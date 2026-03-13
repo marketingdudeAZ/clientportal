@@ -1,0 +1,101 @@
+<!--
+  Module 2: Included Services Value Table
+  Non-elective services with per-unit calculations.
+  Only rendered when property.units_offered is populated.
+-->
+<section class="portal-card included-services" id="included-services">
+  <h2 class="section-header">Included RPM Platform Services</h2>
+  <p class="section-subtitle">Non-elective services included with your RPM partnership</p>
+
+  {% set units = property.units_offered|int %}
+
+  <table class="services-table">
+    <thead>
+      <tr>
+        <th>Service</th>
+        <th>Rate</th>
+        <th class="text-right">Monthly Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      {# CRM Lead Management — $1.50/unit #}
+      {% set crm_value = (units * 1.50)|round(2) %}
+      <tr>
+        <td>CRM Lead Management</td>
+        <td>$1.50 / unit</td>
+        <td class="text-right">${{ crm_value|int_comma }}</td>
+      </tr>
+
+      {# Customer Experience — $0.55/unit #}
+      {% set cx_value = (units * 0.55)|round(2) %}
+      <tr>
+        <td>Customer Experience</td>
+        <td>$0.55 / unit</td>
+        <td class="text-right">${{ cx_value|int_comma }}</td>
+      </tr>
+
+      {# Website Hosting — tier-based #}
+      {% if property.website_hosting_type == "Basic" %}
+        {% set hosting_value = 50 %}
+      {% elif property.website_hosting_type in ["Semi-Custom", "Custom"] %}
+        {% set hosting_value = 205 %}
+      {% else %}
+        {% set hosting_value = 50 %}
+      {% endif %}
+      <tr>
+        <td>Website Hosting{% if property.website_hosting_type %} ({{ property.website_hosting_type }}){% endif %}</td>
+        <td>Flat rate</td>
+        <td class="text-right">${{ hosting_value }}</td>
+      </tr>
+
+      {# SOCi — $60 flat #}
+      <tr>
+        <td>SOCi</td>
+        <td>Flat rate</td>
+        <td class="text-right">$60</td>
+      </tr>
+
+      {# Marketing Self-Service — $65 flat #}
+      <tr>
+        <td>Marketing Self-Service</td>
+        <td>Flat rate</td>
+        <td class="text-right">$65</td>
+      </tr>
+
+      {# Training — unit band #}
+      {% if units < 150 %}
+        {% set training_value = 100 %}
+      {% elif units < 300 %}
+        {% set training_value = 150 %}
+      {% elif units < 500 %}
+        {% set training_value = 200 %}
+      {% elif units < 1000 %}
+        {% set training_value = 275 %}
+      {% else %}
+        {% set training_value = 350 %}
+      {% endif %}
+      <tr>
+        <td>Training</td>
+        <td>Unit band ({{ units }} units)</td>
+        <td class="text-right">${{ training_value }}</td>
+      </tr>
+
+      {# Regional Facilities — $0.75–$1.75/unit (show range) #}
+      {% set facilities_low = (units * 0.75)|round(2) %}
+      {% set facilities_high = (units * 1.75)|round(2) %}
+      <tr>
+        <td>Regional Facilities</td>
+        <td>$0.75–$1.75 / unit</td>
+        <td class="text-right">${{ facilities_low|int_comma }}–${{ facilities_high|int_comma }}</td>
+      </tr>
+    </tbody>
+    <tfoot>
+      {% set total_low = crm_value + cx_value + hosting_value + 60 + 65 + training_value + facilities_low %}
+      {% set total_high = crm_value + cx_value + hosting_value + 60 + 65 + training_value + facilities_high %}
+      <tr class="total-row">
+        <td colspan="2">Your included RPM platform value</td>
+        <td class="text-right total-value">${{ total_low|int_comma }}–${{ total_high|int_comma }}/mo</td>
+      </tr>
+    </tfoot>
+  </table>
+</section>

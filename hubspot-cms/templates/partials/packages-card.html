@@ -1,0 +1,75 @@
+<!--
+  Module 5: Current Enrolled Packages
+  SEO tier, Social Posting tier, Reputation tier, current Paid Media spend.
+-->
+<section class="portal-card packages-card" id="packages">
+  <h2 class="section-header">Current Marketing Packages</h2>
+  <p class="section-subtitle">Your currently enrolled elective marketing services</p>
+
+  <div class="packages-grid">
+    {# SEO #}
+    <div class="package-item">
+      <div class="package-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#53606C" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="#53606C" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+      <h3 class="package-label">SEO</h3>
+      {% if property.seo_budget %}
+        <span class="package-tier">{{ property.seo_budget }}</span>
+      {% else %}
+        <span class="package-tier muted">Not Enrolled</span>
+      {% endif %}
+    </div>
+
+    {# Social Posting #}
+    <div class="package-item">
+      <div class="package-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="#53606C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3 class="package-label">Social Posting</h3>
+      {% if property.social_posting_tier and property.social_posting_tier != "None" %}
+        <span class="package-tier">{{ property.social_posting_tier }}</span>
+      {% else %}
+        <span class="package-tier muted">Not Enrolled</span>
+      {% endif %}
+    </div>
+
+    {# Reputation Management #}
+    <div class="package-item">
+      <div class="package-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="#53606C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3 class="package-label">Reputation</h3>
+      {% if property.reputation_tier and property.reputation_tier != "None" %}
+        <span class="package-tier">{{ property.reputation_tier }}</span>
+      {% else %}
+        <span class="package-tier muted">Not Enrolled</span>
+      {% endif %}
+    </div>
+
+    {# Paid Search #}
+    <div class="package-item">
+      <div class="package-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" stroke="#53606C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3 class="package-label">Paid Search</h3>
+      {% if property.paid_search_monthly_spend %}
+        <span class="package-tier">${{ property.paid_search_monthly_spend|int_comma }}/mo</span>
+      {% else %}
+        <span class="package-tier muted">Not Enrolled</span>
+      {% endif %}
+    </div>
+
+    {# Paid Social #}
+    <div class="package-item">
+      <div class="package-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3V2z" stroke="#53606C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3 class="package-label">Paid Social</h3>
+      {% if property.paid_social_monthly_spend %}
+        <span class="package-tier">${{ property.paid_social_monthly_spend|int_comma }}/mo</span>
+      {% else %}
+        <span class="package-tier muted">Not Enrolled</span>
+      {% endif %}
+    </div>
+  </div>
+</section>

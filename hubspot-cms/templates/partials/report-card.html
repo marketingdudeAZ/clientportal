@@ -1,0 +1,23 @@
+<!--
+  Module 3: Marketing Report
+  NinjaCat dashboard link constructed from ninjacat_system_id.
+-->
+<section class="portal-card report-card" id="report">
+  <h2 class="section-header">Marketing Report</h2>
+
+  {% if property.ninjacat_system_id %}
+    <p class="section-subtitle">View your comprehensive marketing performance dashboard</p>
+    <a href="https://app.ninjacat.io/dashboard-v2#/?accountId={{ property.ninjacat_system_id }}&fromAgency=true&showAccountList=true&dashboardId=16866"
+       class="btn btn-primary"
+       target="_blank"
+       rel="noopener">
+      View Marketing Dashboard
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 7.5v3.5a1 1 0 01-1 1H3a1 1 0 01-1-1V4a1 1 0 011-1h3.5M8.5 2H12v3.5M6 8l6-6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+  {% else %}
+    <div class="muted-state">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 12h4l3-9 4 18 3-9h4" stroke="#D9D9D6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <p>Report not yet configured</p>
+    </div>
+  {% endif %}
+</section>

@@ -1,0 +1,29 @@
+<!--
+  Module 6: SEO Deliverables
+  Conditional Pin Report + Gap Analysis PDF links.
+-->
+<section class="portal-card seo-deliverables" id="seo-deliverables">
+  <h2 class="section-header">SEO Deliverables</h2>
+
+  {% if property.seo_local_pin_report_link or property.competitor_gap_analysis_link %}
+    <p class="section-subtitle">Your latest SEO analysis reports</p>
+    <div class="deliverables-list">
+      {% if property.seo_local_pin_report_link %}
+        <a href="{{ property.seo_local_pin_report_link }}" class="deliverable-link" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M11.5 2H5a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7.5L11.5 2z" stroke="#53606C" stroke-width="1.5"/><path d="M11 2v6h6" stroke="#53606C" stroke-width="1.5"/></svg>
+          Local Pin Report
+        </a>
+      {% endif %}
+      {% if property.competitor_gap_analysis_link %}
+        <a href="{{ property.competitor_gap_analysis_link }}" class="deliverable-link" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M11.5 2H5a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7.5L11.5 2z" stroke="#53606C" stroke-width="1.5"/><path d="M11 2v6h6" stroke="#53606C" stroke-width="1.5"/></svg>
+          Competitor Gap Analysis
+        </a>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="muted-state">
+      <p>No SEO deliverables available yet.</p>
+    </div>
+  {% endif %}
+</section>

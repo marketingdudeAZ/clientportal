@@ -1,0 +1,28 @@
+<!--
+  Phase 5: Sticky Running Total
+  Shows current vs. new monthly total, delta, setup fees, and submit.
+-->
+<div class="running-total" id="running-total">
+  <div class="total-grid">
+    <div class="total-item">
+      <span class="total-label">Current Monthly</span>
+      <span class="total-value" id="total-current">$0</span>
+    </div>
+    <div class="total-item">
+      <span class="total-label">New Monthly</span>
+      <span class="total-value total-new" id="total-new">$0</span>
+    </div>
+    <div class="total-item">
+      <span class="total-label">Monthly Change</span>
+      <span class="total-value" id="total-delta">$0</span>
+    </div>
+    <div class="total-item">
+      <span class="total-label">One-Time Setup</span>
+      <span class="total-value" id="total-setup">$0</span>
+    </div>
+  </div>
+  <button class="btn btn-primary btn-full" id="configurator-submit" onclick="submitConfigurator()" disabled>
+    Confirm My Selections
+  </button>
+  <div id="submit-status" class="submit-status" style="display:none"></div>
+</div>

@@ -1,0 +1,73 @@
+<!--
+  Phase 2: Health Score Integration
+  Overall gauge + four category gauges. SVG arc, 0–100.
+  Colors: 0–40 Red (#C94444), 41–70 Amber (#D4910A), 71–100 Green (#8FA68E)
+-->
+<section class="portal-card health-score" id="health-score">
+  <h2 class="section-header">Property Health Score</h2>
+  {% if property.redlight_report_status %}
+    <span class="badge badge-health-status">{{ property.redlight_report_status }}</span>
+  {% endif %}
+  {% if property.redlight_report_date %}
+    <p class="section-subtitle">Last updated: {{ property.redlight_report_date|datetimeformat("%B %d, %Y") }}</p>
+  {% endif %}
+
+  <div class="health-gauges">
+    {# Overall Health Gauge #}
+    <div class="gauge-container gauge-main">
+      {% include "./gauge.html" with {
+        score: property.redlight_report_score,
+        label: "Overall",
+        size: "large"
+      } %}
+    </div>
+
+    {# Category Breakdown #}
+    <div class="gauge-categories">
+      {% if property.redlight_market_score %}
+        <div class="gauge-container gauge-small">
+          {% include "./gauge.html" with {
+            score: property.redlight_market_score,
+            label: "Market",
+            size: "small"
+          } %}
+        </div>
+      {% endif %}
+      {% if property.redlight_marketing_score %}
+        <div class="gauge-container gauge-small">
+          {% include "./gauge.html" with {
+            score: property.redlight_marketing_score,
+            label: "Marketing",
+            size: "small"
+          } %}
+        </div>
+      {% endif %}
+      {% if property.redlight_funnel_score %}
+        <div class="gauge-container gauge-small">
+          {% include "./gauge.html" with {
+            score: property.redlight_funnel_score,
+            label: "Funnel",
+            size: "small"
+          } %}
+        </div>
+      {% endif %}
+      {% if property.redlight_experience_score %}
+        <div class="gauge-container gauge-small">
+          {% include "./gauge.html" with {
+            score: property.redlight_experience_score,
+            label: "Experience",
+            size: "small"
+          } %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Report PDF Link #}
+  {% if property.redlight_report_pdf_url %}
+    <a href="{{ property.redlight_report_pdf_url }}" class="btn btn-secondary" target="_blank" rel="noopener">
+      View Full Health Report
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 7.5v3.5a1 1 0 01-1 1H3a1 1 0 01-1-1V4a1 1 0 011-1h3.5M8.5 2H12v3.5M6 8l6-6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+  {% endif %}
+</section>

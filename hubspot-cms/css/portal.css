@@ -1,0 +1,285 @@
+/* ══════════════════════════════════════════
+   RPM Living Client Portal — Core Styles
+   Brand: Juniper #53606C, Copper #C8964E,
+   Sage #8FA68E, Mint #CDE3E0
+   Typography: Montserrat
+   ══════════════════════════════════════════ */
+
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --juniper: #53606C;
+  --copper: #C8964E;
+  --sage: #8FA68E;
+  --mint: #CDE3E0;
+  --light-gray: #D9D9D6;
+  --critical-red: #C94444;
+  --warning-amber: #D4910A;
+  --white: #FFFFFF;
+  --off-white: #F8F8F7;
+  --text-primary: #2C3338;
+  --text-secondary: #6B7280;
+  --border: #E0E0E0;
+  --card-radius: 8px;
+  --max-width: 1200px;
+}
+
+body {
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--off-white);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Layout ── */
+.portal-wrapper {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 20px 60px;
+}
+
+.portal-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+}
+
+.portal-logo { height: 40px; width: auto; }
+
+.portal-header-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--juniper);
+  border-left: 1px solid var(--light-gray);
+  padding-left: 16px;
+}
+
+.portal-main { display: flex; flex-direction: column; gap: 24px; }
+
+.portal-footer {
+  text-align: center;
+  padding: 40px 0 20px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* ── Cards ── */
+.portal-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 32px;
+}
+
+.section-header {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--juniper);
+  margin-bottom: 8px;
+}
+
+.section-subtitle {
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+/* ── Identity Block ── */
+.property-name {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--juniper);
+  margin-bottom: 8px;
+}
+
+.identity-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.property-address { color: var(--text-secondary); }
+
+.property-website {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--copper);
+  text-decoration: none;
+  font-weight: 500;
+}
+.property-website:hover { text-decoration: underline; }
+
+/* ── Badges ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.badge-market { background: var(--mint); color: var(--juniper); }
+.badge-current { background: #F3F4F6; color: var(--text-secondary); }
+.badge-enrolled { background: #F3F4F6; color: var(--text-secondary); }
+.badge-recommended { background: var(--copper); color: var(--white); }
+.badge-health-status { background: var(--mint); color: var(--juniper); }
+.badge-subcategory { background: #F3F4F6; color: var(--text-secondary); font-weight: 500; }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn:hover { opacity: 0.9; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-primary { background: var(--copper); color: var(--white); }
+.btn-secondary { background: var(--off-white); color: var(--juniper); border: 1px solid var(--border); }
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+.btn-full { width: 100%; justify-content: center; }
+
+/* ── Muted State ── */
+.muted-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px;
+  color: var(--light-gray);
+  text-align: center;
+}
+.muted-state p { color: var(--text-secondary); }
+
+/* ── Included Services Table ── */
+.services-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.services-table th,
+.services-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.services-table th {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  background: var(--off-white);
+}
+.text-right { text-align: right; }
+.total-row td {
+  font-weight: 700;
+  font-size: 16px;
+  border-top: 2px solid var(--juniper);
+  border-bottom: none;
+}
+.total-value { color: var(--copper); }
+
+/* ── Packages Grid ── */
+.packages-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+.package-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  text-align: center;
+}
+.package-icon { color: var(--juniper); }
+.package-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--juniper);
+}
+.package-tier { font-size: 14px; font-weight: 500; color: var(--copper); }
+.package-tier.muted { color: var(--text-secondary); font-weight: 400; }
+
+/* ── Deliverables ── */
+.deliverables-list { display: flex; flex-direction: column; gap: 12px; }
+.deliverable-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--copper);
+  text-decoration: none;
+  font-weight: 500;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.deliverable-link:hover { background: var(--off-white); }
+
+/* ── Error Card ── */
+.portal-error-card {
+  text-align: center;
+  padding: 64px 32px;
+  max-width: 480px;
+  margin: 80px auto;
+}
+.error-icon { margin-bottom: 24px; color: var(--juniper); }
+.portal-error-card h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--juniper);
+  margin-bottom: 8px;
+}
+.portal-error-card p { color: var(--text-secondary); }
+
+/* ── Visually Hidden (a11y) ── */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  border: 0;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .portal-card { padding: 20px; }
+  .property-name { font-size: 24px; }
+  .section-header { font-size: 18px; }
+  .identity-details { flex-direction: column; align-items: flex-start; }
+  .packages-grid { grid-template-columns: 1fr 1fr; }
+  .services-table { font-size: 13px; }
+  .services-table th, .services-table td { padding: 8px 10px; }
+}
+
+@media (max-width: 480px) {
+  .portal-wrapper { padding: 0 12px 40px; }
+  .portal-header { padding: 16px 0; }
+  .packages-grid { grid-template-columns: 1fr; }
+}

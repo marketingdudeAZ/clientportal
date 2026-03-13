@@ -1,0 +1,207 @@
+/* ══════════════════════════════════════════
+   Phase 5: Budget Configurator
+   Tier cards, running total, submit
+   ══════════════════════════════════════════ */
+
+/* ── Channel Rows ── */
+.channel-row {
+  margin-bottom: 32px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--border);
+}
+.channel-row:last-of-type { border-bottom: none; }
+
+.channel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.channel-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--juniper);
+}
+
+/* ── Tier Cards ── */
+.tier-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.tier-card {
+  position: relative;
+  border: 2px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.tier-card:hover {
+  border-color: var(--copper);
+  box-shadow: 0 2px 8px rgba(200,150,78,0.12);
+}
+.tier-card.selected {
+  border-color: var(--copper);
+  background: #FDF8F3;
+  box-shadow: 0 0 0 1px var(--copper);
+}
+.tier-card.tier-current {
+  border-color: var(--light-gray);
+  background: #FAFAFA;
+}
+
+.tier-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--juniper);
+  margin-bottom: 4px;
+}
+
+.tier-price {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--copper);
+}
+.tier-price span {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.tier-setup {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.tier-detail {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.tier-reasoning {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
+.tier-includes {
+  list-style: none;
+  margin-top: 12px;
+  text-align: left;
+  font-size: 13px;
+}
+.tier-includes li {
+  padding: 4px 0;
+  color: var(--text-secondary);
+}
+.tier-includes li::before {
+  content: "\2713";
+  color: var(--sage);
+  margin-right: 6px;
+  font-weight: 700;
+}
+
+.tier-card .badge {
+  position: absolute;
+  top: -10px;
+  right: 12px;
+}
+
+/* ── On Track Message ── */
+.on-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  background: #F0F7F0;
+  border-radius: 6px;
+  color: var(--sage);
+  font-weight: 600;
+}
+
+/* ── Running Total ── */
+.running-total {
+  position: sticky;
+  bottom: 0;
+  background: var(--white);
+  border-top: 2px solid var(--juniper);
+  border-radius: 0 0 var(--card-radius) var(--card-radius);
+  padding: 24px 0 0;
+  margin: 32px -32px -32px;
+  padding: 24px 32px 32px;
+}
+
+.total-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.total-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.total-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+.running-total .total-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--juniper);
+}
+.total-new { color: var(--copper); }
+
+#total-delta.positive { color: var(--copper); }
+#total-delta.negative { color: var(--sage); }
+#total-delta.zero { color: var(--text-secondary); }
+
+/* ── Submit Status ── */
+.submit-status {
+  text-align: center;
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.submit-status.success { background: #F0F7F0; color: var(--sage); }
+.submit-status.error { background: #FEE2E2; color: var(--critical-red); }
+.submit-status.pending { background: var(--mint); color: var(--juniper); }
+
+/* ── Post-Submission States ── */
+.submission-pending,
+.submission-signed,
+.submission-expired,
+.submission-declined {
+  text-align: center;
+  padding: 32px;
+}
+.submission-pending { color: var(--juniper); }
+.submission-signed { color: var(--sage); }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .tier-cards { grid-template-columns: 1fr; }
+  .total-grid { grid-template-columns: repeat(2, 1fr); }
+  .running-total {
+    margin: 32px -20px -20px;
+    padding: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .total-grid { grid-template-columns: 1fr 1fr; }
+  .running-total .total-value { font-size: 18px; }
+}

@@ -1,0 +1,78 @@
+<!--
+  Phase 2: SVG Gauge Component
+  Params: score (0-100), label (string), size ("large"|"small")
+  Inline SVG + vanilla JS. No external charting libraries.
+-->
+{% set gauge_score = score|default(0)|int %}
+{% set gauge_label = label|default("Score") %}
+{% set gauge_size = size|default("small") %}
+
+{# Color mapping: 0–40 Red, 41–70 Amber, 71–100 Green #}
+{% if gauge_score <= 40 %}
+  {% set gauge_color = "#C94444" %}
+  {% set gauge_status = "Critical" %}
+{% elif gauge_score <= 70 %}
+  {% set gauge_color = "#D4910A" %}
+  {% set gauge_status = "Warning" %}
+{% else %}
+  {% set gauge_color = "#8FA68E" %}
+  {% set gauge_status = "Healthy" %}
+{% endif %}
+
+{% if gauge_size == "large" %}
+  {% set svg_size = 180 %}
+  {% set stroke_width = 12 %}
+  {% set font_size = 36 %}
+{% else %}
+  {% set svg_size = 120 %}
+  {% set stroke_width = 8 %}
+  {% set font_size = 24 %}
+{% endif %}
+
+{% set radius = (svg_size / 2) - stroke_width %}
+{% set circumference = 2 * 3.14159 * radius %}
+{% set arc_length = circumference * 0.75 %}
+{% set dash_offset = arc_length - (arc_length * gauge_score / 100) %}
+
+<div class="gauge" data-score="{{ gauge_score }}" data-size="{{ gauge_size }}">
+  <svg width="{{ svg_size }}" height="{{ svg_size }}" viewBox="0 0 {{ svg_size }} {{ svg_size }}">
+    {# Background arc #}
+    <circle
+      cx="{{ svg_size / 2 }}"
+      cy="{{ svg_size / 2 }}"
+      r="{{ radius }}"
+      fill="none"
+      stroke="#E8E8E8"
+      stroke-width="{{ stroke_width }}"
+      stroke-dasharray="{{ arc_length }} {{ circumference }}"
+      stroke-dashoffset="0"
+      stroke-linecap="round"
+      transform="rotate(135 {{ svg_size / 2 }} {{ svg_size / 2 }})"
+    />
+    {# Score arc #}
+    <circle
+      class="gauge-arc"
+      cx="{{ svg_size / 2 }}"
+      cy="{{ svg_size / 2 }}"
+      r="{{ radius }}"
+      fill="none"
+      stroke="{{ gauge_color }}"
+      stroke-width="{{ stroke_width }}"
+      stroke-dasharray="{{ arc_length }} {{ circumference }}"
+      stroke-dashoffset="{{ dash_offset }}"
+      stroke-linecap="round"
+      transform="rotate(135 {{ svg_size / 2 }} {{ svg_size / 2 }})"
+    />
+    {# Score text #}
+    <text
+      x="{{ svg_size / 2 }}"
+      y="{{ svg_size / 2 }}"
+      text-anchor="middle"
+      dominant-baseline="central"
+      class="gauge-score-text"
+      style="font-size: {{ font_size }}px; fill: {{ gauge_color }};"
+    >{{ gauge_score }}</text>
+  </svg>
+  <div class="gauge-label">{{ gauge_label }}</div>
+  <div class="gauge-status" style="color: {{ gauge_color }};">{{ gauge_status }}</div>
+</div>

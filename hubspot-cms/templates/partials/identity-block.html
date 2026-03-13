@@ -1,0 +1,21 @@
+<!--
+  Module 1: Property Identity Block
+  Displays property name, address, market badge, website link.
+-->
+<section class="portal-card identity-block" id="identity">
+  <h1 class="property-name">{{ property.name }}</h1>
+  <div class="identity-details">
+    <p class="property-address">
+      {{ property.address }}{% if property.city %}, {{ property.city }}{% endif %}{% if property.state %}, {{ property.state }}{% endif %} {{ property.zip }}
+    </p>
+    {% if property.rpmmarket %}
+      <span class="badge badge-market">{{ property.rpmmarket }}</span>
+    {% endif %}
+    {% if property.domain %}
+      <a href="https://{{ property.domain }}" class="property-website" target="_blank" rel="noopener">
+        {{ property.domain }}
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 7.5v3.5a1 1 0 01-1 1H3a1 1 0 01-1-1V4a1 1 0 011-1h3.5M8.5 2H12v3.5M6 8l6-6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    {% endif %}
+  </div>
+</section>

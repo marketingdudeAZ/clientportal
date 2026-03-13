@@ -1,0 +1,96 @@
+<!--
+  RPM Living Client Portal
+  HubSpot CMS Dynamic Page
+  UUID-routed single page: /client-portal?uuid={property_uuid}
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RPM Living | Client Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+  {{ require_css(get_asset_url("../css/portal.css")) }}
+  {{ require_css(get_asset_url("../css/gauges.css")) }}
+  {{ require_css(get_asset_url("../css/asset-library.css")) }}
+  {{ require_css(get_asset_url("../css/configurator.css")) }}
+</head>
+<body>
+
+{# ── UUID Routing ── #}
+{% set uuid_param = request.query_dict.uuid %}
+
+{% if !uuid_param %}
+  {% include "../templates/portal-error.html" with { error_type: "no_uuid" } %}
+{% else %}
+  {% set companies = crm_objects("company",
+    "uuid=" ~ uuid_param,
+    "name,address,city,state,zip,uuid,domain,rpmmarket,plestatus,units_offered,ninjacat_system_id,seo_budget,redlight_report_score,redlight_market_score,redlight_marketing_score,redlight_funnel_score,redlight_experience_score,redlight_report_status,redlight_report_pdf_url,redlight_flag_count,redlight_digital_flags,redlight_pm_flags,redlight_ops_flags,redlight_operations_flags,redlight_recommendations,redlight_report_date,seo_local_pin_report_link,competitor_gap_analysis_link,social_posting_tier,reputation_tier,paid_search_monthly_spend,paid_social_monthly_spend,website_hosting_type,paid_media_recs_status,paid_media_good_json,paid_media_better_json,paid_media_best_json") %}
+
+  {% if companies.results|length == 0 %}
+    {% include "../templates/portal-error.html" with { error_type: "not_found" } %}
+  {% else %}
+    {% set property = companies.results[0] %}
+
+    {% if property.plestatus not in ["RPM Managed", "Dispositioning", "Onboarding"] %}
+      {% include "../templates/portal-error.html" with { error_type: "invalid_status" } %}
+    {% else %}
+
+      {# ── Portal Content ── #}
+      <div class="portal-wrapper">
+        <header class="portal-header">
+          <img src="{{ get_asset_url('../images/rpm-logo.svg') }}" alt="RPM Living" class="portal-logo">
+          <span class="portal-header-label">Client Portal</span>
+        </header>
+
+        <main class="portal-main">
+          {# Phase 1: Identity Block #}
+          {% include "./partials/identity-block.html" %}
+
+          {# Phase 1: Included Services Value Table #}
+          {% if property.units_offered %}
+            {% include "./partials/included-services.html" %}
+          {% endif %}
+
+          {# Phase 1: Marketing Report #}
+          {% include "./partials/report-card.html" %}
+
+          {# Phase 1: Current Enrolled Packages #}
+          {% include "./partials/packages-card.html" %}
+
+          {# Phase 1: SEO Deliverables #}
+          {% include "./partials/seo-deliverables.html" %}
+
+          {# Phase 2: Health Score (conditional) #}
+          {% if property.redlight_report_score %}
+            {% include "./partials/health-score.html" %}
+          {% endif %}
+
+          {# Phase 3: Budget Recommendations (conditional) #}
+          {% if property.redlight_flag_count %}
+            {% include "./partials/recommendations.html" %}
+          {% endif %}
+
+          {# Phase 4: Asset Library #}
+          {% include "./partials/asset-library.html" %}
+
+          {# Phase 5: Budget Configurator #}
+          {% include "./partials/configurator.html" %}
+        </main>
+
+        <footer class="portal-footer">
+          <p>&copy; {{ now()|datetimeformat("%Y") }} RPM Living. All rights reserved.</p>
+        </footer>
+      </div>
+
+    {% endif %}
+  {% endif %}
+{% endif %}
+
+{{ require_js(get_asset_url("../js/portal.js")) }}
+{{ require_js(get_asset_url("../js/gauges.js")) }}
+{{ require_js(get_asset_url("../js/asset-library.js")) }}
+{{ require_js(get_asset_url("../js/configurator.js")) }}
+</body>
+</html>

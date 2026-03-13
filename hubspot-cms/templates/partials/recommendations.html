@@ -1,0 +1,154 @@
+<!--
+  Phase 3: Budget Recommendations
+  Expandable flag cards grouped by owner: Digital, PM, Ops, Operations.
+  Requires structured JSON from redlight_*_flags properties.
+-->
+<section class="portal-card recommendations" id="recommendations">
+  <h2 class="section-header">Budget Recommendations</h2>
+  <p class="section-subtitle">
+    {{ property.redlight_flag_count }} item{{ property.redlight_flag_count|int != 1 ? "s" : "" }} identified in your most recent health assessment
+  </p>
+
+  {# Digital-Owned Flags #}
+  {% if property.redlight_digital_flags %}
+    {% set digital_flags = property.redlight_digital_flags|fromjson %}
+    {% if digital_flags|length > 0 %}
+      <div class="flag-group">
+        <h3 class="flag-group-header">
+          <span class="flag-owner-badge badge-digital">Digital Marketing</span>
+          <span class="flag-count">{{ digital_flags|length }} flag{{ digital_flags|length != 1 ? "s" : "" }}</span>
+        </h3>
+        <div class="flag-cards">
+          {% for flag in digital_flags %}
+            <div class="flag-card" data-severity="{{ flag.severity|default('medium') }}">
+              <div class="flag-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+                <span class="severity-badge severity-{{ flag.severity|default('medium') }}">{{ flag.severity|default("medium")|capitalize }}</span>
+                <h4 class="flag-name">{{ flag.name }}</h4>
+                <svg class="flag-chevron" width="16" height="16" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              </div>
+              <div class="flag-card-body">
+                {% if flag.current is defined and flag.benchmark is defined %}
+                  <div class="flag-metrics">
+                    <span class="metric">Current: <strong>{{ flag.current }}</strong></span>
+                    <span class="metric">Benchmark: <strong>{{ flag.benchmark }}</strong></span>
+                  </div>
+                {% endif %}
+                {% if flag.reasoning %}
+                  <p class="flag-reasoning">{{ flag.reasoning }}</p>
+                {% endif %}
+                {% if flag.consequence %}
+                  <p class="flag-consequence">{{ flag.consequence }}</p>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  {# PM-Owned Flags #}
+  {% if property.redlight_pm_flags %}
+    {% set pm_flags = property.redlight_pm_flags|fromjson %}
+    {% if pm_flags|length > 0 %}
+      <div class="flag-group">
+        <h3 class="flag-group-header">
+          <span class="flag-owner-badge badge-pm">Property Management</span>
+          <span class="flag-count">{{ pm_flags|length }} flag{{ pm_flags|length != 1 ? "s" : "" }}</span>
+        </h3>
+        <p class="flag-callout">Not addressable by marketing spend. Requires attention from Property Management team.</p>
+        <div class="flag-cards">
+          {% for flag in pm_flags %}
+            <div class="flag-card" data-severity="{{ flag.severity|default('medium') }}">
+              <div class="flag-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+                <span class="severity-badge severity-{{ flag.severity|default('medium') }}">{{ flag.severity|default("medium")|capitalize }}</span>
+                <h4 class="flag-name">{{ flag.name }}</h4>
+                <svg class="flag-chevron" width="16" height="16" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              </div>
+              <div class="flag-card-body">
+                {% if flag.current is defined and flag.benchmark is defined %}
+                  <div class="flag-metrics">
+                    <span class="metric">Current: <strong>{{ flag.current }}</strong></span>
+                    <span class="metric">Benchmark: <strong>{{ flag.benchmark }}</strong></span>
+                  </div>
+                {% endif %}
+                {% if flag.reasoning %}<p class="flag-reasoning">{{ flag.reasoning }}</p>{% endif %}
+                {% if flag.consequence %}<p class="flag-consequence">{{ flag.consequence }}</p>{% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  {# Ops-Owned Flags #}
+  {% if property.redlight_ops_flags %}
+    {% set ops_flags = property.redlight_ops_flags|fromjson %}
+    {% if ops_flags|length > 0 %}
+      <div class="flag-group">
+        <h3 class="flag-group-header">
+          <span class="flag-owner-badge badge-ops">Operations</span>
+          <span class="flag-count">{{ ops_flags|length }} flag{{ ops_flags|length != 1 ? "s" : "" }}</span>
+        </h3>
+        <p class="flag-callout">Not addressable by marketing spend. Requires attention from Operations team.</p>
+        <div class="flag-cards">
+          {% for flag in ops_flags %}
+            <div class="flag-card" data-severity="{{ flag.severity|default('medium') }}">
+              <div class="flag-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+                <span class="severity-badge severity-{{ flag.severity|default('medium') }}">{{ flag.severity|default("medium")|capitalize }}</span>
+                <h4 class="flag-name">{{ flag.name }}</h4>
+                <svg class="flag-chevron" width="16" height="16" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              </div>
+              <div class="flag-card-body">
+                {% if flag.current is defined and flag.benchmark is defined %}
+                  <div class="flag-metrics">
+                    <span class="metric">Current: <strong>{{ flag.current }}</strong></span>
+                    <span class="metric">Benchmark: <strong>{{ flag.benchmark }}</strong></span>
+                  </div>
+                {% endif %}
+                {% if flag.reasoning %}<p class="flag-reasoning">{{ flag.reasoning }}</p>{% endif %}
+                {% if flag.consequence %}<p class="flag-consequence">{{ flag.consequence }}</p>{% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  {# Leadership/Operations Flags #}
+  {% if property.redlight_operations_flags %}
+    {% set leadership_flags = property.redlight_operations_flags|fromjson %}
+    {% if leadership_flags|length > 0 %}
+      <div class="flag-group">
+        <h3 class="flag-group-header">
+          <span class="flag-owner-badge badge-leadership">Leadership</span>
+          <span class="flag-count">{{ leadership_flags|length }} flag{{ leadership_flags|length != 1 ? "s" : "" }}</span>
+        </h3>
+        <p class="flag-callout">Not addressable by marketing spend. Requires attention from Leadership team.</p>
+        <div class="flag-cards">
+          {% for flag in leadership_flags %}
+            <div class="flag-card" data-severity="{{ flag.severity|default('medium') }}">
+              <div class="flag-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+                <span class="severity-badge severity-{{ flag.severity|default('medium') }}">{{ flag.severity|default("medium")|capitalize }}</span>
+                <h4 class="flag-name">{{ flag.name }}</h4>
+                <svg class="flag-chevron" width="16" height="16" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              </div>
+              <div class="flag-card-body">
+                {% if flag.current is defined and flag.benchmark is defined %}
+                  <div class="flag-metrics">
+                    <span class="metric">Current: <strong>{{ flag.current }}</strong></span>
+                    <span class="metric">Benchmark: <strong>{{ flag.benchmark }}</strong></span>
+                  </div>
+                {% endif %}
+                {% if flag.reasoning %}<p class="flag-reasoning">{{ flag.reasoning }}</p>{% endif %}
+                {% if flag.consequence %}<p class="flag-consequence">{{ flag.consequence }}</p>{% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+</section>

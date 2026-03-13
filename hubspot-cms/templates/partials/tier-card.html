@@ -1,0 +1,27 @@
+<!--
+  Phase 5: Reusable Tier Card Component
+  Used within configurator channel rows.
+-->
+<div class="tier-card {{ 'tier-current' if is_current else '' }} {{ 'tier-recommended' if is_recommended else '' }}"
+     data-tier="{{ tier_name }}"
+     data-price="{{ tier_price }}"
+     data-setup="{{ setup_fee|default(0) }}">
+  <div class="tier-name">{{ tier_name }}</div>
+  <div class="tier-price">${{ tier_price }}<span>/mo</span></div>
+  {% if setup_fee and setup_fee > 0 %}
+    <div class="tier-setup">+ ${{ setup_fee }} setup</div>
+  {% endif %}
+  {% if includes %}
+    <ul class="tier-includes">
+      {% for item in includes %}
+        <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  {% if is_current %}
+    <span class="badge badge-enrolled">Current</span>
+  {% endif %}
+  {% if is_recommended %}
+    <span class="badge badge-recommended">Recommended</span>
+  {% endif %}
+</div>

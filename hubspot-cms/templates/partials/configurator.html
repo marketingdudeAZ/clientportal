@@ -1,0 +1,162 @@
+<!--
+  Phase 5: Budget Configurator
+  Interactive Good/Better/Best tier selection per channel.
+  Running total. Submit creates Deal + Quote.
+-->
+<section class="portal-card configurator" id="configurator">
+  <h2 class="section-header">Budget Configurator</h2>
+  <p class="section-subtitle">Select your preferred service tiers and submit to receive a formal quote</p>
+
+  <div class="configurator-body" data-company-id="{{ property.hs_object_id }}" data-uuid="{{ property.uuid }}">
+
+    {# ── SEO Channel ── #}
+    {% set current_seo = property.seo_budget|default("None") %}
+    {% set seo_tiers = [
+      {"key": "Local", "price": 100},
+      {"key": "Lite", "price": 300},
+      {"key": "Basic", "price": 500},
+      {"key": "Standard", "price": 800},
+      {"key": "Premium", "price": 1300}
+    ] %}
+    <div class="channel-row" data-channel="seo" data-current="{{ current_seo }}">
+      <div class="channel-header">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#53606C" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="#53606C" stroke-width="2" stroke-linecap="round"/></svg>
+        <h3>SEO</h3>
+        {% if current_seo and current_seo != "None" %}
+          <span class="badge badge-current">Current: {{ current_seo }}</span>
+        {% endif %}
+      </div>
+      <div class="tier-cards">
+        {% for tier in seo_tiers %}
+          <div class="tier-card {% if tier.key == current_seo %}tier-current{% endif %}"
+               data-tier="{{ tier.key }}" data-price="{{ tier.price }}" data-setup="0">
+            <div class="tier-name">{{ tier.key }}</div>
+            <div class="tier-price">${{ tier.price }}<span>/mo</span></div>
+            {% if tier.key == current_seo %}
+              <span class="badge badge-enrolled">Current</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# ── Social Posting Channel ── #}
+    {% set current_social = property.social_posting_tier|default("None") %}
+    {% set social_new = current_social in [None, "None", ""] %}
+    <div class="channel-row" data-channel="social_posting" data-current="{{ current_social }}">
+      <div class="channel-header">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="#53606C" stroke-width="2"/></svg>
+        <h3>Social Media Posting</h3>
+        {% if current_social and current_social != "None" %}
+          <span class="badge badge-current">Current: {{ current_social }}</span>
+        {% endif %}
+      </div>
+      <div class="tier-cards">
+        {% for tier in [{"key":"Basic","price":300},{"key":"Standard","price":450},{"key":"Premium","price":700}] %}
+          <div class="tier-card {% if tier.key == current_social %}tier-current{% endif %}"
+               data-tier="{{ tier.key }}" data-price="{{ tier.price }}"
+               data-setup="{{ social_new ? 500 : 0 }}">
+            <div class="tier-name">{{ tier.key }}</div>
+            <div class="tier-price">${{ tier.price }}<span>/mo</span></div>
+            {% if social_new %}<div class="tier-setup">+ $500 setup</div>{% endif %}
+            {% if tier.key == current_social %}
+              <span class="badge badge-enrolled">Current</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# ── Reputation Management Channel ── #}
+    {% set current_rep = property.reputation_tier|default("None") %}
+    {% set rep_new = current_rep in [None, "None", ""] %}
+    <div class="channel-row" data-channel="reputation" data-current="{{ current_rep }}">
+      <div class="channel-header">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="#53606C" stroke-width="2"/></svg>
+        <h3>Reputation Management</h3>
+        {% if current_rep and current_rep != "None" %}
+          <span class="badge badge-current">Current: {{ current_rep }}</span>
+        {% endif %}
+      </div>
+      <div class="tier-cards">
+        {% for tier in [{"key":"Response Only","price":190},{"key":"Response + Removal","price":255}] %}
+          <div class="tier-card {% if tier.key == current_rep %}tier-current{% endif %}"
+               data-tier="{{ tier.key }}" data-price="{{ tier.price }}"
+               data-setup="{{ rep_new ? 50 : 0 }}">
+            <div class="tier-name">{{ tier.key }}</div>
+            <div class="tier-price">${{ tier.price }}<span>/mo</span></div>
+            {% if rep_new %}<div class="tier-setup">+ $50 setup</div>{% endif %}
+            {% if tier.key == current_rep %}
+              <span class="badge badge-enrolled">Current</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# ── Paid Media (conditional — only when AM approved) ── #}
+    {% if property.paid_media_recs_status in ["approved", "overridden"] %}
+      {# Paid Search #}
+      {% if property.paid_media_good_json %}
+        {% set pm_good = property.paid_media_good_json|fromjson %}
+        {% set pm_better = property.paid_media_better_json|fromjson %}
+        {% set pm_best = property.paid_media_best_json|fromjson %}
+
+        <div class="channel-row channel-paid" data-channel="paid_search"
+             data-current="{{ property.paid_search_monthly_spend|default(0) }}">
+          <div class="channel-header">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" stroke="#53606C" stroke-width="2" stroke-linecap="round"/></svg>
+            <h3>Paid Search (Google Ads)</h3>
+            {% if property.paid_search_monthly_spend %}
+              <span class="badge badge-current">Current: ${{ property.paid_search_monthly_spend|int_comma }}/mo</span>
+            {% endif %}
+          </div>
+          <div class="tier-cards">
+            {% for tier in [pm_good, pm_better, pm_best] %}
+              <div class="tier-card" data-tier="{{ tier.title }}" data-price="{{ tier.cost }}" data-setup="0">
+                <div class="tier-name">{{ tier.title }}</div>
+                <div class="tier-price">${{ tier.cost|int_comma }}<span>/mo</span></div>
+                {% if tier.projected_impressions %}
+                  <div class="tier-detail">~{{ tier.projected_impressions|int_comma }} impressions/mo</div>
+                {% endif %}
+                {% if tier.reasoning %}
+                  <div class="tier-reasoning">{{ tier.reasoning }}</div>
+                {% endif %}
+                {% if loop.index == 2 %}
+                  <span class="badge badge-recommended">Recommended</span>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        {# Paid Social #}
+        <div class="channel-row channel-paid" data-channel="paid_social"
+             data-current="{{ property.paid_social_monthly_spend|default(0) }}">
+          <div class="channel-header">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3V2z" stroke="#53606C" stroke-width="2"/></svg>
+            <h3>Paid Social (Meta)</h3>
+            {% if property.paid_social_monthly_spend %}
+              <span class="badge badge-current">Current: ${{ property.paid_social_monthly_spend|int_comma }}/mo</span>
+            {% endif %}
+          </div>
+          <div class="tier-cards">
+            {% for tier in [pm_good, pm_better, pm_best] %}
+              <div class="tier-card" data-tier="{{ tier.title }}" data-price="{{ tier.cost }}" data-setup="0">
+                <div class="tier-name">{{ tier.title }}</div>
+                <div class="tier-price">${{ tier.cost|int_comma }}<span>/mo</span></div>
+                {% if loop.index == 2 %}
+                  <span class="badge badge-recommended">Recommended</span>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    {% endif %}
+
+    {# ── Running Total (Sticky) ── #}
+    {% include "./running-total.html" %}
+
+  </div>
+</section>

@@ -1,0 +1,164 @@
+/* ══════════════════════════════════════════
+   Phase 2: Health Score Gauges
+   ══════════════════════════════════════════ */
+
+.health-gauges {
+  display: flex;
+  align-items: flex-start;
+  gap: 40px;
+  margin: 24px 0;
+}
+
+.gauge-main { flex-shrink: 0; }
+
+.gauge-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  flex: 1;
+}
+
+.gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.gauge-score-text {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 700;
+}
+
+.gauge-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--juniper);
+}
+
+.gauge-status {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.gauge-arc {
+  transition: stroke-dashoffset 1s ease-out;
+}
+
+/* ── Flag Cards (Phase 3) ── */
+.flag-group { margin-bottom: 24px; }
+
+.flag-group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.flag-owner-badge {
+  padding: 6px 14px;
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--white);
+}
+.badge-digital { background: var(--copper); }
+.badge-pm { background: var(--juniper); }
+.badge-ops { background: var(--sage); }
+.badge-leadership { background: #7C6F9B; }
+
+.flag-count {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.flag-callout {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-bottom: 12px;
+  padding: 8px 16px;
+  background: var(--off-white);
+  border-radius: 6px;
+  border-left: 3px solid var(--light-gray);
+}
+
+.flag-cards { display: flex; flex-direction: column; gap: 8px; }
+
+.flag-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.flag-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.flag-card-header:hover { background: var(--off-white); }
+
+.flag-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.flag-chevron {
+  transition: transform 0.2s;
+  color: var(--text-secondary);
+}
+.flag-card.expanded .flag-chevron { transform: rotate(180deg); }
+
+.flag-card-body {
+  display: none;
+  padding: 0 16px 16px;
+}
+.flag-card.expanded .flag-card-body { display: block; }
+
+.severity-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.severity-critical { background: #FEE2E2; color: var(--critical-red); }
+.severity-high { background: #FEF3C7; color: var(--warning-amber); }
+.severity-medium { background: #FEF3C7; color: #92400E; }
+.severity-low { background: #ECFDF5; color: #065F46; }
+
+.flag-metrics {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--off-white);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.flag-reasoning {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.flag-consequence {
+  font-size: 13px;
+  color: var(--critical-red);
+  font-style: italic;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .health-gauges {
+    flex-direction: column;
+    align-items: center;
+  }
+  .gauge-categories { justify-content: center; }
+}

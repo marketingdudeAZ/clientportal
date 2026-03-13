@@ -1,0 +1,162 @@
+<!--
+  Phase 4: Asset Library
+  HubDB-backed gallery with category tabs, lightbox, and upload form.
+  Replaces standalone creative package page.
+-->
+<section class="portal-card asset-library" id="assets">
+  <div class="asset-library-header">
+    <h2 class="section-header">Asset Library</h2>
+    <button class="btn btn-primary" id="upload-trigger" onclick="document.getElementById('upload-modal').classList.add('active')">
+      Upload Assets
+    </button>
+  </div>
+
+  {# Query HubDB for property assets #}
+  {% set assets = hubdb_table_rows(HUBDB_ASSET_TABLE_ID,
+      "property_uuid=" ~ property.uuid ~ "&status=live",
+      "category ASC, sort_order ASC, uploaded_at DESC") %}
+
+  {% set photo_assets = assets|selectattr("category","equalto","Photography")|list %}
+  {% set video_assets = assets|selectattr("category","equalto","Video")|list %}
+  {% set brand_assets = assets|selectattr("category","equalto","Brand & Creative")|list %}
+  {% set collateral_assets = assets|selectattr("category","equalto","Marketing Collateral")|list %}
+
+  {% set total_count = photo_assets|length + video_assets|length + brand_assets|length + collateral_assets|length %}
+
+  {% if total_count > 0 %}
+    {# Category Tabs #}
+    <div class="asset-tabs" role="tablist">
+      <button class="asset-tab active" role="tab" data-category="all" aria-selected="true">
+        All <span class="tab-count">{{ total_count }}</span>
+      </button>
+      {% if photo_assets|length > 0 %}
+        <button class="asset-tab" role="tab" data-category="photography">
+          Photography <span class="tab-count">{{ photo_assets|length }}</span>
+        </button>
+      {% endif %}
+      {% if video_assets|length > 0 %}
+        <button class="asset-tab" role="tab" data-category="video">
+          Video <span class="tab-count">{{ video_assets|length }}</span>
+        </button>
+      {% endif %}
+      {% if brand_assets|length > 0 %}
+        <button class="asset-tab" role="tab" data-category="brand">
+          Brand &amp; Creative <span class="tab-count">{{ brand_assets|length }}</span>
+        </button>
+      {% endif %}
+      {% if collateral_assets|length > 0 %}
+        <button class="asset-tab" role="tab" data-category="collateral">
+          Marketing Collateral <span class="tab-count">{{ collateral_assets|length }}</span>
+        </button>
+      {% endif %}
+    </div>
+
+    {# Archive Toggle #}
+    <label class="archive-toggle">
+      <input type="checkbox" id="show-archived" onchange="toggleArchived(this.checked)">
+      Show Archived
+    </label>
+
+    {# Photography Grid #}
+    {% if photo_assets|length > 0 %}
+      <div class="asset-grid asset-grid-photos" data-category="photography">
+        {% for asset in photo_assets %}
+          <div class="asset-card asset-photo"
+               data-file-url="{{ asset.file_url }}"
+               data-asset-name="{{ asset.asset_name }}"
+               onclick="openLightbox(this)">
+            <div class="asset-thumb">
+              <img src="{{ asset.thumbnail_url|default(asset.file_url) }}"
+                   alt="{{ asset.asset_name }}"
+                   loading="lazy">
+            </div>
+            <div class="asset-info">
+              <span class="asset-name">{{ asset.asset_name }}</span>
+              {% if asset.subcategory %}
+                <span class="badge badge-subcategory">{{ asset.subcategory }}</span>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# Video Gallery #}
+    {% if video_assets|length > 0 %}
+      <div class="asset-grid asset-grid-videos" data-category="video">
+        {% for asset in video_assets %}
+          <div class="asset-card asset-video"
+               data-file-url="{{ asset.file_url }}"
+               data-asset-name="{{ asset.asset_name }}">
+            <div class="asset-thumb video-thumb">
+              <img src="{{ asset.thumbnail_url|default('') }}"
+                   alt="{{ asset.asset_name }}"
+                   loading="lazy">
+              <div class="play-overlay">
+                <svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="23" fill="rgba(0,0,0,0.5)" stroke="white" stroke-width="2"/><polygon points="20,16 34,24 20,32" fill="white"/></svg>
+              </div>
+            </div>
+            <div class="asset-info">
+              <span class="asset-name">{{ asset.asset_name }}</span>
+              {% if asset.subcategory %}
+                <span class="badge badge-subcategory">{{ asset.subcategory }}</span>
+              {% endif %}
+              {% if asset.campaign_month %}
+                <span class="asset-date">{{ asset.campaign_month }}</span>
+              {% endif %}
+            </div>
+            <a href="{{ asset.file_url }}" class="btn btn-sm btn-secondary" download>Download</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# Brand & Creative #}
+    {% if brand_assets|length > 0 %}
+      <div class="asset-grid asset-grid-docs" data-category="brand">
+        {% for asset in brand_assets %}
+          <div class="asset-card asset-doc">
+            <div class="asset-file-icon">
+              <span class="file-ext">{{ asset.file_type|upper }}</span>
+            </div>
+            <div class="asset-info">
+              <span class="asset-name">{{ asset.asset_name }}</span>
+              {% if asset.description %}<span class="asset-desc">{{ asset.description }}</span>{% endif %}
+            </div>
+            <a href="{{ asset.file_url }}" class="btn btn-sm btn-secondary" download>Download</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# Marketing Collateral #}
+    {% if collateral_assets|length > 0 %}
+      <div class="asset-grid asset-grid-docs" data-category="collateral">
+        {% for asset in collateral_assets %}
+          <div class="asset-card asset-doc">
+            <div class="asset-file-icon">
+              <span class="file-ext">{{ asset.file_type|upper }}</span>
+            </div>
+            <div class="asset-info">
+              <span class="asset-name">{{ asset.asset_name }}</span>
+              {% if asset.description %}<span class="asset-desc">{{ asset.description }}</span>{% endif %}
+            </div>
+            <a href="{{ asset.file_url }}" class="btn btn-sm btn-secondary" download>Download</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+  {% else %}
+    <div class="muted-state asset-empty">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="6" y="10" width="36" height="28" rx="2" stroke="#D9D9D6" stroke-width="2"/><path d="M6 32l10-8 8 6 8-10 10 12" stroke="#D9D9D6" stroke-width="2"/><circle cx="16" cy="20" r="3" stroke="#D9D9D6" stroke-width="2"/></svg>
+      <p>No assets yet. Upload your first asset or contact your marketing team.</p>
+    </div>
+  {% endif %}
+
+  {# Lightbox Modal #}
+  {% include "./asset-lightbox.html" %}
+
+  {# Upload Form Modal #}
+  {% include "./asset-upload-form.html" %}
+</section>
