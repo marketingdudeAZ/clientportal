@@ -31,7 +31,7 @@ from digest import generate_digest
 from approval_agent import route_approval
 from call_notes import save_call_notes
 from red_light_ingest import run_single_property, run_bulk_csv
-from ticket_manager import create_ticket, list_tickets, update_ticket_stage
+from ticket_manager import create_ticket, list_tickets, update_ticket_stage, create_kb_draft_note
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -657,7 +657,185 @@ def update_ticket(ticket_id):
     result = update_ticket_stage(ticket_id, stage)
     if result["status"] == "error":
         return jsonify(result), 400
+
+    # When a ticket closes, auto-draft a KB article in the background
+    if stage == "closed":
+        import threading
+        threading.Thread(
+            target=create_kb_draft_note, args=(ticket_id,), daemon=True
+        ).start()
+
     return jsonify(result)
+
+
+# KB search result cache: {query: (timestamp, results)}
+_kb_cache: dict = {}
+_KB_TTL = 300  # 5 minutes
+
+
+@app.route("/api/kb-search", methods=["GET", "OPTIONS"])
+def kb_search():
+    """Search HubSpot knowledge base articles and return top matches.
+
+    Used to deflect tickets when a KB article already answers the question.
+
+    Query params:
+        q — search query (required)
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    import time
+    from config import HUBSPOT_API_KEY
+    import requests as req
+
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify({"articles": []})
+
+    cache_key = q.lower()
+    now = time.time()
+    cached = _kb_cache.get(cache_key)
+    if cached and (now - cached[0]) < _KB_TTL:
+        return jsonify({"articles": cached[1]})
+
+    try:
+        r = req.get(
+            "https://api.hubapi.com/cms/v3/site-search/search",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"},
+            params={"q": q, "type": "KNOWLEDGE_ARTICLE", "limit": 3},
+            timeout=8,
+        )
+        articles = []
+        if r.status_code == 200:
+            for result in r.json().get("results", []):
+                articles.append({
+                    "title":   result.get("title", ""),
+                    "url":     result.get("url", ""),
+                    "snippet": result.get("description", "") or result.get("featuredImageAltText", ""),
+                })
+        _kb_cache[cache_key] = (now, articles)
+        return jsonify({"articles": articles})
+    except Exception as e:
+        logger.warning("KB search failed: %s", e)
+        return jsonify({"articles": []})
+
+
+@app.route("/api/ticket/<ticket_id>/thread", methods=["GET", "OPTIONS"])
+def get_ticket_thread(ticket_id):
+    """Return the conversation thread messages for a ticket.
+
+    Fetches the HubSpot Conversations thread associated with this ticket,
+    then returns all messages in chronological order.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    from config import HUBSPOT_API_KEY
+    import requests as req
+
+    hs_hdrs = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
+
+    try:
+        # Find thread associated with this ticket
+        r = req.get(
+            "https://api.hubapi.com/conversations/v3/conversations/threads",
+            headers=hs_hdrs,
+            params={"associatedTicketId": ticket_id},
+            timeout=10,
+        )
+        threads = r.json().get("results", []) if r.status_code == 200 else []
+        if not threads:
+            return jsonify({"messages": [], "thread_id": None})
+
+        thread_id = threads[0]["id"]
+
+        # Fetch messages in that thread
+        r2 = req.get(
+            f"https://api.hubapi.com/conversations/v3/conversations/threads/{thread_id}/messages",
+            headers=hs_hdrs,
+            timeout=10,
+        )
+        raw_messages = r2.json().get("results", []) if r2.status_code == 200 else []
+
+        messages = []
+        for m in raw_messages:
+            text = m.get("text") or m.get("richText") or ""
+            if not text.strip():
+                continue
+            senders = m.get("senders", [])
+            sender_name = senders[0].get("name", "") if senders else ""
+            messages.append({
+                "id":         m.get("id", ""),
+                "direction":  m.get("direction", "OUTGOING"),
+                "sender":     sender_name,
+                "text":       text,
+                "created_at": m.get("createdAt", ""),
+            })
+
+        return jsonify({"messages": messages, "thread_id": thread_id})
+
+    except Exception as e:
+        logger.error("Thread fetch failed for ticket %s: %s", ticket_id, e)
+        return jsonify({"error": "Failed to load thread"}), 500
+
+
+@app.route("/api/ticket/<ticket_id>/reply", methods=["POST", "OPTIONS"])
+def reply_to_ticket(ticket_id):
+    """Post a client reply into the ticket's conversation thread.
+
+    Body JSON:
+        text      — message text (required)
+        thread_id — HubSpot thread ID (required)
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    payload = request.get_json() or {}
+    text      = (payload.get("text") or "").strip()
+    thread_id = (payload.get("thread_id") or "").strip()
+
+    if not text or not thread_id:
+        return jsonify({"error": "text and thread_id are required"}), 400
+
+    from config import HUBSPOT_API_KEY
+    import requests as req
+
+    hs_hdrs = {
+        "Authorization": f"Bearer {HUBSPOT_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        r = req.post(
+            f"https://api.hubapi.com/conversations/v3/conversations/threads/{thread_id}/messages",
+            headers=hs_hdrs,
+            json={
+                "type":      "MESSAGE",
+                "text":      f"[Client reply via portal — {email}]\n\n{text}",
+                "direction": "INCOMING",
+            },
+            timeout=10,
+        )
+        if r.status_code in (200, 201):
+            return jsonify({"status": "ok"})
+        logger.warning("Reply post failed %s: %s", r.status_code, r.text[:200])
+        return jsonify({"error": "Failed to post reply"}), 500
+    except Exception as e:
+        logger.error("Reply failed for ticket %s: %s", ticket_id, e)
+        return jsonify({"error": "Failed to post reply"}), 500
 
 
 @app.route("/api/client-brief", methods=["GET", "OPTIONS"])

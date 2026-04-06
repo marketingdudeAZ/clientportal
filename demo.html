@@ -292,6 +292,31 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 .form-textarea{resize:vertical;min-height:72px}
 .form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 
+/* ── KB Deflection ── */
+.kb-deflect-panel{background:linear-gradient(135deg,var(--bdl),#fff);border:1px solid var(--cu);border-radius:8px;padding:16px 18px;margin-bottom:14px}
+.kb-deflect-title{font-size:12px;font-weight:700;color:var(--jd);margin-bottom:10px}
+.kb-article-link{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:6px;text-decoration:none;color:var(--tp);margin-bottom:6px;background:#fff;border:1px solid var(--bd);transition:border-color .15s}
+.kb-article-link:hover{border-color:var(--cu)}
+.kb-article-link svg{flex-shrink:0;margin-top:1px;color:var(--cu)}
+.kb-article-title{font-size:12px;font-weight:700}
+.kb-article-snippet{font-size:11px;color:var(--tm);margin-top:2px;line-height:1.5}
+.kb-deflect-actions{display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--bd)}
+
+/* ── Ticket Thread ── */
+.ticket-thread{background:var(--bdl);border-radius:8px;padding:12px;margin:8px 0}
+.thread-msg{margin-bottom:10px;display:flex;flex-direction:column}
+.thread-msg.outgoing{align-items:flex-start}
+.thread-msg.incoming{align-items:flex-end}
+.thread-bubble{max-width:85%;padding:9px 12px;border-radius:10px;font-size:12px;line-height:1.6}
+.thread-msg.outgoing .thread-bubble{background:#fff;border:1px solid var(--bd);color:var(--tp)}
+.thread-msg.incoming .thread-bubble{background:var(--cu);color:#fff}
+.thread-meta{font-size:10px;color:var(--tm);margin-top:3px;padding:0 2px}
+.thread-reply-bar{display:flex;gap:8px;margin-top:10px}
+.thread-reply-bar textarea{flex:1;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-family:inherit;font-size:12px;resize:none;min-height:36px;outline:none}
+.thread-reply-bar textarea:focus{border-color:var(--cu);box-shadow:0 0 0 3px var(--cug)}
+.thread-loading{font-size:11px;color:var(--tm);padding:8px;text-align:center}
+.ticket-view-thread{font-size:11px;font-weight:600;color:var(--cu);cursor:pointer;border:none;background:none;padding:0;text-decoration:underline}
+
 /* ── Client Brief ── */
 .brief-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
 .brief-card{background:#fff;border:1px solid var(--bd);border-radius:var(--r);padding:22px 24px;box-shadow:var(--sh)}
@@ -2250,21 +2275,72 @@ function toggleCreateTicket() {
 }
 
 function submitTicket() {
-  var form    = document.getElementById('create-ticket-form');
-  var title   = form.querySelector('.form-input').value.trim();
-  var desc    = form.querySelector('.form-textarea').value.trim();
-  var selects = form.querySelectorAll('.form-select');
+  var form     = document.getElementById('create-ticket-form');
+  var title    = form.querySelector('.form-input').value.trim();
+  var desc     = form.querySelector('.form-textarea').value.trim();
+  var selects  = form.querySelectorAll('.form-select');
   var priority = selects[0] ? selects[0].value : 'Medium';
   var category = selects[1] ? selects[1].value : 'Other';
 
   if (!title) { alert('Please enter a title for your request.'); return; }
 
+  // Remove any existing KB deflection panel before searching
+  var existingPanel = form.querySelector('.kb-deflect-panel');
+  if (existingPanel) existingPanel.remove();
+
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+
+  // Step 1 — search KB first
+  fetch(API_BASE + '/api/kb-search?q=' + encodeURIComponent(title), {
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(kb) {
+    var articles = (kb.articles || []).filter(function(a){ return a.title && a.url; });
+    if (articles.length) {
+      _showKBDeflect(form, articles, function(){ _doSubmitTicket(form, title, desc, priority, category); });
+    } else {
+      _doSubmitTicket(form, title, desc, priority, category);
+    }
+  })
+  .catch(function() {
+    // KB unavailable — just submit the ticket
+    _doSubmitTicket(form, title, desc, priority, category);
+  });
+}
+
+function _showKBDeflect(form, articles, onProceed) {
+  var html = '<div class="kb-deflect-panel">' +
+    '<div class="kb-deflect-title">📚 We found some articles that may help:</div>' +
+    articles.map(function(a) {
+      return '<a class="kb-article-link" href="' + a.url + '" target="_blank">' +
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' +
+        '<div><div class="kb-article-title">' + _escHtml(a.title) + '</div>' +
+        (a.snippet ? '<div class="kb-article-snippet">' + _escHtml(a.snippet.slice(0, 100)) + '…</div>' : '') +
+        '</div></a>';
+    }).join('') +
+    '<div class="kb-deflect-actions">' +
+      '<button class="btn btn-secondary btn-sm" onclick="this.closest(\'.kb-deflect-panel\').remove()">Yes, this helped</button>' +
+      '<button class="btn btn-primary btn-sm" id="kb-still-need-help">No, I still need help</button>' +
+    '</div></div>';
+
+  // Insert above the title field
+  var firstRow = form.querySelector('.form-row');
+  firstRow.insertAdjacentHTML('beforebegin', html);
+
+  document.getElementById('kb-still-need-help').onclick = function() {
+    form.querySelector('.kb-deflect-panel').remove();
+    onProceed();
+  };
+}
+
+function _doSubmitTicket(form, title, desc, priority, category) {
   var submitBtn = form.querySelector('.btn-primary');
   submitBtn.textContent = 'Submitting…';
   submitBtn.disabled = true;
 
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__WEBHOOK_URL__ || 'http://localhost:8443';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
 
   fetch(API_BASE + '/api/ticket', {
     method: 'POST',
@@ -2272,41 +2348,22 @@ function submitTicket() {
       'Content-Type': 'application/json',
       'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com',
     },
-    body: JSON.stringify({
-      company_id:  COMPANY_ID,
-      subject:     title,
-      description: desc,
-      priority:    priority,
-      category:    category,
-    })
+    body: JSON.stringify({ company_id: COMPANY_ID, subject: title, description: desc, priority: priority, category: category })
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     if (data.status === 'ok') {
-      // Prepend the new ticket to the list
       var list = document.getElementById('tickets-list');
-      var newCard = _renderTicketCard({
-        id: data.ticket_id,
-        subject: title,
-        description: desc,
-        stage_label: 'New',
-        priority: priority.toUpperCase(),
-        owner_name: 'Your AM',
-        created_at: new Date().toISOString(),
-        channel: category,
-      });
-      list.insertAdjacentHTML('afterbegin', newCard);
-
-      // Reset form + hide
+      list.insertAdjacentHTML('afterbegin', _renderTicketCard({
+        id: data.ticket_id, subject: title, description: desc,
+        stage_label: 'New', priority: priority.toUpperCase(),
+        owner_name: 'Your AM', created_at: new Date().toISOString(), channel: category,
+      }));
       form.querySelector('.form-input').value = '';
       form.querySelector('.form-textarea').value = '';
       form.classList.remove('show');
-
-      // Update sidebar badge
       var badge = document.getElementById('tickets-badge');
       if (badge) badge.textContent = parseInt(badge.textContent || '0') + 1;
-
-      // Log to activity
       document.getElementById('tl-ticket-text').textContent = 'Work request submitted to Service Hub: "' + title + '"';
       showActivityItem('tl-ticket-submitted');
     } else {
@@ -2314,17 +2371,11 @@ function submitTicket() {
     }
   })
   .catch(function(err) {
-    console.warn('Ticket API unavailable, saving locally:', err);
-    // Graceful fallback — show in portal without HubSpot
     var list = document.getElementById('tickets-list');
     list.insertAdjacentHTML('afterbegin', _renderTicketCard({
-      id: 'local-' + Date.now(),
-      subject: title,
-      description: desc,
-      stage_label: 'New',
-      priority: priority.toUpperCase(),
-      owner_name: 'Your AM',
-      created_at: new Date().toISOString(),
+      id: 'local-' + Date.now(), subject: title, description: desc,
+      stage_label: 'New', priority: priority.toUpperCase(),
+      owner_name: 'Your AM', created_at: new Date().toISOString(),
     }));
     form.querySelector('.form-input').value = '';
     form.querySelector('.form-textarea').value = '';
@@ -2340,7 +2391,7 @@ function submitTicket() {
 
 function loadTickets() {
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__WEBHOOK_URL__ || 'http://localhost:8443';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
 
   fetch(API_BASE + '/api/tickets?company_id=' + COMPANY_ID, {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
@@ -2379,9 +2430,13 @@ function _renderTicketCard(t) {
     '</div>' +
     '<div class="ticket-body">' +
       '<div class="ticket-desc">' + (t.description || '') + '</div>' +
+      '<div id="' + id + '-thread"></div>' +
       '<div class="ticket-foot">' +
         '<div class="ticket-date">Opened ' + dateStr + (t.owner_name ? ' · ' + t.owner_name : '') + '</div>' +
-        '<button class="btn btn-secondary btn-sm" onclick="escalateTicket(\'' + id + '\', this)">Escalate to ClickUp</button>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button class="btn btn-secondary btn-sm ticket-view-thread" onclick="loadTicketThread(\'' + t.id + '\', \'' + id + '-thread\', this)">View Thread</button>' +
+          '<button class="btn btn-secondary btn-sm" onclick="escalateTicket(\'' + id + '\', this)">Escalate to ClickUp</button>' +
+        '</div>' +
       '</div>' +
     '</div>' +
   '</div>';
@@ -2397,12 +2452,106 @@ function escalateTicket(id, btn) {
   if (statusEl) { statusEl.className = 'ticket-status escalated'; statusEl.textContent = 'Escalated'; }
 }
 
+function loadTicketThread(ticketId, containerId, btn) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+
+  // Toggle — if already open, close it
+  if (container.dataset.open === '1') {
+    container.innerHTML = '';
+    container.dataset.open = '0';
+    btn.textContent = 'View Thread';
+    return;
+  }
+
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+  btn.textContent = 'Loading…';
+  btn.disabled = true;
+
+  fetch(API_BASE + '/api/ticket/' + ticketId + '/thread', {
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    btn.disabled = false;
+    btn.textContent = 'Hide Thread';
+    container.dataset.open = '1';
+
+    var msgs = data.messages || [];
+    if (!msgs.length) {
+      container.innerHTML = '<div class="ticket-thread"><p class="thread-loading">No messages yet. Use the reply box below to send your first message.</p>' + _replyBarHTML(ticketId, data.thread_id) + '</div>';
+      return;
+    }
+
+    var html = '<div class="ticket-thread">';
+    msgs.forEach(function(m) {
+      var cls = m.direction === 'OUTGOING' ? 'outgoing' : 'incoming';
+      var time = '';
+      try { time = new Date(m.created_at).toLocaleString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); } catch(e){}
+      html += '<div class="thread-msg ' + cls + '">' +
+        '<div class="thread-bubble">' + (m.text || '') + '</div>' +
+        '<div class="thread-meta">' + (m.sender || (cls === 'outgoing' ? 'RPM Team' : 'You')) + (time ? ' · ' + time : '') + '</div>' +
+      '</div>';
+    });
+    html += _replyBarHTML(ticketId, data.thread_id) + '</div>';
+    container.innerHTML = html;
+  })
+  .catch(function() {
+    btn.disabled = false;
+    btn.textContent = 'View Thread';
+    container.innerHTML = '<div class="ticket-thread"><p class="thread-loading" style="color:#DC2626">Could not load thread. Please try again.</p></div>';
+  });
+}
+
+function _replyBarHTML(ticketId, threadId) {
+  var tid = threadId || '';
+  return '<div class="thread-reply-bar">' +
+    '<input type="text" class="thread-reply-input" id="reply-input-' + ticketId + '" placeholder="Type a reply to your AM…" onkeydown="if(event.key===\'Enter\')replyToTicket(\'' + ticketId + '\',\'' + tid + '\')">' +
+    '<button class="btn btn-primary btn-sm" onclick="replyToTicket(\'' + ticketId + '\',\'' + tid + '\')">Send</button>' +
+  '</div>';
+}
+
+function replyToTicket(ticketId, threadId) {
+  var input = document.getElementById('reply-input-' + ticketId);
+  if (!input) return;
+  var text = input.value.trim();
+  if (!text) return;
+
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+  input.disabled = true;
+
+  fetch(API_BASE + '/api/ticket/' + ticketId + '/reply', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com'
+    },
+    body: JSON.stringify({ text: text, thread_id: threadId })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function() {
+    input.value = '';
+    input.disabled = false;
+    // Find the View Thread button for this ticket and reload
+    var threadContainer = document.getElementById('ticket-hs-' + ticketId + '-thread');
+    if (threadContainer) {
+      var btn = threadContainer.closest('.ticket-body').querySelector('.ticket-view-thread');
+      threadContainer.dataset.open = '0'; // force reload
+      if (btn) loadTicketThread(ticketId, 'ticket-hs-' + ticketId + '-thread', btn);
+    }
+  })
+  .catch(function() {
+    input.disabled = false;
+    alert('Could not send reply. Please try again.');
+  });
+}
+
 // ── Client Brief ──
 var _briefLoaded = false;
 function loadClientBrief() {
   if (_briefLoaded) return;
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__WEBHOOK_URL__ || 'http://localhost:8443';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
 
   fetch(API_BASE + '/api/client-brief?company_id=' + COMPANY_ID, {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
@@ -2475,7 +2624,7 @@ var _budgetLoaded = false;
 function loadBudget() {
   if (_budgetLoaded) return;
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__WEBHOOK_URL__ || 'http://localhost:8443';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
 
   fetch(API_BASE + '/api/budget?company_id=' + COMPANY_ID, {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
@@ -2610,7 +2759,7 @@ function cancelBriefEdit(card) {
 
 function saveBriefCard(card) {
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__WEBHOOK_URL__ || 'http://localhost:8443';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
 
   var fields = {};
   card.querySelectorAll('[data-input-field]').forEach(function(inp) {
@@ -2695,7 +2844,7 @@ var _spendLoaded = false;
 
 function loadSpendSheet(force) {
   if (_spendLoaded && !force) return;
-  var API_BASE = window.__WEBHOOK_URL__ || 'http://localhost:8443';
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
   var tbody = document.getElementById('spend-tbody');
   var url = API_BASE + '/api/spend-sheet' + (force ? '?refresh=true' : '');
 
