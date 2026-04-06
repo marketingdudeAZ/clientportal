@@ -1,0 +1,21 @@
+{#
+  Phase 6: AI-Curated Property Digest
+  Rendered as a placeholder div — JS fetches content from /api/digest on load.
+  Falls back to static message if API fails.
+#}
+<section class="portal-card digest-card" id="digest-section">
+  <div class="section-header">
+    <h2 class="section-title">Property Summary</h2>
+    <span class="digest-badge">AI-curated</span>
+  </div>
+  <div id="digest-content" class="digest-content">
+    <div id="digest-loading" class="digest-loading">
+      <div class="digest-spinner"></div>
+      <span>Preparing your summary...</span>
+    </div>
+    <div id="digest-text" class="digest-text" style="display:none;"></div>
+    <div id="digest-error" class="digest-fallback" style="display:none;">
+      Your property summary is being prepared — check back shortly.
+    </div>
+  </div>
+</section>

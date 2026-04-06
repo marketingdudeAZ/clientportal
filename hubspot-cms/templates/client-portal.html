@@ -1,7 +1,9 @@
 <!--
   RPM Living Client Portal
-  HubSpot CMS Dynamic Page
-  UUID-routed single page: /client-portal?uuid={property_uuid}
+  HubSpot CMS Dynamic Page (Membership-gated)
+  Routes:
+    ?uuid={id}  → Property detail view
+    (default)   → Portfolio dashboard (user authenticated via HubSpot Membership)
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -10,72 +12,83 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RPM Living | Client Portal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
-  {{ require_css(get_asset_url("../css/portal.css")) }}
-  {{ require_css(get_asset_url("../css/gauges.css")) }}
-  {{ require_css(get_asset_url("../css/asset-library.css")) }}
-  {{ require_css(get_asset_url("../css/configurator.css")) }}
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/css/portal.css">
+
+  {% set uuid_param = request.query_dict.uuid %}
+
+  {% if uuid_param %}
+    {# Property detail: load all property CSS/JS #}
+    <link rel="stylesheet" href="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/css/gauges.css">
+    <link rel="stylesheet" href="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/css/asset-library.css">
+    <link rel="stylesheet" href="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/css/configurator.css">
+    <link rel="stylesheet" href="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/css/rec-feed.css">
+  {% else %}
+    {# Dashboard: load dashboard CSS #}
+    <link rel="stylesheet" href="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/css/dashboard.css">
+  {% endif %}
 </head>
 <body>
 
-{# ── UUID Routing ── #}
-{% set uuid_param = request.query_dict.uuid %}
-
-{% if !uuid_param %}
-  {% include "../templates/portal-error.html" with { error_type: "no_uuid" } %}
-{% else %}
+{% if uuid_param %}
+  {# ══════════════════════════════════════════
+     ROUTE 1: Property Detail View (existing)
+     ══════════════════════════════════════════ #}
   {% set companies = crm_objects("company",
     "uuid=" ~ uuid_param,
-    "name,address,city,state,zip,uuid,domain,rpmmarket,plestatus,units_offered,ninjacat_system_id,seo_budget,redlight_report_score,redlight_market_score,redlight_marketing_score,redlight_funnel_score,redlight_experience_score,redlight_report_status,redlight_report_pdf_url,redlight_flag_count,redlight_digital_flags,redlight_pm_flags,redlight_ops_flags,redlight_operations_flags,redlight_recommendations,redlight_report_date,seo_local_pin_report_link,competitor_gap_analysis_link,social_posting_tier,reputation_tier,paid_search_monthly_spend,paid_social_monthly_spend,website_hosting_type,paid_media_recs_status,paid_media_good_json,paid_media_better_json,paid_media_best_json") %}
+    "name,address,city,state,zip,uuid,domain,rpmmarket,plestatus,totalunits,ninjacat_system_id,seo_budget,redlight_report_score,redlight_market_score,redlight_marketing_score,redlight_funnel_score,redlight_experience_score,redlight_report_status,redlight_report_pdf_url,redlight_flag_count,redlight_digital_flags,redlight_pm_flags,redlight_ops_flags,redlight_operations_flags,redlight_recommendations,redlight_report_date,seo_local_pin_report_link,competitor_gap_analysis_link,social_posting_tier,reputation_tier,paid_search_monthly_spend,paid_social_monthly_spend,website_hosting_type,paid_media_recs_status,paid_media_good_json,paid_media_better_json,paid_media_best_json") %}
 
   {% if companies.results|length == 0 %}
-    {% include "../templates/portal-error.html" with { error_type: "not_found" } %}
+    {% include "./portal-error.html" with { error_type: "not_found" } %}
   {% else %}
     {% set property = companies.results[0] %}
 
     {% if property.plestatus not in ["RPM Managed", "Dispositioning", "Onboarding"] %}
-      {% include "../templates/portal-error.html" with { error_type: "invalid_status" } %}
+      {% include "./portal-error.html" with { error_type: "invalid_status" } %}
     {% else %}
 
-      {# ── Portal Content ── #}
       <div class="portal-wrapper">
         <header class="portal-header">
-          <img src="{{ get_asset_url('../images/rpm-logo.svg') }}" alt="RPM Living" class="portal-logo">
+          <img src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/images/rpm-logo.png" alt="RPM Living" class="portal-logo">
           <span class="portal-header-label">Client Portal</span>
         </header>
 
-        <main class="portal-main">
-          {# Phase 1: Identity Block #}
+        {# Inject portal config for JS — company ID needed for digest + approval API calls #}
+      <script>
+        window.__PORTAL_API_BASE = '{{ module.api_base_url|default("") }}';
+        window.__PORTAL_UUID = '{{ uuid_param }}';
+        window.__PORTAL_COMPANY_ID = '{{ property.id }}';
+        window.__PORTAL_PROPERTY_NAME = '{{ property.name|replace("'", "\\'") }}';
+        window.__PORTAL_MARKET = '{{ property.rpmmarket|default("") }}';
+        window.__PORTAL_EMAIL = '{{ request.contact.email|default("") }}';
+      </script>
+
+      <main class="portal-main">
           {% include "./partials/identity-block.html" %}
 
-          {# Phase 1: Included Services Value Table #}
-          {% if property.units_offered %}
+          {% if property.totalunits %}
             {% include "./partials/included-services.html" %}
           {% endif %}
 
-          {# Phase 1: Marketing Report #}
           {% include "./partials/report-card.html" %}
-
-          {# Phase 1: Current Enrolled Packages #}
           {% include "./partials/packages-card.html" %}
-
-          {# Phase 1: SEO Deliverables #}
           {% include "./partials/seo-deliverables.html" %}
 
-          {# Phase 2: Health Score (conditional) #}
           {% if property.redlight_report_score %}
             {% include "./partials/health-score.html" %}
           {% endif %}
 
-          {# Phase 3: Budget Recommendations (conditional) #}
+          {# AI-curated digest — JS fetches from /api/digest on load #}
+          {% include "./partials/digest.html" %}
+
+          {# AI recommendations feed — reads from HubDB rpm_recommendations #}
+          {% include "./partials/rec-feed.html" %}
+
           {% if property.redlight_flag_count %}
             {% include "./partials/recommendations.html" %}
           {% endif %}
 
-          {# Phase 4: Asset Library #}
           {% include "./partials/asset-library.html" %}
-
-          {# Phase 5: Budget Configurator #}
           {% include "./partials/configurator.html" %}
         </main>
 
@@ -86,11 +99,33 @@
 
     {% endif %}
   {% endif %}
+
+  <script src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/js/portal.js"></script>
+  <script src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/js/gauges.js"></script>
+  <script src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/js/asset-library.js"></script>
+  <script src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/js/configurator.js"></script>
+
+{% else %}
+  {# ══════════════════════════════════════════
+     ROUTE 2: Portfolio Dashboard
+     HubSpot Membership gates this page — if we reach here,
+     request.contact is the authenticated user.
+     ══════════════════════════════════════════ #}
+
+  {# Read contact identity from HubSpot Membership session #}
+  {% set contact_email = request.contact.email|default("") %}
+  {% set contact_role = request.contact.portal_role|default("marketing_manager") %}
+
+  <script>
+    window.__PORTAL_API_BASE = '{{ module.api_base_url|default("") }}';
+    window.__PORTAL_EMAIL = '{{ contact_email }}';
+    window.__PORTAL_ROLE = '{{ contact_role }}';
+  </script>
+
+  {% include "./partials/dashboard.html" %}
+  <script src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/js/dashboard.js"></script>
+
 {% endif %}
 
-{{ require_js(get_asset_url("../js/portal.js")) }}
-{{ require_js(get_asset_url("../js/gauges.js")) }}
-{{ require_js(get_asset_url("../js/asset-library.js")) }}
-{{ require_js(get_asset_url("../js/configurator.js")) }}
 </body>
 </html>

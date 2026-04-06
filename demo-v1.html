@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RPM Living | Client Portal Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* ── Demo Nav ── */
+    .demo-nav { position:fixed;top:0;left:0;right:0;z-index:9999;background:#1F2937;padding:10px 24px;display:flex;align-items:center;gap:16px;font-family:'Montserrat',sans-serif;font-size:12px; }
+    .demo-nav span { color:#9CA3AF;font-weight:600;text-transform:uppercase;letter-spacing:0.1em; }
+    .demo-nav button { padding:6px 16px;border-radius:6px;border:1px solid #4B5563;background:transparent;color:#D1D5DB;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s; }
+    .demo-nav button:hover { background:#374151;border-color:#C8964E;color:#fff; }
+    .demo-nav button.active { background:#C8964E;border-color:#C8964E;color:#fff; }
+    body { padding-top:44px; }
+
+    /* ══ Portal CSS ══ */
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--juniper:#53606C;--juniper-dark:#3D474F;--copper:#C8964E;--copper-light:#D4A86A;--copper-glow:rgba(200,150,78,0.12);--sage:#8FA68E;--mint:#CDE3E0;--mint-light:#E8F4F2;--light-gray:#D9D9D6;--critical-red:#C94444;--warning-amber:#D4910A;--white:#FFFFFF;--bg:#F3F4F6;--text-primary:#1F2937;--text-secondary:#6B7280;--text-muted:#9CA3AF;--border:#E5E7EB;--border-light:#F3F4F6;--card-radius:16px;--card-radius-sm:12px;--max-width:1120px;--shadow-sm:0 1px 2px rgba(0,0,0,0.04);--shadow-md:0 4px 16px rgba(0,0,0,0.06);--shadow-glow:0 0 0 3px var(--copper-glow);--transition:0.2s cubic-bezier(0.4,0,0.2,1)}
+    html{scroll-behavior:smooth}
+    body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;font-weight:400;line-height:1.7;color:var(--text-primary);background:var(--bg);-webkit-font-smoothing:antialiased}
+    .portal-wrapper{max-width:var(--max-width);margin:0 auto;padding:0 24px 80px}
+    .portal-header{display:flex;align-items:center;gap:20px;padding:20px 32px;margin:24px 0 32px;background:rgba(255,255,255,0.92);border-radius:var(--card-radius);box-shadow:var(--shadow-md);position:sticky;top:60px;z-index:100;backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.6)}
+    .portal-logo{height:36px;width:auto}
+    .portal-header-label{font-size:13px;font-weight:700;color:var(--copper);text-transform:uppercase;letter-spacing:0.12em;border-left:2px solid var(--mint);padding-left:20px}
+    .portal-main{display:flex;flex-direction:column;gap:24px}
+    .portal-footer{text-align:center;padding:48px 0 24px;color:var(--text-muted);font-size:12px}
+    .portal-card{background:var(--white);border:1px solid var(--border);border-radius:var(--card-radius);padding:36px;box-shadow:var(--shadow-sm);transition:box-shadow var(--transition);position:relative;overflow:hidden}
+    .portal-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--copper),var(--sage));opacity:0;transition:opacity var(--transition)}
+    .portal-card:hover{box-shadow:var(--shadow-md)}
+    .portal-card:hover::before{opacity:1}
+    .section-header{font-size:20px;font-weight:700;color:var(--juniper-dark);margin-bottom:6px;display:flex;align-items:center;gap:10px}
+    .section-header::before{content:'';width:4px;height:20px;border-radius:2px;background:var(--copper);flex-shrink:0}
+    .section-subtitle{color:var(--text-secondary);margin-bottom:28px;font-size:13px;padding-left:14px}
+    .identity-block{background:linear-gradient(135deg,var(--juniper-dark) 0%,var(--juniper) 100%);color:var(--white);border:none;padding:44px 40px}
+    .identity-block::before{display:none}
+    .identity-block .section-header::before{background:var(--copper)}
+    .property-name{font-size:34px;font-weight:800;color:var(--white);margin-bottom:12px;letter-spacing:-0.02em;line-height:1.2}
+    .identity-details{display:flex;flex-wrap:wrap;align-items:center;gap:16px;margin-top:4px}
+    .property-address{color:rgba(255,255,255,0.75);font-size:15px}
+    .property-website{display:inline-flex;align-items:center;gap:6px;color:var(--copper-light);text-decoration:none;font-weight:600;font-size:13px;padding:6px 16px;background:rgba(255,255,255,0.1);border-radius:100px;transition:all var(--transition)}
+    .property-website:hover{background:rgba(255,255,255,0.2);color:var(--white)}
+    .badge{display:inline-flex;align-items:center;padding:5px 14px;border-radius:100px;font-size:11px;font-weight:700;line-height:1;letter-spacing:0.04em;text-transform:uppercase}
+    .badge-market{background:rgba(205,227,224,0.3);color:var(--white);border:1px solid rgba(205,227,224,0.4)}
+    .badge-enrolled{background:var(--mint-light);color:var(--juniper)}
+    .badge-health-status{background:var(--mint);color:var(--juniper-dark)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 28px;border-radius:10px;font-family:inherit;font-size:14px;font-weight:700;text-decoration:none;border:none;cursor:pointer;transition:all var(--transition)}
+    .btn:hover{transform:translateY(-1px);box-shadow:var(--shadow-md)}
+    .btn-primary{background:linear-gradient(135deg,var(--copper),var(--copper-light));color:var(--white)}
+    .btn-secondary{background:var(--white);color:var(--juniper);border:1px solid var(--border)}
+    .btn-sm{padding:8px 18px;font-size:12px;border-radius:8px}
+    .btn-full{width:100%}
+    .text-right{text-align:right}
+
+    /* Services table */
+    .services-table{width:100%;border-collapse:separate;border-spacing:0}
+    .services-table th,.services-table td{padding:14px 20px;text-align:left}
+    .services-table th{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);background:var(--bg);border-bottom:1px solid var(--border)}
+    .services-table th:first-child{border-radius:8px 0 0 0} .services-table th:last-child{border-radius:0 8px 0 0}
+    .services-table tbody tr{transition:background var(--transition)} .services-table tbody tr:hover{background:var(--mint-light)}
+    .services-table td{border-bottom:1px solid var(--border-light);font-size:14px} .services-table td:first-child{font-weight:600}
+    .total-row td{font-weight:800;font-size:16px;border-top:2px solid var(--juniper);border-bottom:none;background:var(--bg);padding:18px 20px}
+    .total-row td:first-child{border-radius:0 0 0 8px} .total-row td:last-child{border-radius:0 0 8px 0}
+    .total-value{color:var(--copper)}
+
+    /* Packages */
+    .packages-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px}
+    .package-item{display:flex;flex-direction:column;align-items:center;gap:10px;padding:28px 20px;border:1px solid var(--border);border-radius:var(--card-radius-sm);text-align:center;transition:all var(--transition);background:var(--white)}
+    .package-item:hover{border-color:var(--copper);box-shadow:var(--shadow-glow);transform:translateY(-2px)}
+    .package-icon{color:var(--juniper)} .package-label{font-size:13px;font-weight:700;color:var(--juniper-dark)}
+    .package-tier{font-size:13px;font-weight:600;color:var(--copper);padding:3px 12px;background:var(--copper-glow);border-radius:100px}
+
+    /* Deliverables */
+    .deliverables-list{display:flex;flex-direction:column;gap:12px}
+    .deliverable-link{display:flex;align-items:center;gap:12px;color:var(--text-primary);text-decoration:none;font-weight:600;padding:16px 20px;border:1px solid var(--border);border-radius:var(--card-radius-sm);transition:all var(--transition);background:var(--white)}
+    .deliverable-link svg{color:var(--copper);flex-shrink:0}
+    .deliverable-link:hover{border-color:var(--copper);box-shadow:var(--shadow-glow);transform:translateX(4px)}
+
+    /* Gauges */
+    .health-gauges{display:flex;align-items:flex-start;gap:40px;margin:24px 0}
+    .gauge-main{flex-shrink:0} .gauge-categories{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;flex:1}
+    .gauge{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px;border-radius:12px;transition:all 0.2s}
+    .gauge:hover{background:var(--bg)} .gauge-score-text{font-family:'Montserrat',sans-serif;font-weight:800}
+    .gauge-label{font-size:12px;font-weight:700;color:var(--juniper);text-transform:uppercase;letter-spacing:0.04em}
+    .gauge-status{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em}
+    .gauge-arc{transition:stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)}
+    .health-meta{display:flex;align-items:center;gap:12px;margin-top:16px}
+
+    /* Flags */
+    .flag-group{margin-bottom:28px} .flag-group-header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+    .flag-owner-badge{padding:5px 14px;border-radius:100px;font-size:11px;font-weight:700;color:var(--white);text-transform:uppercase;letter-spacing:0.06em}
+    .badge-digital{background:linear-gradient(135deg,var(--copper),var(--copper-light))} .badge-pm{background:linear-gradient(135deg,var(--juniper-dark),var(--juniper))} .badge-ops{background:linear-gradient(135deg,#6B8E6A,var(--sage))}
+    .flag-cards{display:flex;flex-direction:column;gap:8px}
+    .flag-card{border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:all 0.2s} .flag-card:hover{border-color:var(--light-gray)} .flag-card.expanded{box-shadow:var(--shadow-md)}
+    .flag-card-header{display:flex;align-items:center;gap:12px;padding:16px 20px;cursor:pointer;transition:background 0.15s} .flag-card-header:hover{background:var(--bg)}
+    .flag-name{flex:1;font-size:14px;font-weight:700}
+    .flag-chevron{transition:transform 0.3s;color:var(--text-muted)} .flag-card.expanded .flag-chevron{transform:rotate(180deg)}
+    .flag-card-body{display:none;padding:0 20px 20px} .flag-card.expanded .flag-card-body{display:block}
+    .severity-badge{padding:3px 10px;border-radius:6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em}
+    .severity-high{background:#FEF3C7;color:var(--warning-amber)} .severity-medium{background:#FEF3C7;color:#92400E} .severity-low{background:#ECFDF5;color:#065F46}
+    .flag-metrics{display:flex;gap:24px;margin-bottom:12px;padding:10px 16px;background:var(--bg);border-radius:8px;font-size:13px}
+    .flag-reasoning{font-size:13px;color:var(--text-secondary);margin-bottom:8px;line-height:1.7}
+    .flag-consequence{font-size:13px;color:var(--critical-red);font-style:italic}
+
+    /* Asset Library */
+    .asset-tabs{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+    .asset-tab{padding:8px 18px;border-radius:100px;border:1px solid var(--border);font-family:inherit;font-size:13px;font-weight:600;color:var(--text-secondary);background:var(--white);cursor:pointer;transition:all var(--transition)}
+    .asset-tab:hover{border-color:var(--copper);color:var(--copper)}
+    .asset-tab.active{background:var(--juniper);color:var(--white);border-color:var(--juniper)}
+    .asset-tab .tab-count{font-size:11px;margin-left:4px;opacity:0.7}
+    .asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}
+    .asset-card{border:1px solid var(--border);border-radius:var(--card-radius-sm);overflow:hidden;transition:all var(--transition);cursor:pointer;background:var(--white)}
+    .asset-card:hover{border-color:var(--copper);box-shadow:var(--shadow-glow);transform:translateY(-2px)}
+    .asset-card img{width:100%;height:140px;object-fit:cover;display:block}
+    .asset-card-info{padding:12px 14px}
+    .asset-card-name{font-size:12px;font-weight:700;color:var(--juniper-dark);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .asset-card-meta{font-size:11px;color:var(--text-muted)}
+
+    /* Configurator */
+    .channel-row{margin-bottom:32px}
+    .channel-header{display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border-light)}
+    .channel-name{font-size:16px;font-weight:700;color:var(--juniper-dark)}
+    .channel-icon{color:var(--juniper)}
+    .tier-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+    .tier-card{border:2px solid var(--border);border-radius:var(--card-radius-sm);padding:24px 20px;text-align:center;transition:all var(--transition);cursor:pointer;position:relative;background:var(--white)}
+    .tier-card:hover{border-color:var(--copper);box-shadow:var(--shadow-glow)}
+    .tier-card.selected{border-color:var(--copper);box-shadow:var(--shadow-glow);background:var(--copper-glow)}
+    .tier-card.tier-current{border-color:var(--sage)}
+    .tier-card.tier-recommended::after{content:'RECOMMENDED';position:absolute;top:0;left:0;right:0;background:var(--copper);color:var(--white);font-size:9px;font-weight:800;padding:4px;text-align:center;letter-spacing:0.1em}
+    .tier-card.tier-recommended{padding-top:36px}
+    .tier-name{font-size:14px;font-weight:700;color:var(--juniper-dark);margin-bottom:8px}
+    .tier-price{font-size:28px;font-weight:800;color:var(--copper);margin-bottom:4px}
+    .tier-price span{font-size:14px;font-weight:400;color:var(--text-muted)}
+    .tier-setup{font-size:12px;color:var(--text-muted);margin-bottom:12px}
+
+    /* Running Total */
+    .running-total{position:sticky;bottom:0;background:var(--white);border-top:2px solid var(--juniper);padding:20px 36px;display:flex;align-items:center;justify-content:space-between;gap:24px;z-index:50;box-shadow:0 -4px 20px rgba(0,0,0,0.08)}
+    .total-grid{display:flex;gap:32px}
+    .total-item{text-align:center} .total-item-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted)} .total-item-value{font-size:20px;font-weight:800;color:var(--juniper-dark)}
+    .total-item-value.positive{color:var(--critical-red)} .total-item-value.negative{color:var(--sage)}
+
+    /* Animations */
+    @keyframes fadeInUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    .portal-main>*{animation:fadeInUp 0.5s ease-out both}
+    .portal-main>*:nth-child(1){animation-delay:0.05s}.portal-main>*:nth-child(2){animation-delay:0.1s}.portal-main>*:nth-child(3){animation-delay:0.15s}.portal-main>*:nth-child(4){animation-delay:0.2s}.portal-main>*:nth-child(5){animation-delay:0.25s}.portal-main>*:nth-child(6){animation-delay:0.3s}.portal-main>*:nth-child(7){animation-delay:0.35s}.portal-main>*:nth-child(8){animation-delay:0.4s}.portal-main>*:nth-child(9){animation-delay:0.45s}.portal-main>*:nth-child(10){animation-delay:0.5s}
+
+    /* ══ Dashboard CSS ══ */
+    .dashboard-header{display:flex;align-items:center}.header-spacer{flex:1}.header-user{display:flex;align-items:center;gap:12px}.user-email{font-size:13px;color:var(--text-secondary);font-weight:600}.user-role-badge{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;background:var(--copper-glow);color:var(--copper);padding:4px 10px;border-radius:6px}
+    .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}
+    .kpi-card{background:var(--white);border:1px solid var(--border);border-radius:var(--card-radius);padding:28px 24px;text-align:center;box-shadow:var(--shadow-sm);transition:box-shadow var(--transition),transform var(--transition);position:relative;overflow:hidden}
+    .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--copper),var(--sage));opacity:0;transition:opacity var(--transition)}
+    .kpi-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}.kpi-card:hover::before{opacity:1}
+    .kpi-icon{display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;background:var(--mint-light);color:var(--juniper);margin-bottom:12px}
+    .kpi-icon-units{background:rgba(200,150,78,0.08);color:var(--copper)}.kpi-icon-health{background:rgba(143,166,142,0.15);color:var(--sage)}.kpi-icon-spend{background:var(--copper-glow);color:var(--copper)}.kpi-icon-flags{background:rgba(201,68,68,0.08);color:var(--critical-red)}
+    .kpi-value{font-size:32px;font-weight:800;color:var(--juniper-dark);line-height:1.2;margin-bottom:4px}.kpi-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted)}
+    .health-distribution-card{padding:28px 36px}.health-bar-wrapper{margin-top:20px}.health-bar{display:flex;height:28px;border-radius:14px;overflow:hidden;background:var(--border-light)}.health-segment{height:100%;min-width:0}
+    .health-segment.healthy{background:var(--sage)}.health-segment.warning{background:var(--warning-amber)}.health-segment.critical{background:var(--critical-red)}.health-segment.no-data{background:var(--light-gray)}
+    .health-legend{display:flex;gap:24px;margin-top:14px;flex-wrap:wrap}.legend-item{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);font-weight:600}.legend-dot{width:10px;height:10px;border-radius:50%}.legend-dot.healthy{background:var(--sage)}.legend-dot.warning{background:var(--warning-amber)}.legend-dot.critical{background:var(--critical-red)}.legend-dot.no-data{background:var(--light-gray)}
+    .property-table-card{padding:28px 0}.table-header-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;padding:0 36px;margin-bottom:20px}.table-controls{display:flex;gap:10px;flex-wrap:wrap}
+    .table-search{padding:9px 16px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;width:220px}.table-search:focus{outline:none;border-color:var(--copper);box-shadow:var(--shadow-glow)}
+    .table-filter{padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;color:var(--text-primary);background:var(--white);cursor:pointer}
+    .dashboard-table{width:100%;border-collapse:collapse}.dashboard-table th{padding:12px 20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);background:var(--bg);border-bottom:1px solid var(--border);border-top:1px solid var(--border-light);white-space:nowrap;cursor:pointer}
+    .dashboard-table th:first-child{padding-left:36px}.dashboard-table th:last-child{padding-right:36px}.dashboard-table th:hover{color:var(--copper)}
+    .dashboard-table td{padding:16px 20px;border-bottom:1px solid var(--border-light);font-size:14px}.dashboard-table td:first-child{padding-left:36px}.dashboard-table td:last-child{padding-right:36px}
+    .dashboard-table tbody tr{cursor:pointer;transition:background var(--transition)}.dashboard-table tbody tr:hover{background:var(--mint-light)}
+    .property-name-cell{font-weight:700;color:var(--juniper-dark)}.property-name-cell .property-location{display:block;font-size:12px;font-weight:400;color:var(--text-muted);margin-top:2px}
+    .health-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}.health-dot.healthy{background:var(--sage)}.health-dot.warning{background:var(--warning-amber)}.health-dot.critical{background:var(--critical-red)}
+    .flag-count-cell{font-weight:700}.flag-count-cell.has-flags{color:var(--critical-red)}.flag-count-cell.no-flags{color:var(--text-muted)}
+    .table-footer{padding:14px 36px;font-size:13px;color:var(--text-muted);border-top:1px solid var(--border-light)}
+    .table-responsive{overflow-x:auto}.sort-icon{display:inline-block;margin-left:4px;font-size:10px;opacity:0.3}.sort-icon.asc::after{content:'\25B2'}
+    @media(max-width:1200px){.kpi-grid{grid-template-columns:repeat(3,1fr)}.gauge-categories{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:768px){.kpi-grid{grid-template-columns:1fr 1fr}.portal-card{padding:24px}.property-name{font-size:26px}.identity-block{padding:32px 24px}.packages-grid{grid-template-columns:1fr 1fr}.health-gauges{flex-direction:column;align-items:center}.tier-cards{grid-template-columns:1fr 1fr}}
+
+    .view{display:none}.view.active{display:block}
+  </style>
+</head>
+<body>
+
+<div class="demo-nav">
+  <span>Demo</span>
+  <button class="active" onclick="showView('property')">Property Detail</button>
+  <button onclick="showView('dashboard')">Portfolio Dashboard</button>
+</div>
+
+<!-- ════════════════════════════════════════
+     VIEW 1: Property Detail
+     ════════════════════════════════════════ -->
+<div id="view-property" class="view active">
+<div class="portal-wrapper">
+  <header class="portal-header">
+    <img src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/images/rpm-logo.png" alt="RPM Living" class="portal-logo">
+    <span class="portal-header-label">Client Portal</span>
+  </header>
+  <main class="portal-main">
+
+    <!-- 1. Identity Block -->
+    <div class="portal-card identity-block">
+      <h1 class="property-name">The Quincy at Kierland</h1>
+      <div class="identity-details">
+        <span class="property-address">15169 N Kierland Blvd, Scottsdale, AZ 85254</span>
+        <span class="badge badge-market">Scottsdale</span>
+        <span class="badge badge-market">320 Units</span>
+        <a href="#" class="property-website">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          quincyatkierland.com
+        </a>
+      </div>
+    </div>
+
+    <!-- 2. Included Services -->
+    <div class="portal-card">
+      <h2 class="section-header">Included Marketing Services</h2>
+      <p class="section-subtitle">Services included with your marketing program based on 294 units.</p>
+      <table class="services-table">
+        <thead><tr><th>Service</th><th>Tier / Basis</th><th class="text-right">Monthly</th></tr></thead>
+        <tbody>
+          <tr><td>CRM Lead Management</td><td>$1.50/unit</td><td class="text-right">$441.00</td></tr>
+          <tr><td>Customer Experience</td><td>$0.55/unit</td><td class="text-right">$161.70</td></tr>
+          <tr><td>Website Hosting</td><td>Semi-Custom</td><td class="text-right">$205.00</td></tr>
+          <tr><td>SOCi</td><td>Flat</td><td class="text-right">$60.00</td></tr>
+          <tr><td>Marketing Self-Service</td><td>Flat</td><td class="text-right">$65.00</td></tr>
+          <tr><td>Training</td><td>150-299 units</td><td class="text-right">$150.00</td></tr>
+          <tr><td>Regional Facilities</td><td>$0.75-$1.75/unit</td><td class="text-right">$220.50 - $514.50</td></tr>
+        </tbody>
+        <tfoot><tr class="total-row"><td>Total Included</td><td></td><td class="text-right total-value">$1,303.20 - $1,597.20</td></tr></tfoot>
+      </table>
+    </div>
+
+    <!-- 3. Marketing Report Card (NinjaCat) -->
+    <div class="portal-card">
+      <h2 class="section-header">Marketing Performance Dashboard</h2>
+      <p class="section-subtitle">Real-time marketing analytics powered by NinjaCat.</p>
+      <div style="text-align:center;padding:20px 0">
+        <a href="#" class="btn btn-primary" style="padding:14px 36px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Open NinjaCat Dashboard
+        </a>
+      </div>
+    </div>
+
+    <!-- 4. Current Packages -->
+    <div class="portal-card">
+      <h2 class="section-header">Current Enrolled Packages</h2>
+      <p class="section-subtitle">Your active marketing service subscriptions.</p>
+      <div class="packages-grid">
+        <div class="package-item"><div class="package-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><div class="package-label">SEO</div><span class="package-tier">Standard — $800/mo</span></div>
+        <div class="package-item"><div class="package-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div><div class="package-label">Social Posting</div><span class="package-tier">Premium — $700/mo</span></div>
+        <div class="package-item"><div class="package-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div><div class="package-label">Reputation</div><span class="package-tier">Response + Removal — $255/mo</span></div>
+        <div class="package-item"><div class="package-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div><div class="package-label">Paid Search</div><span class="package-tier">$2,500/mo</span></div>
+        <div class="package-item"><div class="package-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg></div><div class="package-label">Paid Social</div><span class="package-tier">$1,200/mo</span></div>
+      </div>
+    </div>
+
+    <!-- 5. SEO Deliverables -->
+    <div class="portal-card">
+      <h2 class="section-header">SEO Deliverables</h2>
+      <p class="section-subtitle">Reports and deliverables from your SEO program.</p>
+      <div class="deliverables-list">
+        <a href="#" class="deliverable-link"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Local Pin Report — Google Maps Ranking Analysis</a>
+        <a href="#" class="deliverable-link"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Competitor Gap Analysis — Market Positioning Report</a>
+      </div>
+    </div>
+
+    <!-- 6. Health Score Gauges -->
+    <div class="portal-card">
+      <h2 class="section-header">Property Health Score</h2>
+      <p class="section-subtitle">RedLight digital marketing health assessment.</p>
+      <div class="health-gauges">
+        <div class="gauge-main">
+          <div class="gauge">
+            <!-- Overall: 72 YELLOW — arc = 368*0.75*0.72 = 198.7 -->
+            <svg width="180" height="180" viewBox="0 0 180 180">
+              <circle cx="90" cy="90" r="78" fill="none" stroke="#E5E7EB" stroke-width="8" stroke-dasharray="368 122" stroke-dashoffset="-61" stroke-linecap="round"/>
+              <circle cx="90" cy="90" r="78" fill="none" stroke="#D4910A" stroke-width="8" stroke-dasharray="199 291" stroke-dashoffset="-61" stroke-linecap="round" class="gauge-arc"/>
+              <text x="90" y="85" text-anchor="middle" class="gauge-score-text" font-size="36" fill="#3D474F">72</text>
+              <text x="90" y="108" text-anchor="middle" font-size="11" fill="#D4910A" font-weight="700" letter-spacing="0.06em">WARNING</text>
+            </svg>
+            <div class="gauge-label">Overall</div>
+          </div>
+        </div>
+        <div class="gauge-categories">
+          <!-- Market: 78 YELLOW — arc = 236*0.75*0.78 = 138 -->
+          <div class="gauge"><svg width="120" height="120" viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="236 78" stroke-dashoffset="-39" stroke-linecap="round"/><circle cx="60" cy="60" r="50" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="138 176" stroke-dashoffset="-39" stroke-linecap="round"/><text x="60" y="58" text-anchor="middle" class="gauge-score-text" font-size="24" fill="#3D474F">78</text><text x="60" y="74" text-anchor="middle" font-size="9" fill="#D4910A" font-weight="700">WARNING</text></svg><div class="gauge-label">Market</div></div>
+          <!-- Marketing: 68 WARNING — arc = 236*0.75*0.68 = 120 -->
+          <div class="gauge"><svg width="120" height="120" viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="236 78" stroke-dashoffset="-39" stroke-linecap="round"/><circle cx="60" cy="60" r="50" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="120 194" stroke-dashoffset="-39" stroke-linecap="round"/><text x="60" y="58" text-anchor="middle" class="gauge-score-text" font-size="24" fill="#3D474F">68</text><text x="60" y="74" text-anchor="middle" font-size="9" fill="#D4910A" font-weight="700">WARNING</text></svg><div class="gauge-label">Marketing</div></div>
+          <!-- Funnel: 70 WARNING — arc = 236*0.75*0.70 = 124 -->
+          <div class="gauge"><svg width="120" height="120" viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="236 78" stroke-dashoffset="-39" stroke-linecap="round"/><circle cx="60" cy="60" r="50" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="124 190" stroke-dashoffset="-39" stroke-linecap="round"/><text x="60" y="58" text-anchor="middle" class="gauge-score-text" font-size="24" fill="#3D474F">70</text><text x="60" y="74" text-anchor="middle" font-size="9" fill="#D4910A" font-weight="700">WARNING</text></svg><div class="gauge-label">Funnel</div></div>
+          <!-- Experience: 67 WARNING — arc = 236*0.75*0.67 = 119 -->
+          <div class="gauge"><svg width="120" height="120" viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="236 78" stroke-dashoffset="-39" stroke-linecap="round"/><circle cx="60" cy="60" r="50" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="119 195" stroke-dashoffset="-39" stroke-linecap="round"/><text x="60" y="58" text-anchor="middle" class="gauge-score-text" font-size="24" fill="#3D474F">67</text><text x="60" y="74" text-anchor="middle" font-size="9" fill="#D4910A" font-weight="700">WARNING</text></svg><div class="gauge-label">Experience</div></div>
+        </div>
+      </div>
+      <div class="health-meta" style="display:flex;gap:12px;align-items:center;margin-top:8px;">
+        <span class="badge badge-health-status">Report Current</span>
+        <span style="font-size:12px;color:var(--text-muted)">Last updated: March 1, 2026</span>
+        <a href="#" class="btn btn-sm btn-secondary" style="margin-left:auto">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          View Full Report PDF
+        </a>
+      </div>
+    </div>
+
+    <!-- 7a. AI Property Digest -->
+    <div class="portal-card" id="digest-section" style="position:relative;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <h2 class="section-header" style="margin-bottom:0;">Property Summary</h2>
+        <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;background:linear-gradient(135deg,#3D474F,#53606C);color:#fff;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;border-radius:100px;">✦ AI-curated</span>
+      </div>
+      <div style="font-size:14px;line-height:1.8;color:#6B7280;white-space:pre-line;">
+        <strong style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#53606C;margin-bottom:6px;">What changed this month</strong>
+        Your overall Red Light score dropped 4 points to 72 (Yellow). The biggest shift was in Experience, which fell 8 points to 67. This is the main area needing attention this month.
+
+        <strong style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#53606C;margin-bottom:6px;margin-top:14px;">What is working</strong>
+        Market position remains strong at 78 — your competitive positioning in Scottsdale is holding. SEO organic traffic is up 12% following the content calendar update your team launched last month.
+
+        <strong style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#53606C;margin-bottom:6px;margin-top:14px;">What needs your input</strong>
+        Two recommendations are waiting for your approval below. The first is related to reputation management, the second to paid search budget. Both are time-sensitive ahead of peak leasing season.
+
+        <strong style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#53606C;margin-bottom:6px;margin-top:14px;">What we are handling</strong>
+        Your SEO and social programs are running on schedule. The local pin report from last week has been reviewed by your AM. No action needed from you on these items.
+      </div>
+    </div>
+
+    <!-- 7b. AI Recommendations Feed -->
+    <div class="portal-card" id="rec-feed-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <h2 class="section-header" style="margin-bottom:0;">Recommendations</h2>
+        <span style="font-size:12px;font-weight:700;color:#D4910A;background:#FEF3C7;padding:3px 10px;border-radius:100px;">2 pending</span>
+      </div>
+      <p style="font-size:13px;color:#9CA3AF;margin:0 0 20px;">Review and approve recommendations from your RPM team. Approvals are routed to the appropriate team for action.</p>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+
+        <!-- Rec Card 1: Strategy Change -->
+        <div class="rec-card-demo" id="rec-demo-1" style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;transition:box-shadow 0.2s;">
+          <div style="padding:16px 20px 0;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span style="padding:3px 10px;border-radius:6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;background:#E0F2FE;color:#0C4A6E;">Strategy</span>
+              <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#C94444;">High Priority</span>
+            </div>
+            <h3 style="font-size:14px;font-weight:700;color:#1F2937;margin:0 0 16px;line-height:1.4;">Increase review response rate to improve resident experience score</h3>
+          </div>
+          <div style="padding:0 20px 20px;">
+            <p style="font-size:13px;color:#6B7280;line-height:1.7;margin-bottom:14px;">Your resident experience subscore dropped 8 points this month to 67. The primary driver is an unresponded review backlog — 23 reviews over the past 60 days have no response, which Google weighs heavily in local ranking. Activating the Response + Removal reputation management tier would address this within the current billing cycle.</p>
+            <div style="font-size:13px;color:#6B7280;background:#F3F4F6;border-left:3px solid #53606C;padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:16px;">
+              <span style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#53606C;margin-bottom:4px;">What we need from you:</span>
+              Approve to create a task for your reputation management team
+            </div>
+            <div style="display:flex;gap:10px;" id="rec1-actions">
+              <button onclick="demoApprove('rec-demo-1','rec1-actions','rec1-confirm')" style="padding:9px 22px;background:#53606C;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;transition:background 0.15s;">Approve</button>
+              <button onclick="demoDismiss('rec-demo-1','rec1-actions','rec1-confirm')" style="padding:9px 18px;background:transparent;color:#9CA3AF;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Dismiss</button>
+            </div>
+            <div id="rec1-confirm" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;background:#ECFDF5;color:#065F46;">Your approval has been received. Your team has been notified and a task has been created.</div>
+          </div>
+        </div>
+
+        <!-- Rec Card 2: Budget Change -->
+        <div class="rec-card-demo" id="rec-demo-2" style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;transition:box-shadow 0.2s;">
+          <div style="padding:16px 20px 0;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span style="padding:3px 10px;border-radius:6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;background:#EDE9FE;color:#5B21B6;">Budget Change</span>
+              <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#D4910A;">Medium Priority</span>
+            </div>
+            <h3 style="font-size:14px;font-weight:700;color:#1F2937;margin:0 0 16px;line-height:1.4;">Increase paid search budget ahead of peak leasing season</h3>
+          </div>
+          <div style="padding:0 20px 20px;">
+            <p style="font-size:13px;color:#6B7280;line-height:1.7;margin-bottom:14px;">Your market subscore of 78 shows strong competitive positioning, but paid search impression share dropped 14% month-over-month as two competing properties increased spend. Kierland is entering peak leasing season (April–June). A $500/month increase in paid search spend is projected to recover impression share and protect your lead velocity.</p>
+            <div style="font-size:13px;color:#6B7280;background:#F3F4F6;border-left:3px solid #53606C;padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:16px;">
+              <span style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#53606C;margin-bottom:4px;">What we need from you:</span>
+              Approve to have your AM create a budget change request
+            </div>
+            <div style="display:flex;gap:10px;" id="rec2-actions">
+              <button onclick="demoApprove('rec-demo-2','rec2-actions','rec2-confirm')" style="padding:9px 22px;background:#53606C;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;">Approve</button>
+              <button onclick="demoDismiss('rec-demo-2','rec2-actions','rec2-confirm')" style="padding:9px 18px;background:transparent;color:#9CA3AF;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Dismiss</button>
+            </div>
+            <div id="rec2-confirm" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;background:#ECFDF5;color:#065F46;">Your approval has been received. Your team has been notified and a task has been created.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 8. Recommendations / Flag Cards -->
+    <div class="portal-card">
+      <h2 class="section-header">Budget Recommendations</h2>
+      <p class="section-subtitle">3 flags identified based on your latest health assessment.</p>
+
+      <div class="flag-group">
+        <div class="flag-group-header"><span class="flag-owner-badge badge-digital">Digital</span><span class="flag-count">2 flags</span></div>
+        <div class="flag-cards">
+          <div class="flag-card expanded">
+            <div class="flag-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+              <span class="severity-badge severity-high">High</span>
+              <span class="flag-name">SEO Budget Below Market Average</span>
+              <svg class="flag-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="flag-card-body">
+              <div class="flag-metrics"><span><strong>Current:</strong> $800/mo (Standard)</span><span><strong>Benchmark:</strong> $1,300/mo (Premium)</span></div>
+              <div class="flag-reasoning">Properties with 250+ units in competitive suburban markets typically require Premium SEO to maintain first-page rankings. Orland Ridge competes with 12 other communities within a 3-mile radius.</div>
+              <div class="flag-consequence">Risk: Declining organic traffic and rising cost-per-lead if competitors increase SEO investment.</div>
+            </div>
+          </div>
+          <div class="flag-card">
+            <div class="flag-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+              <span class="severity-badge severity-medium">Medium</span>
+              <span class="flag-name">No Paid Social Campaign Active</span>
+              <svg class="flag-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="flag-card-body">
+              <div class="flag-metrics"><span><strong>Current:</strong> $1,200/mo</span><span><strong>Benchmark:</strong> $2,000/mo</span></div>
+              <div class="flag-reasoning">Social advertising spend is below the market median for similar-sized properties in the Chicago metro. Increasing budget would improve awareness and reduce reliance on ILS platforms.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flag-group">
+        <div class="flag-group-header"><span class="flag-owner-badge badge-ops">Operations</span><span class="flag-count">1 flag</span></div>
+        <div class="flag-cards">
+          <div class="flag-card">
+            <div class="flag-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+              <span class="severity-badge severity-low">Low</span>
+              <span class="flag-name">Review Response Time Above Target</span>
+              <svg class="flag-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="flag-card-body">
+              <div class="flag-metrics"><span><strong>Current:</strong> 18 hours avg</span><span><strong>Target:</strong> 12 hours</span></div>
+              <div class="flag-reasoning">Average response time to Google reviews exceeds the 12-hour target. Faster responses improve reputation scores and signal responsiveness to prospects.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. Asset Library -->
+    <div class="portal-card">
+      <h2 class="section-header">Asset Library</h2>
+      <p class="section-subtitle">Brand-approved photography, video, and marketing collateral.</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <div class="asset-tabs">
+          <button class="asset-tab active">Photography <span class="tab-count">(24)</span></button>
+          <button class="asset-tab">Video <span class="tab-count">(6)</span></button>
+          <button class="asset-tab">Brand & Creative <span class="tab-count">(8)</span></button>
+          <button class="asset-tab">Collateral <span class="tab-count">(3)</span></button>
+        </div>
+        <button class="btn btn-sm btn-primary">Upload Assets</button>
+      </div>
+      <div class="asset-grid">
+        <div class="asset-card"><div style="height:140px;background:linear-gradient(135deg,#E8D5B7,#C4A882);display:flex;align-items:center;justify-content:center;color:var(--white);font-size:12px;font-weight:600">Exterior Hero Shot</div><div class="asset-card-info"><div class="asset-card-name">Exterior - Main Entrance</div><div class="asset-card-meta">Exterior / Jan 2026</div></div></div>
+        <div class="asset-card"><div style="height:140px;background:linear-gradient(135deg,#B8C5D0,#8FA0B0);display:flex;align-items:center;justify-content:center;color:var(--white);font-size:12px;font-weight:600">Pool & Amenity</div><div class="asset-card-info"><div class="asset-card-name">Pool Area - Summer</div><div class="asset-card-meta">Amenity / Jun 2025</div></div></div>
+        <div class="asset-card"><div style="height:140px;background:linear-gradient(135deg,#D4C5A9,#B8A88C);display:flex;align-items:center;justify-content:center;color:var(--white);font-size:12px;font-weight:600">Living Room</div><div class="asset-card-info"><div class="asset-card-name">Model Unit - Living Room</div><div class="asset-card-meta">Interior / Jan 2026</div></div></div>
+        <div class="asset-card"><div style="height:140px;background:linear-gradient(135deg,#A8C4A0,#7FA878);display:flex;align-items:center;justify-content:center;color:var(--white);font-size:12px;font-weight:600">Aerial View</div><div class="asset-card-info"><div class="asset-card-name">Drone - Community Overview</div><div class="asset-card-meta">Aerial / Mar 2026</div></div></div>
+        <div class="asset-card"><div style="height:140px;background:linear-gradient(135deg,#C5B8D0,#A090B0);display:flex;align-items:center;justify-content:center;color:var(--white);font-size:12px;font-weight:600">Kitchen</div><div class="asset-card-info"><div class="asset-card-name">Model Unit - Kitchen</div><div class="asset-card-meta">Interior / Jan 2026</div></div></div>
+      </div>
+    </div>
+
+    <!-- 9. Budget Configurator -->
+    <div class="portal-card" style="padding-bottom:0;">
+      <h2 class="section-header">Budget Configurator</h2>
+      <p class="section-subtitle">Select your preferred tiers. Changes are submitted for AM review.</p>
+
+      <div class="channel-row">
+        <div class="channel-header"><div class="channel-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><div class="channel-name">SEO</div><span class="badge badge-enrolled" style="margin-left:8px">Current: Standard</span></div>
+        <div class="tier-cards">
+          <div class="tier-card"><div class="tier-name">Local</div><div class="tier-price">$100<span>/mo</span></div></div>
+          <div class="tier-card"><div class="tier-name">Lite</div><div class="tier-price">$300<span>/mo</span></div></div>
+          <div class="tier-card"><div class="tier-name">Basic</div><div class="tier-price">$500<span>/mo</span></div></div>
+          <div class="tier-card tier-current selected"><div class="tier-name">Standard</div><div class="tier-price">$800<span>/mo</span></div></div>
+          <div class="tier-card tier-recommended"><div class="tier-name">Premium</div><div class="tier-price">$1,300<span>/mo</span></div></div>
+        </div>
+      </div>
+
+      <div class="channel-row">
+        <div class="channel-header"><div class="channel-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div><div class="channel-name">Social Posting</div><span class="badge badge-enrolled" style="margin-left:8px">Current: Premium</span></div>
+        <div class="tier-cards">
+          <div class="tier-card"><div class="tier-name">Basic</div><div class="tier-price">$300<span>/mo</span></div></div>
+          <div class="tier-card"><div class="tier-name">Standard</div><div class="tier-price">$450<span>/mo</span></div></div>
+          <div class="tier-card tier-current selected"><div class="tier-name">Premium</div><div class="tier-price">$700<span>/mo</span></div></div>
+        </div>
+      </div>
+
+      <div class="channel-row">
+        <div class="channel-header"><div class="channel-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div><div class="channel-name">Reputation</div><span class="badge badge-enrolled" style="margin-left:8px">Current: Response + Removal</span></div>
+        <div class="tier-cards">
+          <div class="tier-card"><div class="tier-name">Response Only</div><div class="tier-price">$190<span>/mo</span></div></div>
+          <div class="tier-card tier-current selected"><div class="tier-name">Response + Removal</div><div class="tier-price">$255<span>/mo</span></div></div>
+        </div>
+      </div>
+
+      <!-- Running Total -->
+      <div class="running-total">
+        <div class="total-grid">
+          <div class="total-item"><div class="total-item-label">Current Monthly</div><div class="total-item-value">$5,455</div></div>
+          <div class="total-item"><div class="total-item-label">New Monthly</div><div class="total-item-value">$5,455</div></div>
+          <div class="total-item"><div class="total-item-label">Monthly Change</div><div class="total-item-value negative">$0</div></div>
+          <div class="total-item"><div class="total-item-label">Setup Fees</div><div class="total-item-value">$0</div></div>
+        </div>
+        <button class="btn btn-primary">Confirm My Selections</button>
+      </div>
+    </div>
+
+  </main>
+  <footer class="portal-footer"><p>&copy; 2026 RPM Living. All rights reserved.</p></footer>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════
+     VIEW 2: Portfolio Dashboard
+     ════════════════════════════════════════ -->
+<div id="view-dashboard" class="view">
+<div class="portal-wrapper">
+  <header class="portal-header dashboard-header">
+    <img src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/images/rpm-logo.png" alt="RPM Living" class="portal-logo">
+    <span class="portal-header-label">Portfolio Dashboard</span>
+    <div class="header-spacer"></div>
+    <div class="header-user"><span class="user-role-badge">Marketing Director</span><span class="user-email">sarah.johnson@rpmliving.com</span></div>
+  </header>
+  <main class="portal-main">
+    <section class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><div class="kpi-value">47</div><div class="kpi-label">Properties</div></div>
+      <div class="kpi-card"><div class="kpi-icon kpi-icon-units"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div><div class="kpi-value">12,840</div><div class="kpi-label">Total Units</div></div>
+      <div class="kpi-card"><div class="kpi-icon kpi-icon-health"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="kpi-value">76.4</div><div class="kpi-label">Avg Health Score</div></div>
+      <div class="kpi-card"><div class="kpi-icon kpi-icon-spend"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div><div class="kpi-value">$184,200</div><div class="kpi-label">Monthly Spend</div></div>
+      <div class="kpi-card"><div class="kpi-icon kpi-icon-flags"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></div><div class="kpi-value">23</div><div class="kpi-label">Total Flags</div></div>
+    </section>
+
+    <section class="portal-card health-distribution-card">
+      <h3 class="section-header">Health Distribution</h3>
+      <div class="health-bar-wrapper">
+        <div class="health-bar">
+          <div class="health-segment healthy" style="width:55.3%" title="Healthy: 26"></div>
+          <div class="health-segment warning" style="width:27.7%" title="Warning: 13"></div>
+          <div class="health-segment critical" style="width:10.6%" title="Critical: 5"></div>
+          <div class="health-segment no-data" style="width:6.4%" title="No Data: 3"></div>
+        </div>
+        <div class="health-legend">
+          <span class="legend-item"><span class="legend-dot healthy"></span>Healthy 80+ (26)</span>
+          <span class="legend-item"><span class="legend-dot warning"></span>Warning 60-79 (13)</span>
+          <span class="legend-item"><span class="legend-dot critical"></span>Critical &lt;60 (5)</span>
+          <span class="legend-item"><span class="legend-dot no-data"></span>No Data (3)</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="portal-card property-table-card">
+      <div class="table-header-row">
+        <h3 class="section-header">Properties</h3>
+        <div class="table-controls">
+          <input type="text" class="table-search" placeholder="Search properties...">
+          <select class="table-filter"><option>All Markets</option><option>Chicago (8)</option><option>Dallas (12)</option><option>Denver (6)</option><option>Houston (9)</option><option>Phoenix (7)</option><option>Tampa (5)</option></select>
+          <select class="table-filter"><option>All Health</option><option>Healthy (80+)</option><option>Warning (60-79)</option><option>Critical (&lt;60)</option></select>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="dashboard-table">
+          <thead><tr>
+            <th>Property <span class="sort-icon asc"></span></th><th>Market</th><th class="text-right">Units</th><th class="text-right">Health</th><th class="text-right">Monthly Spend</th><th class="text-right">Flags</th>
+          </tr></thead>
+          <tbody>
+            <tr><td class="property-name-cell">10x Riverwalk<span class="property-location">Dallas, TX</span></td><td>Dallas</td><td class="text-right">260</td><td class="text-right"><span class="health-dot healthy"></span>88</td><td class="text-right">$4,750</td><td class="text-right"><span class="flag-count-cell no-flags">0</span></td></tr>
+            <tr><td class="property-name-cell">Alexan Springdale<span class="property-location">Austin, TX</span></td><td>Dallas</td><td class="text-right">251</td><td class="text-right"><span class="health-dot healthy"></span>85</td><td class="text-right">$3,800</td><td class="text-right"><span class="flag-count-cell has-flags">1</span></td></tr>
+            <tr><td class="property-name-cell">Azure Creek<span class="property-location">Cave Creek, AZ</span></td><td>Phoenix</td><td class="text-right">312</td><td class="text-right"><span class="health-dot warning"></span>72</td><td class="text-right">$5,200</td><td class="text-right"><span class="flag-count-cell has-flags">2</span></td></tr>
+            <tr><td class="property-name-cell">Broadstone on 9th<span class="property-location">Denver, CO</span></td><td>Denver</td><td class="text-right">198</td><td class="text-right"><span class="health-dot healthy"></span>91</td><td class="text-right">$3,100</td><td class="text-right"><span class="flag-count-cell no-flags">0</span></td></tr>
+            <tr><td class="property-name-cell">Camden Buckhead<span class="property-location">Atlanta, GA</span></td><td>Houston</td><td class="text-right">445</td><td class="text-right"><span class="health-dot critical"></span>54</td><td class="text-right">$6,800</td><td class="text-right"><span class="flag-count-cell has-flags">4</span></td></tr>
+            <tr><td class="property-name-cell">Copper Falls<span class="property-location">Glendale, AZ</span></td><td>Phoenix</td><td class="text-right">220</td><td class="text-right"><span class="health-dot healthy"></span>83</td><td class="text-right">$3,400</td><td class="text-right"><span class="flag-count-cell no-flags">0</span></td></tr>
+            <tr><td class="property-name-cell">Domain at Midtown Park<span class="property-location">Dallas, TX</span></td><td>Dallas</td><td class="text-right">380</td><td class="text-right"><span class="health-dot warning"></span>67</td><td class="text-right">$5,900</td><td class="text-right"><span class="flag-count-cell has-flags">3</span></td></tr>
+            <tr><td class="property-name-cell">Elan Flower Mound<span class="property-location">Flower Mound, TX</span></td><td>Dallas</td><td class="text-right">275</td><td class="text-right"><span class="health-dot healthy"></span>89</td><td class="text-right">$4,200</td><td class="text-right"><span class="flag-count-cell no-flags">0</span></td></tr>
+            <tr><td class="property-name-cell">Orland Ridge Towns & Villas<span class="property-location">Orland Park, IL</span></td><td>Chicago</td><td class="text-right">294</td><td class="text-right"><span class="health-dot healthy"></span>82</td><td class="text-right">$4,455</td><td class="text-right"><span class="flag-count-cell has-flags">3</span></td></tr>
+            <tr><td class="property-name-cell">Pinnacle at Westchase<span class="property-location">Houston, TX</span></td><td>Houston</td><td class="text-right">340</td><td class="text-right"><span class="health-dot warning"></span>71</td><td class="text-right">$5,100</td><td class="text-right"><span class="flag-count-cell has-flags">2</span></td></tr>
+            <tr><td class="property-name-cell">The Residences at Pearland<span class="property-location">Pearland, TX</span></td><td>Houston</td><td class="text-right">186</td><td class="text-right"><span class="health-dot healthy"></span>86</td><td class="text-right">$2,900</td><td class="text-right"><span class="flag-count-cell no-flags">0</span></td></tr>
+            <tr><td class="property-name-cell">17th Street Rentals<span class="property-location">Denver, CO</span></td><td>Denver</td><td class="text-right">87</td><td class="text-right"><span class="health-dot warning"></span>74</td><td class="text-right">$1,800</td><td class="text-right"><span class="flag-count-cell has-flags">1</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-footer">12 of 47 properties (showing first page)</div>
+    </section>
+  </main>
+  <footer class="portal-footer"><p>&copy; 2026 RPM Living. All rights reserved.</p></footer>
+</div>
+</div>
+
+<script>
+function showView(v){
+  document.querySelectorAll('.view').forEach(function(el){el.classList.remove('active')});
+  document.getElementById('view-'+v).classList.add('active');
+  document.querySelectorAll('.demo-nav button').forEach(function(b){b.classList.remove('active')});
+  event.target.classList.add('active');
+  window.scrollTo(0,0);
+}
+// Tier card click interaction
+document.querySelectorAll('.tier-card').forEach(function(card){
+  card.addEventListener('click',function(){
+    var row=this.closest('.channel-row');
+    row.querySelectorAll('.tier-card').forEach(function(c){c.classList.remove('selected')});
+    this.classList.add('selected');
+  });
+});
+// Asset tab click
+document.querySelectorAll('.asset-tab').forEach(function(tab){
+  tab.addEventListener('click',function(){
+    document.querySelectorAll('.asset-tab').forEach(function(t){t.classList.remove('active')});
+    this.classList.add('active');
+  });
+});
+
+// Demo: Recommendation approve
+function demoApprove(cardId, actionsId, confirmId) {
+  var card    = document.getElementById(cardId);
+  var actions = document.getElementById(actionsId);
+  var confirm = document.getElementById(confirmId);
+  var btn = actions.querySelector('button');
+  btn.textContent = 'Submitting...';
+  btn.disabled = true;
+  setTimeout(function() {
+    actions.style.display = 'none';
+    confirm.style.display = '';
+    confirm.style.background = '#ECFDF5';
+    confirm.style.color = '#065F46';
+    confirm.textContent = 'Your approval has been received. Your team has been notified and a task has been created.';
+    card.style.opacity = '0.6';
+  }, 900);
+}
+
+// Demo: Recommendation dismiss
+function demoDismiss(cardId, actionsId, confirmId) {
+  var card    = document.getElementById(cardId);
+  var actions = document.getElementById(actionsId);
+  var confirm = document.getElementById(confirmId);
+  actions.style.display = 'none';
+  confirm.style.display = '';
+  confirm.style.background = '#F3F4F6';
+  confirm.style.color = '#6B7280';
+  confirm.textContent = 'Recommendation dismissed.';
+  card.style.opacity = '0.45';
+}
+
+// Flag card toggle
+document.querySelectorAll('.flag-card-header').forEach(function(header){
+  header.addEventListener('click',function(){
+    this.closest('.flag-card').classList.toggle('expanded');
+  });
+});
+</script>
+</body>
+</html>

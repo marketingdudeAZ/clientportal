@@ -1,13 +1,13 @@
 <!--
   Module 2: Included Services Value Table
   Non-elective services with per-unit calculations.
-  Only rendered when property.units_offered is populated.
+  Only rendered when property.totalunits is populated.
 -->
 <section class="portal-card included-services" id="included-services">
   <h2 class="section-header">Included RPM Platform Services</h2>
   <p class="section-subtitle">Non-elective services included with your RPM partnership</p>
 
-  {% set units = property.units_offered|int %}
+  {% set units = property.totalunits|int %}
 
   <table class="services-table">
     <thead>

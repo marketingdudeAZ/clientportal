@@ -1,102 +1,144 @@
-"""Phase 7: AM email notifications."""
+"""Phase 7: AM notifications via HubSpot Tasks (assigned to company owner)."""
 
 import logging
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timedelta
 
-from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, PORTAL_BASE_URL
+import requests
+
+from config import HUBSPOT_API_KEY, PORTAL_BASE_URL
 
 logger = logging.getLogger(__name__)
 
+API_BASE = "https://api.hubapi.com"
+HEADERS = {
+    "Authorization": f"Bearer {HUBSPOT_API_KEY}",
+    "Content-Type": "application/json",
+}
 
-def notify_am(
-    deal_id: str,
-    company_id: str,
-    uuid: str,
-    selections: dict,
-    totals: dict,
-) -> None:
-    """Send email notification to AM when a configurator submission creates a Deal."""
-    if not SMTP_USER or not SMTP_PASSWORD:
-        logger.warning("SMTP not configured — skipping AM notification")
-        return
 
-    hubspot_deal_url = f"https://app.hubspot.com/contacts/deals/{deal_id}"
-    portal_url = f"{PORTAL_BASE_URL}?uuid={uuid}"
+def _get_company_owner(company_id):
+    """Fetch the hubspot_owner_id for a company."""
+    resp = requests.get(
+        f"{API_BASE}/crm/v3/objects/companies/{company_id}",
+        headers=HEADERS,
+        params={"properties": "hubspot_owner_id,name"},
+    )
+    resp.raise_for_status()
+    props = resp.json().get("properties", {})
+    return props.get("hubspot_owner_id"), props.get("name", "Unknown Property")
 
-    # Build selections summary
+
+def notify_am(deal_id, company_id, uuid, selections, totals):
+    """Create a HubSpot task assigned to the company owner for configurator submission review."""
+    owner_id, company_name = _get_company_owner(company_id)
+
+    # Build selections summary for task body
     lines = []
     for channel, sel in selections.items():
         tier = sel.get("tier", "Variable")
         monthly = sel.get("monthly", 0)
         setup = sel.get("setup", 0)
-        line = f"  - {channel.replace('_', ' ').title()}: {tier} (${monthly:,}/mo"
+        line = f"- {channel.replace('_', ' ').title()}: {tier} (${monthly:,}/mo"
         if setup > 0:
             line += f" + ${setup:,} setup"
         line += ")"
         lines.append(line)
 
     selections_text = "\n".join(lines)
+    hubspot_deal_url = f"https://app.hubspot.com/contacts/deals/{deal_id}"
+    portal_url = f"{PORTAL_BASE_URL}?uuid={uuid}"
 
-    subject = f"New Configurator Submission — Deal #{deal_id}"
+    task_body = (
+        f"A client has submitted budget configurator selections for {company_name}.\n\n"
+        f"Deal: {hubspot_deal_url}\n"
+        f"Portal: {portal_url}\n\n"
+        f"Selections:\n{selections_text}\n\n"
+        f"Monthly Total: ${totals.get('monthly', 0):,}\n"
+        f"Setup Fees: ${totals.get('setup', 0):,}\n"
+        f"Monthly Change: ${totals.get('delta', 0):,}\n\n"
+        f"A Quote has been auto-generated. Review the Deal in HubSpot before the client signs."
+    )
 
-    body = f"""A client has submitted their budget configurator selections.
+    due_date = (datetime.utcnow() + timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-Deal: {hubspot_deal_url}
-Portal: {portal_url}
+    task_props = {
+        "hs_task_subject": f"Review Budget Submission — {company_name}",
+        "hs_task_body": task_body,
+        "hs_task_status": "NOT_STARTED",
+        "hs_task_priority": "HIGH",
+        "hs_task_type": "TODO",
+        "hs_timestamp": due_date,
+    }
 
-Selections:
-{selections_text}
+    if owner_id:
+        task_props["hubspot_owner_id"] = owner_id
 
-Monthly Total: ${totals.get('monthly', 0):,}
-Setup Fees: ${totals.get('setup', 0):,}
-Monthly Change: ${totals.get('delta', 0):,}
+    # Create the task
+    resp = requests.post(
+        f"{API_BASE}/crm/v3/objects/tasks",
+        headers=HEADERS,
+        json={"properties": task_props},
+    )
+    resp.raise_for_status()
+    task_id = resp.json()["id"]
 
-A Quote has been auto-generated and sent to the client. You can review and modify the Deal in HubSpot before the client signs.
-"""
+    # Associate task with company
+    requests.put(
+        f"{API_BASE}/crm/v4/objects/tasks/{task_id}/associations/companies/{company_id}",
+        headers=HEADERS,
+        json=[{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 192}],
+    ).raise_for_status()
 
-    msg = MIMEMultipart()
-    msg["From"] = SMTP_USER
-    msg["To"] = SMTP_USER  # AM receives at the configured email
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
+    # Associate task with deal
+    requests.put(
+        f"{API_BASE}/crm/v4/objects/tasks/{task_id}/associations/deals/{deal_id}",
+        headers=HEADERS,
+        json=[{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 216}],
+    )
 
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.send_message(msg)
-        logger.info("AM notification sent for deal %s", deal_id)
-    except Exception as e:
-        logger.error("Failed to send AM notification: %s", e)
+    logger.info("Created review task %s for company %s (owner: %s)", task_id, company_id, owner_id)
+    return task_id
 
 
-def notify_am_reminder(deal_id: str, company_id: str, uuid: str) -> None:
-    """Send reminder if AM hasn't reviewed Paid Media recs within 48 hours."""
-    if not SMTP_USER or not SMTP_PASSWORD:
-        logger.warning("SMTP not configured — skipping reminder")
-        return
+def create_paid_media_review_task(company_id, uuid):
+    """Create a HubSpot task for the company owner to review AI-generated Paid Media recommendations."""
+    owner_id, company_name = _get_company_owner(company_id)
+    portal_url = f"{PORTAL_BASE_URL}?uuid={uuid}"
 
-    subject = f"Reminder: Paid Media Review Pending — Property {uuid}"
-    body = f"""This is a reminder that Paid Media recommendations for property {uuid} have not been reviewed.
+    due_date = (datetime.utcnow() + timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-Please review at: {PORTAL_BASE_URL.replace('client-portal', 'am-review')}?uuid={uuid}
+    task_props = {
+        "hs_task_subject": f"Review Paid Media Recommendations — {company_name}",
+        "hs_task_body": (
+            f"New Paid Media recommendations have been generated for {company_name}.\n\n"
+            f"Please review the Good/Better/Best tiers in HubSpot and update the "
+            f"paid_media_recs_status property to 'approved' or 'overridden' when complete.\n\n"
+            f"Recommendations will remain hidden from the client configurator until approved.\n\n"
+            f"Portal: {portal_url}"
+        ),
+        "hs_task_status": "NOT_STARTED",
+        "hs_task_priority": "HIGH",
+        "hs_task_type": "TODO",
+        "hs_timestamp": due_date,
+    }
 
-Recommendations will remain hidden from the client configurator until explicitly approved.
-"""
+    if owner_id:
+        task_props["hubspot_owner_id"] = owner_id
 
-    msg = MIMEMultipart()
-    msg["From"] = SMTP_USER
-    msg["To"] = SMTP_USER
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
+    resp = requests.post(
+        f"{API_BASE}/crm/v3/objects/tasks",
+        headers=HEADERS,
+        json={"properties": task_props},
+    )
+    resp.raise_for_status()
+    task_id = resp.json()["id"]
 
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.send_message(msg)
-        logger.info("AM reminder sent for property %s", uuid)
-    except Exception as e:
-        logger.error("Failed to send AM reminder: %s", e)
+    # Associate with company
+    requests.put(
+        f"{API_BASE}/crm/v4/objects/tasks/{task_id}/associations/companies/{company_id}",
+        headers=HEADERS,
+        json=[{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 192}],
+    ).raise_for_status()
+
+    logger.info("Created paid media review task %s for company %s", task_id, company_id)
+    return task_id

@@ -1,0 +1,346 @@
+/* ══════════════════════════════════════════
+   RPM Living Portfolio Dashboard — Styles
+   Extends the portal design system
+   Auth handled by HubSpot Memberships — no login form styles needed.
+   ══════════════════════════════════════════ */
+
+/* ── Spinner ── */
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--copper);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Dashboard Header ── */
+.dashboard-header {
+  display: flex;
+  align-items: center;
+}
+.header-spacer { flex: 1; }
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.user-email {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.user-role-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--copper-glow);
+  color: var(--copper);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+/* ── Dashboard Loading ── */
+.dashboard-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 80px 0;
+  color: var(--text-secondary);
+}
+
+/* ── KPI Grid ── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+
+.kpi-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 28px 24px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition), transform var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--copper), var(--sage));
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.kpi-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+.kpi-card:hover::before { opacity: 1; }
+
+.kpi-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--mint-light);
+  color: var(--juniper);
+  margin-bottom: 12px;
+}
+.kpi-icon-units { background: rgba(200, 150, 78, 0.08); color: var(--copper); }
+.kpi-icon-health { background: rgba(143, 166, 142, 0.15); color: var(--sage); }
+.kpi-icon-spend { background: var(--copper-glow); color: var(--copper); }
+.kpi-icon-flags { background: rgba(201, 68, 68, 0.08); color: var(--critical-red); }
+
+.kpi-value {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--juniper-dark);
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.kpi-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+/* ── Health Distribution ── */
+.health-distribution-card { padding: 28px 36px; }
+
+.health-bar-wrapper { margin-top: 20px; }
+
+.health-bar {
+  display: flex;
+  height: 28px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--border-light);
+}
+
+.health-segment {
+  height: 100%;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 0;
+  position: relative;
+}
+
+.health-segment.healthy { background: var(--sage); }
+.health-segment.warning { background: var(--warning-amber); }
+.health-segment.critical { background: var(--critical-red); }
+.health-segment.no-data { background: var(--light-gray); }
+
+.health-legend {
+  display: flex;
+  gap: 24px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.legend-dot.healthy { background: var(--sage); }
+.legend-dot.warning { background: var(--warning-amber); }
+.legend-dot.critical { background: var(--critical-red); }
+.legend-dot.no-data { background: var(--light-gray); }
+
+/* ── Property Table ── */
+.property-table-card { padding: 28px 0; }
+
+.table-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 0 36px;
+  margin-bottom: 20px;
+}
+
+.table-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.table-search {
+  padding: 9px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  width: 220px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.table-search:focus {
+  outline: none;
+  border-color: var(--copper);
+  box-shadow: var(--shadow-glow);
+}
+
+.table-filter {
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--white);
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.table-filter:focus {
+  outline: none;
+  border-color: var(--copper);
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dashboard-table th {
+  padding: 12px 20px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border-light);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.dashboard-table th:first-child { padding-left: 36px; }
+.dashboard-table th:last-child { padding-right: 36px; }
+
+.dashboard-table th.sortable { cursor: pointer; }
+.dashboard-table th.sortable:hover { color: var(--copper); }
+
+.sort-icon {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.3;
+}
+.sort-icon.asc::after { content: '▲'; }
+.sort-icon.desc::after { content: '▼'; }
+.sort-icon.asc, .sort-icon.desc { opacity: 1; color: var(--copper); }
+
+.dashboard-table td {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 14px;
+}
+
+.dashboard-table td:first-child { padding-left: 36px; }
+.dashboard-table td:last-child { padding-right: 36px; }
+
+.dashboard-table tbody tr {
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.dashboard-table tbody tr:hover {
+  background: var(--mint-light);
+}
+
+.property-name-cell {
+  font-weight: 700;
+  color: var(--juniper-dark);
+}
+
+.property-name-cell .property-location {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.health-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.health-dot.healthy { background: var(--sage); }
+.health-dot.warning { background: var(--warning-amber); }
+.health-dot.critical { background: var(--critical-red); }
+.health-dot.no-data { background: var(--light-gray); }
+
+.flag-count {
+  font-weight: 700;
+}
+.flag-count.has-flags { color: var(--critical-red); }
+.flag-count.no-flags { color: var(--text-muted); }
+
+.table-footer {
+  padding: 14px 36px;
+  font-size: 13px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-light);
+}
+
+/* ── Responsive ── */
+@media (max-width: 1200px) {
+  .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .kpi-value { font-size: 26px; }
+  .table-header-row { flex-direction: column; align-items: stretch; padding: 0 24px; }
+  .table-controls { flex-direction: column; }
+  .table-search { width: 100%; }
+  .dashboard-table th:first-child,
+  .dashboard-table td:first-child { padding-left: 24px; }
+  .dashboard-table th:last-child,
+  .dashboard-table td:last-child { padding-right: 24px; }
+  .table-footer { padding: 14px 24px; }
+  .health-distribution-card { padding: 24px; }
+  .property-table-card { padding: 24px 0; }
+  .header-user { gap: 8px; }
+  .user-email { display: none; }
+}
+
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+}

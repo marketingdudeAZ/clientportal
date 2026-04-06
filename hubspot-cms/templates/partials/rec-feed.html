@@ -1,0 +1,76 @@
+{#
+  Phase 7: AI Recommendations Feed
+  Reads from HubDB rpm_recommendations (table id: 232326006)
+  filtered by property_uuid = uuid_param and status = pending.
+
+  property_id (HubSpot company record ID) and api_base are injected from client-portal.html.
+  Approve/Dismiss actions POST to the webhook server via portal.js.
+#}
+
+{# HubDB table ID for rpm_recommendations #}
+{% set rec_table_id = "232326006" %}
+{% set recs = hubdb_table_rows(rec_table_id, "property_uuid=" ~ uuid_param ~ "&status=pending&orderBy=created_date:DESC") %}
+
+{% if recs and recs.results|length > 0 %}
+<section class="portal-card" id="rec-feed-section">
+  <div class="section-header">
+    <h2 class="section-title">Recommendations</h2>
+    <span class="rec-feed-count">{{ recs.results|length }} pending</span>
+  </div>
+  <p class="rec-feed-intro">Review and approve recommendations from your RPM team. Approvals are routed to the appropriate team for action.</p>
+
+  <div class="rec-feed" id="rec-feed-list">
+    {% for rec in recs.results %}
+      {% set rec_vals = rec.values %}
+      <div class="rec-card" data-rec-id="{{ rec_vals.rec_id }}" data-rec-type="{{ rec_vals.rec_type }}">
+        <div class="rec-card-header">
+          <div class="rec-meta">
+            {% if rec_vals.rec_type == "budget_change" %}
+              <span class="rec-type-badge badge-budget">Budget Change</span>
+            {% elif rec_vals.rec_type == "package_upgrade" %}
+              <span class="rec-type-badge badge-upgrade">Package Upgrade</span>
+            {% else %}
+              <span class="rec-type-badge badge-strategy">Strategy</span>
+            {% endif %}
+            {% if rec_vals.risk_level == "high" %}
+              <span class="rec-risk high">High Priority</span>
+            {% elif rec_vals.risk_level == "medium" %}
+              <span class="rec-risk medium">Medium Priority</span>
+            {% endif %}
+          </div>
+          <h3 class="rec-title">{{ rec_vals.title }}</h3>
+        </div>
+
+        <div class="rec-card-body">
+          <div class="rec-body-text">{{ rec_vals.body }}</div>
+
+          {% if rec_vals.action_required %}
+            <div class="rec-action-required">
+              <span class="rec-action-label">What we need from you:</span>
+              {{ rec_vals.action_required }}
+            </div>
+          {% endif %}
+
+          <div class="rec-actions">
+            <button
+              class="btn-approve"
+              onclick="approveRec(this)"
+              data-rec-id="{{ rec_vals.rec_id }}"
+              data-rec-type="{{ rec_vals.rec_type }}"
+              data-rec-title="{{ rec_vals.title|replace('"', '&quot;') }}"
+              data-rec-body="{{ rec_vals.action_required|default('')|replace('"', '&quot;') }}"
+            >Approve</button>
+            <button
+              class="btn-dismiss"
+              onclick="dismissRec(this)"
+              data-rec-id="{{ rec_vals.rec_id }}"
+            >Dismiss</button>
+          </div>
+
+          <div class="rec-confirm" id="rec-confirm-{{ rec_vals.rec_id }}" style="display:none;"></div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}

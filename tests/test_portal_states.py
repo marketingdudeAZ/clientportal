@@ -35,8 +35,8 @@ class TestPortalStates(unittest.TestCase):
         self.assertIsNone(property_data["seo_budget"])
 
     def test_missing_units_hides_included_services(self):
-        property_data = {"units_offered": None}
-        self.assertIsNone(property_data["units_offered"])
+        property_data = {"totalunits": None}
+        self.assertIsNone(property_data["totalunits"])
 
     def test_null_redlight_hides_health(self):
         property_data = {"redlight_report_score": None}

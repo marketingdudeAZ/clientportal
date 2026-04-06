@@ -9,24 +9,47 @@ load_dotenv()
 HUBSPOT_API_KEY = os.getenv("HUBSPOT_API_KEY")
 HUBSPOT_PORTAL_ID = os.getenv("HUBSPOT_PORTAL_ID")
 HUBDB_ASSET_TABLE_ID = os.getenv("HUBDB_ASSET_TABLE_ID")
+HUBDB_RECOMMENDATIONS_TABLE_ID = os.getenv("HUBDB_RECOMMENDATIONS_TABLE_ID")
+HUBDB_BUDGET_TIERS_TABLE_ID = os.getenv("HUBDB_BUDGET_TIERS_TABLE_ID")
+HUBDB_AM_PRIORITY_TABLE_ID = os.getenv("HUBDB_AM_PRIORITY_TABLE_ID")
 
 # --- Google Sheets ---
 GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID", "1jRqmEzhOIe72zgwIOcDZTyvde_Y0_jvayaLTZhva9mk")
 GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
 
+# --- Google BigQuery ---
+BIGQUERY_PROJECT_ID = os.getenv("BIGQUERY_PROJECT_ID")
+BIGQUERY_SERVICE_ACCOUNT_JSON = os.getenv("BIGQUERY_SERVICE_ACCOUNT_JSON")
+BIGQUERY_DATASET_PROD = os.getenv("BIGQUERY_DATASET_PROD", "rpm_portal")
+BIGQUERY_DATASET_DEV = os.getenv("BIGQUERY_DATASET_DEV", "rpm_portal_dev")
+
+# --- Anthropic ---
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+CLAUDE_DIGEST_MODEL = "claude-sonnet-4-5"
+CLAUDE_AGENT_MODEL = "claude-sonnet-4-5"
+CLAUDE_DIGEST_TEMP = 0.2
+CLAUDE_DIGEST_MAX_TOKENS = 600
+DIGEST_CACHE_HOURS = 24
+
+# --- ClickUp ---
+CLICKUP_API_KEY = os.getenv("CLICKUP_API_KEY")
+CLICKUP_LISTS = {
+    "seo": os.getenv("CLICKUP_LIST_SEO"),
+    "paid_media": os.getenv("CLICKUP_LIST_PAID_MEDIA"),
+    "social": os.getenv("CLICKUP_LIST_SOCIAL"),
+    "reputation": os.getenv("CLICKUP_LIST_REPUTATION"),
+    "onboarding": os.getenv("CLICKUP_LIST_ONBOARDING"),
+}
+
+# --- NinjaCat ---
+NINJACAT_EXPORT_BUCKET = os.getenv("NINJACAT_EXPORT_BUCKET")
+
 # --- Webhook ---
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", "8443"))
 
-# --- SMTP ---
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-
 # --- URLs ---
-PORTAL_BASE_URL = os.getenv("PORTAL_BASE_URL", "https://info.rpmliving.com/client-portal")
-AM_REVIEW_URL = os.getenv("AM_REVIEW_URL", "https://info.rpmliving.com/am-review")
+PORTAL_BASE_URL = os.getenv("PORTAL_BASE_URL", "https://go.rpmliving.com/digital/client-portal")
 NINJACAT_DASHBOARD_ID = os.getenv("NINJACAT_DASHBOARD_ID", "16866")
 
 # --- Service Tiers ---
@@ -58,6 +81,9 @@ SETUP_FEES = {
 
 PLE_STATUS_INCLUDE = ["RPM Managed", "Dispositioning", "Onboarding"]
 PAID_MEDIA_REVIEW_WINDOW_HOURS = 48
+
+# --- Portal ---
+WEBHOOK_SERVER_URL = os.getenv("WEBHOOK_SERVER_URL", "http://localhost:8443")
 
 # --- Asset Library ---
 ASSET_CATEGORIES = ["Photography", "Video", "Brand & Creative", "Marketing Collateral"]

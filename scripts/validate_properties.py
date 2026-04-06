@@ -18,7 +18,7 @@ HEADERS = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
 REQUIRED_FIELDS = ["name", "uuid", "plestatus"]
 RECOMMENDED_FIELDS = [
     "address", "city", "state", "zip", "domain", "rpmmarket",
-    "units_offered", "ninjacat_system_id", "seo_budget",
+    "totalunits", "ninjacat_system_id", "seo_budget",
     "social_posting_tier", "reputation_tier", "website_hosting_type",
 ]
 PHASE2_FIELDS = [

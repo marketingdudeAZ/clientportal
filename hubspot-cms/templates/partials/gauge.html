@@ -1,8 +1,6 @@
-<!--
-  Phase 2: SVG Gauge Component
-  Params: score (0-100), label (string), size ("large"|"small")
-  Inline SVG + vanilla JS. No external charting libraries.
--->
+{# Phase 2 - SVG Gauge Component
+   Accepts score (0-100), label (string), size (large or small)
+   Inline SVG with vanilla JS, no external charting libraries #}
 {% set gauge_score = score|default(0)|int %}
 {% set gauge_label = label|default("Score") %}
 {% set gauge_size = size|default("small") %}

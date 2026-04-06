@@ -1,0 +1,237 @@
+/* ══════════════════════════════════════════
+   Phase 6–7: AI Digest + Recommendations Feed
+   ══════════════════════════════════════════ */
+
+/* ── AI Digest ── */
+.digest-card { position: relative; }
+
+.digest-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  background: linear-gradient(135deg, var(--juniper-dark), var(--juniper));
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 100px;
+}
+
+.digest-badge::before {
+  content: "✦";
+  font-size: 9px;
+}
+
+.digest-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0 8px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.digest-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--juniper);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.digest-text {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  white-space: pre-line;
+  padding-top: 4px;
+}
+
+.digest-fallback {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 12px 0;
+}
+
+/* ── Rec Feed ── */
+.rec-feed-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--warning-amber);
+  background: #FEF3C7;
+  padding: 3px 10px;
+  border-radius: 100px;
+}
+
+.rec-feed-intro {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+}
+
+.rec-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rec-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+.rec-card:hover { box-shadow: var(--shadow-md); }
+
+.rec-card-header {
+  padding: 16px 20px 0;
+}
+
+.rec-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.rec-type-badge {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-budget  { background: #EDE9FE; color: #5B21B6; }
+.badge-upgrade { background: #DCFCE7; color: #166534; }
+.badge-strategy { background: #E0F2FE; color: #0C4A6E; }
+
+.rec-risk {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rec-risk.high   { color: var(--critical-red); }
+.rec-risk.medium { color: var(--warning-amber); }
+
+.rec-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 16px;
+  line-height: 1.4;
+}
+
+.rec-card-body {
+  padding: 0 20px 20px;
+}
+
+.rec-body-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 14px;
+}
+
+.rec-action-required {
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg);
+  border-left: 3px solid var(--juniper);
+  padding: 10px 14px;
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 16px;
+}
+
+.rec-action-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--juniper);
+  margin-bottom: 4px;
+}
+
+.rec-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-approve {
+  padding: 9px 22px;
+  background: var(--juniper);
+  color: var(--white);
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.btn-approve:hover  { background: var(--juniper-dark); }
+.btn-approve:active { transform: scale(0.98); }
+.btn-approve:disabled {
+  background: var(--light-gray);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-dismiss {
+  padding: 9px 18px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.btn-dismiss:hover { border-color: var(--light-gray); color: var(--text-secondary); }
+.btn-dismiss:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.rec-confirm {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rec-confirm.success {
+  background: #ECFDF5;
+  color: #065F46;
+}
+
+.rec-confirm.error {
+  background: #FEF2F2;
+  color: var(--critical-red);
+}
+
+/* Dismissed/approved card states */
+.rec-card.actioned {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .rec-actions { flex-direction: column; }
+  .btn-approve,
+  .btn-dismiss { width: 100%; text-align: center; }
+}

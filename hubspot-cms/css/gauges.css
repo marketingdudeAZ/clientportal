@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════
-   Phase 2: Health Score Gauges
+   Phase 2–3: Health Score Gauges & Flag Cards
    ══════════════════════════════════════════ */
 
 .health-gauges {
@@ -12,8 +12,8 @@
 .gauge-main { flex-shrink: 0; }
 
 .gauge-categories {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   gap: 24px;
   flex: 1;
 }
@@ -22,110 +22,127 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gauge:hover {
+  background: var(--bg);
 }
 
 .gauge-score-text {
   font-family: 'Montserrat', sans-serif;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .gauge-label {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--juniper);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .gauge-status {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .gauge-arc {
-  transition: stroke-dashoffset 1s ease-out;
+  transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ── Flag Cards (Phase 3) ── */
-.flag-group { margin-bottom: 24px; }
+.flag-group { margin-bottom: 28px; }
 
 .flag-group-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .flag-owner-badge {
-  padding: 6px 14px;
+  padding: 5px 14px;
   border-radius: 100px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   color: var(--white);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
-.badge-digital { background: var(--copper); }
-.badge-pm { background: var(--juniper); }
-.badge-ops { background: var(--sage); }
-.badge-leadership { background: #7C6F9B; }
+.badge-digital { background: linear-gradient(135deg, var(--copper), var(--copper-light)); }
+.badge-pm { background: linear-gradient(135deg, var(--juniper-dark), var(--juniper)); }
+.badge-ops { background: linear-gradient(135deg, #6B8E6A, var(--sage)); }
+.badge-leadership { background: linear-gradient(135deg, #5E5080, #7C6F9B); }
 
 .flag-count {
-  font-size: 13px;
-  color: var(--text-secondary);
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
 }
 
 .flag-callout {
   font-size: 13px;
   color: var(--text-secondary);
   font-style: italic;
-  margin-bottom: 12px;
-  padding: 8px 16px;
-  background: var(--off-white);
-  border-radius: 6px;
-  border-left: 3px solid var(--light-gray);
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--bg);
+  border-radius: 10px;
+  border-left: 3px solid var(--sage);
 }
 
 .flag-cards { display: flex; flex-direction: column; gap: 8px; }
 
 .flag-card {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 12px;
   overflow: hidden;
+  transition: all 0.2s ease;
 }
+.flag-card:hover { border-color: var(--light-gray); }
+.flag-card.expanded { box-shadow: var(--shadow-md); }
 
 .flag-card-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 16px 20px;
   cursor: pointer;
   transition: background 0.15s;
 }
-.flag-card-header:hover { background: var(--off-white); }
+.flag-card-header:hover { background: var(--bg); }
 
 .flag-name {
   flex: 1;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .flag-chevron {
-  transition: transform 0.2s;
-  color: var(--text-secondary);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: var(--text-muted);
 }
 .flag-card.expanded .flag-chevron { transform: rotate(180deg); }
 
 .flag-card-body {
   display: none;
-  padding: 0 16px 16px;
+  padding: 0 20px 20px;
 }
 .flag-card.expanded .flag-card-body { display: block; }
 
 .severity-badge {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.06em;
 }
 .severity-critical { background: #FEE2E2; color: var(--critical-red); }
 .severity-high { background: #FEF3C7; color: var(--warning-amber); }
@@ -136,9 +153,9 @@
   display: flex;
   gap: 24px;
   margin-bottom: 12px;
-  padding: 8px 12px;
-  background: var(--off-white);
-  border-radius: 4px;
+  padding: 10px 16px;
+  background: var(--bg);
+  border-radius: 8px;
   font-size: 13px;
 }
 
@@ -146,6 +163,7 @@
   font-size: 13px;
   color: var(--text-secondary);
   margin-bottom: 8px;
+  line-height: 1.7;
 }
 
 .flag-consequence {

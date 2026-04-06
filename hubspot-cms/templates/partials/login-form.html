@@ -1,0 +1,68 @@
+<!--
+  Portal Login — Email + OTP Verification
+  Two-step form: email entry, then 6-digit code input.
+-->
+<div class="portal-wrapper">
+  <header class="portal-header">
+    <img src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/images/rpm-logo.png" alt="RPM Living" class="portal-logo">
+    <span class="portal-header-label">Client Portal</span>
+  </header>
+
+  <main class="portal-main">
+    <div class="portal-card login-card" id="login-card">
+      <div class="login-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+        </svg>
+      </div>
+      <h2 class="login-title">Sign In to Your Portal</h2>
+      <p class="login-subtitle">Access your property portfolio and marketing performance.</p>
+
+      {# Step 1: Email Input #}
+      <div id="login-step-email" class="login-step">
+        <label for="login-email" class="login-label">Work Email</label>
+        <input
+          type="email"
+          id="login-email"
+          class="login-input"
+          placeholder="you@company.com"
+          autocomplete="email"
+          required
+        >
+        <button id="btn-request-code" class="btn btn-primary btn-full" onclick="requestOTP()">
+          Send Verification Code
+        </button>
+      </div>
+
+      {# Step 2: OTP Input #}
+      <div id="login-step-otp" class="login-step" style="display:none;">
+        <p class="otp-prompt">Enter the 6-digit code sent to <strong id="otp-email-display"></strong></p>
+        <div class="otp-inputs" id="otp-inputs">
+          <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" class="otp-digit" data-index="0" autocomplete="one-time-code">
+          <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" class="otp-digit" data-index="1">
+          <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" class="otp-digit" data-index="2">
+          <span class="otp-separator">—</span>
+          <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" class="otp-digit" data-index="3">
+          <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" class="otp-digit" data-index="4">
+          <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" class="otp-digit" data-index="5">
+        </div>
+        <button id="btn-verify-code" class="btn btn-primary btn-full" onclick="verifyOTP()" disabled>
+          Verify Code
+        </button>
+        <button class="btn-link" onclick="backToEmail()">Use a different email</button>
+      </div>
+
+      {# Error / Status Messages #}
+      <div id="login-message" class="login-message" style="display:none;"></div>
+
+      {# Loading Overlay #}
+      <div id="login-loading" class="login-loading" style="display:none;">
+        <div class="spinner"></div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="portal-footer">
+    <p>&copy; {{ now()|datetimeformat("%Y") }} RPM Living. All rights reserved.</p>
+  </footer>
+</div>

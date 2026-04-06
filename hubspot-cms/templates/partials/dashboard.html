@@ -1,0 +1,133 @@
+<!--
+  Portfolio Dashboard — Executive Overview
+  Rendered client-side from /api/portfolio JSON response.
+  User identity comes from HubSpot Membership (request.contact).
+-->
+<div class="portal-wrapper">
+  <header class="portal-header dashboard-header">
+    <img src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/images/rpm-logo.png" alt="RPM Living" class="portal-logo">
+    <span class="portal-header-label">Portfolio Dashboard</span>
+    <div class="header-spacer"></div>
+    <div class="header-user" id="header-user">
+      <span class="user-role-badge" id="user-role"></span>
+      <span class="user-email" id="user-email"></span>
+    </div>
+  </header>
+
+  <main class="portal-main" id="dashboard-main">
+    {# Loading State #}
+    <div id="dashboard-loading" class="dashboard-loading">
+      <div class="spinner"></div>
+      <p>Loading your portfolio...</p>
+    </div>
+
+    {# Error State #}
+    <div id="dashboard-error" class="dashboard-error" style="display:none;">
+      <div class="portal-card portal-error-card">
+        <div class="error-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </div>
+        <h2>Unable to Load Portfolio</h2>
+        <p id="dashboard-error-msg">Something went wrong. Please try again.</p>
+        <button class="btn btn-primary" onclick="loadPortfolio()" style="margin-top:16px;">Retry</button>
+      </div>
+    </div>
+
+    {# Dashboard Content (populated by JS) #}
+    <div id="dashboard-content" style="display:none;">
+
+      {# KPI Hero Cards #}
+      <section class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </div>
+          <div class="kpi-value" id="kpi-properties">—</div>
+          <div class="kpi-label">Properties</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon kpi-icon-units">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          </div>
+          <div class="kpi-value" id="kpi-units">—</div>
+          <div class="kpi-label">Total Units</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon kpi-icon-health">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </div>
+          <div class="kpi-value" id="kpi-health">—</div>
+          <div class="kpi-label">Avg Health Score</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon kpi-icon-spend">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+          </div>
+          <div class="kpi-value" id="kpi-spend">—</div>
+          <div class="kpi-label">Monthly Spend</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon kpi-icon-flags">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+          </div>
+          <div class="kpi-value" id="kpi-flags">—</div>
+          <div class="kpi-label">Total Flags</div>
+        </div>
+      </section>
+
+      {# Health Distribution Bar #}
+      <section class="portal-card health-distribution-card" id="health-distribution-card">
+        <h3 class="section-header">Health Distribution</h3>
+        <div class="health-bar-wrapper">
+          <div class="health-bar" id="health-bar"></div>
+          <div class="health-legend" id="health-legend"></div>
+        </div>
+      </section>
+
+      {# Property Table #}
+      <section class="portal-card property-table-card" id="property-table-card">
+        <div class="table-header-row">
+          <h3 class="section-header">Properties</h3>
+          <div class="table-controls">
+            <input type="text" id="search-input" class="table-search" placeholder="Search properties..." oninput="applyFilters()">
+            <select id="market-filter" class="table-filter" onchange="applyFilters()">
+              <option value="">All Markets</option>
+            </select>
+            <select id="health-filter" class="table-filter" onchange="applyFilters()">
+              <option value="">All Health</option>
+              <option value="healthy">Healthy (80+)</option>
+              <option value="warning">Warning (60-79)</option>
+              <option value="critical">Critical (&lt;60)</option>
+              <option value="no_data">No Data</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="dashboard-table" id="property-table">
+            <thead>
+              <tr>
+                <th class="sortable" data-sort="name" onclick="applySort('name')">Property <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="market" onclick="applySort('market')">Market <span class="sort-icon"></span></th>
+                <th class="sortable text-right" data-sort="units" onclick="applySort('units')">Units <span class="sort-icon"></span></th>
+                <th class="sortable text-right" data-sort="health_score" onclick="applySort('health_score')">Health <span class="sort-icon"></span></th>
+                <th class="sortable text-right" data-sort="monthly_spend" onclick="applySort('monthly_spend')">Monthly Spend <span class="sort-icon"></span></th>
+                <th class="sortable text-right" data-sort="flags" onclick="applySort('flags')">Flags <span class="sort-icon"></span></th>
+              </tr>
+            </thead>
+            <tbody id="property-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="table-footer" id="table-footer">
+          <span id="table-count"></span>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="portal-footer">
+    <p>&copy; 2026 RPM Living. All rights reserved.</p>
+  </footer>
+</div>
