@@ -27,12 +27,15 @@ Requirements:
     GOOGLE_SERVICE_ACCOUNT_JSON, KB_DRAFT_FOLDER_ID, KB_LOG_SHEET_ID)
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import os
 import sys
 import time
 from datetime import datetime, timezone
+from typing import Optional
 
 import requests
 
@@ -65,7 +68,7 @@ def get_clickup_list_ids_from_env() -> dict[str, str]:
     return mapping
 
 
-def fetch_tasks(list_id: str, since_ts: int | None = None, limit: int | None = None) -> list[dict]:
+def fetch_tasks(list_id: str, since_ts: Optional[int] = None, limit: Optional[int] = None) -> list[dict]:
     """Fetch all closed tasks from a ClickUp list. Returns list of task dicts."""
     if not CLICKUP_API_KEY:
         logger.error("CLICKUP_API_KEY not set")
@@ -153,7 +156,7 @@ def build_ticket_url(task: dict) -> str:
     return task.get("url") or f"https://app.clickup.com/t/{task.get('id', '')}"
 
 
-def import_list(list_id: str, list_label: str, dry_run: bool, since_ts: int | None, limit: int | None) -> int:
+def import_list(list_id: str, list_label: str, dry_run: bool, since_ts: Optional[int], limit: Optional[int]) -> int:
     """Import all closed tasks from one ClickUp list. Returns count of processed tasks."""
     logger.info("Fetching closed tasks from list '%s' (id: %s)…", list_label, list_id)
     tasks = fetch_tasks(list_id, since_ts=since_ts, limit=limit)

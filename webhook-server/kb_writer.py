@@ -13,11 +13,14 @@ Sheet columns (in order):
   Doc Link | Status | Notes
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
 import time
 from datetime import datetime, timezone
+from typing import Optional
 
 import requests
 
@@ -49,7 +52,7 @@ def create_kb_draft(
     ticket_id: str,
     title: str,
     description: str,
-    thread_messages: list[dict] | None = None,
+    thread_messages: Optional[list] = None,
     category: str = "",
     property_name: str = "",
     source: str = "HubSpot",               # "HubSpot" or "ClickUp"
@@ -103,7 +106,7 @@ def create_kb_draft(
 
 # ── Claude ──────────────────────────────────────────────────────────────────────
 
-def _call_claude(title: str, description: str, thread_messages, category: str) -> str | None:
+def _call_claude(title: str, description: str, thread_messages, category: str) -> Optional[str]:
     """Call Claude Haiku to draft the KB article. Returns the text or None on failure."""
     if not ANTHROPIC_API_KEY:
         logger.warning("KB writer: ANTHROPIC_API_KEY not set")
@@ -164,7 +167,7 @@ def _call_claude(title: str, description: str, thread_messages, category: str) -
 
 # ── Google Docs ─────────────────────────────────────────────────────────────────
 
-def _create_google_doc(title: str, body_text: str, ticket_url: str, source: str, ticket_id: str) -> str | None:
+def _create_google_doc(title: str, body_text: str, ticket_url: str, source: str, ticket_id: str) -> Optional[str]:
     """Create a Google Doc in the KB Drafts folder. Returns the doc URL or None."""
     if not GOOGLE_SERVICE_ACCOUNT_JSON:
         logger.warning("KB writer: GOOGLE_SERVICE_ACCOUNT_JSON not set")
@@ -257,7 +260,7 @@ def _append_sheet_row(
     ticket_url: str,
     doc_url: str,
     notes: str,
-) -> int | None:
+) -> Optional[int]:
     """Append a log row to the KB Draft Log sheet. Returns the new row number or None."""
     if not GOOGLE_SERVICE_ACCOUNT_JSON:
         return None
