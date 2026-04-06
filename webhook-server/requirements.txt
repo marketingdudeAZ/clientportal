@@ -3,3 +3,6 @@ gunicorn==22.0.0
 requests==2.32.3
 python-dotenv==1.0.1
 PyJWT==2.9.0
+gspread==6.1.2
+google-auth==2.29.0
+google-api-python-client==2.128.0

@@ -297,19 +297,19 @@ def _get_portal_id():
 
 
 def create_kb_draft_note(ticket_id: str) -> None:
-    """When a ticket closes, use Claude to draft a KB article and post it as a Note.
+    """When a ticket closes, draft a KB article → Google Doc → log to Sheet.
 
-    The note is tagged [KB DRAFT] so AMs can copy it into the HubSpot KB UI.
-    Runs in a background thread — failures are logged but never raised.
+    Replaces the old HubSpot Note approach. Runs in a background thread —
+    failures are logged but never raised.
     """
-    import os
-
     try:
-        # 1. Fetch ticket subject + content
+        from kb_writer import create_kb_draft
+
+        # 1. Fetch ticket subject + content + channel
         r = requests.get(
             f"{HS_BASE}/crm/v3/objects/tickets/{ticket_id}",
             headers=HS_HEADERS,
-            params={"properties": "subject,content"},
+            params={"properties": "subject,content,channel,hs_pipeline_stage"},
             timeout=8,
         )
         if r.status_code != 200:
@@ -317,10 +317,16 @@ def create_kb_draft_note(ticket_id: str) -> None:
             return
         props   = r.json().get("properties", {})
         subject = props.get("subject", "")
-        content = (props.get("content") or "").replace("[Submitted via RPM Client Portal]\n\n", "")
+        content = (props.get("content") or "").replace("[Submitted via RPM Client Portal]\n\nCategory: ", "")
+        # Strip the second prefix line if present (e.g. "SEO\n\n")
+        if "\n\n" in content:
+            first_line, rest = content.split("\n\n", 1)
+            if len(first_line) < 40:   # it's a category label, not real content
+                content = rest
+        channel = props.get("channel", "")
 
-        # 2. Fetch conversation thread messages (if any)
-        thread_text = ""
+        # 2. Fetch conversation thread messages
+        thread_messages = []
         r2 = requests.get(
             f"{HS_BASE}/conversations/v3/conversations/threads",
             headers=HS_HEADERS,
@@ -337,89 +343,40 @@ def create_kb_draft_note(ticket_id: str) -> None:
                     timeout=8,
                 )
                 if r3.status_code == 200:
-                    msgs = r3.json().get("results", [])
-                    lines = []
-                    for m in msgs:
+                    for m in r3.json().get("results", []):
                         text = (m.get("text") or "").strip()
-                        direction = m.get("direction", "OUTGOING")
                         if text:
-                            label = "Client" if direction == "INCOMING" else "RPM Team"
-                            lines.append(f"{label}: {text}")
-                    thread_text = "\n".join(lines)
+                            thread_messages.append({
+                                "direction": m.get("direction", "OUTGOING"),
+                                "sender": m.get("senderActor", {}).get("name", ""),
+                                "text": text,
+                            })
 
-        # 3. Call Claude API to draft the KB article
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        if not api_key:
-            logger.warning("KB draft: ANTHROPIC_API_KEY not set, skipping")
-            return
-
-        import json as _json
-        prompt = (
-            f"A property management client submitted a support ticket that has now been resolved. "
-            f"Draft a concise HubSpot knowledge base article that answers the question for future clients.\n\n"
-            f"Ticket subject: {subject}\n\n"
-            f"Original question: {content}\n\n"
-            f"{'Conversation thread:\n' + thread_text if thread_text else ''}\n\n"
-            f"Write the article with:\n"
-            f"- A clear title\n"
-            f"- A short intro sentence\n"
-            f"- A numbered or bulleted answer (3-6 steps or points)\n"
-            f"- A closing note about contacting the RPM team if the issue persists\n"
-            f"Keep it concise and friendly. Do not include any preamble like 'Here is the article'."
+        # 3. Build ticket URL for the Sheet
+        portal_id = _get_portal_id()
+        ticket_url = (
+            f"https://app.hubspot.com/contacts/{portal_id}/ticket/{ticket_id}"
+            if portal_id else ""
         )
 
-        claude_resp = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 800,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=30,
-        )
-        if claude_resp.status_code != 200:
-            logger.warning("KB draft: Claude API error %s", claude_resp.status_code)
-            return
-
-        draft_text = claude_resp.json()["content"][0]["text"].strip()
-
-        # 4. Post draft as a HubSpot Note on the ticket
-        note_body = (
-            f"[KB DRAFT — Ready to publish]\n\n"
-            f"Auto-drafted from resolved ticket #{ticket_id}. "
-            f"Copy into HubSpot Knowledge Base.\n\n"
-            f"{'─' * 60}\n\n"
-            f"{draft_text}"
+        # 4. Hand off to kb_writer — creates Doc + logs Sheet row
+        result = create_kb_draft(
+            ticket_id=ticket_id,
+            title=subject,
+            description=content,
+            thread_messages=thread_messages,
+            category=channel,
+            source="HubSpot",
+            ticket_url=ticket_url,
         )
 
-        note_resp = requests.post(
-            f"{HS_BASE}/crm/v3/objects/notes",
-            headers=HS_HEADERS,
-            json={"properties": {
-                "hs_note_body":    note_body,
-                "hs_timestamp":    str(int(__import__("time").time() * 1000)),
-            }},
-            timeout=10,
-        )
-        if note_resp.status_code not in (200, 201):
-            logger.warning("KB draft: note creation failed %s", note_resp.status_code)
-            return
-
-        note_id = note_resp.json()["id"]
-
-        # 5. Associate note → ticket
-        requests.post(
-            f"{HS_BASE}/crm/v3/associations/notes/tickets/batch/create",
-            headers=HS_HEADERS,
-            json={"inputs": [{"from": {"id": note_id}, "to": {"id": ticket_id}, "type": "note_to_ticket"}]},
-            timeout=8,
-        )
-        logger.info("KB draft note created for ticket %s (note %s)", ticket_id, note_id)
+        if result.get("status") == "ok":
+            logger.info(
+                "KB draft created for ticket %s → %s",
+                ticket_id, result.get("doc_url"),
+            )
+        else:
+            logger.error("KB draft failed for ticket %s: %s", ticket_id, result.get("error"))
 
     except Exception as e:
         logger.error("KB draft failed for ticket %s: %s", ticket_id, e)
