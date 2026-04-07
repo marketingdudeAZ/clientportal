@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPM Client Portal — Technical Overview</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    color: #1a1a2e;
+    background: #f8f9fb;
+  }
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 32px 80px;
+  }
+  /* Header */
+  .doc-header {
+    border-bottom: 3px solid #1e3a5f;
+    padding-bottom: 24px;
+    margin-bottom: 40px;
+  }
+  .doc-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1e3a5f;
+    margin-bottom: 6px;
+  }
+  .doc-header .meta {
+    font-size: 13px;
+    color: #6b7280;
+  }
+  /* Section headings */
+  h2 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1e3a5f;
+    margin: 44px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #dde3ec;
+  }
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e3a5f;
+    margin: 28px 0 10px;
+  }
+  h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin: 20px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  p { margin-bottom: 12px; }
+  /* Architecture box */
+  .arch-box {
+    background: #1e3a5f;
+    color: #e2e8f0;
+    border-radius: 10px;
+    padding: 24px 28px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    margin: 16px 0 20px;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  /* Code / inline */
+  code {
+    background: #eef2f7;
+    border: 1px solid #d1d9e6;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12.5px;
+    color: #c0392b;
+  }
+  /* Tables */
+  .table-wrap { overflow-x: auto; margin: 14px 0 24px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  thead tr { background: #1e3a5f; color: #fff; }
+  thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid #e5e9f0; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:nth-child(even) { background: #f4f6fb; }
+  tbody td { padding: 9px 14px; vertical-align: top; }
+  tbody td:first-child { font-weight: 500; white-space: nowrap; }
+  /* Lists */
+  ul, ol { padding-left: 22px; margin-bottom: 12px; }
+  li { margin-bottom: 5px; }
+  /* Callout */
+  .callout {
+    background: #fff8e7;
+    border-left: 4px solid #f59e0b;
+    border-radius: 0 6px 6px 0;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 13.5px;
+    color: #78350f;
+  }
+  /* Badges for methods */
+  .method {
+    display: inline-block;
+    font-family: 'SF Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+  .get  { background: #dcfce7; color: #166534; }
+  .post { background: #dbeafe; color: #1e40af; }
+  .patch { background: #fef3c7; color: #92400e; }
+  /* Section divider */
+  hr { border: none; border-top: 1px solid #dde3ec; margin: 36px 0; }
+  /* Numbered sections */
+  .section-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    background: #1e3a5f;
+    color: #fff;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
+    margin-right: 10px;
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
+  .section-title { display: flex; align-items: center; margin: 28px 0 10px; }
+  .section-title h3 { margin: 0; }
+  strong { color: #1e3a5f; }
+  /* Endpoint row method highlight */
+  td .get, td .post, td .patch { font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="doc-header">
+    <h1>RPM Living Client Portal — Technical Overview</h1>
+    <div class="meta">Last updated: April 2026 &nbsp;·&nbsp; Prepared for RPM Living marketing team</div>
+  </div>
+
+  <h2>What It Is</h2>
+  <p>The RPM Client Portal is a branded self-service hub for RPM Living property clients, hosted on HubSpot CMS at <code>go.rpmliving.com</code>. It gives clients visibility into their marketing performance, active campaigns, spend details, and support tickets — all connected live to HubSpot CRM, HubSpot Service Hub, and the broader RPM marketing stack.</p>
+  <p>The portal is a single HubSpot page template (<code>demo.html</code>) that talks to a Flask API server (the "webhook server") hosted on Railway at <code>https://clientportal-production-05ac.up.railway.app</code>. The Flask server is the only thing that holds API keys and communicates with HubSpot.</p>
+
+  <h2>Architecture at a Glance</h2>
+  <div class="arch-box">Client Browser (go.rpmliving.com)
+        │
+        │  fetch() calls over HTTPS
+        ▼
+Railway Flask API Server
+(clientportal-production-05ac.up.railway.app)
+        │
+        ├── HubSpot CRM v3/v4 API  (company, deal, ticket, note, contact data)
+        ├── HubSpot Conversations API  (ticket threads + replies)
+        ├── HubSpot CMS Site Search API  (knowledge base search)
+        ├── HubSpot HubDB  (assets, recommendations, budget tiers)
+        ├── Google BigQuery  (portfolio data, red-light signals)
+        └── Anthropic Claude API  (digest summaries, KB article drafts)</div>
+  <p>The portal page is a static HTML/JS file deployed to HubSpot's Design Manager. There is no separate database — all persistent data lives in HubSpot CRM or HubDB.</p>
+
+  <h2>Infrastructure</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Component</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Portal frontend</td><td>HubSpot CMS page template, <code>custom/client-portal/client-portal.html</code></td></tr>
+        <tr><td>Demo page</td><td><code>templates/rpm-portal-demo.html</code> (HubSpot Source Code)</td></tr>
+        <tr><td>API server</td><td>Railway — auto-deploys from GitHub on push to <code>main</code></td></tr>
+        <tr><td>GitHub repo</td><td><code>github.com/marketingdudeAZ/clientportal</code></td></tr>
+        <tr><td>Server runtime</td><td>Python 3, Flask, Gunicorn (2 workers, 120s timeout)</td></tr>
+        <tr><td>Root directory</td><td><code>webhook-server/</code> — Procfile: <code>web: gunicorn server:app --bind 0.0.0.0:$PORT</code></td></tr>
+        <tr><td>Environment variables</td><td>Set in Railway Variables tab (HUBSPOT_API_KEY, ANTHROPIC_API_KEY, etc.)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Portal Sections</h2>
+
+  <div class="section-title"><span class="section-num">1</span><h3>Dashboard / Overview</h3></div>
+  <p>Shows the client's property name, account manager, and a high-level health summary. Data comes from <code>/api/property</code> which reads HubSpot company properties. The AM who owns the company record in HubSpot is auto-surfaced as the client's primary contact.</p>
+
+  <div class="section-title"><span class="section-num">2</span><h3>Performance</h3></div>
+  <p>Embeds reporting data wired to NinjaCat (configurable via <code>NINJACAT_DASHBOARD_ID</code> env var). Gauges and score cards are rendered from the <code>/api/property</code> response which includes channel-level performance metrics stored on the HubSpot company record.</p>
+
+  <div class="section-title"><span class="section-num">3</span><h3>Recommendations Feed</h3></div>
+  <p>Pulls from HubDB table (<code>HUBDB_RECOMMENDATIONS_TABLE_ID</code>) — a structured table of recommendations the AM has entered for this client. Clients can approve or dismiss each recommendation directly from the portal:</p>
+  <ul>
+    <li><strong>Approve</strong> → <code>POST /api/approve</code> — logs to HubSpot, creates a ClickUp task in the appropriate service list, optionally triggers Claude to generate a campaign brief</li>
+    <li><strong>Dismiss</strong> → <code>POST /api/dismiss</code> — logs dismissal to HubSpot</li>
+  </ul>
+
+  <div class="section-title"><span class="section-num">4</span><h3>Digest</h3></div>
+  <p>A Claude-generated plain-English summary of what's happening with the client's account. Calls <code>/api/digest</code> which reads recent HubSpot activity, sends a structured prompt to Claude Sonnet, and caches the result for 24 hours.</p>
+
+  <div class="section-title"><span class="section-num">5</span><h3>Asset Library</h3></div>
+  <p>Displays marketing assets (photos, videos, brand files) stored in HubDB (<code>HUBDB_ASSET_TABLE_ID</code>). Clients can browse by category, open a lightbox viewer, and upload new files via <code>POST /api/asset-upload</code> which stores them in HubSpot File Manager and writes metadata to HubDB.</p>
+
+  <div class="section-title"><span class="section-num">6</span><h3>Included Services</h3></div>
+  <p>Renders a pricing breakdown of the client's included services based on their unit count and tier selections. Pricing tiers are defined in <code>config.py</code> (CRM Lead Management, Website Hosting, SOCi, Training bands, etc.).</p>
+
+  <div class="section-title"><span class="section-num">7</span><h3>Budget Configurator</h3></div>
+  <p>An interactive package builder. Clients adjust their SEO tier, Paid Search, Paid Social, Reputation, and add-ons — a running total updates live. On submit, <code>POST /api/configurator-submit</code> creates or updates a HubSpot deal and notifies the AM.</p>
+
+  <div class="section-title"><span class="section-num">8</span><h3>Support Tickets</h3></div>
+
+  <h4>Creating a Ticket</h4>
+  <p>When a client submits a ticket, the portal first runs <strong>KB deflection</strong>:</p>
+  <ol>
+    <li>Calls <code>GET /api/kb-search?q=&lt;title&gt;</code> — searches HubSpot's Knowledge Base for matching articles</li>
+    <li>If articles are found, shows them inline: "We found these articles that may help — did this answer your question?"</li>
+    <li>Client clicks <strong>Yes</strong> (form closes) or <strong>No, I still need help</strong> (proceeds to submit)</li>
+    <li>If no articles found, submits immediately without the deflection panel</li>
+  </ol>
+  <p>On submission, <code>POST /api/ticket</code> creates the ticket in HubSpot's Support Pipeline (ID: 0), auto-assigns it to the AM who owns the company record, and associates it with both the company and contact records.</p>
+
+  <h4>Conversation Threads</h4>
+  <p>Each ticket card has a <strong>View Thread</strong> button. On click:</p>
+  <ol>
+    <li>Calls <code>GET /api/ticket/&lt;id&gt;/thread</code> — queries HubSpot Conversations API for the message thread</li>
+    <li>Renders messages inline (incoming = client, outgoing = AM/RPM team)</li>
+    <li>Shows a reply bar — client types a message and hits Enter or Send</li>
+    <li>Reply is posted via <code>POST /api/ticket/&lt;id&gt;/reply</code> → writes back to HubSpot Conversations</li>
+    <li>The AM sees the reply immediately in HubSpot Service Hub</li>
+  </ol>
+
+  <h4>Auto KB Draft on Close</h4>
+  <p>When a ticket is moved to Closed, a background thread automatically:</p>
+  <ol>
+    <li>Fetches the full ticket subject, description, and conversation thread</li>
+    <li>Calls Claude Haiku (<code>claude-haiku-4-5-20251001</code>) to write a Knowledge Base article draft</li>
+    <li>Posts the draft as a HubSpot Note on the ticket tagged <code>[KB DRAFT — Ready to publish]</code></li>
+    <li>The AM copies it into the HubSpot KB UI (a ~30-second task)</li>
+  </ol>
+  <div class="callout">HubSpot has no public API for creating KB articles. This Note-based workaround keeps the workflow intact without any manual API workarounds.</div>
+
+  <div class="section-title"><span class="section-num">9</span><h3>Spend Sheet</h3></div>
+  <p>A full table of marketing spend across all RPM-managed properties. The data pipeline runs on first load, is cached for 30 minutes, and is pre-warmed on server startup:</p>
+  <ol>
+    <li>CRM search: all companies where <code>plestatus</code> is RPM Managed, Onboarding, or Dispositioning</li>
+    <li>Batch associations: companies → deals (HubSpot v4 API, returns <code>207 Multi-Status</code>)</li>
+    <li>Batch read: latest deal per company</li>
+    <li>Batch associations: deals → line items</li>
+    <li>Batch read: line items (Search, PMax, Paid Social, SEO, Management Fee)</li>
+    <li>Batch associations: deals → quotes</li>
+    <li>Batch read: latest quote per deal (name + approval status)</li>
+  </ol>
+  <p>Three filter inputs (Property Name, RPM Market, Marketing Manager) filter the table client-side.</p>
+
+  <div class="section-title"><span class="section-num">10</span><h3>Client Brief</h3></div>
+  <p><code>GET /api/client-brief</code> returns a structured summary of the client's onboarding status, goals, and key context. AMs update fields via <code>PATCH /api/client-brief</code>, which writes back to HubSpot company properties.</p>
+
+  <div class="section-title"><span class="section-num">11</span><h3>Portfolio (Red Light)</h3></div>
+  <p><code>GET /api/portfolio</code> pulls portfolio-level data from BigQuery. The Red Light system ingests performance signals and flags underperforming properties for AM attention.</p>
+
+  <h2>API Endpoints Reference</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Method</th><th>Endpoint</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/property</code></td><td>Company data, performance metrics, AM info</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/digest</code></td><td>Claude-generated account summary (24h cache)</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/portfolio</code></td><td>Portfolio-level BigQuery data</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/approve</code></td><td>Approve a recommendation → ClickUp task</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/dismiss</code></td><td>Dismiss a recommendation</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/configurator-submit</code></td><td>Submit budget config → HubSpot deal</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/asset-upload</code></td><td>Upload file to HubSpot File Manager + HubDB</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/call-notes</code></td><td>Log call notes to HubSpot</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/red-light/run</code></td><td>Trigger red-light analysis</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/red-light/ingest-csv</code></td><td>Ingest performance CSV</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/ticket</code></td><td>Create a new support ticket</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/tickets</code></td><td>List open tickets for a company</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/ticket/&lt;id&gt;/stage</code></td><td>Move ticket stage (triggers KB draft if closed)</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/kb-search</code></td><td>Search HubSpot Knowledge Base (5-min cache)</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/ticket/&lt;id&gt;/thread</code></td><td>Load conversation thread messages</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/ticket/&lt;id&gt;/reply</code></td><td>Post a reply to a ticket thread</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/client-brief</code></td><td>Get client brief / onboarding summary</td></tr>
+        <tr><td><span class="method patch">PATCH</span></td><td><code>/api/client-brief</code></td><td>Update client brief fields in HubSpot</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/spend-sheet</code></td><td>Full spend table — all properties (30-min cache)</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/budget</code></td><td>Budget tier data from HubDB</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/health</code></td><td>Health check (Railway uptime monitoring)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Key Backend Modules</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>server.py</code></td><td>Flask app — all API routes</td></tr>
+        <tr><td><code>config.py</code></td><td>Env var loading, pricing tiers, constants</td></tr>
+        <tr><td><code>ticket_manager.py</code></td><td>HubSpot ticket CRUD + auto KB draft generation</td></tr>
+        <tr><td><code>spend_sheet.py</code></td><td>Multi-step deal/spend pipeline with 30-min cache</td></tr>
+        <tr><td><code>approval_agent.py</code></td><td>Claude-powered campaign brief on recommendation approval</td></tr>
+        <tr><td><code>digest.py</code></td><td>Account digest generation via Claude</td></tr>
+        <tr><td><code>portfolio.py</code></td><td>BigQuery portfolio data reads</td></tr>
+        <tr><td><code>bigquery_client.py</code></td><td>BigQuery connection wrapper</td></tr>
+        <tr><td><code>red_light_pipeline.py</code></td><td>Red-light signal processing</td></tr>
+        <tr><td><code>red_light_ingest.py</code></td><td>CSV ingestion for red-light data</td></tr>
+        <tr><td><code>call_notes.py</code></td><td>HubSpot call note logging</td></tr>
+        <tr><td><code>auth.py</code></td><td>Portal authentication helpers</td></tr>
+        <tr><td><code>asset_uploader.py</code></td><td>HubSpot File Manager + HubDB write</td></tr>
+        <tr><td><code>deal_creator.py</code></td><td>HubSpot deal creation from configurator</td></tr>
+        <tr><td><code>quote_generator.py</code></td><td>Quote generation logic</td></tr>
+        <tr><td><code>notifier.py</code></td><td>AM notification dispatch</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Authentication &amp; Security</h2>
+  <ul>
+    <li>All API calls include an <code>X-Portal-Email</code> header injected by HubSpot personalization tokens — the server uses this to identify the requesting client</li>
+    <li>API keys (HubSpot, Anthropic, ClickUp, Google) are stored only as Railway environment variables — never in code</li>
+    <li>CORS is locked to the HubSpot portal domain</li>
+    <li>HubSpot webhook payloads are validated via HMAC signature (<code>hmac_validator.py</code>)</li>
+  </ul>
+
+  <h2>Deployment Workflow</h2>
+  <ol>
+    <li>Edit files locally in <code>/Users/kyleshipp/Client-Portal/</code></li>
+    <li><code>git push origin main</code> → Railway auto-deploys from the <code>webhook-server/</code> folder</li>
+    <li>Upload <code>demo.html</code> to HubSpot via Source Code API (<code>PUT /cms/v3/source-code/published/content/templates/rpm-portal-demo.html</code>)</li>
+    <li>Push live: <code>POST /cms/v3/pages/site-pages/210424772716/draft/push-live</code></li>
+  </ol>
+  <p>Steps 3–4 are automated via <code>scripts/deploy_to_hubspot.py</code> for the full CMS bundle, or run inline for the demo page.</p>
+
+  <h2>Environment Variables (Railway)</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Variable</th><th>Used For</th></tr></thead>
+      <tbody>
+        <tr><td><code>HUBSPOT_API_KEY</code></td><td>All HubSpot API calls</td></tr>
+        <tr><td><code>HUBSPOT_PORTAL_ID</code></td><td>Building direct ticket URLs</td></tr>
+        <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Claude digest + KB draft generation</td></tr>
+        <tr><td><code>HUBDB_ASSET_TABLE_ID</code></td><td>Asset library HubDB table</td></tr>
+        <tr><td><code>HUBDB_RECOMMENDATIONS_TABLE_ID</code></td><td>Recommendations feed HubDB table</td></tr>
+        <tr><td><code>HUBDB_BUDGET_TIERS_TABLE_ID</code></td><td>Budget configurator tiers</td></tr>
+        <tr><td><code>HUBDB_AM_PRIORITY_TABLE_ID</code></td><td>AM priority queue</td></tr>
+        <tr><td><code>CLICKUP_API_KEY</code></td><td>Approval → ClickUp task creation</td></tr>
+        <tr><td><code>CLICKUP_LIST_SEO</code> / <code>_PAID_MEDIA</code> / etc.</td><td>Per-channel ClickUp list IDs</td></tr>
+        <tr><td><code>BIGQUERY_PROJECT_ID</code></td><td>Portfolio / red-light BigQuery project</td></tr>
+        <tr><td><code>BIGQUERY_SERVICE_ACCOUNT_JSON</code></td><td>BigQuery service account auth</td></tr>
+        <tr><td><code>GOOGLE_SHEETS_ID</code></td><td>Legacy Google Sheets connection</td></tr>
+        <tr><td><code>GOOGLE_SERVICE_ACCOUNT_JSON</code></td><td>Google service account auth</td></tr>
+        <tr><td><code>WEBHOOK_SECRET</code></td><td>HubSpot webhook HMAC validation</td></tr>
+        <tr><td><code>PORTAL_BASE_URL</code></td><td>Base URL for portal links in AM notifications</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Known Quirks &amp; Notes</h2>
+  <ul>
+    <li><strong>HubSpot v4 Batch Associations returns <code>207 Multi-Status</code></strong> (not <code>200</code>). All batch association calls check for both status codes — this was the root cause of the spend sheet taking 2+ minutes to build before the fix.</li>
+    <li><strong>KB article creation</strong>: HubSpot has no public API to create KB articles. The workaround is posting Claude's draft as a HubSpot Note tagged <code>[KB DRAFT]</code> on the resolved ticket.</li>
+    <li><strong>Spend sheet first load</strong>: ~60 seconds on a cold server (1,300+ companies × multiple batch API calls). A background thread pre-warms the cache on startup; subsequent loads are under 1 second.</li>
+    <li><strong>HubSpot CSP</strong>: HubSpot injects <code>upgrade-insecure-requests</code> on hosted pages, which upgrades <code>http://</code> fetch calls to <code>https://</code>. This is why the API server must be on Railway with a real TLS certificate rather than localhost.</li>
+  </ul>
+
+</div>
+</body>
+</html>
