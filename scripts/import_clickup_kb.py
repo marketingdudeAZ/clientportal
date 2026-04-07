@@ -43,7 +43,7 @@ import requests
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "webhook-server"))
 
 from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=True)
 
 from kb_writer import create_kb_draft
 
@@ -54,8 +54,64 @@ CLICKUP_API_KEY = os.getenv("CLICKUP_API_KEY", "")
 CU_BASE = "https://api.clickup.com/api/v2"
 CU_HEADERS = {"Authorization": CLICKUP_API_KEY}
 
+KB_LOG_SHEET_ID = os.getenv("KB_LOG_SHEET_ID", "18oIx_CmBcTPDsG44YY3mFy2CfKhSjcTshfWYsa3gheI")
+GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+
 # Statuses that mean "resolved / done" in ClickUp
 CLOSED_STATUSES = {"closed", "complete", "done", "resolved", "won't fix", "duplicate"}
+
+
+def load_existing_titles() -> set:
+    """Fetch all titles already in the KB Drafts sheet to avoid duplicates."""
+    if not GOOGLE_SERVICE_ACCOUNT_JSON:
+        return set()
+    try:
+        import json
+        import gspread
+        from google.oauth2.service_account import Credentials
+        creds_info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+        creds = Credentials.from_service_account_info(creds_info, scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+        ])
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_key(KB_LOG_SHEET_ID)
+        ws = sh.worksheet("KB Drafts")
+        # Title is column B (index 1); row 1 is header
+        all_rows = ws.get_all_values()
+        titles = {row[1].strip().lower() for row in all_rows[1:] if len(row) > 1 and row[1].strip()}
+        logger.info("Loaded %d existing KB draft titles for deduplication", len(titles))
+        return titles
+    except Exception as e:
+        logger.warning("Could not load existing KB draft titles: %s", e)
+        return set()
+
+
+def load_reference_context() -> str:
+    """Load Q&A pairs from the KB Reference sheet tab and return as a formatted string."""
+    if not GOOGLE_SERVICE_ACCOUNT_JSON:
+        return ""
+    try:
+        import json
+        import gspread
+        from google.oauth2.service_account import Credentials
+        creds_info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+        creds = Credentials.from_service_account_info(creds_info, scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+        ])
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_key(KB_LOG_SHEET_ID)
+        ws = sh.worksheet("KB Reference")
+        rows = ws.get_all_values()
+        lines = []
+        for row in rows[1:]:  # skip header
+            if len(row) >= 2 and row[0] and row[1]:
+                lines.append(f"Q: {row[0]}\nA: {row[1]}")
+        context = "\n\n".join(lines)
+        logger.info("Loaded %d reference Q&A pairs from KB Reference sheet", len(lines))
+        return context
+    except Exception as e:
+        logger.warning("Could not load KB Reference sheet: %s", e)
+        return ""
 
 
 def get_clickup_list_ids_from_env() -> dict[str, str]:
@@ -81,11 +137,9 @@ def fetch_tasks(list_id: str, since_ts: Optional[int] = None, limit: Optional[in
         params = {
             "page": page,
             "include_closed": "true",
-            "order_by": "date_closed",
-            "reverse": "true",
         }
         if since_ts:
-            params["date_closed_gt"] = since_ts
+            params["date_updated_gt"] = since_ts
 
         try:
             r = requests.get(
@@ -156,7 +210,7 @@ def build_ticket_url(task: dict) -> str:
     return task.get("url") or f"https://app.clickup.com/t/{task.get('id', '')}"
 
 
-def import_list(list_id: str, list_label: str, dry_run: bool, since_ts: Optional[int], limit: Optional[int]) -> int:
+def import_list(list_id: str, list_label: str, dry_run: bool, since_ts: Optional[int], limit: Optional[int], reference_context: str = "", existing_titles: Optional[set] = None) -> int:
     """Import all closed tasks from one ClickUp list. Returns count of processed tasks."""
     logger.info("Fetching closed tasks from list '%s' (id: %s)…", list_label, list_id)
     tasks = fetch_tasks(list_id, since_ts=since_ts, limit=limit)
@@ -180,6 +234,12 @@ def import_list(list_id: str, list_label: str, dry_run: bool, since_ts: Optional
                 property_name = str(field.get("value") or "").strip()
                 break
 
+        # Skip duplicates — check normalized title against already-written KB drafts
+        title_key = title.strip().lower()
+        if existing_titles is not None and title_key in existing_titles:
+            logger.info("  [SKIP duplicate] '%s'", title)
+            continue
+
         if dry_run:
             logger.info("  [DRY RUN] Would process: '%s' (%s)", title, task_id)
             processed += 1
@@ -200,10 +260,14 @@ def import_list(list_id: str, list_label: str, dry_run: bool, since_ts: Optional
             source="ClickUp",
             ticket_url=ticket_url,
             notes=f"Imported from ClickUp list: {list_label}",
+            reference_context=reference_context,
         )
 
         if result.get("status") == "ok":
             logger.info("    ✓ Doc: %s", result.get("doc_url"))
+            # Track title so subsequent lists don't re-create it
+            if existing_titles is not None:
+                existing_titles.add(title_key)
         else:
             logger.error("    ✗ Failed: %s", result.get("error"))
 
@@ -245,9 +309,15 @@ def main():
     if args.dry_run:
         logger.info("DRY RUN — no docs or sheet rows will be created")
 
+    # Load KB policy reference once — injected into every Claude prompt
+    reference_context = load_reference_context()
+
+    # Load existing titles once — shared across all lists to prevent duplicates
+    existing_titles = load_existing_titles()
+
     total = 0
     for label, list_id in lists.items():
-        count = import_list(list_id, label, dry_run=args.dry_run, since_ts=since_ts, limit=args.limit)
+        count = import_list(list_id, label, dry_run=args.dry_run, since_ts=since_ts, limit=args.limit, reference_context=reference_context, existing_titles=existing_titles)
         total += count
         logger.info("  Done: %d tasks from '%s'", count, label)
 
