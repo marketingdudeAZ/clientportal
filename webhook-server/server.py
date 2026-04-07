@@ -1277,7 +1277,7 @@ def get_budget():
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok"})
+    return '{"status":"ok"}', 200, {"Content-Type": "application/json"}
 
 
 def _prewarm_spend_cache():
