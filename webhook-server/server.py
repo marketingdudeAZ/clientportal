@@ -21,17 +21,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Flask, request, jsonify, make_response
 from config import WEBHOOK_PORT
 
-from hmac_validator import validate_signature
-from deal_creator import create_deal_with_line_items
-from quote_generator import generate_and_send_quote
-from notifier import notify_am
-from asset_uploader import process_asset_upload
-from portfolio import fetch_portfolio, format_portfolio_response
-from digest import generate_digest
-from approval_agent import route_approval
-from call_notes import save_call_notes
-from red_light_ingest import run_single_property, run_bulk_csv
-from ticket_manager import create_ticket, list_tickets, update_ticket_stage, create_kb_draft_note
+# Heavy modules are imported lazily inside each route handler so Flask
+# can boot and answer /health in < 1 second (Railway health-check window).
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -85,6 +76,7 @@ def get_portfolio():
         role = "marketing_manager"
 
     try:
+        from portfolio import fetch_portfolio, format_portfolio_response
         companies = fetch_portfolio(email, role)
         response_data = format_portfolio_response(companies)
         response_data["user"] = {"email": email, "role": role}
@@ -133,6 +125,7 @@ def get_digest():
         return jsonify({"error": "Missing uuid or company_id"}), 400
 
     try:
+        from digest import generate_digest
         text = generate_digest(uuid, company_id, property_name, rpmmarket)
         return jsonify({"digest": text, "uuid": uuid})
     except Exception as e:
@@ -280,6 +273,7 @@ def approve_recommendation():
         return jsonify({"error": f"Invalid rec_type: {rec_type}"}), 400
 
     try:
+        from approval_agent import route_approval
         result = route_approval(
             rec_id=rec_id,
             rec_type=rec_type,
@@ -334,6 +328,7 @@ def dismiss_recommendation():
 def configurator_submit():
     """Phase 7: Receive configurator selections, create Deal + Quote, assign AM task."""
     # Validate HMAC signature
+    from hmac_validator import validate_signature
     sig = request.headers.get("X-Hub-Signature-256", "")
     if not validate_signature(request.get_data(), sig):
         logger.warning("Invalid HMAC signature on configurator submit")
@@ -353,6 +348,9 @@ def configurator_submit():
 
     try:
         # Step 1: Create Deal with line items
+        from deal_creator import create_deal_with_line_items
+        from quote_generator import generate_and_send_quote
+        from notifier import notify_am
         deal_id = create_deal_with_line_items(company_id, selections, totals)
         logger.info("Deal created: %s for company %s", deal_id, company_id)
 
@@ -392,6 +390,7 @@ def asset_upload():
         return jsonify({"error": "No files provided"}), 400
 
     try:
+        from asset_uploader import process_asset_upload
         results = process_asset_upload(
             property_uuid=property_uuid,
             category=category,
@@ -448,6 +447,7 @@ def submit_call_notes():
         return jsonify({"error": "No answered questions — nothing to save"}), 400
 
     try:
+        from call_notes import save_call_notes
         result = save_call_notes(
             company_id=company_id,
             property_name=property_name,
@@ -508,6 +508,7 @@ def red_light_run():
         return jsonify({"error": "Missing property_uuid"}), 400
 
     try:
+        from red_light_ingest import run_single_property
         result = run_single_property(payload)
         return jsonify(result)
     except Exception as e:
@@ -542,6 +543,7 @@ def red_light_ingest_csv():
         return jsonify({"error": "No CSV provided"}), 400
 
     try:
+        from red_light_ingest import run_bulk_csv
         result = run_bulk_csv(csv_text)
         logger.info(
             "Bulk CSV ingest: processed=%d RED=%d YELLOW=%d GREEN=%d errors=%d",
@@ -590,6 +592,7 @@ def submit_ticket():
     if not company_id or not subject:
         return jsonify({"error": "company_id and subject are required"}), 400
 
+    from ticket_manager import create_ticket
     result = create_ticket(
         subject=subject,
         description=description,
@@ -628,6 +631,7 @@ def get_tickets():
         return jsonify({"error": "company_id is required"}), 400
 
     try:
+        from ticket_manager import list_tickets
         tickets = list_tickets(company_id, include_closed=include_closed)
         return jsonify({"tickets": tickets, "count": len(tickets)})
     except Exception as e:
@@ -654,6 +658,7 @@ def update_ticket(ticket_id):
     if not stage:
         return jsonify({"error": "stage is required"}), 400
 
+    from ticket_manager import update_ticket_stage, create_kb_draft_note
     result = update_ticket_stage(ticket_id, stage)
     if result["status"] == "error":
         return jsonify(result), 400
