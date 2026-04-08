@@ -2527,6 +2527,18 @@ select.brief-input{height:34px;cursor:pointer}
 </div>
 
 <script>
+// ── Portal property globals (real portal injects via HubL; demo falls back to hardcoded values) ──
+window.__PORTAL_MARKET      = window.__PORTAL_MARKET      || 'Scottsdale';
+window.__PORTAL_UNIT_COUNT  = window.__PORTAL_UNIT_COUNT  || 320;
+window.__PORTAL_OCCUPANCY   = window.__PORTAL_OCCUPANCY   || 93.2;
+window.__PORTAL_HEALTH_SCORE = window.__PORTAL_HEALTH_SCORE || 72;
+window.__PORTAL_PROP_PACKAGES = window.__PORTAL_PROP_PACKAGES || [
+  {label:'SEO: Standard', budget:800,  channel:'seo_organic'},
+  {label:'Google Ads',    budget:2500, channel:'google_ads'},
+  {label:'Meta Ads',      budget:1500, channel:'meta'},
+];
+window.__PORTAL_CURRENT_PERF = window.__PORTAL_CURRENT_PERF || {leads:58, cpl:83};
+
 // ── Navigation ──
 function nav(id, el) {
   document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});
@@ -3414,19 +3426,30 @@ function loadForecast() {
   var email    = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
   var cid      = typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '';
 
-  // Demo context
+  // Build property context from portal globals (injected by HubL in production, fallback above for demo)
+  var units = window.__PORTAL_UNIT_COUNT || 320;
   _propContext = {
-    unit_count: 280, market: 'Dallas', occupancy: 91.5, health_score: 72,
-    size_band: 'mid', health_red: false,
-    packages: [
-      {label:'SEO: Standard', budget: 800, channel:'seo_organic'},
-      {label:'Google Ads',     budget: 2500, channel:'google_ads'},
-      {label:'Meta Ads',       budget: 1500, channel:'meta'},
+    unit_count:   units,
+    market:       window.__PORTAL_MARKET || 'Scottsdale',
+    occupancy:    window.__PORTAL_OCCUPANCY || 93.2,
+    health_score: window.__PORTAL_HEALTH_SCORE || 72,
+    size_band:    units < 200 ? 'small' : units <= 400 ? 'mid' : 'large',
+    health_red:   (window.__PORTAL_HEALTH_SCORE || 72) < 50,
+    packages:     window.__PORTAL_PROP_PACKAGES || [
+      {label:'SEO: Standard', budget:800,  channel:'seo_organic'},
+      {label:'Google Ads',    budget:2500, channel:'google_ads'},
+      {label:'Meta Ads',      budget:1500, channel:'meta'},
     ]
   };
-  _currentPerf = { leads: 58, cpl: 83, channels: {
-    google_ads: {leads:32, spend:2500}, meta: {leads:18, spend:1500}, seo_organic: {leads:8, spend:800}
-  }};
+  var perf = window.__PORTAL_CURRENT_PERF || {leads:58, cpl:83};
+  _currentPerf = {
+    leads: perf.leads, cpl: perf.cpl,
+    channels: perf.channels || {
+      google_ads:  {leads: Math.round(perf.leads * 0.55), spend: 2500},
+      meta:        {leads: Math.round(perf.leads * 0.31), spend: 1500},
+      seo_organic: {leads: Math.round(perf.leads * 0.14), spend: 800},
+    }
+  };
 
   var sb = {};
   _propContext.packages.forEach(function(p){ sb[p.channel] = p.budget; });
@@ -3522,19 +3545,33 @@ function _buildSliders() {
   var chEl = document.getElementById('channel-sliders');
   var catEl = document.getElementById('category-sliders');
   if (!chEl) return;
+  var SEO_TIERS = [100, 300, 500, 800, 1300];
   var CHANNEL_LABELS = {google_ads:'Google Ads', meta:'Meta Ads', seo_organic:'SEO', video_creative:'Video Creative'};
   var html = '';
   Object.keys(_baseBudgets).forEach(function(ch) {
     var cur = _baseBudgets[ch];
-    var max = Math.max(cur * 3, 3000);
-    var step = ch === 'seo_organic' ? 100 : 100;
-    html += '<div class="slider-row">' +
-      '<div class="slider-label"><span>'+(CHANNEL_LABELS[ch]||ch)+'</span>' +
-      '<span class="slider-val" id="slv-'+ch+'">$'+Number(_simBudgets[ch]).toLocaleString()+'</span></div>' +
-      '<input type="range" class="sim-slider" id="sl-'+ch+'" min="0" max="'+max+'" step="'+step+'" value="'+_simBudgets[ch]+'" ' +
-      'oninput="onSliderChange(\''+ch+'\',this.value)">' +
-      '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tm);margin-top:3px"><span>$0</span><span>$'+Number(max).toLocaleString()+'</span></div>' +
-      '</div>';
+    if (ch === 'seo_organic') {
+      // Discrete tier selector for SEO
+      var curIdx = SEO_TIERS.indexOf(cur);
+      if (curIdx < 0) curIdx = SEO_TIERS.reduce(function(best,t,i){ return Math.abs(t-cur) < Math.abs(SEO_TIERS[best]-cur) ? i : best; }, 0);
+      html += '<div class="slider-row">' +
+        '<div class="slider-label"><span>SEO</span>' +
+        '<span class="slider-val" id="slv-seo_organic">$'+Number(SEO_TIERS[curIdx]).toLocaleString()+'</span></div>' +
+        '<input type="range" class="sim-slider" id="sl-seo_organic" min="0" max="4" step="1" value="'+curIdx+'" ' +
+        'oninput="onSeoTierChange(this.value)">' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tm);margin-top:3px">' +
+        SEO_TIERS.map(function(t){ return '<span>$'+t+'</span>'; }).join('') +
+        '</div></div>';
+    } else {
+      var max = Math.max(cur * 3, 3000);
+      html += '<div class="slider-row">' +
+        '<div class="slider-label"><span>'+(CHANNEL_LABELS[ch]||ch)+'</span>' +
+        '<span class="slider-val" id="slv-'+ch+'">$'+Number(_simBudgets[ch]).toLocaleString()+'</span></div>' +
+        '<input type="range" class="sim-slider" id="sl-'+ch+'" min="0" max="'+max+'" step="100" value="'+_simBudgets[ch]+'" ' +
+        'oninput="onSliderChange(\''+ch+'\',this.value)">' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tm);margin-top:3px"><span>$0</span><span>$'+Number(max).toLocaleString()+'</span></div>' +
+        '</div>';
+    }
   });
   // Add video creative if not already enrolled
   if (!_simBudgets['video_creative']) {
@@ -3604,6 +3641,15 @@ function onSliderChange(ch, val) {
   _updateProjections();
 }
 
+function onSeoTierChange(idx) {
+  var SEO_TIERS = [100, 300, 500, 800, 1300];
+  var budget = SEO_TIERS[parseInt(idx)] || 100;
+  _simBudgets['seo_organic'] = budget;
+  var lbl = document.getElementById('slv-seo_organic');
+  if (lbl) lbl.textContent = '$' + Number(budget).toLocaleString();
+  _updateProjections();
+}
+
 function onCatSliderChange(catKey, channels, val) {
   var newTotal = parseInt(val);
   var lbl = document.getElementById('catv-'+catKey);
@@ -3630,10 +3676,10 @@ function selectScenario(id, el) {
   } else if (id === 'add_video') {
     _simBudgets['video_creative'] = 1500; // Standard tier default
   } else if (id === 'upgrade_seo') {
-    var SEO_TIERS = [100,300,500,800,1300];
-    var cur = _simBudgets['seo_organic'] || 0;
-    var next = SEO_TIERS.find(function(t){ return t > cur; }) || cur;
-    _simBudgets['seo_organic'] = next;
+    var _SEO_TIERS = [100,300,500,800,1300];
+    var _cur = _simBudgets['seo_organic'] || 0;
+    var _next = _SEO_TIERS.find(function(t){ return t > _cur; }) || _SEO_TIERS[_SEO_TIERS.length-1];
+    _simBudgets['seo_organic'] = _next;
   } else if (id === 'leasing_boost') {
     ['google_ads','meta'].forEach(function(ch){ if (_simBudgets[ch]) _simBudgets[ch] = Math.round(_simBudgets[ch]*1.5); });
   } else if (id === 'full_package') {
