@@ -46,11 +46,6 @@ SKU_COLUMN_MAP = {
     "Retargeting":                "retargeting",
     "Website_Hosting":            "website_hosting",
     "Eblast":                     "eblast",
-    "Email_Blast":                "eblast",
-    "Email_Blasts":               "eblast",
-    "Eblasts":                    "eblast",
-    "Email_Drip":                 "email_drip",
-    "Email_Drips":                "email_drip",
     "Email_Drip_Campaign":        "email_drip",
     # Common name-based fallbacks (if hs_sku is empty)
     "SEO Package":                "seo",
@@ -58,10 +53,6 @@ SKU_COLUMN_MAP = {
     "Paid Search Ads":            "search",
     "Paid Social Ads":            "paid_social",
     "Performance Max":            "pmax",
-    "Eblast":                     "eblast",
-    "Email Blast":                "eblast",
-    "Email Drip":                 "email_drip",
-    "Email Drips":                "email_drip",
 }
 
 _cache: dict = {}
@@ -78,9 +69,15 @@ def get_spend_sheet_data(force: bool = False) -> list[dict]:
         logger.debug("Spend sheet cache hit — %d rows", len(cached[1]))
         return cached[1]
 
-    data = _build_spend_sheet()
+    SKU_COLS = [
+        "search", "pmax", "paid_social", "geofence", "display", "retargeting",
+        "ctv", "seo", "social_posting", "eblast", "email_drip",
+    ]
+    raw = _build_spend_sheet()
+    # Only show properties that have at least one active SKU spend
+    data = [r for r in raw if any(r.get(col) for col in SKU_COLS)]
     _cache["data"] = (now, data)
-    logger.info("Spend sheet built — %d rows", len(data))
+    logger.info("Spend sheet built — %d rows (%d filtered, no spend)", len(data), len(raw) - len(data))
     return data
 
 
