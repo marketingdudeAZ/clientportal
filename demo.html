@@ -2288,7 +2288,7 @@ function submitTicket() {
   var existingPanel = form.querySelector('.kb-deflect-panel');
   if (existingPanel) existingPanel.remove();
 
-  var API_BASE = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   // Step 1 — search KB first
   fetch(API_BASE + '/api/kb-search?q=' + encodeURIComponent(title), {
@@ -2340,7 +2340,7 @@ function _doSubmitTicket(form, title, desc, priority, category) {
   submitBtn.disabled = true;
 
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/ticket', {
     method: 'POST',
@@ -2391,7 +2391,7 @@ function _doSubmitTicket(form, title, desc, priority, category) {
 
 function loadTickets() {
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/tickets?company_id=' + COMPANY_ID, {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
@@ -2464,7 +2464,7 @@ function loadTicketThread(ticketId, containerId, btn) {
     return;
   }
 
-  var API_BASE = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   btn.textContent = 'Loading…';
   btn.disabled = true;
 
@@ -2517,7 +2517,7 @@ function replyToTicket(ticketId, threadId) {
   var text = input.value.trim();
   if (!text) return;
 
-  var API_BASE = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   input.disabled = true;
 
   fetch(API_BASE + '/api/ticket/' + ticketId + '/reply', {
@@ -2551,7 +2551,7 @@ var _briefLoaded = false;
 function loadClientBrief() {
   if (_briefLoaded) return;
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/client-brief?company_id=' + COMPANY_ID, {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
@@ -2624,7 +2624,7 @@ var _budgetLoaded = false;
 function loadBudget() {
   if (_budgetLoaded) return;
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/budget?company_id=' + COMPANY_ID, {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
@@ -2759,7 +2759,7 @@ function cancelBriefEdit(card) {
 
 function saveBriefCard(card) {
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   var fields = {};
   card.querySelectorAll('[data-input-field]').forEach(function(inp) {
@@ -2844,7 +2844,7 @@ var _spendLoaded = false;
 
 function loadSpendSheet(force) {
   if (_spendLoaded && !force) return;
-  var API_BASE = window.__WEBHOOK_URL__ || 'https://clientportal-production-05ac.up.railway.app';
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   var tbody = document.getElementById('spend-tbody');
   var url = API_BASE + '/api/spend-sheet' + (force ? '?refresh=true' : '');
 
