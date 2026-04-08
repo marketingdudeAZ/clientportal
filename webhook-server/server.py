@@ -1280,6 +1280,266 @@ def get_budget():
         return jsonify({"error": "Failed to fetch budget data"}), 500
 
 
+@app.route("/api/video-creative", methods=["GET", "OPTIONS"])
+def get_video_creative():
+    """Return video creative data for a property from HubSpot company record.
+
+    Query params:
+        company_id  — HubSpot company ID
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    company_id = request.args.get("company_id", "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    import requests as req, json as _json
+    from config import HUBSPOT_API_KEY
+
+    hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
+    props = ",".join([
+        "video_pipeline_enrolled", "video_pipeline_tier",
+        "video_cycle_status", "video_cycle_month",
+        "video_variants_json", "video_cycle_history_json",
+        "video_perf_snapshot_json",
+    ])
+
+    r = req.get(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props}",
+        headers=hs_headers, timeout=10,
+    )
+    if not r.ok:
+        logger.error("HubSpot company fetch failed (%d): %s", r.status_code, r.text[:200])
+        return jsonify({"error": "Failed to fetch company data"}), 500
+
+    p = r.json().get("properties", {})
+
+    def _parse_json(val):
+        if not val:
+            return []
+        try:
+            return _json.loads(val)
+        except Exception:
+            return []
+
+    return jsonify({
+        "enrolled":      p.get("video_pipeline_enrolled", "false") == "true",
+        "tier":          p.get("video_pipeline_tier", "Starter"),
+        "cycle_status":  p.get("video_cycle_status", ""),
+        "cycle_month":   p.get("video_cycle_month", ""),
+        "variants":      _parse_json(p.get("video_variants_json")),
+        "history":       _parse_json(p.get("video_cycle_history_json")),
+        "perf_snapshot": _parse_json(p.get("video_perf_snapshot_json")) if p.get("video_perf_snapshot_json", "").startswith("[") else (
+            {} if not p.get("video_perf_snapshot_json") else
+            __import__("json").loads(p.get("video_perf_snapshot_json"))
+        ),
+    })
+
+
+@app.route("/api/video-approve", methods=["POST", "OPTIONS"])
+def video_approve():
+    """Approve one or more video variants for a property.
+
+    Body: { company_id, variant_ids: [...] | "all" }
+
+    On approval:
+      1. Updates variant statuses in video_variants_json on company record
+      2. Sets video_cycle_status = 'Approved' (if all approved)
+      3. Writes each approved variant to HubDB asset library table
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    body = request.get_json(force=True) or {}
+    company_id = body.get("company_id", "").strip()
+    variant_ids = body.get("variant_ids", "all")
+
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    import requests as req, json as _json, time as _time
+    from config import HUBSPOT_API_KEY, HUBDB_ASSET_TABLE_ID
+
+    hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+
+    # Fetch current variants
+    r = req.get(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
+        "?properties=video_variants_json,video_cycle_month",
+        headers=hs_headers, timeout=10,
+    )
+    if not r.ok:
+        return jsonify({"error": "Failed to fetch company"}), 500
+
+    p = r.json().get("properties", {})
+    cycle_month = p.get("video_cycle_month", "")
+    try:
+        variants = _json.loads(p.get("video_variants_json") or "[]")
+    except Exception:
+        variants = []
+
+    now_ms = int(_time.time() * 1000)
+    approved_ids = set()
+
+    for v in variants:
+        if variant_ids == "all" or v.get("variant_id") in variant_ids:
+            v["status"] = "approved"
+            v["approved_at"] = now_ms
+            approved_ids.add(v.get("variant_id"))
+
+    all_approved = all(v.get("status") == "approved" for v in variants)
+    new_cycle_status = "Approved" if all_approved else "Pending Review"
+
+    # Write back to HubSpot company record
+    update_r = req.patch(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+        headers=hs_headers,
+        json={"properties": {
+            "video_variants_json": _json.dumps(variants),
+            "video_cycle_status": new_cycle_status,
+        }},
+        timeout=10,
+    )
+    if not update_r.ok:
+        logger.error("Company update failed (%d): %s", update_r.status_code, update_r.text[:200])
+        return jsonify({"error": "Failed to update company record"}), 500
+
+    # Write approved variants to HubDB asset library
+    hubdb_url = f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_ASSET_TABLE_ID}/rows"
+    hubdb_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+    hubdb_rows_created = 0
+
+    for v in variants:
+        if v.get("variant_id") not in approved_ids:
+            continue
+        month_label = cycle_month or _time.strftime("%Y-%m")
+        asset_name = f"{month_label} - {v.get('title', 'Video Variant')}"
+        row = {
+            "property_uuid": company_id,
+            "file_url": v.get("video_url", ""),
+            "thumbnail_url": v.get("poster_url", ""),
+            "asset_name": asset_name,
+            "category": "Video",
+            "subcategory": "Ad Creative",
+            "status": "live",
+            "source": "video_pipeline",
+            "uploaded_by": "system",
+            "uploaded_at": now_ms,
+            "file_type": "mp4",
+            "file_size_bytes": 0,
+            "description": v.get("rationale", ""),
+        }
+        rr = req.post(hubdb_url, headers=hubdb_headers, json={"values": row}, timeout=10)
+        if rr.ok:
+            hubdb_rows_created += 1
+        else:
+            logger.warning("HubDB row failed for variant %s: %s", v.get("variant_id"), rr.text[:100])
+
+    # Publish HubDB table if rows were added
+    if hubdb_rows_created:
+        req.post(
+            f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_ASSET_TABLE_ID}/draft/publish",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"},
+            timeout=15,
+        )
+
+    logger.info("Approved %d variants for company %s; %d HubDB rows created", len(approved_ids), company_id, hubdb_rows_created)
+    return jsonify({"approved": len(approved_ids), "cycle_status": new_cycle_status, "asset_rows": hubdb_rows_created})
+
+
+@app.route("/api/video-revise", methods=["POST", "OPTIONS"])
+def video_revise():
+    """Submit a revision request for a specific video variant.
+
+    Body: {
+        company_id, variant_id,
+        tone_shift, emphasis_change, cta_update, notes
+    }
+    Increments revision_count, sets variant status to revision_in_progress,
+    sets cycle status to Revision Requested.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    body = request.get_json(force=True) or {}
+    company_id  = body.get("company_id", "").strip()
+    variant_id  = body.get("variant_id", "").strip()
+
+    if not company_id or not variant_id:
+        return jsonify({"error": "company_id and variant_id required"}), 400
+
+    import requests as req, json as _json
+    from config import HUBSPOT_API_KEY
+
+    hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+
+    r = req.get(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
+        "?properties=video_variants_json",
+        headers=hs_headers, timeout=10,
+    )
+    if not r.ok:
+        return jsonify({"error": "Failed to fetch company"}), 500
+
+    try:
+        variants = _json.loads(r.json().get("properties", {}).get("video_variants_json") or "[]")
+    except Exception:
+        variants = []
+
+    MAX_REVISIONS = 5
+    target = None
+    for v in variants:
+        if v.get("variant_id") == variant_id:
+            target = v
+            break
+
+    if not target:
+        return jsonify({"error": "Variant not found"}), 404
+
+    revision_count = target.get("revision_count", 0)
+    if revision_count >= MAX_REVISIONS:
+        return jsonify({"error": f"Revision limit ({MAX_REVISIONS}) reached for this variant"}), 400
+
+    # Attach revision feedback to the variant
+    target["status"] = "revision_in_progress"
+    target["revision_count"] = revision_count + 1
+    target["revision_feedback"] = {
+        "tone_shift":      body.get("tone_shift", ""),
+        "emphasis_change": body.get("emphasis_change", ""),
+        "cta_update":      body.get("cta_update", ""),
+        "notes":           body.get("notes", ""),
+        "submitted_by":    email,
+    }
+
+    update_r = req.patch(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+        headers=hs_headers,
+        json={"properties": {
+            "video_variants_json": _json.dumps(variants),
+            "video_cycle_status": "Revision Requested",
+        }},
+        timeout=10,
+    )
+    if not update_r.ok:
+        return jsonify({"error": "Failed to update company record"}), 500
+
+    logger.info("Revision %d submitted for variant %s on company %s", revision_count + 1, variant_id, company_id)
+    return jsonify({"revision_count": revision_count + 1, "status": "revision_in_progress"})
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return '{"status":"ok"}', 200, {"Content-Type": "application/json"}

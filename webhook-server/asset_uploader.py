@@ -22,6 +22,79 @@ HEADERS = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
 ALLOWED_EXTENSIONS = ALLOWED_IMAGE_TYPES + ALLOWED_VIDEO_TYPES + ALLOWED_DOC_TYPES
 THUMBNAIL_WIDTH = 400
 
+# ── Compression constants (spec A.1) ──────────────────────────────────────────
+MAX_COMPRESSED_BYTES = 2 * 1024 * 1024   # 2 MB
+MAX_DIMENSION = 2000                      # px on longest edge
+JPEG_QUALITY_START = 85
+JPEG_QUALITY_FLOOR = 70
+THUMBNAIL_QUALITY = 60
+
+
+def compress_image(file_bytes: bytes, filename: str) -> tuple[bytes, str]:
+    """Resize and compress a raster image per spec A.2.
+
+    Returns (compressed_bytes, output_filename).
+    Non-image files and SVG/PDF are returned unchanged.
+    """
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    # Pass-through for non-raster types
+    if ext in ("svg", "pdf", "ai", "eps"):
+        return file_bytes, filename
+    if ext not in ALLOWED_IMAGE_TYPES:
+        return file_bytes, filename
+
+    # HEIC/WEBP: attempt conversion via pillow-heif / built-in WEBP
+    if ext in ("heic", "heif"):
+        try:
+            import pillow_heif
+            pillow_heif.register_heif_opener()
+        except ImportError:
+            logger.warning("pillow-heif not installed — HEIC upload rejected")
+            raise ValueError("HEIC uploads require pillow-heif. Please convert to JPG first.")
+
+    try:
+        img = Image.open(io.BytesIO(file_bytes))
+    except Exception as e:
+        logger.error("Image open failed for %s: %s", filename, e)
+        return file_bytes, filename
+
+    has_alpha = img.mode in ("RGBA", "LA", "PA")
+
+    # Step 1: Resize if either dimension > MAX_DIMENSION
+    if max(img.size) > MAX_DIMENSION:
+        img.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
+        logger.debug("Resized %s to %s", filename, img.size)
+
+    # Step 2: Determine output format
+    if ext == "png" and has_alpha:
+        output_format = "PNG"
+    else:
+        # Convert PNG without alpha, HEIC, WEBP, etc. → JPEG
+        output_format = "JPEG"
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        if ext != "jpg" and ext != "jpeg":
+            filename = filename.rsplit(".", 1)[0] + ".jpg"
+
+    # Step 3: Compress
+    if output_format == "JPEG":
+        quality = JPEG_QUALITY_START
+        buf = io.BytesIO()
+        while quality >= JPEG_QUALITY_FLOOR:
+            buf = io.BytesIO()
+            img.save(buf, "JPEG", quality=quality, progressive=True)
+            if buf.tell() <= MAX_COMPRESSED_BYTES:
+                break
+            quality -= 5
+        logger.debug("Compressed %s → %d bytes at quality %d", filename, buf.tell(), quality)
+        return buf.getvalue(), filename
+    else:
+        buf = io.BytesIO()
+        img.save(buf, "PNG", optimize=True)
+        logger.debug("Compressed PNG %s → %d bytes", filename, buf.tell())
+        return buf.getvalue(), filename
+
 
 def process_asset_upload(
     property_uuid: str,
@@ -49,6 +122,16 @@ def process_asset_upload(
         # Determine asset name from filename
         asset_name = filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").title()
 
+        # Compress raster images before upload (spec A.2)
+        if ext in ALLOWED_IMAGE_TYPES:
+            try:
+                file_data, filename = compress_image(file_data, filename)
+                ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ext
+                logger.info("Compressed %s → %d bytes", filename, len(file_data))
+            except ValueError as e:
+                logger.warning("Skipping %s: %s", filename, e)
+                continue
+
         # Upload to HubSpot Files API
         folder_path = f"/property-assets/{property_uuid}/{category.lower().replace(' ', '-')}/{time.strftime('%Y-%m')}"
         file_url = upload_to_files_api(file_data, filename, folder_path)
@@ -57,7 +140,7 @@ def process_asset_upload(
             logger.error("Failed to upload file: %s", filename)
             continue
 
-        # Generate thumbnail for images
+        # Generate thumbnail for images (using already-compressed data)
         thumbnail_url = None
         if ext in ALLOWED_IMAGE_TYPES:
             thumbnail_url = generate_and_upload_thumbnail(file_data, filename, folder_path)
@@ -110,19 +193,23 @@ def upload_to_files_api(file_data: bytes, filename: str, folder_path: str):
 def generate_and_upload_thumbnail(
     file_data: bytes, filename: str, folder_path: str
 ):
-    """Resize image to thumbnail and upload. Returns thumbnail URL."""
+    """Resize image to 400px wide thumbnail and upload. Returns thumbnail URL."""
     try:
         img = Image.open(io.BytesIO(file_data))
-        ratio = THUMBNAIL_WIDTH / img.width
-        new_height = int(img.height * ratio)
-        img = img.resize((THUMBNAIL_WIDTH, new_height), Image.LANCZOS)
+        if img.width > THUMBNAIL_WIDTH:
+            ratio = THUMBNAIL_WIDTH / img.width
+            img = img.resize((THUMBNAIL_WIDTH, int(img.height * ratio)), Image.LANCZOS)
+
+        if img.mode != "RGB":
+            img = img.convert("RGB")
 
         thumb_buffer = io.BytesIO()
-        img_format = "JPEG" if img.mode == "RGB" else "PNG"
-        img.save(thumb_buffer, format=img_format, quality=80)
+        img.save(thumb_buffer, format="JPEG", quality=THUMBNAIL_QUALITY, progressive=True)
         thumb_data = thumb_buffer.getvalue()
 
-        thumb_name = f"thumb_{filename}"
+        # Ensure thumb filename is .jpg
+        base = filename.rsplit(".", 1)[0]
+        thumb_name = f"thumb_{base}.jpg"
         return upload_to_files_api(thumb_data, thumb_name, f"{folder_path}/thumbnails")
     except Exception as e:
         logger.error("Thumbnail generation failed for %s: %s", filename, e)

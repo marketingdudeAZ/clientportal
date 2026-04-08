@@ -459,6 +459,70 @@ select.brief-input{height:34px;cursor:pointer}
 .asset-name{font-size:11px;font-weight:700;color:var(--jd);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .asset-meta{font-size:10px;color:var(--tm);margin-top:2px}
 
+/* ── Video Creative Tab ── */
+.video-view-tabs{display:flex;gap:8px;margin-bottom:20px}
+.video-view-tab{padding:7px 18px;border-radius:8px;border:1px solid var(--bd);background:#fff;font-size:12px;font-weight:700;color:var(--ts);cursor:pointer;font-family:inherit;transition:all .15s}
+.video-view-tab.active{background:var(--j);color:#fff;border-color:var(--j)}
+.video-cycle-header{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.video-cycle-month{font-size:18px;font-weight:700;color:var(--tp)}
+.video-status-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:100px;padding:4px 10px;text-transform:uppercase;letter-spacing:.05em}
+.video-status-badge.pending{background:#fef3c7;color:#92400e}
+.video-status-badge.revision{background:#dbeafe;color:#1e40af}
+.video-status-badge.approved{background:#d1fae5;color:#065f46}
+.video-status-badge.processing{background:var(--bdl);color:var(--tm)}
+.video-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+@media(max-width:800px){.video-grid{grid-template-columns:1fr}}
+.video-card{background:#fff;border:1px solid var(--bd);border-radius:12px;overflow:hidden}
+.video-player-wrap{position:relative;background:#111;aspect-ratio:16/9;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.video-player-wrap img{width:100%;height:100%;object-fit:cover;opacity:.85}
+.video-play-btn{position:absolute;width:52px;height:52px;background:rgba(200,150,78,.9);border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform .15s,background .15s}
+.video-player-wrap:hover .video-play-btn{background:var(--cu);transform:scale(1.08)}
+.video-card-body{padding:16px}
+.video-card-title{font-size:13px;font-weight:700;color:var(--tp);margin-bottom:8px}
+.video-card-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.video-meta-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--bdl);color:var(--ts)}
+.video-meta-tag.platform-meta{background:#dbeafe;color:#1e40af}
+.video-meta-tag.platform-youtube{background:#fee2e2;color:#991b1b}
+.video-meta-tag.platform-tiktok{background:#f3e8ff;color:#6b21a8}
+.video-expand-btn{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--tm);background:none;border:none;cursor:pointer;padding:4px 0;font-family:inherit;transition:color .15s}
+.video-expand-btn:hover{color:var(--cu)}
+.video-expand-content{display:none;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;margin-top:8px;font-size:12px;color:var(--ts);line-height:1.6}
+.video-expand-content.open{display:block}
+.video-script-line{margin-bottom:6px}
+.video-script-label{font-weight:700;color:var(--tp);font-size:11px;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:2px}
+.video-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--bd)}
+.btn-approve{padding:7px 16px;border-radius:8px;border:none;background:#d1fae5;color:#065f46;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn-approve:hover{background:#a7f3d0}
+.btn-approve.checked{background:#10b981;color:#fff}
+.btn-revise{padding:7px 16px;border-radius:8px;border:1px solid var(--bd);background:#fff;color:var(--ts);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn-revise:hover{border-color:var(--cu);color:var(--cu)}
+.btn-revise:disabled{opacity:.4;cursor:not-allowed}
+.video-revision-counter{font-size:10px;color:var(--tm);margin-left:auto;align-self:center}
+.video-approve-all-bar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+.perf-snap{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:16px 20px;margin-bottom:20px}
+.perf-snap-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tm);margin-bottom:12px}
+.perf-snap-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:700px){.perf-snap-grid{grid-template-columns:repeat(2,1fr)}}
+.perf-snap-kpi{text-align:center}
+.perf-snap-val{font-size:18px;font-weight:800;color:var(--tp)}
+.perf-snap-lbl{font-size:10px;color:var(--tm);margin-top:2px}
+.video-history-row{padding:12px 0;border-bottom:1px solid var(--bd);cursor:pointer}
+.video-history-row:last-child{border-bottom:none}
+.video-history-hdr{display:flex;align-items:center;gap:10px}
+.video-history-month{font-size:13px;font-weight:700;color:var(--tp)}
+.video-history-detail{display:none;margin-top:12px}
+.video-history-detail.open{display:block}
+/* Revision modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-box{background:#fff;border-radius:14px;padding:28px 32px;width:min(520px,90vw);max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.modal-title{font-size:16px;font-weight:800;color:var(--tp);margin-bottom:4px}
+.modal-sub{font-size:12px;color:var(--tm);margin-bottom:20px}
+.modal-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ts);display:block;margin-bottom:6px}
+.modal-select,.modal-input,.modal-textarea{width:100%;padding:9px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;color:var(--tp);background:#fff;margin-bottom:14px;box-sizing:border-box}
+.modal-textarea{min-height:90px;resize:vertical}
+.modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
+
 /* ── Portfolio Dashboard ── */
 .port-view-tabs{display:flex;gap:6px;margin-bottom:20px}
 .port-view-tab{padding:7px 18px;border-radius:8px;border:1px solid var(--bd);background:#fff;font-size:12px;font-weight:700;color:var(--ts);cursor:pointer;font-family:inherit;transition:all .15s}
@@ -594,6 +658,10 @@ select.brief-input{height:34px;cursor:pointer}
       <div class="nav-item" onclick="nav('assets',this)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         Assets
+      </div>
+      <div class="nav-item" id="nav-video" onclick="nav('video',this)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        Video Creative
       </div>
     </div>
     <div class="sb-nav-group">
@@ -1345,6 +1413,79 @@ select.brief-input{height:34px;cursor:pointer}
     <div class="asset-card"><div class="asset-thumb" style="background:linear-gradient(135deg,#8FA68E,#6E8B6D)">Courtyard</div><div class="asset-info"><div class="asset-name">Courtyard — Evening</div><div class="asset-meta">Exterior · Mar 2026</div></div></div>
   </div>
 </section>
+
+<!-- ── VIDEO CREATIVE ── -->
+<section id="section-video" class="section">
+  <div class="sec-topbar">
+    <div>
+      <div class="sec-title">Video Creative</div>
+      <div class="sec-sub">AI-generated ad creative · review &amp; approve variants</div>
+    </div>
+  </div>
+
+  <!-- View tabs: Current Cycle / History -->
+  <div class="video-view-tabs">
+    <button class="video-view-tab active" onclick="switchVideoView('cycle',this)">Current Cycle</button>
+    <button class="video-view-tab" onclick="switchVideoView('history',this)">History</button>
+  </div>
+
+  <!-- Current Cycle -->
+  <div id="video-view-cycle">
+    <div id="video-cycle-content">
+      <div style="text-align:center;padding:60px 0;color:var(--tm);font-size:13px">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display:block;margin:0 auto 12px;opacity:.4"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Loading video creative data…
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div id="video-view-history" style="display:none">
+    <div id="video-history-content">
+      <div style="color:var(--tm);font-size:13px;padding:40px 0;text-align:center">No history available.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Revision Modal -->
+<div class="modal-overlay" id="revision-modal">
+  <div class="modal-box">
+    <div class="modal-title">Request Revision</div>
+    <div class="modal-sub" id="revision-modal-variant-title">Variant</div>
+    <input type="hidden" id="revision-variant-id">
+
+    <label class="modal-label">Tone Shift</label>
+    <select class="modal-select" id="rev-tone">
+      <option value="">— No change —</option>
+      <option value="More professional">More professional</option>
+      <option value="More casual">More casual</option>
+      <option value="More urgent">More urgent</option>
+      <option value="More playful">More playful</option>
+      <option value="Other">Other</option>
+    </select>
+
+    <label class="modal-label">Emphasis Change</label>
+    <select class="modal-select" id="rev-emphasis">
+      <option value="">— No change —</option>
+      <option value="Focus on amenities">Focus on amenities</option>
+      <option value="Focus on pricing">Focus on pricing</option>
+      <option value="Focus on location">Focus on location</option>
+      <option value="Focus on lifestyle">Focus on lifestyle</option>
+      <option value="Other">Other</option>
+    </select>
+
+    <label class="modal-label">CTA Update <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+    <input type="text" class="modal-input" id="rev-cta" placeholder="e.g. 'Schedule a tour today'" maxlength="120">
+
+    <label class="modal-label">Notes <span style="font-weight:400;text-transform:none;letter-spacing:0">(max 500 chars)</span></label>
+    <textarea class="modal-textarea" id="rev-notes" maxlength="500" placeholder="Describe what you'd like changed…"></textarea>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="closeRevisionModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="submitRevision()">Submit Revision</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── CLIENT BRIEF ── -->
 <section id="section-brief" class="section">
@@ -2143,6 +2284,7 @@ function nav(id, el) {
   if (id === 'tickets') { loadTickets(); }
   if (id === 'brief')   { loadClientBrief(); }
   if (id === 'budget')  { loadBudget(); }
+  if (id === 'video')   { loadVideoCreative(); }
 }
 
 function switchDemo(view, btn) {
@@ -3001,6 +3143,369 @@ function filterSpendSheet() {
   _renderSpendSheet(filtered);
 }
 
+// ── Video Creative ──────────────────────────────────────────────────────────
+var _videoData = null;
+var _revisionTargetId = null;
+var _videoPollingTimer = null;
+var COMPANY_ID_VIDEO = typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '';
+
+function switchVideoView(view, btn) {
+  document.querySelectorAll('.video-view-tab').forEach(function(b){b.classList.remove('active')});
+  btn.classList.add('active');
+  document.getElementById('video-view-cycle').style.display   = view === 'cycle'   ? '' : 'none';
+  document.getElementById('video-view-history').style.display = view === 'history' ? '' : 'none';
+}
+
+function loadVideoCreative() {
+  if (_videoData) { _renderVideoCreative(_videoData); return; }
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
+  var cid = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '');
+
+  // Demo mode: render sample data if no company ID
+  if (!cid) {
+    _renderVideoCreative(_demoVideoData());
+    return;
+  }
+
+  fetch(API_BASE + '/api/video-creative?company_id=' + encodeURIComponent(cid), {
+    headers: {'X-Portal-Email': email}
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    _videoData = d;
+    _renderVideoCreative(d);
+  })
+  .catch(function(){
+    document.getElementById('video-cycle-content').innerHTML =
+      '<div style="text-align:center;padding:48px;color:var(--tm)">Unable to load video creative data.</div>';
+  });
+}
+
+function _demoVideoData() {
+  return {
+    enrolled: true, tier: 'Standard',
+    cycle_status: 'Pending Review', cycle_month: '2026-04',
+    perf_snapshot: {impressions: 48200, leads: 142, cpl: 28.50, channels: {meta: 0.58, google: 0.42}},
+    variants: [
+      { variant_id: 'v1', title: 'Variant A: Value-Driven, 30s Vertical',
+        video_url: '', poster_url: '',
+        platform: 'Meta', duration_seconds: 30, aspect_ratio: '9:16',
+        script: {hook: 'Stop paying too much for apartment hunting.',
+          body: 'At Quincy Apartments, you get resort-style amenities at a price that makes sense. Rooftop pool, coworking lounge, and a location you can actually afford.',
+          cta: 'Tour today — limited availability.', overlays: ['From $1,495/mo','Pet friendly'], visual_notes: 'Upbeat lifestyle B-roll, golden hour exterior.'},
+        rationale: 'Prior month data showed 62% of leads came from price-sensitive searchers. Value positioning outperformed lifestyle in A/B tests by 18% CTR.',
+        status: 'pending_review', revision_count: 0, approved_at: null },
+      { variant_id: 'v2', title: 'Variant B: Lifestyle, 15s Horizontal',
+        video_url: '', poster_url: '',
+        platform: 'YouTube', duration_seconds: 15, aspect_ratio: '16:9',
+        script: {hook: 'This is not your average apartment.', body: 'Rooftop. Pool. Walking distance to everything. Quincy Apartments — live differently.',
+          cta: 'See availability now.', overlays: ['Rooftop Pool','Downtown access'], visual_notes: 'Fast-cut montage, aspirational music.'},
+        rationale: 'YouTube skippable placement benefits from immediate visual hook. Short lifestyle format drove 22% higher view-through in comparable campaigns.',
+        status: 'pending_review', revision_count: 0, approved_at: null },
+    ],
+    history: [
+      {month: '2026-03', variant_count: 3, cycle_status: 'Approved'},
+      {month: '2026-02', variant_count: 2, cycle_status: 'Approved'},
+    ]
+  };
+}
+
+function _renderVideoCreative(d) {
+  _renderCycleView(d);
+  _renderHistoryView(d.history || []);
+  // Start polling if any variant is in revision
+  var inRevision = (d.variants||[]).some(function(v){ return v.status === 'revision_in_progress'; });
+  if (inRevision && !_videoPollingTimer) {
+    _videoPollingTimer = setInterval(function(){
+      _videoData = null; // force refresh
+      loadVideoCreative();
+    }, 60000);
+  } else if (!inRevision && _videoPollingTimer) {
+    clearInterval(_videoPollingTimer);
+    _videoPollingTimer = null;
+  }
+}
+
+function _renderCycleView(d) {
+  var el = document.getElementById('video-cycle-content');
+  var status = d.cycle_status || '';
+
+  if (!d.enrolled) {
+    el.innerHTML = '<div style="text-align:center;padding:60px 0;color:var(--tm)">This property is not enrolled in the Video Creative pipeline.</div>';
+    return;
+  }
+  if (!status || status === 'No Cycle') {
+    el.innerHTML = '<div style="text-align:center;padding:60px 0;color:var(--tm);font-size:13px">No videos scheduled for this month.</div>';
+    return;
+  }
+  if (status === 'Processing') {
+    el.innerHTML = '<div style="text-align:center;padding:60px 0;color:var(--tm);font-size:13px">' +
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display:block;margin:0 auto 12px;opacity:.4"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+      'Your videos are being generated. Check back shortly.</div>';
+    return;
+  }
+
+  var statusCls = {
+    'Pending Review': 'pending', 'Revision Requested': 'revision',
+    'Approved': 'approved', 'Processing': 'processing'
+  }[status] || 'processing';
+  var statusDot = {'pending':'●','revision':'●','approved':'●','processing':'○'}[statusCls] || '●';
+
+  var html = '';
+
+  // Cycle header
+  html += '<div class="video-cycle-header">' +
+    '<span class="video-cycle-month">' + _escHtml(d.cycle_month || '') + '</span>' +
+    '<span class="video-status-badge ' + statusCls + '">' + statusDot + '  ' + _escHtml(status) + '</span>' +
+    '</div>';
+
+  // Performance snapshot (Standard/Premium only)
+  var perf = d.perf_snapshot;
+  if (perf && d.tier !== 'Starter' && typeof perf === 'object' && perf.impressions) {
+    html += '<div class="perf-snap">' +
+      '<div class="perf-snap-title">Prior Month Performance (informed script generation)</div>' +
+      '<div class="perf-snap-grid">' +
+      '<div class="perf-snap-kpi"><div class="perf-snap-val">' + Number(perf.impressions).toLocaleString() + '</div><div class="perf-snap-lbl">Impressions</div></div>' +
+      '<div class="perf-snap-kpi"><div class="perf-snap-val">' + (perf.leads||0) + '</div><div class="perf-snap-lbl">Leads</div></div>' +
+      '<div class="perf-snap-kpi"><div class="perf-snap-val">$' + Number(perf.cpl||0).toFixed(2) + '</div><div class="perf-snap-lbl">CPL</div></div>' +
+      '<div class="perf-snap-kpi"><div class="perf-snap-val">' + (perf.channels ? Math.round((perf.channels.meta||0)*100)+'%' : '—') + '</div><div class="perf-snap-lbl">Meta Share</div></div>' +
+      '</div></div>';
+  }
+
+  // Approve-all bar (only when actionable)
+  var actionable = (status === 'Pending Review' || status === 'Revision Requested');
+  var pendingVariants = (d.variants||[]).filter(function(v){ return v.status === 'pending_review'; });
+  if (actionable && pendingVariants.length) {
+    html += '<div class="video-approve-all-bar">' +
+      '<button class="btn btn-primary btn-sm" onclick="approveVariants(\'all\')">' +
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><polyline points="20 6 9 17 4 12"/></svg>' +
+      'Approve All</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="approveSelected()">Approve Selected</button>' +
+      '<span style="font-size:11px;color:var(--tm)">' + pendingVariants.length + ' variant' + (pendingVariants.length===1?'':'s') + ' pending review</span>' +
+      '</div>';
+  }
+
+  // Video cards
+  if (!(d.variants||[]).length) {
+    html += '<div style="text-align:center;padding:40px;color:var(--tm)">No variants for this cycle.</div>';
+  } else {
+    html += '<div class="video-grid">';
+    (d.variants||[]).forEach(function(v) {
+      html += _renderVideoCard(v, actionable);
+    });
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function _renderVideoCard(v, actionable) {
+  var platformCls = 'platform-' + (v.platform||'').toLowerCase();
+  var isApproved = v.status === 'approved';
+  var inRevision = v.status === 'revision_in_progress';
+  var revCount = v.revision_count || 0;
+  var atLimit = revCount >= 5;
+
+  // Poster / video player
+  var playerHtml;
+  if (v.video_url) {
+    playerHtml = '<div class="video-player-wrap" onclick="playVideo(this,\'' + _escHtml(v.video_url) + '\')">' +
+      (v.poster_url ? '<img src="' + _escHtml(v.poster_url) + '" alt="poster">' : '<div style="width:100%;height:100%;background:#1a1a2e"></div>') +
+      '<div class="video-play-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>' +
+      '</div>';
+  } else {
+    playerHtml = '<div class="video-player-wrap" style="cursor:default">' +
+      '<div style="color:rgba(255,255,255,.35);font-size:11px;text-align:center">' +
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display:block;margin:0 auto 6px"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>' +
+      'Video generating…</div>' +
+      '</div>';
+  }
+
+  // Script section
+  var scriptHtml = '';
+  if (v.script) {
+    var s = v.script;
+    scriptHtml = '<div class="video-script-line"><span class="video-script-label">Hook</span>' + _escHtml(s.hook||'') + '</div>' +
+      '<div class="video-script-line"><span class="video-script-label">Body</span>' + _escHtml(s.body||'') + '</div>' +
+      '<div class="video-script-line"><span class="video-script-label">CTA</span>' + _escHtml(s.cta||'') + '</div>';
+    if ((s.overlays||[]).length) {
+      scriptHtml += '<div class="video-script-line"><span class="video-script-label">On-screen text</span>' + _escHtml(s.overlays.join(' · ')) + '</div>';
+    }
+    if (s.visual_notes) {
+      scriptHtml += '<div class="video-script-line"><span class="video-script-label">Visual notes</span>' + _escHtml(s.visual_notes) + '</div>';
+    }
+  }
+
+  // Actions
+  var actionsHtml = '';
+  if (actionable && v.status === 'pending_review') {
+    actionsHtml = '<div class="video-actions">' +
+      '<button class="btn-approve" id="approve-btn-' + v.variant_id + '" onclick="toggleApproveSelect(\'' + v.variant_id + '\',this)">' +
+      '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><polyline points="20 6 9 17 4 12"/></svg>Approve</button>' +
+      (atLimit
+        ? '<span class="btn-revise" style="opacity:.4;cursor:default">Revision limit reached</span>'
+        : '<button class="btn-revise" onclick="openRevisionModal(\'' + v.variant_id + '\',\'' + _escHtml(v.title) + '\')">Request Revision</button>') +
+      (revCount > 0 ? '<span class="video-revision-counter">Revision ' + revCount + ' of 5</span>' : '') +
+      '</div>';
+  } else if (isApproved) {
+    actionsHtml = '<div class="video-actions"><span class="video-status-badge approved" style="font-size:10px">' +
+      '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> &nbsp;Approved</span></div>';
+  } else if (inRevision) {
+    actionsHtml = '<div class="video-actions"><span class="video-status-badge revision" style="font-size:10px">⟳ &nbsp;Revision in progress</span>' +
+      (revCount > 0 ? '<span class="video-revision-counter">Revision ' + revCount + ' of 5</span>' : '') +
+      '</div>';
+  }
+
+  return '<div class="video-card">' +
+    playerHtml +
+    '<div class="video-card-body">' +
+    '<div class="video-card-title">' + _escHtml(v.title||'Video Variant') + '</div>' +
+    '<div class="video-card-meta">' +
+    '<span class="video-meta-tag ' + platformCls + '">' + _escHtml(v.platform||'') + '</span>' +
+    '<span class="video-meta-tag">' + (v.duration_seconds||'?') + 's</span>' +
+    '<span class="video-meta-tag">' + _escHtml(v.aspect_ratio||'') + '</span>' +
+    '</div>' +
+    (v.script ? '<button class="video-expand-btn" onclick="toggleVideoExpand(this,\'script-' + v.variant_id + '\')">' +
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg> Script' +
+      '</button><div class="video-expand-content" id="script-' + v.variant_id + '">' + scriptHtml + '</div>' : '') +
+    (v.rationale ? '<button class="video-expand-btn" onclick="toggleVideoExpand(this,\'rationale-' + v.variant_id + '\')" style="margin-top:4px">' +
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg> Creative Rationale' +
+      '</button><div class="video-expand-content" id="rationale-' + v.variant_id + '">' + _escHtml(v.rationale) + '</div>' : '') +
+    actionsHtml +
+    '</div></div>';
+}
+
+function _renderHistoryView(history) {
+  var el = document.getElementById('video-history-content');
+  if (!history.length) {
+    el.innerHTML = '<div style="color:var(--tm);font-size:13px;padding:40px 0;text-align:center">No past cycles on record.</div>';
+    return;
+  }
+  el.innerHTML = history.slice().reverse().map(function(cycle, idx) {
+    var statusCls = cycle.cycle_status === 'Approved' ? 'approved' : 'pending';
+    return '<div class="video-history-row" onclick="toggleHistoryRow(\'hr-' + idx + '\')">' +
+      '<div class="video-history-hdr">' +
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>' +
+      '<span class="video-history-month">' + _escHtml(cycle.month||'') + '</span>' +
+      '<span class="video-meta-tag" style="margin-left:4px">' + (cycle.variant_count||0) + ' variants</span>' +
+      '<span class="video-status-badge ' + statusCls + '" style="font-size:10px;margin-left:auto">' + _escHtml(cycle.cycle_status||'') + '</span>' +
+      '</div>' +
+      '<div class="video-history-detail" id="hr-' + idx + '">' +
+      '<div style="color:var(--tm);font-size:12px;padding:8px 0">Detailed variant history will load here from HubSpot.</div>' +
+      '</div></div>';
+  }).join('');
+}
+
+function toggleVideoExpand(btn, id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('open');
+  var chevron = btn.querySelector('svg');
+  if (chevron) chevron.style.transform = el.classList.contains('open') ? 'rotate(180deg)' : '';
+}
+
+function toggleHistoryRow(id) {
+  var el = document.getElementById(id);
+  if (el) el.classList.toggle('open');
+}
+
+function playVideo(wrap, url) {
+  var vid = document.createElement('video');
+  vid.src = url; vid.controls = true; vid.autoplay = true;
+  vid.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000';
+  wrap.innerHTML = '';
+  wrap.appendChild(vid);
+  wrap.style.cursor = 'default';
+}
+
+var _selectedApprovals = {};
+
+function toggleApproveSelect(variantId, btn) {
+  _selectedApprovals[variantId] = !_selectedApprovals[variantId];
+  btn.classList.toggle('checked', !!_selectedApprovals[variantId]);
+  btn.innerHTML = _selectedApprovals[variantId]
+    ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><polyline points="20 6 9 17 4 12"/></svg>Approved ✓'
+    : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><polyline points="20 6 9 17 4 12"/></svg>Approve';
+}
+
+function approveVariants(ids) {
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
+  var cid = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '');
+
+  if (!cid) { alert('Demo mode — approval would be submitted here.'); return; }
+
+  fetch(API_BASE + '/api/video-approve', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-Portal-Email': email},
+    body: JSON.stringify({company_id: cid, variant_ids: ids})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.error) { alert('Error: ' + d.error); return; }
+    _videoData = null; _selectedApprovals = {};
+    loadVideoCreative();
+  })
+  .catch(function(){ alert('Failed to submit approval. Please try again.'); });
+}
+
+function approveSelected() {
+  var selected = Object.keys(_selectedApprovals).filter(function(k){ return _selectedApprovals[k]; });
+  if (!selected.length) { alert('Select at least one variant to approve.'); return; }
+  approveVariants(selected);
+}
+
+function openRevisionModal(variantId, variantTitle) {
+  _revisionTargetId = variantId;
+  document.getElementById('revision-modal-variant-title').textContent = variantTitle;
+  document.getElementById('revision-variant-id').value = variantId;
+  document.getElementById('rev-tone').value = '';
+  document.getElementById('rev-emphasis').value = '';
+  document.getElementById('rev-cta').value = '';
+  document.getElementById('rev-notes').value = '';
+  document.getElementById('revision-modal').classList.add('open');
+}
+
+function closeRevisionModal() {
+  document.getElementById('revision-modal').classList.remove('open');
+  _revisionTargetId = null;
+}
+
+function submitRevision() {
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
+  var cid = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '');
+
+  var payload = {
+    company_id:      cid,
+    variant_id:      _revisionTargetId,
+    tone_shift:      document.getElementById('rev-tone').value,
+    emphasis_change: document.getElementById('rev-emphasis').value,
+    cta_update:      document.getElementById('rev-cta').value,
+    notes:           document.getElementById('rev-notes').value,
+  };
+
+  if (!cid) {
+    alert('Demo mode — revision would be submitted:\n' + JSON.stringify(payload, null, 2));
+    closeRevisionModal(); return;
+  }
+
+  fetch(API_BASE + '/api/video-revise', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-Portal-Email': email},
+    body: JSON.stringify(payload)
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.error) { alert('Error: ' + d.error); return; }
+    closeRevisionModal();
+    _videoData = null;
+    loadVideoCreative();
+  })
+  .catch(function(){ alert('Failed to submit revision. Please try again.'); });
+}
+
 // ── Activity ──
 function showActivityItem(id) {
   var el = document.getElementById(id);
@@ -3171,6 +3676,12 @@ function selectTierCustom(card, channel) {
 function updateCustomSpend(prefix) {
   // Just keep input in sync — totals update on submit
 }
+
+// Close revision modal on backdrop click
+document.addEventListener('click', function(e) {
+  var modal = document.getElementById('revision-modal');
+  if (modal && e.target === modal) closeRevisionModal();
+});
 </script>
 </body>
 </html>
