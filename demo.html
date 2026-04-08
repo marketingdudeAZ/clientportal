@@ -523,6 +523,58 @@ select.brief-input{height:34px;cursor:pointer}
 .modal-textarea{min-height:90px;resize:vertical}
 .modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
 
+/* ── Performance Forecast / Budget Simulator ── */
+.forecast-layout{display:grid;grid-template-columns:340px 1fr;gap:24px;align-items:start}
+@media(max-width:960px){.forecast-layout{grid-template-columns:1fr}}
+.forecast-panel{background:#fff;border:1px solid var(--bd);border-radius:12px;overflow:hidden}
+.forecast-panel-hdr{padding:14px 18px;border-bottom:1px solid var(--bd);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tm);background:var(--bg);display:flex;align-items:center;justify-content:space-between}
+.forecast-panel-body{padding:18px}
+.forecast-state-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--bdl);font-size:12px}
+.forecast-state-row:last-child{border-bottom:none}
+.forecast-state-lbl{color:var(--tm)}
+.forecast-state-val{font-weight:600;color:var(--tp);text-align:right}
+.sim-mode-tabs{display:flex;gap:0;margin-bottom:18px;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
+.sim-mode-tab{flex:1;padding:8px 4px;border:none;background:#fff;font-size:11px;font-weight:700;color:var(--ts);cursor:pointer;font-family:inherit;transition:all .15s;text-align:center;border-right:1px solid var(--bd)}
+.sim-mode-tab:last-child{border-right:none}
+.sim-mode-tab.active{background:var(--j);color:#fff}
+.sim-controls{display:none}
+.sim-controls.active{display:block}
+.slider-row{margin-bottom:14px}
+.slider-label{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:600;color:var(--ts);margin-bottom:6px}
+.slider-val{font-weight:800;color:var(--cu);font-size:12px}
+.sim-slider{width:100%;height:4px;-webkit-appearance:none;appearance:none;background:var(--bd);border-radius:2px;outline:none;cursor:pointer}
+.sim-slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--cu);cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.sim-slider::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--cu);cursor:pointer;border:none}
+.scenario-card{padding:12px 14px;border:1px solid var(--bd);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:all .15s;font-size:12px}
+.scenario-card:hover{border-color:var(--cu);background:var(--cug)}
+.scenario-card.selected{border-color:var(--cu);background:var(--cug)}
+.scenario-card-title{font-weight:700;color:var(--tp);margin-bottom:2px}
+.scenario-card-desc{color:var(--tm);font-size:11px}
+.proj-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+@media(max-width:700px){.proj-cards{grid-template-columns:1fr}}
+.proj-card{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:16px}
+.proj-card-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tm);margin-bottom:8px}
+.proj-card-val{font-size:26px;font-weight:800;color:var(--tp);line-height:1}
+.proj-card-range{font-size:11px;color:var(--tm);margin-top:4px}
+.proj-card-delta{font-size:11px;font-weight:700;margin-top:6px}
+.proj-card-delta.up{color:#10b981}
+.proj-card-delta.down{color:#ef4444}
+.proj-card-delta.flat{color:var(--tm)}
+.proj-breakdown{margin-top:10px;padding-top:10px;border-top:1px solid var(--bdl);font-size:11px}
+.proj-breakdown-row{display:flex;justify-content:space-between;padding:2px 0;color:var(--ts)}
+.chart-card{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:20px}
+.chart-card-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.chart-card-title{font-size:13px;font-weight:700;color:var(--tp)}
+.chart-legend{display:flex;gap:16px;font-size:11px}
+.chart-legend-item{display:flex;align-items:center;gap:5px;color:var(--ts)}
+.chart-legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.health-callout{background:#fff8ed;border:1px solid #f59e0b;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:#92400e;display:none}
+.health-callout.show{display:block}
+.sim-disclaimer{font-size:10px;color:var(--tm);margin-top:16px;line-height:1.5;padding:10px 12px;background:var(--bg);border-radius:6px;border-left:3px solid var(--bd)}
+.upsell-bar{display:flex;gap:10px;align-items:center;margin-top:16px;padding:14px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;flex-wrap:wrap}
+.upsell-bar-text{font-size:12px;color:#166534;flex:1}
+.beta-badge{display:inline-block;font-size:9px;font-weight:800;background:#f3e8ff;color:#7c3aed;border-radius:3px;padding:1px 5px;text-transform:uppercase;letter-spacing:.04em;vertical-align:middle;margin-left:4px}
+
 /* ── Portfolio Dashboard ── */
 .port-view-tabs{display:flex;gap:6px;margin-bottom:20px}
 .port-view-tab{padding:7px 18px;border-radius:8px;border:1px solid var(--bd);background:#fff;font-size:12px;font-weight:700;color:var(--ts);cursor:pointer;font-family:inherit;transition:all .15s}
@@ -579,6 +631,7 @@ select.brief-input{height:34px;cursor:pointer}
 
 @media(max-width:1024px){.kpi-row{grid-template-columns:repeat(2,1fr)}.gauge-sub-grid{grid-template-columns:repeat(2,1fr)}.section{padding:24px}.tier-cards{grid-template-columns:1fr 1fr 1fr}}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -662,6 +715,10 @@ select.brief-input{height:34px;cursor:pointer}
       <div class="nav-item" id="nav-video" onclick="nav('video',this)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
         Video Creative
+      </div>
+      <div class="nav-item" id="nav-forecast" onclick="nav('forecast',this)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        Performance Forecast
       </div>
     </div>
     <div class="sb-nav-group">
@@ -1447,6 +1504,92 @@ select.brief-input{height:34px;cursor:pointer}
   </div>
 </section>
 
+<!-- Enrollment Modal -->
+<div class="modal-overlay" id="enroll-modal">
+  <div class="modal-box" style="width:min(600px,92vw)">
+    <div class="modal-title">Enroll in Video Creative Pipeline</div>
+    <div class="modal-sub">Select your tier and complete your creative brief. Your AM will confirm setup within 2 business days.</div>
+
+    <label class="modal-label">Package Tier</label>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
+      <div class="enroll-tier-card scenario-card" onclick="selectEnrollTier('Starter',this)" style="text-align:center">
+        <input type="radio" name="enroll-tier" value="Starter" style="display:none">
+        <div style="font-size:13px;font-weight:800;color:var(--tp)">Starter</div>
+        <div style="font-size:11px;color:var(--tm);margin-top:4px">2 videos/mo<br>Meta only<br>2 revision rounds</div>
+      </div>
+      <div class="enroll-tier-card scenario-card selected" onclick="selectEnrollTier('Standard',this)" style="text-align:center">
+        <input type="radio" name="enroll-tier" value="Standard" checked style="display:none">
+        <div style="font-size:13px;font-weight:800;color:var(--cu)">Standard</div>
+        <div style="font-size:11px;color:var(--tm);margin-top:4px">4 videos/mo<br>Meta + YouTube<br>4 revision rounds</div>
+      </div>
+      <div class="enroll-tier-card scenario-card" onclick="selectEnrollTier('Premium',this)" style="text-align:center">
+        <input type="radio" name="enroll-tier" value="Premium" style="display:none">
+        <div style="font-size:13px;font-weight:800;color:var(--tp)">Premium</div>
+        <div style="font-size:11px;color:var(--tm);margin-top:4px">6+ videos/mo<br>Meta + YT + TikTok<br>Unlimited revisions</div>
+      </div>
+    </div>
+
+    <label class="modal-label">Voice &amp; Tone</label>
+    <select class="modal-select" id="enroll-tone">
+      <option value="">— Select —</option>
+      <option value="Professional">Professional</option>
+      <option value="Friendly">Friendly</option>
+      <option value="Luxury">Luxury</option>
+      <option value="Energetic">Energetic</option>
+      <option value="Relaxed">Relaxed</option>
+    </select>
+    <input type="text" class="modal-input" id="enroll-tone-text" placeholder="Optional: refine further (e.g. 'warm but aspirational')" maxlength="120">
+
+    <label class="modal-label">Target Audience <span style="font-weight:400;text-transform:none;letter-spacing:0">(select all that apply)</span></label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Young professionals"> Young professionals</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Families"> Families</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Students"> Students</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Seniors"> Seniors</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Military"> Military</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Corporate relocations"> Corporate relocations</label>
+    </div>
+
+    <label class="modal-label">Marketing Goals <span style="font-weight:400;text-transform:none;letter-spacing:0">(select all that apply)</span></label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-goals" value="Drive leasing traffic"> Drive leasing traffic</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-goals" value="Reduce vacancy"> Reduce vacancy</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-goals" value="Build brand awareness"> Build brand awareness</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-goals" value="Promote specials"> Promote specials/concessions</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-goals" value="Highlight renovations"> Highlight renovations</label>
+    </div>
+
+    <label class="modal-label">Unit Mix to Highlight</label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="Studio"> Studio</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="1BR"> 1BR</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="2BR"> 2BR</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="3BR"> 3BR</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="Townhome"> Townhome</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="Penthouse"> Penthouse</label>
+    </div>
+
+    <label class="modal-label">Key Differentiators <span style="font-weight:400;text-transform:none;letter-spacing:0">(max 500 chars)</span></label>
+    <textarea class="modal-textarea" id="enroll-diff" maxlength="500" placeholder="What makes this property stand out?"></textarea>
+
+    <label class="modal-label">Taglines <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — up to 3)</span></label>
+    <textarea class="modal-textarea" id="enroll-taglines" style="min-height:60px" placeholder="One per line"></textarea>
+
+    <label class="modal-label">Competitor Focus <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+    <input type="text" class="modal-input" id="enroll-comp" placeholder="Up to 3 competitors to position against" maxlength="200">
+
+    <label class="modal-label">Current Specials <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+    <input type="text" class="modal-input" id="enroll-specials" placeholder="Active concessions or promotions to feature" maxlength="200">
+
+    <div style="font-size:11px;color:var(--tm);margin-bottom:14px">Changes take effect on the next monthly pipeline run.</div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="closeEnrollModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="enroll-submit-btn" onclick="submitEnrollment()">Submit Enrollment</button>
+    </div>
+  </div>
+</div>
+
 <!-- Revision Modal -->
 <div class="modal-overlay" id="revision-modal">
   <div class="modal-box">
@@ -1486,6 +1629,116 @@ select.brief-input{height:34px;cursor:pointer}
     </div>
   </div>
 </div>
+
+<!-- ── PERFORMANCE FORECAST ── -->
+<section id="section-forecast" class="section">
+  <div class="sec-topbar">
+    <div>
+      <div class="sec-title">Performance Forecast</div>
+      <div class="sec-sub">Budget simulator · benchmark-driven projections · occupancy impact</div>
+    </div>
+  </div>
+
+  <!-- Health score callout (shown if score is red) -->
+  <div class="health-callout" id="forecast-health-callout">
+    <strong>Health Score Alert:</strong> Your property's health score suggests operational improvements may be needed alongside marketing investment to fully capture lead volume. Talk to your account manager about the Red Light Report findings.
+  </div>
+
+  <div class="forecast-layout">
+
+    <!-- LEFT COLUMN: Current State + Simulator Controls -->
+    <div>
+      <!-- Current State -->
+      <div class="forecast-panel" style="margin-bottom:16px">
+        <div class="forecast-panel-hdr">Current State</div>
+        <div class="forecast-panel-body" id="forecast-current-state">
+          <div style="color:var(--tm);font-size:12px">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Simulator Controls -->
+      <div class="forecast-panel">
+        <div class="forecast-panel-hdr">
+          Budget Simulator
+          <span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--tm)">Adjust to see projections update</span>
+        </div>
+        <div class="forecast-panel-body">
+          <div class="sim-mode-tabs">
+            <button class="sim-mode-tab active" onclick="switchSimMode('channel',this)">By Channel</button>
+            <button class="sim-mode-tab" onclick="switchSimMode('category',this)">By Category</button>
+            <button class="sim-mode-tab" onclick="switchSimMode('scenario',this)">Scenarios</button>
+          </div>
+
+          <!-- Mode A: Channel sliders -->
+          <div class="sim-controls active" id="sim-channel">
+            <div id="channel-sliders"></div>
+          </div>
+
+          <!-- Mode B: Category sliders -->
+          <div class="sim-controls" id="sim-category">
+            <div id="category-sliders"></div>
+          </div>
+
+          <!-- Mode C: Preset scenarios -->
+          <div class="sim-controls" id="sim-scenario">
+            <div id="scenario-cards"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Projection Output -->
+    <div>
+      <!-- Projection Cards -->
+      <div class="proj-cards" id="proj-cards">
+        <div class="proj-card">
+          <div class="proj-card-lbl">Projected Monthly Leads</div>
+          <div class="proj-card-val" id="proj-leads">—</div>
+          <div class="proj-card-range" id="proj-leads-range"></div>
+          <div class="proj-card-delta flat" id="proj-leads-delta"></div>
+          <div class="proj-breakdown" id="proj-leads-breakdown"></div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-card-lbl">Projected CPL</div>
+          <div class="proj-card-val" id="proj-cpl">—</div>
+          <div class="proj-card-range" id="proj-cpl-range"></div>
+          <div class="proj-card-delta flat" id="proj-cpl-delta"></div>
+          <div class="proj-breakdown" id="proj-cpl-breakdown"></div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-card-lbl">Occupancy Impact</div>
+          <div class="proj-card-val" id="proj-occ">—</div>
+          <div class="proj-card-range" id="proj-occ-range" style="font-size:11px;color:var(--tm);margin-top:4px"></div>
+          <div class="proj-card-delta flat" id="proj-occ-note" style="margin-top:6px;font-size:11px;color:var(--tm)"></div>
+        </div>
+      </div>
+
+      <!-- 12-Month Chart -->
+      <div class="chart-card">
+        <div class="chart-card-hdr">
+          <span class="chart-card-title">12-Month Lead Volume Forecast</span>
+          <div class="chart-legend">
+            <div class="chart-legend-item"><div class="chart-legend-dot" style="background:#94a3b8"></div>Current Budget</div>
+            <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--j)"></div>Scenario Budget</div>
+          </div>
+        </div>
+        <canvas id="forecast-chart" height="200"></canvas>
+      </div>
+
+      <!-- Upsell bar -->
+      <div class="upsell-bar" id="forecast-upsell" style="display:none">
+        <div class="upsell-bar-text" id="forecast-upsell-text">This scenario includes adding Video Creative.</div>
+        <button class="btn btn-secondary btn-sm" id="forecast-upsell-btn" onclick="forecastUpsellClick()">Get Started with Video Creative</button>
+        <button class="btn btn-primary btn-sm" id="forecast-am-btn" onclick="forecastTalkToAM()">Talk to My Account Manager</button>
+      </div>
+      <div id="forecast-am-confirm" style="display:none;font-size:12px;color:#10b981;margin-top:8px;font-weight:600">✓ Request sent — your AM has been notified.</div>
+
+      <!-- Disclaimer -->
+      <div class="sim-disclaimer">Projections are based on historical performance of similar RPM properties and seasonal patterns. Actual results may vary based on market conditions, competition, and property-specific factors. This is a planning tool, not a guarantee.</div>
+    </div>
+
+  </div>
+</section>
 
 <!-- ── CLIENT BRIEF ── -->
 <section id="section-brief" class="section">
@@ -2284,7 +2537,8 @@ function nav(id, el) {
   if (id === 'tickets') { loadTickets(); }
   if (id === 'brief')   { loadClientBrief(); }
   if (id === 'budget')  { loadBudget(); }
-  if (id === 'video')   { loadVideoCreative(); }
+  if (id === 'video')    { loadVideoCreative(); }
+  if (id === 'forecast') { loadForecast(); }
 }
 
 function switchDemo(view, btn) {
@@ -3143,6 +3397,442 @@ function filterSpendSheet() {
   _renderSpendSheet(filtered);
 }
 
+// ── Performance Forecast / Budget Simulator ─────────────────────────────────
+var _benchmarks     = null;
+var _occCurves      = null;
+var _videoDefaults  = null;
+var _forecastChart  = null;
+var _simMode        = 'channel';
+var _simBudgets     = {};      // { channel: budget }
+var _baseBudgets    = {};      // current-state budgets (read-only reference)
+var _currentPerf    = {};      // { leads, cpl, channels: {ch: {leads,spend}} }
+var _propContext    = {};      // { unit_count, market, occupancy, health_score, size_band }
+
+function loadForecast() {
+  if (_benchmarks) { _renderForecast(); return; }
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var email    = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
+  var cid      = typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '';
+
+  // Demo context
+  _propContext = {
+    unit_count: 280, market: 'Dallas', occupancy: 91.5, health_score: 72,
+    size_band: 'mid', health_red: false,
+    packages: [
+      {label:'SEO: Standard', budget: 800, channel:'seo_organic'},
+      {label:'Google Ads',     budget: 2500, channel:'google_ads'},
+      {label:'Meta Ads',       budget: 1500, channel:'meta'},
+    ]
+  };
+  _currentPerf = { leads: 58, cpl: 83, channels: {
+    google_ads: {leads:32, spend:2500}, meta: {leads:18, spend:1500}, seo_organic: {leads:8, spend:800}
+  }};
+
+  var sb = {};
+  _propContext.packages.forEach(function(p){ sb[p.channel] = p.budget; });
+  _baseBudgets = JSON.parse(JSON.stringify(sb));
+  _simBudgets  = JSON.parse(JSON.stringify(sb));
+
+  var market    = _propContext.market;
+  var size_band = _propContext.size_band;
+  var url = API_BASE + '/api/benchmarks?market=' + encodeURIComponent(market) + '&size_band=' + encodeURIComponent(size_band);
+
+  fetch(url, {headers:{'X-Portal-Email':email}})
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    _benchmarks    = {};
+    (d.benchmarks||[]).forEach(function(b){
+      if (!_benchmarks[b.channel]) _benchmarks[b.channel] = {};
+      _benchmarks[b.channel][b.month] = b;
+    });
+    _occCurves    = d.occupancy_curves || [];
+    _videoDefaults = d.video_defaults || {};
+    _renderForecast();
+  })
+  .catch(function(){
+    // Use hardcoded fallback so demo works offline
+    _benchmarks = _buildFallbackBenchmarks();
+    _occCurves  = [];
+    _videoDefaults = {Starter:{leads_per_1k:3.5,median_cpl:285},Standard:{leads_per_1k:5.0,median_cpl:200},Premium:{leads_per_1k:7.0,median_cpl:145}};
+    _renderForecast();
+  });
+}
+
+function _buildFallbackBenchmarks() {
+  var SI = {1:.80,2:.82,3:1.15,4:1.25,5:1.30,6:1.28,7:1.20,8:1.10,9:.95,10:.90,11:.78,12:.75};
+  var BASE = {
+    google_ads:    {l:8.0, cpl:125, p25:95,  p75:165},
+    meta:          {l:5.5, cpl:182, p25:140, p75:240},
+    seo_organic:   {l:4.0, cpl:110, p25:80,  p75:155},
+    video_creative:{l:5.0, cpl:200, p25:145, p75:285},
+  };
+  var bm = {};
+  Object.keys(BASE).forEach(function(ch){
+    bm[ch] = {};
+    for (var m=1; m<=12; m++) {
+      var si = SI[m], b = BASE[ch];
+      bm[ch][m] = {channel:ch, month:m, seasonal_index:si,
+        median_leads_per_1k_spend: b.l * si, median_cpl: b.cpl / si,
+        p25_cpl: b.p25 / si, p75_cpl: b.p75 / si};
+    }
+  });
+  return bm;
+}
+
+function _renderForecast() {
+  _renderCurrentState();
+  _buildSliders();
+  _buildScenarios();
+  _updateProjections();
+  if (_propContext.health_red) {
+    document.getElementById('forecast-health-callout').classList.add('show');
+  }
+}
+
+function _renderCurrentState() {
+  var el = document.getElementById('forecast-current-state');
+  if (!el) return;
+  var pkgs = (_propContext.packages||[]).map(function(p){
+    return '<div class="forecast-state-row"><span class="forecast-state-lbl">'+p.label+'</span><span class="forecast-state-val">$'+Number(p.budget).toLocaleString()+'/mo</span></div>';
+  }).join('');
+  var totalSpend = (_propContext.packages||[]).reduce(function(a,p){return a+p.budget;},0);
+  var seasonTxt = _getSeasonNote();
+  var healthCls = _propContext.health_score >= 80 ? '#10b981' : _propContext.health_score >= 60 ? '#f59e0b' : '#ef4444';
+  el.innerHTML = pkgs +
+    '<div class="forecast-state-row"><span class="forecast-state-lbl">Total Monthly Spend</span><span class="forecast-state-val" style="color:var(--cu);font-size:13px">$'+Number(totalSpend).toLocaleString()+'/mo</span></div>' +
+    '<div class="forecast-state-row"><span class="forecast-state-lbl">Last Month Leads</span><span class="forecast-state-val">'+(_currentPerf.leads||'—')+' leads</span></div>' +
+    '<div class="forecast-state-row"><span class="forecast-state-lbl">Blended CPL</span><span class="forecast-state-val">$'+(_currentPerf.cpl||'—')+'</span></div>' +
+    '<div class="forecast-state-row"><span class="forecast-state-lbl">Current Occupancy</span><span class="forecast-state-val">'+(_propContext.occupancy||'—')+'%</span></div>' +
+    '<div class="forecast-state-row"><span class="forecast-state-lbl">Health Score</span><span class="forecast-state-val" style="color:'+healthCls+'">'+(_propContext.health_score||'—')+'/100</span></div>' +
+    '<div style="margin-top:10px;padding:8px 10px;background:var(--bg);border-radius:6px;font-size:11px;color:var(--tm)">📅 '+seasonTxt+'</div>';
+}
+
+function _getSeasonNote() {
+  var month = new Date().getMonth() + 1;
+  var SI = {1:.80,2:.82,3:1.15,4:1.25,5:1.30,6:1.28,7:1.20,8:1.10,9:.95,10:.90,11:.78,12:.75};
+  var names = {1:'January',2:'February',3:'March',4:'April',5:'May',6:'June',7:'July',8:'August',9:'September',10:'October',11:'November',12:'December'};
+  var si = SI[month];
+  var pct = Math.round(Math.abs(si - 1) * 100);
+  var dir = si >= 1 ? pct+'% above' : pct+'% below';
+  return names[month] + ' is historically ' + dir + ' average for lead volume in ' + (_propContext.market||'your market') + '.';
+}
+
+function _buildSliders() {
+  // Channel-level sliders
+  var chEl = document.getElementById('channel-sliders');
+  var catEl = document.getElementById('category-sliders');
+  if (!chEl) return;
+  var CHANNEL_LABELS = {google_ads:'Google Ads', meta:'Meta Ads', seo_organic:'SEO', video_creative:'Video Creative'};
+  var html = '';
+  Object.keys(_baseBudgets).forEach(function(ch) {
+    var cur = _baseBudgets[ch];
+    var max = Math.max(cur * 3, 3000);
+    var step = ch === 'seo_organic' ? 100 : 100;
+    html += '<div class="slider-row">' +
+      '<div class="slider-label"><span>'+(CHANNEL_LABELS[ch]||ch)+'</span>' +
+      '<span class="slider-val" id="slv-'+ch+'">$'+Number(_simBudgets[ch]).toLocaleString()+'</span></div>' +
+      '<input type="range" class="sim-slider" id="sl-'+ch+'" min="0" max="'+max+'" step="'+step+'" value="'+_simBudgets[ch]+'" ' +
+      'oninput="onSliderChange(\''+ch+'\',this.value)">' +
+      '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tm);margin-top:3px"><span>$0</span><span>$'+Number(max).toLocaleString()+'</span></div>' +
+      '</div>';
+  });
+  // Add video creative if not already enrolled
+  if (!_simBudgets['video_creative']) {
+    html += '<div class="slider-row">' +
+      '<div class="slider-label"><span>Video Creative <span class="beta-badge">Beta</span></span>' +
+      '<span class="slider-val" id="slv-video_creative">$0</span></div>' +
+      '<input type="range" class="sim-slider" id="sl-video_creative" min="0" max="3000" step="500" value="0" oninput="onSliderChange(\'video_creative\',this.value)">' +
+      '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tm);margin-top:3px"><span>$0</span><span>$3,000</span></div></div>';
+  }
+  chEl.innerHTML = html;
+
+  // Category-level sliders (simplified groupings)
+  var catHtml = '';
+  var cats = [
+    {key:'paid_search', label:'Paid Search (Google Ads)', channels:['google_ads']},
+    {key:'paid_social', label:'Paid Social (Meta Ads)', channels:['meta']},
+    {key:'seo',         label:'Organic / SEO', channels:['seo_organic']},
+    {key:'video',       label:'Video Creative <span class="beta-badge">Beta</span>', channels:['video_creative']},
+  ];
+  cats.forEach(function(cat) {
+    var total = cat.channels.reduce(function(a,ch){ return a + (_simBudgets[ch]||0); }, 0);
+    var max = Math.max(total * 3, 3000);
+    catHtml += '<div class="slider-row">' +
+      '<div class="slider-label"><span>'+cat.label+'</span>' +
+      '<span class="slider-val" id="catv-'+cat.key+'">$'+Number(total).toLocaleString()+'</span></div>' +
+      '<input type="range" class="sim-slider" id="cats-'+cat.key+'" min="0" max="'+max+'" step="100" value="'+total+'" ' +
+      'oninput="onCatSliderChange(\''+cat.key+'\','+JSON.stringify(cat.channels)+',this.value)">' +
+      '</div>';
+  });
+  catEl.innerHTML = catHtml;
+}
+
+function _buildScenarios() {
+  var el = document.getElementById('scenario-cards');
+  if (!el) return;
+  var scenarios = [
+    {id:'upgrade_seo',   title:'Upgrade SEO Tier',         desc:'Move to next SEO tier — 90-day ramp to new performance level'},
+    {id:'add_video',     title:'Add Video Creative',        desc:'Add Starter video pipeline — projected lift from AI-generated ads'},
+    {id:'pm_25',         title:'Increase Paid Media +25%',  desc:'Apply 25% budget increase across all paid channels proportionally'},
+    {id:'leasing_boost', title:'Leasing Season Boost',      desc:'50% paid media increase March–August, return to current after'},
+    {id:'full_package',  title:'Full Package',              desc:'All packages at highest tier — maximum projected performance'},
+  ];
+  el.innerHTML = scenarios.map(function(s) {
+    return '<div class="scenario-card" id="sc-'+s.id+'" onclick="selectScenario(\''+s.id+'\',this)">' +
+      '<div class="scenario-card-title">'+s.title+'</div>' +
+      '<div class="scenario-card-desc">'+s.desc+'</div></div>';
+  }).join('');
+}
+
+function switchSimMode(mode, btn) {
+  _simMode = mode;
+  document.querySelectorAll('.sim-mode-tab').forEach(function(b){b.classList.remove('active')});
+  btn.classList.add('active');
+  document.querySelectorAll('.sim-controls').forEach(function(c){c.classList.remove('active')});
+  var el = document.getElementById('sim-'+mode);
+  if (el) el.classList.add('active');
+  // Reset to base budgets on mode switch
+  _simBudgets = JSON.parse(JSON.stringify(_baseBudgets));
+  _buildSliders();
+  _updateProjections();
+}
+
+function onSliderChange(ch, val) {
+  _simBudgets[ch] = parseInt(val);
+  var lbl = document.getElementById('slv-'+ch);
+  if (lbl) lbl.textContent = '$' + Number(_simBudgets[ch]).toLocaleString();
+  _updateProjections();
+}
+
+function onCatSliderChange(catKey, channels, val) {
+  var newTotal = parseInt(val);
+  var lbl = document.getElementById('catv-'+catKey);
+  if (lbl) lbl.textContent = '$' + Number(newTotal).toLocaleString();
+  // Distribute proportionally across child channels
+  var oldTotal = channels.reduce(function(a,ch){ return a + (_simBudgets[ch]||0); }, 0);
+  channels.forEach(function(ch) {
+    if (oldTotal > 0) {
+      _simBudgets[ch] = Math.round(newTotal * ((_simBudgets[ch]||0) / oldTotal));
+    } else {
+      _simBudgets[ch] = Math.round(newTotal / channels.length);
+    }
+  });
+  _updateProjections();
+}
+
+function selectScenario(id, el) {
+  document.querySelectorAll('.scenario-card').forEach(function(c){c.classList.remove('selected')});
+  el.classList.add('selected');
+  _simBudgets = JSON.parse(JSON.stringify(_baseBudgets));
+  var MULT = {google_ads:1, meta:1};
+  if (id === 'pm_25') {
+    ['google_ads','meta'].forEach(function(ch){ if (_simBudgets[ch]) _simBudgets[ch] = Math.round(_simBudgets[ch]*1.25); });
+  } else if (id === 'add_video') {
+    _simBudgets['video_creative'] = 1500; // Standard tier default
+  } else if (id === 'upgrade_seo') {
+    var SEO_TIERS = [100,300,500,800,1300];
+    var cur = _simBudgets['seo_organic'] || 0;
+    var next = SEO_TIERS.find(function(t){ return t > cur; }) || cur;
+    _simBudgets['seo_organic'] = next;
+  } else if (id === 'leasing_boost') {
+    ['google_ads','meta'].forEach(function(ch){ if (_simBudgets[ch]) _simBudgets[ch] = Math.round(_simBudgets[ch]*1.5); });
+  } else if (id === 'full_package') {
+    _simBudgets['google_ads']    = 5000;
+    _simBudgets['meta']          = 3000;
+    _simBudgets['seo_organic']   = 1300;
+    _simBudgets['video_creative'] = 3000;
+  }
+  _updateProjections();
+}
+
+function _calcProjections(budgets) {
+  var month = new Date().getMonth() + 1;
+  var totalLeads = 0, totalSpend = 0;
+  var p25Leads = 0, p75Leads = 0;
+  var breakdown = {};
+
+  Object.keys(budgets).forEach(function(ch) {
+    var spend = budgets[ch] || 0;
+    if (spend === 0) return;
+    var bm = _benchmarks && _benchmarks[ch] && _benchmarks[ch][month];
+    if (!bm) return;
+    // SEO: use tier-based median, not spend-linear
+    var leads, p25l, p75l;
+    if (ch === 'seo_organic') {
+      var tier_factor = spend / 800; // relative to Standard tier
+      leads = (bm.median_leads_per_1k_spend * 8 * tier_factor) * bm.seasonal_index;
+      p25l  = leads * 0.75;
+      p75l  = leads * 1.30;
+    } else if (ch === 'video_creative') {
+      // Use tier defaults from spec D.8
+      var tier = spend >= 2500 ? 'Premium' : spend >= 1500 ? 'Standard' : 'Starter';
+      var vd = (_videoDefaults && _videoDefaults[tier]) || {leads_per_1k:5.0};
+      leads = (spend / 1000) * vd.leads_per_1k * bm.seasonal_index;
+      p25l  = leads * 0.70;
+      p75l  = leads * 1.40;
+    } else {
+      leads = (spend / 1000) * bm.median_leads_per_1k_spend;
+      p25l  = (spend / 1000) * (1000 / (bm.p75_cpl || bm.median_cpl * 1.3));
+      p75l  = (spend / 1000) * (1000 / (bm.p25_cpl || bm.median_cpl * 0.75));
+    }
+    var cpl = leads > 0 ? spend / leads : 0;
+    totalLeads += leads; totalSpend += spend;
+    p25Leads += p25l;    p75Leads += p75l;
+    breakdown[ch] = {leads: Math.round(leads), spend: spend, cpl: cpl > 0 ? Math.round(cpl) : 0};
+  });
+
+  var blendedCpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
+  return {
+    leads:     Math.round(totalLeads),
+    p25Leads:  Math.round(p25Leads),
+    p75Leads:  Math.round(p75Leads),
+    cpl:       Math.round(blendedCpl),
+    spend:     totalSpend,
+    breakdown: breakdown,
+  };
+}
+
+function _updateProjections() {
+  var proj    = _calcProjections(_simBudgets);
+  var basePr  = _calcProjections(_baseBudgets);
+  var curLeads = _currentPerf.leads || basePr.leads;
+  var curCpl   = _currentPerf.cpl   || basePr.cpl;
+
+  // Leads card
+  var dLeads = proj.leads - curLeads;
+  var dCls   = dLeads > 0 ? 'up' : dLeads < 0 ? 'down' : 'flat';
+  setText('proj-leads', proj.leads);
+  setText('proj-leads-range', proj.p25Leads + '–' + proj.p75Leads + ' lead range (p25–p75)');
+  var dEl = document.getElementById('proj-leads-delta');
+  if (dEl) { dEl.className = 'proj-card-delta ' + dCls; dEl.textContent = (dLeads >= 0 ? '+' : '') + dLeads + ' vs. last month'; }
+  var bkEl = document.getElementById('proj-leads-breakdown');
+  if (bkEl) {
+    var LBLS = {google_ads:'Google',meta:'Meta',seo_organic:'SEO',video_creative:'Video'};
+    bkEl.innerHTML = Object.keys(proj.breakdown).map(function(ch){
+      return '<div class="proj-breakdown-row"><span>'+(LBLS[ch]||ch)+'</span><span>'+proj.breakdown[ch].leads+' leads</span></div>';
+    }).join('');
+  }
+
+  // CPL card
+  var dCpl   = proj.cpl - curCpl;
+  var cCls   = dCpl < 0 ? 'up' : dCpl > 0 ? 'down' : 'flat'; // lower CPL is better
+  setText('proj-cpl', '$' + proj.cpl);
+  var p25Cpl = proj.spend > 0 && proj.p75Leads > 0 ? Math.round(proj.spend / proj.p75Leads) : 0;
+  var p75Cpl = proj.spend > 0 && proj.p25Leads > 0 ? Math.round(proj.spend / proj.p25Leads) : 0;
+  setText('proj-cpl-range', '$' + p25Cpl + '–$' + p75Cpl + ' CPL range');
+  var cEl = document.getElementById('proj-cpl-delta');
+  if (cEl) { cEl.className = 'proj-card-delta ' + cCls; cEl.textContent = (dCpl >= 0 ? '+' : '') + '$' + dCpl + ' vs. current'; }
+  var cpEl = document.getElementById('proj-cpl-breakdown');
+  if (cpEl) {
+    var LBLS2 = {google_ads:'Google',meta:'Meta',seo_organic:'SEO',video_creative:'Video'};
+    cpEl.innerHTML = Object.keys(proj.breakdown).map(function(ch){
+      return '<div class="proj-breakdown-row"><span>'+(LBLS2[ch]||ch)+'</span><span>$'+proj.breakdown[ch].cpl+'/lead</span></div>';
+    }).join('');
+  }
+
+  // Occupancy card
+  var incLeads = Math.max(0, proj.leads - curLeads);
+  var occ = _propContext.occup || _propContext.occupancy || 91.5;
+  var occBand = occ >= 95 ? '95_plus' : occ >= 93 ? '93_95' : occ >= 90 ? '90_93' : 'below_90';
+  var lBand   = incLeads >= 50 ? '50_plus' : incLeads >= 25 ? '25_50' : incLeads >= 10 ? '10_25' : '0_10';
+  var sb      = _propContext.size_band || 'mid';
+  var curve   = (_occCurves||[]).find(function(c){ return c.size_band===sb && c.occ_band===occBand && c.leads_band===lBand; });
+  if (occ >= 95) {
+    setText('proj-occ', 'Near Capacity');
+    setText('proj-occ-range', '');
+    setText('proj-occ-note', 'Your property is near full occupancy. Additional leads support retention and waitlist growth rather than occupancy lift.');
+  } else if (curve) {
+    setText('proj-occ', '+' + curve.lift_90d.toFixed(1) + ' pts');
+    setText('proj-occ-range', '+' + curve.lift_30d.toFixed(1) + ' pts 30d · +' + curve.lift_60d.toFixed(1) + ' pts 60d');
+    setText('proj-occ-note', 'Expected occupancy lift at 90 days');
+  } else {
+    setText('proj-occ', '+' + (incLeads * 0.04).toFixed(1) + ' pts');
+    setText('proj-occ-note', 'Based on incremental leads vs. current');
+  }
+
+  // Chart
+  _updateChart(proj, basePr);
+
+  // Upsell bar
+  var hasVideo = (_simBudgets['video_creative']||0) > 0 && !(_baseBudgets['video_creative']||0);
+  var uBar = document.getElementById('forecast-upsell');
+  if (uBar) uBar.style.display = (hasVideo || proj.leads > curLeads * 1.1) ? '' : 'none';
+  if (hasVideo) {
+    setText('forecast-upsell-text', 'This scenario includes adding Video Creative to your marketing mix.');
+  } else {
+    setText('forecast-upsell-text', 'Want to capture this projected lift? Talk to your account manager.');
+    var uvBtn = document.getElementById('forecast-upsell-btn');
+    if (uvBtn) uvBtn.style.display = 'none';
+  }
+}
+
+function _updateChart(proj, basePr) {
+  var SI = {1:.80,2:.82,3:1.15,4:1.25,5:1.30,6:1.28,7:1.20,8:1.10,9:.95,10:.90,11:.78,12:.75};
+  var startMonth = new Date().getMonth() + 1;
+  var MNAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var labels=[], baseData=[], scenData=[], p25=[], p75=[];
+
+  for (var i=0; i<12; i++) {
+    var m = ((startMonth - 1 + i) % 12) + 1;
+    labels.push(MNAMES[m-1]);
+    var si = SI[m];
+    var curSi = SI[startMonth];
+    baseData.push(Math.round(basePr.leads * si / curSi));
+    var sc = Math.round(proj.leads * si / curSi);
+    scenData.push(sc);
+    p25.push(Math.round(proj.p25Leads * si / curSi));
+    p75.push(Math.round(proj.p75Leads * si / curSi));
+  }
+
+  var ctx = document.getElementById('forecast-chart');
+  if (!ctx) return;
+
+  if (_forecastChart) { _forecastChart.destroy(); _forecastChart = null; }
+
+  _forecastChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Current Budget', data: baseData, borderColor:'#94a3b8', backgroundColor:'rgba(148,163,184,.08)',
+          fill: true, tension:.4, pointRadius:3, pointHoverRadius:5 },
+        { label: 'Scenario Budget', data: scenData, borderColor:'#2D5954', backgroundColor:'rgba(45,89,84,.10)',
+          fill: true, tension:.4, pointRadius:3, pointHoverRadius:5, borderWidth:2 },
+        { label: 'p25', data: p25, borderColor:'transparent', backgroundColor:'rgba(45,89,84,.06)',
+          fill: '+1', tension:.4, pointRadius:0 },
+        { label: 'p75', data: p75, borderColor:'transparent', backgroundColor:'rgba(45,89,84,.06)',
+          fill: false, tension:.4, pointRadius:0 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend:{ display:false }, tooltip:{ callbacks:{
+        label: function(ctx){ return ctx.dataset.label + ': ' + ctx.parsed.y + ' leads'; }
+      }}},
+      scales: {
+        x: { grid:{ color:'rgba(0,0,0,.04)' }, ticks:{ font:{size:11} } },
+        y: { grid:{ color:'rgba(0,0,0,.04)' }, ticks:{ font:{size:11} }, beginAtZero:true,
+          title:{ display:true, text:'Projected Leads', font:{size:10}, color:'#94a3b8' } }
+      }
+    }
+  });
+}
+
+function forecastUpsellClick() {
+  nav('video', document.getElementById('nav-video'));
+}
+
+function forecastTalkToAM() {
+  var btn = document.getElementById('forecast-am-btn');
+  if (btn) btn.disabled = true;
+  // In a real portal this would POST to the webhook
+  setTimeout(function(){
+    var conf = document.getElementById('forecast-am-confirm');
+    if (conf) conf.style.display = '';
+    if (btn) { btn.textContent = 'Request Sent ✓'; btn.style.background = '#10b981'; }
+  }, 800);
+}
+
 // ── Video Creative ──────────────────────────────────────────────────────────
 var _videoData = null;
 var _revisionTargetId = null;
@@ -3232,7 +3922,7 @@ function _renderCycleView(d) {
   var status = d.cycle_status || '';
 
   if (!d.enrolled) {
-    el.innerHTML = '<div style="text-align:center;padding:60px 0;color:var(--tm)">This property is not enrolled in the Video Creative pipeline.</div>';
+    _renderEnrollmentLanding(el);
     return;
   }
   if (!status || status === 'No Cycle') {
@@ -3374,6 +4064,114 @@ function _renderVideoCard(v, actionable) {
       '</button><div class="video-expand-content" id="rationale-' + v.variant_id + '">' + _escHtml(v.rationale) + '</div>' : '') +
     actionsHtml +
     '</div></div>';
+}
+
+function _renderEnrollmentLanding(el) {
+  el.innerHTML = [
+    '<div style="max-width:680px;margin:0 auto;text-align:center;padding:32px 0 16px">',
+    '<div style="font-size:28px;font-weight:800;color:var(--tp);margin-bottom:10px">AI-Powered Video Ads,<br>Built from Your Data</div>',
+    '<div style="font-size:14px;color:var(--tm);max-width:480px;margin:0 auto 28px;line-height:1.6">RPM generates targeted video ad creative every month using your property\'s performance data, leasing goals, and market position — no production team required.</div>',
+    '<button class="btn btn-primary" style="font-size:14px;padding:12px 28px" onclick="openEnrollModal()">Enroll Now</button>',
+    '</div>',
+
+    // How it works
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:28px 0;text-align:center">',
+    ['Data Collection','Script Generation','Video Production','Review &amp; Approve'].map(function(s,i){
+      return '<div style="background:#fff;border:1px solid var(--bd);border-radius:10px;padding:16px 12px">' +
+        '<div style="font-size:22px;font-weight:800;color:var(--bdl);margin-bottom:8px">'+(i+1)+'</div>' +
+        '<div style="font-size:12px;font-weight:700;color:var(--tp)">'+s+'</div></div>';
+    }).join(''),
+    '</div>',
+
+    // Tier table
+    '<div style="background:#fff;border:1px solid var(--bd);border-radius:12px;overflow:hidden;margin-bottom:20px">',
+    '<div style="padding:14px 18px;border-bottom:1px solid var(--bd);font-weight:700;font-size:13px;color:var(--tp)">Choose Your Tier</div>',
+    '<table style="width:100%;border-collapse:collapse;font-size:12px">',
+    '<thead><tr style="background:var(--bg)">',
+    '<th style="padding:10px 14px;text-align:left;color:var(--tm);font-weight:700;font-size:10px;text-transform:uppercase">Feature</th>',
+    '<th style="padding:10px 14px;text-align:center;color:var(--tm);font-weight:700;font-size:10px;text-transform:uppercase">Starter</th>',
+    '<th style="padding:10px 14px;text-align:center;color:var(--cu);font-weight:700;font-size:10px;text-transform:uppercase">Standard</th>',
+    '<th style="padding:10px 14px;text-align:center;color:var(--tm);font-weight:700;font-size:10px;text-transform:uppercase">Premium</th>',
+    '</tr></thead><tbody>',
+    [
+      ['Videos / month','2','4','6+'],
+      ['Platforms','Meta only','Meta + YouTube','Meta + YouTube + TikTok'],
+      ['Performance data','—','✓','✓ (advanced)'],
+      ['Script rationale','—','✓','✓'],
+      ['Revision rounds','2','4','Unlimited'],
+    ].map(function(row){
+      return '<tr style="border-top:1px solid var(--bdl)">'+
+        row.map(function(c,i){ return '<td style="padding:10px 14px;'+(i===0?'color:var(--ts)':'text-align:center;color:var(--tp)')+'">'+c+'</td>'; }).join('')+'</tr>';
+    }).join(''),
+    '</tbody></table></div>',
+  ].join('');
+}
+
+function openEnrollModal() {
+  document.getElementById('enroll-modal').classList.add('open');
+}
+function closeEnrollModal() {
+  document.getElementById('enroll-modal').classList.remove('open');
+}
+function selectEnrollTier(tier, el) {
+  document.querySelectorAll('.enroll-tier-card').forEach(function(c){c.classList.remove('selected')});
+  el.classList.add('selected');
+  el.querySelector('input[type=radio]').checked = true;
+}
+function submitEnrollment() {
+  var tier = document.querySelector('input[name=enroll-tier]:checked');
+  if (!tier) { alert('Please select a tier.'); return; }
+  var tone = document.getElementById('enroll-tone');
+  var audience = Array.from(document.querySelectorAll('input[name=enroll-audience]:checked')).map(function(c){return c.value;});
+  var goals = Array.from(document.querySelectorAll('input[name=enroll-goals]:checked')).map(function(c){return c.value;});
+  if (!tone || !tone.value) { alert('Please select a voice and tone.'); return; }
+  if (!audience.length) { alert('Please select at least one target audience.'); return; }
+  if (!goals.length)    { alert('Please select at least one marketing goal.'); return; }
+
+  var brief = {
+    voice_tone:       tone.value,
+    tone_freetext:    document.getElementById('enroll-tone-text').value,
+    taglines:         document.getElementById('enroll-taglines').value,
+    target_audience:  audience,
+    unit_mix:         Array.from(document.querySelectorAll('input[name=enroll-units]:checked')).map(function(c){return c.value;}),
+    marketing_goals:  goals,
+    differentiators:  document.getElementById('enroll-diff').value,
+    competitor_focus: document.getElementById('enroll-comp').value,
+    current_specials: document.getElementById('enroll-specials').value,
+  };
+
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var email    = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
+  var cid      = typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '';
+
+  if (!cid) {
+    closeEnrollModal();
+    document.getElementById('video-cycle-content').innerHTML =
+      '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:28px;text-align:center">' +
+      '<div style="font-size:16px;font-weight:800;color:#166534;margin-bottom:8px">You are enrolled!</div>' +
+      '<div style="font-size:13px;color:#166534">Demo mode — in production, your enrollment would be submitted and your AM notified.</div></div>';
+    return;
+  }
+
+  var submitBtn = document.getElementById('enroll-submit-btn');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…'; }
+
+  fetch(API_BASE + '/api/video-enroll', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-Portal-Email':email},
+    body: JSON.stringify({company_id:cid, contact_email:email, tier:tier.value, brief:brief})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.error) { alert('Error: ' + d.error); if (submitBtn) {submitBtn.disabled=false;submitBtn.textContent='Submit Enrollment';} return; }
+    closeEnrollModal();
+    _videoData = null;
+    document.getElementById('video-cycle-content').innerHTML =
+      '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:28px;text-align:center">' +
+      '<div style="font-size:16px;font-weight:800;color:#166534;margin-bottom:8px">You\'re enrolled in the ' + d.tier + ' plan!</div>' +
+      '<div style="font-size:13px;color:#166534">' + (d.message||'Your account manager will confirm setup within 2 business days.') + '</div></div>';
+  })
+  .catch(function(){ alert('Submission failed. Please try again.'); if (submitBtn) {submitBtn.disabled=false;submitBtn.textContent='Submit Enrollment';} });
 }
 
 function _renderHistoryView(history) {
@@ -3677,10 +4475,12 @@ function updateCustomSpend(prefix) {
   // Just keep input in sync — totals update on submit
 }
 
-// Close revision modal on backdrop click
+// Close modals on backdrop click
 document.addEventListener('click', function(e) {
-  var modal = document.getElementById('revision-modal');
-  if (modal && e.target === modal) closeRevisionModal();
+  var rev = document.getElementById('revision-modal');
+  if (rev && e.target === rev) closeRevisionModal();
+  var enr = document.getElementById('enroll-modal');
+  if (enr && e.target === enr) closeEnrollModal();
 });
 </script>
 </body>

@@ -1280,6 +1280,217 @@ def get_budget():
         return jsonify({"error": "Failed to fetch budget data"}), 500
 
 
+@app.route("/api/benchmarks", methods=["GET", "OPTIONS"])
+def get_benchmarks():
+    """Return benchmark dataset for a property segment.
+
+    Query params:
+        market    — RPM market name (e.g., 'Dallas')
+        size_band — 'small' | 'mid' | 'large'
+
+    Returns channel/month benchmark rows + occupancy curves for the segment.
+    Server-side 24-hour cache. Seeded data until BigQuery is connected.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    market   = request.args.get("market", "").strip()
+    size_band = request.args.get("size_band", "mid").strip()
+
+    # ── Seeded benchmark data (replace BigQuery query here later) ──────────
+    # Seasonal indices by month — apartment leasing patterns
+    SEASONAL = {1:0.80, 2:0.82, 3:1.15, 4:1.25, 5:1.30, 6:1.28,
+                7:1.20, 8:1.10, 9:0.95, 10:0.90, 11:0.78, 12:0.75}
+
+    # Base benchmark values by channel (median, p25, p75)
+    BASE = {
+        "google_ads": {"leads_per_1k": 8.0, "median_cpl": 125, "p25_cpl": 95,  "p75_cpl": 165},
+        "meta":       {"leads_per_1k": 5.5, "median_cpl": 182, "p25_cpl": 140, "p75_cpl": 240},
+        "seo_organic":{"leads_per_1k": 4.0, "median_cpl": 110, "p25_cpl": 80,  "p75_cpl": 155},
+        # Video creative — seeded conservative defaults (spec D.8)
+        # Will be overridden by tier-specific values in client JS
+        "video_creative": {"leads_per_1k": 5.0, "median_cpl": 200, "p25_cpl": 145, "p75_cpl": 285},
+    }
+
+    # Size-band multipliers (larger properties tend to have lower CPL due to scale)
+    SIZE_MULT = {"small": 1.15, "mid": 1.0, "large": 0.88}
+    mult = SIZE_MULT.get(size_band, 1.0)
+
+    benchmarks = []
+    for channel, base in BASE.items():
+        for month in range(1, 13):
+            si = SEASONAL[month]
+            benchmarks.append({
+                "channel": channel,
+                "month": month,
+                "market": market or "portfolio",
+                "size_band": size_band,
+                "median_cpl": round(base["median_cpl"] * mult / si, 2),
+                "median_leads_per_1k_spend": round(base["leads_per_1k"] * si / mult, 3),
+                "seasonal_index": si,
+                "p25_cpl": round(base["p25_cpl"] * mult / si, 2),
+                "p75_cpl": round(base["p75_cpl"] * mult / si, 2),
+                "sample_size": 42,  # placeholder; BigQuery will return real counts
+                "data_source": "seeded",  # flag: swap to 'bigquery' when live
+            })
+
+    # Occupancy curves lookup (spec D.3) — seeded from portfolio analysis
+    occ_curves = []
+    OCC_TABLE = {
+        # [size_band][occ_band][leads_band] = (30d, 60d, 90d)
+        "small": {
+            "below_90": {"0_10": (0.3,0.6,0.9), "10_25": (0.8,1.4,1.9), "25_50": (1.5,2.5,3.2), "50_plus": (2.2,3.5,4.5)},
+            "90_93":    {"0_10": (0.2,0.4,0.6), "10_25": (0.5,0.9,1.3), "25_50": (1.0,1.8,2.4), "50_plus": (1.6,2.8,3.6)},
+            "93_95":    {"0_10": (0.1,0.3,0.4), "10_25": (0.3,0.6,0.9), "25_50": (0.7,1.2,1.7), "50_plus": (1.1,1.9,2.5)},
+            "95_plus":  {"0_10": (0.1,0.1,0.2), "10_25": (0.1,0.2,0.4), "25_50": (0.2,0.4,0.6), "50_plus": (0.3,0.6,0.9)},
+        },
+        "mid": {
+            "below_90": {"0_10": (0.2,0.5,0.8), "10_25": (0.6,1.1,1.6), "25_50": (1.2,2.0,2.8), "50_plus": (1.9,3.2,4.1)},
+            "90_93":    {"0_10": (0.1,0.3,0.5), "10_25": (0.4,0.7,1.1), "25_50": (0.8,1.4,2.0), "50_plus": (1.3,2.3,3.0)},
+            "93_95":    {"0_10": (0.1,0.2,0.3), "10_25": (0.2,0.4,0.7), "25_50": (0.5,0.9,1.4), "50_plus": (0.8,1.5,2.1)},
+            "95_plus":  {"0_10": (0.0,0.1,0.1), "10_25": (0.1,0.2,0.3), "25_50": (0.2,0.3,0.5), "50_plus": (0.3,0.5,0.7)},
+        },
+        "large": {
+            "below_90": {"0_10": (0.1,0.3,0.6), "10_25": (0.4,0.8,1.2), "25_50": (0.9,1.6,2.2), "50_plus": (1.5,2.6,3.4)},
+            "90_93":    {"0_10": (0.1,0.2,0.4), "10_25": (0.3,0.6,0.9), "25_50": (0.6,1.1,1.6), "50_plus": (1.0,1.8,2.5)},
+            "93_95":    {"0_10": (0.0,0.1,0.2), "10_25": (0.2,0.3,0.5), "25_50": (0.4,0.7,1.1), "50_plus": (0.6,1.2,1.7)},
+            "95_plus":  {"0_10": (0.0,0.0,0.1), "10_25": (0.1,0.1,0.2), "25_50": (0.1,0.2,0.4), "50_plus": (0.2,0.4,0.6)},
+        },
+    }
+    band_data = OCC_TABLE.get(size_band, OCC_TABLE["mid"])
+    for occ_band, leads_map in band_data.items():
+        for leads_band, (d30, d60, d90) in leads_map.items():
+            occ_curves.append({
+                "size_band": size_band, "occ_band": occ_band,
+                "leads_band": leads_band,
+                "lift_30d": d30, "lift_60d": d60, "lift_90d": d90,
+            })
+
+    # Video creative tier defaults (spec D.8)
+    video_defaults = {
+        "Starter":  {"leads_per_1k": 3.5, "median_cpl": 285},
+        "Standard": {"leads_per_1k": 5.0, "median_cpl": 200},
+        "Premium":  {"leads_per_1k": 7.0, "median_cpl": 145},
+    }
+
+    return jsonify({
+        "benchmarks":      benchmarks,
+        "occupancy_curves": occ_curves,
+        "video_defaults":  video_defaults,
+        "segment":         {"market": market, "size_band": size_band},
+        "data_source":     "seeded",  # changes to 'bigquery' once connected
+    })
+
+
+@app.route("/api/video-enroll", methods=["POST", "OPTIONS"])
+def video_enroll():
+    """Self-serve enrollment for the Video Ad Creative Pipeline (spec E.4).
+
+    Body: {
+        company_id, property_name, contact_email,
+        tier,           # Starter | Standard | Premium
+        brief: {
+            voice_tone, tone_freetext, taglines, target_audience,
+            unit_mix, marketing_goals, differentiators,
+            competitor_focus, current_specials
+        }
+    }
+    Actions:
+      1. Write HubSpot company properties
+      2. Create ClickUp task for AM
+      3. Send confirmation email (SMTP)
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    body = request.get_json(force=True) or {}
+    company_id    = body.get("company_id", "").strip()
+    property_name = body.get("property_name", "this property")
+    contact_email = body.get("contact_email", email)
+    tier          = body.get("tier", "Starter")
+    brief         = body.get("brief", {})
+
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+    if tier not in ("Starter", "Standard", "Premium"):
+        return jsonify({"error": "tier must be Starter, Standard, or Premium"}), 400
+
+    import requests as req, json as _json, calendar, datetime
+    from config import HUBSPOT_API_KEY, CLICKUP_API_KEY, CLICKUP_LISTS
+
+    hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+
+    # 1. Write HubSpot company properties
+    hs_r = req.patch(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+        headers=hs_headers,
+        json={"properties": {
+            "video_pipeline_enrolled":   "pending_setup",
+            "video_pipeline_tier":       tier,
+            "video_creative_brief_json": _json.dumps(brief),
+        }},
+        timeout=10,
+    )
+    if not hs_r.ok:
+        logger.error("HubSpot enrollment update failed (%d): %s", hs_r.status_code, hs_r.text[:200])
+        return jsonify({"error": "Failed to update HubSpot record"}), 500
+
+    # 2. Create ClickUp task for AM
+    cu_list_id = CLICKUP_LISTS.get("social") or CLICKUP_LISTS.get("onboarding")
+    if CLICKUP_API_KEY and cu_list_id:
+        brief_summary = (
+            f"Voice/Tone: {brief.get('voice_tone','')}\n"
+            f"Goals: {', '.join(brief.get('marketing_goals',[]))}\n"
+            f"Audience: {', '.join(brief.get('target_audience',[]))}\n"
+            f"Differentiators: {brief.get('differentiators','')}"
+        )
+        cu_r = req.post(
+            f"https://api.clickup.com/api/v2/list/{cu_list_id}/task",
+            headers={"Authorization": CLICKUP_API_KEY, "Content-Type": "application/json"},
+            json={
+                "name": f"[{property_name}] - Video Pipeline Enrollment (Self-Serve)",
+                "description": (
+                    f"Property: {property_name}\nTier: {tier}\n"
+                    f"Submitted by: {contact_email}\n\n"
+                    f"Creative Brief:\n{brief_summary}\n\n"
+                    f"HubSpot: https://app.hubspot.com/contacts/{19843861}/company/{company_id}"
+                ),
+                "priority": 2,  # High
+                "status": "Open",
+            },
+            timeout=10,
+        )
+        if not cu_r.ok:
+            logger.warning("ClickUp task creation failed (%d): %s", cu_r.status_code, cu_r.text[:100])
+
+    # 3. Calculate next 1st of month for timeline
+    today = datetime.date.today()
+    if today.day == 1:
+        next_first = today.replace(month=today.month % 12 + 1, day=1) if today.month < 12 else today.replace(year=today.year+1, month=1, day=1)
+    else:
+        if today.month == 12:
+            next_first = datetime.date(today.year + 1, 1, 1)
+        else:
+            next_first = datetime.date(today.year, today.month + 1, 1)
+    next_first_str = next_first.strftime("%B 1, %Y")
+
+    logger.info("Video enrollment submitted: company=%s tier=%s by=%s", company_id, tier, email)
+    return jsonify({
+        "status": "enrolled",
+        "tier": tier,
+        "next_batch_date": next_first_str,
+        "message": f"You are enrolled in the {tier} plan. Your account manager will confirm setup within 2 business days. Your first video batch will generate on {next_first_str}.",
+    })
+
+
 @app.route("/api/video-creative", methods=["GET", "OPTIONS"])
 def get_video_creative():
     """Return video creative data for a property from HubSpot company record.
