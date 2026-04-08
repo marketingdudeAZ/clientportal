@@ -45,12 +45,23 @@ SKU_COLUMN_MAP = {
     "Demand_Gen":                 "demand_gen",
     "Retargeting":                "retargeting",
     "Website_Hosting":            "website_hosting",
+    "Eblast":                     "eblast",
+    "Email_Blast":                "eblast",
+    "Email_Blasts":               "eblast",
+    "Eblasts":                    "eblast",
+    "Email_Drip":                 "email_drip",
+    "Email_Drips":                "email_drip",
+    "Email_Drip_Campaign":        "email_drip",
     # Common name-based fallbacks (if hs_sku is empty)
     "SEO Package":                "seo",
     "Management Fee":             "mgmt_fee",
     "Paid Search Ads":            "search",
     "Paid Social Ads":            "paid_social",
     "Performance Max":            "pmax",
+    "Eblast":                     "eblast",
+    "Email Blast":                "eblast",
+    "Email Drip":                 "email_drip",
+    "Email Drips":                "email_drip",
 }
 
 _cache: dict = {}
@@ -163,6 +174,7 @@ def _base_row(company: dict) -> dict:
         "social_posting": None, "reputation": None, "display": None,
         "youtube": None, "ctv": None, "demand_gen": None,
         "retargeting": None, "website_hosting": None,
+        "eblast": None, "email_drip": None,
     }
 
 
@@ -188,7 +200,7 @@ def _get_managed_companies() -> list[dict]:
     for _ in range(20):  # safety: max 2,000 companies
         body = {
             "filterGroups": filter_groups,
-            "properties": ["name", "rpmmarket", "marketing_manager_email", "plestatus"],
+            "properties": ["name", "rpmmarket", "marketing_manager", "marketing_manager_email", "plestatus"],
             "limit": 100,
             "sorts": [{"propertyName": "name", "direction": "ASCENDING"}],
         }
@@ -212,7 +224,7 @@ def _get_managed_companies() -> list[dict]:
                 "id":         c["id"],
                 "name":       props.get("name", ""),
                 "market":     props.get("rpmmarket", ""),
-                "manager":    props.get("marketing_manager_email", ""),
+                "manager":    props.get("marketing_manager") or props.get("marketing_manager_email", ""),
                 "ple_status": props.get("plestatus", ""),
             })
 

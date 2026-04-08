@@ -2089,30 +2089,40 @@ select.brief-input{height:34px;cursor:pointer}
               <th style="min-width:80px">Status</th>
               <th style="min-width:110px">Market</th>
               <th style="min-width:130px">Manager</th>
-              <th style="min-width:140px">Latest Deal</th>
-              <th style="min-width:90px">Quote</th>
               <th class="s-num" style="min-width:85px">Search</th>
               <th class="s-num" style="min-width:75px">PMax</th>
               <th class="s-num" style="min-width:90px">Paid Social</th>
+              <th class="s-num" style="min-width:75px">Geofence</th>
+              <th class="s-num" style="min-width:75px">Display</th>
+              <th class="s-num" style="min-width:90px">Retargeting</th>
+              <th class="s-num" style="min-width:65px">CTV</th>
               <th class="s-num" style="min-width:65px">SEO</th>
-              <th class="s-num" style="min-width:85px">Mgmt Fee</th>
-              <th class="s-num" style="min-width:100px;color:var(--cu)">Deal Total</th>
+              <th class="s-num" style="min-width:105px">Social Content</th>
+              <th class="s-num" style="min-width:75px">Eblasts</th>
+              <th class="s-num" style="min-width:95px">Email Drips</th>
+              <th class="s-num" style="min-width:100px;color:var(--cu)">Total</th>
             </tr>
           </thead>
           <tbody id="spend-tbody">
-            <tr><td colspan="12" style="text-align:center;padding:48px;color:var(--tm);font-size:12px">
+            <tr><td colspan="16" style="text-align:center;padding:48px;color:var(--tm);font-size:12px">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px;display:block;margin-left:auto;margin-right:auto"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               Loading spend data…
             </td></tr>
           </tbody>
           <tfoot id="spend-tfoot" style="display:none">
             <tr class="spend-tfoot">
-              <td colspan="6" style="padding:10px 14px">Portfolio Total (filtered)</td>
+              <td colspan="4" style="padding:10px 14px">Portfolio Total (filtered)</td>
               <td class="s-num" id="sf-search">—</td>
               <td class="s-num" id="sf-pmax">—</td>
               <td class="s-num" id="sf-social">—</td>
+              <td class="s-num" id="sf-geofence">—</td>
+              <td class="s-num" id="sf-display">—</td>
+              <td class="s-num" id="sf-retargeting">—</td>
+              <td class="s-num" id="sf-ctv">—</td>
               <td class="s-num" id="sf-seo">—</td>
-              <td class="s-num" id="sf-mgmt">—</td>
+              <td class="s-num" id="sf-social-content">—</td>
+              <td class="s-num" id="sf-eblast">—</td>
+              <td class="s-num" id="sf-email-drip">—</td>
               <td class="s-num" id="sf-total">—</td>
             </tr>
           </tfoot>
@@ -2878,7 +2888,7 @@ function loadSpendSheet(force) {
     var msg = err && err.name === 'AbortError'
       ? 'Spend data timed out — try clicking Refresh.'
       : 'Spend data unavailable — server not connected.';
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--tm)">' + msg + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;padding:40px;color:var(--tm)">' + msg + '</td></tr>';
   });
 }
 
@@ -2909,7 +2919,7 @@ function _renderSpendSheet(rows) {
   var badge = document.getElementById('sf-count');
 
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--tm)">No results match your filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;padding:40px;color:var(--tm)">No results match your filters.</td></tr>';
     if (tfoot) tfoot.style.display = 'none';
     if (badge) { badge.textContent = '0 properties'; badge.style.display = ''; }
     return;
@@ -2925,48 +2935,51 @@ function _renderSpendSheet(rows) {
     return '<span class="ple-badge ' + cls + '">' + (status || '—') + '</span>';
   }
 
-  function qBadge(status) {
-    if (!status) return '<span style="color:var(--tm);font-size:11px">—</span>';
-    var s = (status || '').toLowerCase();
-    var cls = s === 'approved' ? 'approved' : s === 'sent' ? 'sent' : s === 'draft' ? 'draft' : 'pending';
-    return '<span class="q-badge ' + cls + '">' + _escHtml(status) + '</span>';
-  }
-
   tbody.innerHTML = rows.map(function(r) {
-    var dealLabel = r.deal_name
-      ? '<div class="s-prop-name" title="'+_escHtml(r.deal_name||'')+'">'+_escHtml(r.deal_name)+'</div>' +
-        '<div class="s-prop-sub" style="margin-top:1px">' + (r.deal_stage||'') + '</div>'
-      : '<span style="color:var(--tm);font-size:11px">No deal</span>';
-    var total = r.deal_amount
-      ? '<span style="font-weight:700;color:var(--cu)">$'+Number(r.deal_amount).toLocaleString('en-US',{minimumFractionDigits:0})+'</span>'
+    var skuTotal = (r.search||0) + (r.pmax||0) + (r.paid_social||0) +
+                   (r.geofence||0) + (r.display||0) + (r.retargeting||0) +
+                   (r.ctv||0) + (r.seo||0) + (r.social_posting||0) +
+                   (r.eblast||0) + (r.email_drip||0);
+    var total = skuTotal
+      ? '<span style="font-weight:700;color:var(--cu)">$'+Math.round(skuTotal).toLocaleString('en-US')+'</span>'
       : '—';
     return '<tr>' +
       '<td><span class="s-prop-name" title="'+_escHtml(r.property_name||'')+'">'+_escHtml(r.property_name||'—')+'</span></td>' +
       '<td>' + pleBadge(r.ple_status) + '</td>' +
       '<td>' + _escHtml(r.market||'—') + '</td>' +
       '<td style="font-size:11px;color:var(--ts)">' + _escHtml(r.marketing_manager||'—') + '</td>' +
-      '<td>' + dealLabel + '</td>' +
-      '<td>' + qBadge(r.quote_status) + '</td>' +
       '<td class="s-num">' + fmtAmt(r.search) + '</td>' +
       '<td class="s-num">' + fmtAmt(r.pmax) + '</td>' +
       '<td class="s-num">' + fmtAmt(r.paid_social) + '</td>' +
+      '<td class="s-num">' + fmtAmt(r.geofence) + '</td>' +
+      '<td class="s-num">' + fmtAmt(r.display) + '</td>' +
+      '<td class="s-num">' + fmtAmt(r.retargeting) + '</td>' +
+      '<td class="s-num">' + fmtAmt(r.ctv) + '</td>' +
       '<td class="s-num">' + fmtAmt(r.seo) + '</td>' +
-      '<td class="s-num">' + fmtAmt(r.mgmt_fee) + '</td>' +
+      '<td class="s-num">' + fmtAmt(r.social_posting) + '</td>' +
+      '<td class="s-num">' + fmtAmt(r.eblast) + '</td>' +
+      '<td class="s-num">' + fmtAmt(r.email_drip) + '</td>' +
       '<td class="s-num s-total">' + total + '</td>' +
       '</tr>';
   }).join('');
 
-  // Footer totals
+  // Footer totals — sum each SKU column, grand total = sum of all SKUs
   function sumCol(col) { return rows.reduce(function(acc, r){ return acc + (r[col] || 0); }, 0); }
   function fmtTot(n) { return n ? '$'+Math.round(n).toLocaleString('en-US') : '—'; }
-  var cols = {
+  var skuCols = ['search','pmax','paid_social','geofence','display','retargeting','ctv','seo','social_posting','eblast','email_drip'];
+  var colMap = {
     'sf-search': 'search', 'sf-pmax': 'pmax', 'sf-social': 'paid_social',
-    'sf-seo': 'seo', 'sf-mgmt': 'mgmt_fee', 'sf-total': 'deal_amount',
+    'sf-geofence': 'geofence', 'sf-display': 'display', 'sf-retargeting': 'retargeting',
+    'sf-ctv': 'ctv', 'sf-seo': 'seo', 'sf-social-content': 'social_posting',
+    'sf-eblast': 'eblast', 'sf-email-drip': 'email_drip',
   };
-  Object.keys(cols).forEach(function(id) {
+  Object.keys(colMap).forEach(function(id) {
     var el = document.getElementById(id);
-    if (el) el.textContent = fmtTot(sumCol(cols[id]));
+    if (el) el.textContent = fmtTot(sumCol(colMap[id]));
   });
+  var grandTotal = skuCols.reduce(function(acc, col){ return acc + sumCol(col); }, 0);
+  var totalEl = document.getElementById('sf-total');
+  if (totalEl) totalEl.textContent = fmtTot(grandTotal);
   if (tfoot) tfoot.style.display = '';
 
   // Count badge
