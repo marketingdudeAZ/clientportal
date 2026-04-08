@@ -55,7 +55,7 @@
 
         {# Inject portal config for JS — company ID needed for digest + approval API calls #}
       <script>
-        window.__PORTAL_API_BASE = '{{ module.api_base_url|default("") }}';
+        window.__PORTAL_API_BASE = '{{ module.api_base_url|default("https://rpm-portal-server.onrender.com") }}';
         window.__PORTAL_UUID = '{{ uuid_param }}';
         window.__PORTAL_COMPANY_ID = '{{ property.id }}';
         window.__PORTAL_PROPERTY_NAME = '{{ property.name|replace("'", "\\'") }}';
@@ -117,7 +117,7 @@
   {% set contact_role = request.contact.portal_role|default("marketing_manager") %}
 
   <script>
-    window.__PORTAL_API_BASE = '{{ module.api_base_url|default("") }}';
+    window.__PORTAL_API_BASE = '{{ module.api_base_url|default("https://rpm-portal-server.onrender.com") }}';
     window.__PORTAL_EMAIL = '{{ contact_email }}';
     window.__PORTAL_ROLE = '{{ contact_role }}';
   </script>
