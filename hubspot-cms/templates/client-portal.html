@@ -2613,8 +2613,8 @@ window.__PORTAL_CURRENT_PERF  = {};
   var occEl = document.getElementById('sb-occ-val');
   if (occEl) {
     var occStatus = window.__PORTAL_OCC_STATUS || '';
-    if (occStatus === 'Stabilized') occEl.textContent = '94%+';
-    else if (occStatus === 'Lease-Up') occEl.textContent = 'Lease-Up';
+    if (occStatus === 'Stable' || occStatus === 'Stabilized') occEl.textContent = '94%+';
+    else if (occStatus === 'Lease Up' || occStatus === 'Lease-Up') occEl.textContent = 'Lease Up';
     // real value filled in when forecast-context loads
   }
 })();
@@ -3635,7 +3635,7 @@ function _renderPeerInsights(data) {
     if (ctx.asset_class)     badges += '<span class="prop-badge asset">'+ctx.asset_class+'</span>';
     if (ctx.property_type)   badges += '<span class="prop-badge type">'+ctx.property_type+'</span>';
     if (ctx.occupancy_status) {
-      var oc = ctx.occupancy_status === 'Lease-Up' ? 'occ-leaseup' : ctx.occupancy_status === 'Stabilized' ? 'occ-stabilized' : 'occ-other';
+      var oc = (ctx.occupancy_status === 'Lease-Up' || ctx.occupancy_status === 'Lease Up') ? 'occ-leaseup' : (ctx.occupancy_status === 'Stabilized' || ctx.occupancy_status === 'Stable') ? 'occ-stabilized' : 'occ-other';
       badges += '<span class="prop-badge '+oc+'">'+ctx.occupancy_status+'</span>';
     }
     badgeEl.innerHTML = badges;

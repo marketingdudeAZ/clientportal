@@ -1429,15 +1429,15 @@ def get_forecast_context():
             "urgency": "medium",
         })
 
-    # Lease-up vs stabilized context
-    if occ_status == "Lease-Up":
+    # Lease-up vs stabilized context (HubSpot values: "Lease Up" / "Stable")
+    if occ_status in ("Lease Up", "Lease-Up"):
         insights.append({
             "type": "lease_up",
             "icon": "🚀",
             "text": "Lease-up properties typically need 2-3x the paid media investment of stabilized properties to hit velocity targets. The benchmark window to reach 93%+ is 4-6 months — budget allocation now determines how fast you get there.",
             "urgency": "high",
         })
-    elif occ_status == "Stabilized" and (this_row and (this_row.get("search") or 0) == 0 and (this_row.get("pmax") or 0) == 0):
+    elif occ_status in ("Stable", "Stabilized") and (this_row and (this_row.get("search") or 0) == 0 and (this_row.get("pmax") or 0) == 0):
         insights.append({
             "type": "stabilized_risk",
             "icon": "⚠️",
