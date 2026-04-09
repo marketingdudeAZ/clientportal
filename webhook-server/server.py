@@ -2079,45 +2079,58 @@ def get_report_data():
     cutoff = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
 
     try:
-        # Get associated engagement IDs
+        import concurrent.futures
+
+        # Fetch association IDs — cap at 30 server-side to avoid huge lists
         assoc_r = req.get(
             f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}/associations/engagements",
-            headers=hs_headers, timeout=10,
+            headers=hs_headers,
+            params={"limit": 30},
+            timeout=10,
         )
+        eng_ids = []
         if assoc_r.ok:
-            eng_ids = [item["id"] for item in assoc_r.json().get("results", [])][:30]
+            eng_ids = [item["id"] for item in assoc_r.json().get("results", [])]
 
-            for eid in eng_ids:
-                eng_r = req.get(
+        def _fetch_engagement(eid):
+            """Fetch a single engagement and return a normalized dict or None."""
+            try:
+                r = req.get(
                     f"https://api.hubapi.com/engagements/v1/engagements/{eid}",
-                    headers=hs_headers, timeout=6,
+                    headers=hs_headers,
+                    timeout=6,
                 )
-                if not eng_r.ok:
-                    continue
-                data = eng_r.json()
+                if not r.ok:
+                    return None
+                data  = r.json()
                 eng   = data.get("engagement", {})
                 meta  = data.get("metadata", {})
                 ts    = eng.get("createdAt", 0)
-                if ts:
-                    eng_date = datetime.datetime.utcfromtimestamp(ts / 1000).strftime("%Y-%m-%d")
-                    if eng_date < cutoff:
-                        continue
-                else:
-                    continue
-
+                if not ts:
+                    return None
+                eng_date = datetime.datetime.utcfromtimestamp(ts / 1000).strftime("%Y-%m-%d")
+                if eng_date < cutoff:
+                    return None
                 eng_type = eng.get("type", "").capitalize()
                 summary  = (
                     meta.get("subject") or
                     meta.get("title") or
-                    meta.get("body", "")[:120] or
+                    (meta.get("body") or "")[:120] or
                     ""
                 ).strip()
+                return {"date": eng_date, "type": eng_type, "summary": summary}
+            except Exception:
+                return None
 
-                activity.append({
-                    "date": eng_date,
-                    "type": eng_type,
-                    "summary": summary,
-                })
+        # Parallel fetch — max 10 workers, 15s wall-clock budget
+        if eng_ids:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
+                futures = {pool.submit(_fetch_engagement, eid): eid for eid in eng_ids}
+                done, _ = concurrent.futures.wait(futures, timeout=15)
+                for fut in done:
+                    result = fut.result()
+                    if result:
+                        activity.append(result)
 
         activity.sort(key=lambda x: x["date"], reverse=True)
         activity = activity[:20]
