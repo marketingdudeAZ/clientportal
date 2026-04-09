@@ -573,6 +573,39 @@ select.brief-input{height:34px;cursor:pointer}
 .sim-disclaimer{font-size:10px;color:var(--tm);margin-top:16px;line-height:1.5;padding:10px 12px;background:var(--bg);border-radius:6px;border-left:3px solid var(--bd)}
 .upsell-bar{display:flex;gap:10px;align-items:center;margin-top:16px;padding:14px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;flex-wrap:wrap}
 .upsell-bar-text{font-size:12px;color:#166534;flex:1}
+
+/* ── FOMO / Peer Insights ── */
+.prop-badges{display:flex;flex-wrap:wrap;gap:5px;padding:10px 18px;border-bottom:1px solid var(--bdl)}
+.prop-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.04em}
+.prop-badge.asset{background:rgba(200,150,78,0.12);color:#92600A;border:1px solid rgba(200,150,78,0.3)}
+.prop-badge.type{background:rgba(63,90,117,0.1);color:#374151;border:1px solid rgba(63,90,117,0.2)}
+.prop-badge.occ-leaseup{background:rgba(239,68,68,0.1);color:#991b1b;border:1px solid rgba(239,68,68,0.25)}
+.prop-badge.occ-stabilized{background:rgba(16,185,129,0.1);color:#065f46;border:1px solid rgba(16,185,129,0.25)}
+.prop-badge.occ-other{background:rgba(107,114,128,0.1);color:#4b5563;border:1px solid rgba(107,114,128,0.2)}
+.fomo-panel{background:#fff;border:1px solid var(--bd);border-radius:12px;overflow:hidden;margin-top:14px}
+.fomo-panel-hdr{padding:12px 16px;border-bottom:1px solid var(--bd);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tm);background:var(--bg)}
+.fomo-list{padding:0 16px}
+.fomo-item{display:flex;gap:10px;padding:11px 0;border-bottom:1px solid var(--bdl);align-items:flex-start}
+.fomo-item:last-child{border-bottom:none}
+.fomo-icon{font-size:15px;flex-shrink:0;margin-top:1px}
+.fomo-text{font-size:11px;color:var(--ts);line-height:1.55}
+.fomo-urgency{display:inline-block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 6px;border-radius:10px;margin-bottom:4px}
+.fomo-urgency.high{background:rgba(239,68,68,0.1);color:#991b1b}
+.fomo-urgency.medium{background:rgba(245,158,11,0.12);color:#92400e}
+.fomo-urgency.low{background:rgba(107,114,128,0.1);color:#4b5563}
+.comp-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bdl);font-size:11px}
+.comp-row:last-child{border-bottom:none}
+.comp-mkt{color:var(--ts);width:72px;flex-shrink:0;font-weight:600}
+.comp-units{color:var(--tm);font-size:10px;width:60px;flex-shrink:0}
+.comp-bar{flex:1;height:6px;border-radius:3px;background:var(--bdl);overflow:hidden}
+.comp-bar-fill{height:100%;border-radius:3px;background:var(--j);transition:width .4s ease}
+.comp-total{font-size:11px;font-weight:700;color:var(--tp);width:44px;text-align:right;flex-shrink:0}
+.mix-bar{display:flex;gap:3px;margin:8px 0 4px;height:8px}
+.mix-seg{height:100%;border-radius:2px;transition:flex .3s}
+.mix-legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.mix-legend-item{font-size:10px;color:var(--ts);display:flex;align-items:center;gap:4px}
+.mix-swatch{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+
 .beta-badge{display:inline-block;font-size:9px;font-weight:800;background:#f3e8ff;color:#7c3aed;border-radius:3px;padding:1px 5px;text-transform:uppercase;letter-spacing:.04em;vertical-align:middle;margin-left:4px}
 
 /* ── Portfolio Dashboard ── */
@@ -1651,10 +1684,14 @@ select.brief-input{height:34px;cursor:pointer}
       <!-- Current State -->
       <div class="forecast-panel" style="margin-bottom:16px">
         <div class="forecast-panel-hdr">Current State</div>
+        <div id="forecast-prop-badges" class="prop-badges" style="display:none"></div>
         <div class="forecast-panel-body" id="forecast-current-state">
           <div style="color:var(--tm);font-size:12px">Loading…</div>
         </div>
       </div>
+
+      <!-- Peer Insights (populated async from /api/forecast-context) -->
+      <div id="forecast-peer-insights" style="margin-bottom:16px"></div>
 
       <!-- Simulator Controls -->
       <div class="forecast-panel">
@@ -3419,9 +3456,10 @@ var _simBudgets     = {};      // { channel: budget }
 var _baseBudgets    = {};      // current-state budgets (read-only reference)
 var _currentPerf    = {};      // { leads, cpl, channels: {ch: {leads,spend}} }
 var _propContext    = {};      // { unit_count, market, occupancy, health_score, size_band }
+var _forecastCtx    = null;   // result from /api/forecast-context
 
 function loadForecast() {
-  if (_benchmarks) { _renderForecast(); return; }
+  if (_benchmarks) { _renderForecast(); _loadForecastContext(); return; }
   var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   var email    = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
   var cid      = typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '';
@@ -3471,6 +3509,7 @@ function loadForecast() {
     _occCurves    = d.occupancy_curves || [];
     _videoDefaults = d.video_defaults || {};
     _renderForecast();
+    _loadForecastContext();
   })
   .catch(function(){
     // Use hardcoded fallback so demo works offline
@@ -3478,8 +3517,161 @@ function loadForecast() {
     _occCurves  = [];
     _videoDefaults = {Starter:{leads_per_1k:3.5,median_cpl:285},Standard:{leads_per_1k:5.0,median_cpl:200},Premium:{leads_per_1k:7.0,median_cpl:145}};
     _renderForecast();
+    _loadForecastContext();
   });
 }
+
+// ── Peer Insights / FOMO Layer ────────────────────────────────────────────────
+
+function _loadForecastContext() {
+  var peerEl = document.getElementById('forecast-peer-insights');
+  if (!peerEl) return;
+  peerEl.innerHTML = '<div class="fomo-panel"><div class="fomo-panel-hdr">Peer Insights</div><div style="padding:14px 16px;color:var(--tm);font-size:12px">Analysing comparable properties…</div></div>';
+
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var email    = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
+  var cid      = (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '') || window.__PORTAL_COMPANY_ID || '';
+
+  if (!cid) {
+    _renderPeerInsights(_demoForecastContext());
+    return;
+  }
+
+  fetch(API_BASE + '/api/forecast-context?company_id=' + encodeURIComponent(cid), {
+    headers: {'X-Portal-Email': email}
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){ _forecastCtx = d; _renderPeerInsights(d); })
+  .catch(function(){ _renderPeerInsights(_demoForecastContext()); });
+}
+
+function _demoForecastContext() {
+  return {
+    company_context: {
+      asset_class: 'Class A',
+      property_type: 'Conventional',
+      occupancy_status: 'Stabilized',
+      market: 'Scottsdale',
+      unit_count: 320
+    },
+    comp_stats: {
+      comp_count: 7,
+      spend_percentile: 42,
+      this_total: 4800,
+      comp_avg_total: 6200,
+      this_spu: 15.0
+    },
+    fomo_insights: [
+      {type:'spend_rank', icon:'📊', urgency:'high',   text:'Your marketing spend per unit puts you in the bottom 42% of RPM-managed properties. Properties spending more are benchmarked at significantly higher lead volumes.'},
+      {type:'comp_gap',   icon:'🏆', urgency:'high',   text:'7 comparable properties in similar markets are spending $1,400/mo more on average. At benchmark rates, that gap translates to roughly +8 leads/month.'},
+      {type:'seasonal',   icon:'📅', urgency:'medium', text:'April is historically 25% above average for lead volume. Properties that increased paid media ahead of peak are outpacing those that waited.'},
+      {type:'video_adoption', icon:'🎬', urgency:'medium', text:'71% of comparable Class A properties have added video creative or CTV. Early adopters are reporting a 12–18% drop in blended CPL as video warms retargeting audiences.'},
+      {type:'asset_class', icon:'✨', urgency:'low',   text:'Class A properties consistently see stronger ROI from video and lifestyle-focused Meta campaigns — renters are brand-comparing, not just price-shopping.'}
+    ],
+    top_comps: [
+      {market:'Austin',  unit_band:'~300 units', total_spend:7200, search:2800, seo:1300, social:1800, video:1300},
+      {market:'Denver',  unit_band:'~350 units', total_spend:6500, search:2500, seo:1000, social:1500, video:1500},
+      {market:'Phoenix', unit_band:'~300 units', total_spend:5800, search:2200, seo:800,  social:1800, video:1000},
+    ]
+  };
+}
+
+function _renderPeerInsights(data) {
+  var peerEl = document.getElementById('forecast-peer-insights');
+  if (!peerEl || !data) return;
+
+  var ctx     = data.company_context || {};
+  var stats   = data.comp_stats     || {};
+  var insights= data.fomo_insights  || [];
+  var comps   = data.top_comps      || [];
+
+  // ── Property badges (asset class / type / occupancy) ──
+  var badgeEl = document.getElementById('forecast-prop-badges');
+  if (badgeEl) {
+    var badges = '';
+    if (ctx.asset_class)     badges += '<span class="prop-badge asset">'+ctx.asset_class+'</span>';
+    if (ctx.property_type)   badges += '<span class="prop-badge type">'+ctx.property_type+'</span>';
+    if (ctx.occupancy_status) {
+      var oc = ctx.occupancy_status === 'Lease-Up' ? 'occ-leaseup' : ctx.occupancy_status === 'Stabilized' ? 'occ-stabilized' : 'occ-other';
+      badges += '<span class="prop-badge '+oc+'">'+ctx.occupancy_status+'</span>';
+    }
+    badgeEl.innerHTML = badges;
+    badgeEl.style.display = badges ? 'flex' : 'none';
+  }
+
+  var html = '';
+
+  // ── FOMO insight cards ──
+  if (insights.length) {
+    var compLabel = stats.comp_count ? ' <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">— '+stats.comp_count+' comparable properties</span>' : '';
+    html += '<div class="fomo-panel">';
+    html += '<div class="fomo-panel-hdr">Peer Insights'+compLabel+'</div>';
+    if (stats.spend_percentile) {
+      var pctCls = stats.spend_percentile < 40 ? '#ef4444' : stats.spend_percentile < 60 ? '#f59e0b' : '#10b981';
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:#f8fafc;border-bottom:1px solid var(--bdl)">';
+      html += '<div style="font-size:22px;font-weight:800;color:'+pctCls+'">'+stats.spend_percentile+'<span style="font-size:12px">th</span></div>';
+      html += '<div style="font-size:11px;color:var(--ts)">Portfolio spend percentile<br><span style="color:var(--tm)">$'+Number(stats.this_spu||0).toFixed(2)+'/unit vs. $'+Number((stats.comp_avg_total||0)/(stats.comp_count||1)/(_propContext.unit_count||320)).toFixed(2)+' comp avg</span></div>';
+      html += '</div>';
+    }
+    html += '<div class="fomo-list">';
+    insights.forEach(function(ins) {
+      html += '<div class="fomo-item">';
+      html += '<div class="fomo-icon">'+ins.icon+'</div>';
+      html += '<div class="fomo-text"><span class="fomo-urgency '+ins.urgency+'">'+ins.urgency+'</span><br>'+ins.text+'</div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  // ── Peer spend mix comparison ──
+  if (comps.length) {
+    var maxSpend = Math.max.apply(null, comps.map(function(c){ return c.total_spend; }));
+    var COLORS = {Search:'#53606C', SEO:'#C8964E', Social:'#8FA68E', Video:'#7B9EC9'};
+
+    html += '<div class="fomo-panel" style="margin-top:12px">';
+    html += '<div class="fomo-panel-hdr">Peer Spend Mix <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">— anonymised comparables</span></div>';
+    html += '<div style="padding:8px 16px 4px">';
+
+    // Bar rows per comp
+    comps.forEach(function(c) {
+      var pct = Math.round(c.total_spend / maxSpend * 100);
+      html += '<div class="comp-row">';
+      html += '<div class="comp-mkt">'+c.market+'</div>';
+      html += '<div class="comp-units">'+c.unit_band+'</div>';
+      html += '<div class="comp-bar"><div class="comp-bar-fill" style="width:'+pct+'%"></div></div>';
+      html += '<div class="comp-total">$'+Math.round(c.total_spend/1000)+'k</div>';
+      html += '</div>';
+    });
+
+    // Stacked channel-mix bar for top comp
+    var top = comps[0];
+    if (top) {
+      var fields = [{l:'Search',v:top.search},{l:'SEO',v:top.seo},{l:'Social',v:top.social},{l:'Video',v:top.video}];
+      var totalMix = fields.reduce(function(a,f){return a+(f.v||0);},0);
+      if (totalMix > 0) {
+        html += '<div style="padding:10px 0 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm)">Top Comp Channel Mix</div>';
+        html += '<div class="mix-bar">';
+        fields.forEach(function(f) {
+          if (!f.v) return;
+          var flex = Math.round(f.v/totalMix*100);
+          html += '<div class="mix-seg" title="'+f.l+': $'+Number(f.v).toLocaleString()+'" style="flex:'+flex+';background:'+(COLORS[f.l]||'#ccc')+'"></div>';
+        });
+        html += '</div>';
+        html += '<div class="mix-legend">';
+        fields.forEach(function(f) {
+          if (!f.v) return;
+          html += '<div class="mix-legend-item"><div class="mix-swatch" style="background:'+(COLORS[f.l]||'#ccc')+'"></div>'+f.l+' $'+Number(f.v).toLocaleString()+'</div>';
+        });
+        html += '</div>';
+      }
+    }
+    html += '</div></div>';
+  }
+
+  peerEl.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function _buildFallbackBenchmarks() {
   var SI = {1:.80,2:.82,3:1.15,4:1.25,5:1.30,6:1.28,7:1.20,8:1.10,9:.95,10:.90,11:.78,12:.75};

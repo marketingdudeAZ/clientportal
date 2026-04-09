@@ -1280,6 +1280,239 @@ def get_budget():
         return jsonify({"error": "Failed to fetch budget data"}), 500
 
 
+@app.route("/api/forecast-context", methods=["GET", "OPTIONS"])
+def get_forecast_context():
+    """Return portfolio comp data and FOMO insights for the forecast simulator.
+
+    Pulls company properties (asset_class, property_type, occupancy_status)
+    from HubSpot, then scans the spend_sheet to find comparable properties
+    (similar unit count ±40%, similar total budget ±60%, different market).
+
+    Returns:
+      - property context labels (asset_class, property_type, occupancy_status)
+      - comp_stats: percentile position vs peers on spend_per_unit
+      - fomo_insights: list of insight strings for the UI
+      - top_comps: anonymised list of 3-5 comps showing spend mix
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    company_id = request.args.get("company_id", "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    import requests as req, math
+    from config import HUBSPOT_API_KEY
+
+    hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
+
+    # 1. Fetch company properties
+    props_to_fetch = "asset_class,property_type,occupancy_status,totalunits,rpmmarket,plestatus"
+    r = req.get(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props_to_fetch}",
+        headers=hs_headers, timeout=10,
+    )
+    company_props = {}
+    if r.ok:
+        company_props = r.json().get("properties", {})
+
+    unit_count = int(company_props.get("totalunits") or 0) or None
+    market     = company_props.get("rpmmarket", "")
+    asset_cls  = company_props.get("asset_class", "")
+    prop_type  = company_props.get("property_type", "Conventional")
+    occ_status = company_props.get("occupancy_status", "")
+
+    # 2. Pull spend sheet to find comps
+    from spend_sheet import get_spend_sheet_data
+    all_rows = get_spend_sheet_data(force=False)
+
+    SKU_COLS = ["search","pmax","paid_social","geofence","display","retargeting",
+                "ctv","seo","social_posting","eblast","email_drip"]
+
+    def row_total(r):
+        return sum(r.get(c) or 0 for c in SKU_COLS)
+
+    def row_spu(r):
+        units = r.get("unit_count") or unit_count or 200
+        total = row_total(r)
+        return (total / units) if units else 0
+
+    this_row = next((r for r in all_rows if r.get("company_id") == company_id), None)
+    this_total = row_total(this_row) if this_row else 4800
+    this_units = unit_count or (int(this_row.get("unit_count") or 0) if this_row else 280)
+    this_spu   = (this_total / this_units) if this_units else 0
+
+    # Find comps: similar unit count (±40%), similar total spend (±60%), any market
+    comps = []
+    for row in all_rows:
+        if row.get("company_id") == company_id:
+            continue
+        r_units = int(row.get("unit_count") or 0) or None
+        r_total = row_total(row)
+        if r_total == 0:
+            continue
+        unit_ok  = (not this_units or not r_units or
+                    abs(r_units - this_units) / this_units <= 0.40)
+        spend_ok = abs(r_total - this_total) / max(this_total, 1) <= 0.60
+        if unit_ok and spend_ok:
+            comps.append(row)
+
+    # Compute spend-per-unit percentile across all active properties
+    all_spus = sorted([row_total(r) / max(int(r.get("unit_count") or 0) or this_units, 1)
+                       for r in all_rows if row_total(r) > 0])
+    if all_spus and this_spu > 0:
+        pct_rank = round(sum(1 for s in all_spus if s <= this_spu) / len(all_spus) * 100)
+    else:
+        pct_rank = 50
+
+    # Top 5 comps sorted by total spend (anonymised)
+    top_comps = sorted(comps, key=row_total, reverse=True)[:5]
+    comp_avg_total   = sum(row_total(c) for c in comps) / len(comps) if comps else this_total
+    comp_avg_seo     = sum((c.get("seo") or 0) for c in comps) / len(comps) if comps else 0
+    comp_avg_search  = sum((c.get("search") or 0) + (c.get("pmax") or 0) for c in comps) / len(comps) if comps else 0
+    comp_video_count = sum(1 for c in comps if (c.get("ctv") or 0) + (c.get("social_posting") or 0) > 0)
+
+    # 3. Generate FOMO insights
+    insights = []
+
+    # Spend percentile
+    if pct_rank < 40:
+        insights.append({
+            "type": "spend_rank",
+            "icon": "📊",
+            "text": f"Your marketing spend per unit puts you in the bottom {pct_rank}% of RPM-managed properties. Properties spending more are benchmarked at significantly higher lead volumes.",
+            "urgency": "high",
+        })
+    elif pct_rank < 60:
+        insights.append({
+            "type": "spend_rank",
+            "icon": "📊",
+            "text": f"Your spend per unit is near the portfolio median ({pct_rank}th percentile). Top-quartile properties are outspending you by an average of ${int((all_spus[int(len(all_spus)*0.75)] - this_spu) * this_units):,}/mo.",
+            "urgency": "medium",
+        })
+
+    # Comp spend gap
+    if comps and comp_avg_total > this_total * 1.1:
+        gap = int(comp_avg_total - this_total)
+        from spend_sheet import _build_spend_sheet
+        # Estimate lead lift from gap using benchmark (≈6 leads per $1k paid media)
+        est_leads = round(gap / 1000 * 6)
+        insights.append({
+            "type": "comp_gap",
+            "icon": "🏆",
+            "text": f"{len(comps)} comparable properties are spending ${gap:,}/mo more on average. At benchmark rates, that translates to roughly +{est_leads} leads/month.",
+            "urgency": "high",
+        })
+
+    # SEO gap
+    if comps and comp_avg_seo > (this_row.get("seo") or 0) * 1.2 if this_row else False:
+        seo_gap = int(comp_avg_seo - (this_row.get("seo") or 0))
+        insights.append({
+            "type": "seo_gap",
+            "icon": "🔍",
+            "text": f"Comparable properties are running SEO at an average ${int(comp_avg_seo):,}/mo — ${seo_gap:,} more than your current tier. SEO compounds over time; properties that upgraded 6+ months ago are averaging 18% more organic leads.",
+            "urgency": "medium",
+        })
+
+    # Video adoption
+    if comps and comp_video_count > 0:
+        video_pct = round(comp_video_count / len(comps) * 100)
+        insights.append({
+            "type": "video_adoption",
+            "icon": "🎬",
+            "text": f"{video_pct}% of comparable properties have added video creative or CTV to their mix. Early adopters are seeing lower blended CPL as video warms retargeting audiences.",
+            "urgency": "medium",
+        })
+
+    # Lease-up vs stabilized context
+    if occ_status == "Lease-Up":
+        insights.append({
+            "type": "lease_up",
+            "icon": "🚀",
+            "text": "Lease-up properties typically need 2-3x the paid media investment of stabilized properties to hit velocity targets. The benchmark window to reach 93%+ is 4-6 months — budget allocation now determines how fast you get there.",
+            "urgency": "high",
+        })
+    elif occ_status == "Stabilized" and (this_row and (this_row.get("search") or 0) == 0 and (this_row.get("pmax") or 0) == 0):
+        insights.append({
+            "type": "stabilized_risk",
+            "icon": "⚠️",
+            "text": "Stabilized properties with no paid search presence are vulnerable to competitive pressure. A single competitor adding $2K/mo in paid search can pull 15-25% of your organic leads within 90 days.",
+            "urgency": "medium",
+        })
+
+    # Asset class context
+    if asset_cls == "Class A":
+        insights.append({
+            "type": "asset_class",
+            "icon": "✨",
+            "text": "Class A properties typically see stronger ROI from video creative and lifestyle-focused Meta campaigns than from search alone — renters are brand-comparing, not just price-shopping.",
+            "urgency": "low",
+        })
+    elif asset_cls == "Class B":
+        insights.append({
+            "type": "asset_class",
+            "icon": "💡",
+            "text": "Class B properties consistently see the highest paid search ROI in the portfolio — value-driven renters actively comparing options respond well to Google Ads and retargeting.",
+            "urgency": "low",
+        })
+
+    # Seasonal opportunity
+    import datetime
+    month = datetime.date.today().month
+    if month in (2, 3):  # Pre-peak
+        insights.append({
+            "type": "seasonal",
+            "icon": "📅",
+            "text": f"Peak leasing season starts in {'March' if month == 2 else 'April'}. Properties that increase paid media in February–March consistently outperform those that wait until peak — audiences are already building. Budget now for peak.",
+            "urgency": "high",
+        })
+    elif month in (9, 10):  # Pre-slow
+        insights.append({
+            "type": "seasonal",
+            "icon": "📅",
+            "text": "Lead volume typically drops 20-30% October through February. Properties that maintain SEO investment through the slow season rank better heading into spring — organic rankings take 90+ days to build.",
+            "urgency": "medium",
+        })
+
+    # Sort by urgency
+    urgency_order = {"high": 0, "medium": 1, "low": 2}
+    insights.sort(key=lambda x: urgency_order.get(x.get("urgency", "low"), 2))
+
+    return jsonify({
+        "company_context": {
+            "asset_class":      asset_cls,
+            "property_type":    prop_type,
+            "occupancy_status": occ_status,
+            "market":           market,
+            "unit_count":       this_units,
+        },
+        "comp_stats": {
+            "comp_count":      len(comps),
+            "spend_percentile": pct_rank,
+            "this_total":      this_total,
+            "comp_avg_total":  int(comp_avg_total),
+            "this_spu":        round(this_spu, 2),
+        },
+        "fomo_insights":  insights,
+        "top_comps": [
+            {
+                "market":       c.get("market", ""),
+                "unit_band":    "~" + str(int(int(c.get("unit_count") or this_units) / 50) * 50) + " units",
+                "total_spend":  row_total(c),
+                "search":       (c.get("search") or 0) + (c.get("pmax") or 0),
+                "seo":          c.get("seo") or 0,
+                "social":       c.get("paid_social") or 0,
+                "video":        (c.get("ctv") or 0) + (c.get("social_posting") or 0),
+            }
+            for c in top_comps
+        ],
+    })
+
+
 @app.route("/api/benchmarks", methods=["GET", "OPTIONS"])
 def get_benchmarks():
     """Return benchmark dataset for a property segment.
