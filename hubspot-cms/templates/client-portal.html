@@ -794,13 +794,13 @@ select.brief-input{height:34px;cursor:pointer}
 <!-- ── OVERVIEW ── -->
 <section id="section-overview" class="section active">
   <div class="sec-topbar">
-    <div><div class="sec-title">Overview</div><div class="sec-sub">The Quincy at Kierland · March 2026</div></div>
+    <div><div class="sec-title">Overview</div><div class="sec-sub" id="overview-sub">Loading…</div></div>
     <div class="sec-actions">
       <button class="btn btn-secondary btn-sm" onclick="nav('activity',document.querySelector('[onclick*=activity]'))">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         Activity Log
       </button>
-      <button class="btn btn-primary btn-sm" onclick="nav('recommendations',document.querySelector('[onclick*=recommendations]'))">
+      <button class="btn btn-primary btn-sm" id="btn-pending-recs" onclick="nav('recommendations',document.querySelector('[onclick*=recommendations]'))">
         2 Pending Recs
       </button>
     </div>
@@ -808,19 +808,19 @@ select.brief-input{height:34px;cursor:pointer}
 
   <div class="kpi-row">
     <div class="kpi">
-      <div class="kpi-icon" style="background:rgba(212,145,10,0.1)">
+      <div class="kpi-icon" id="kpi-health-icon" style="background:rgba(212,145,10,0.1)">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4910A" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
       </div>
-      <div class="kpi-v" style="color:#D4910A">72</div>
+      <div class="kpi-v" id="kpi-health-score" style="color:#D4910A">—</div>
       <div class="kpi-l">Health Score</div>
-      <div class="kpi-delta down">↓ 4 pts from Feb · Yellow</div>
-      <div class="kpi-bar" style="background:linear-gradient(90deg,#D4910A,#F5A623)"></div>
+      <div class="kpi-delta down" id="kpi-health-delta">Loading…</div>
+      <div class="kpi-bar" id="kpi-health-bar" style="background:linear-gradient(90deg,#D4910A,#F5A623)"></div>
     </div>
     <div class="kpi">
       <div class="kpi-icon" style="background:#FEF9C3">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#854D0E" stroke-width="2"><path d="M12 2a7 7 0 017 7c0 3-1.7 5.6-4.3 6.8V18H9.3v-2.2C6.7 14.6 5 12 5 9a7 7 0 017-7z"/><path d="M9 21h6"/></svg>
       </div>
-      <div class="kpi-v">2</div>
+      <div class="kpi-v" id="kpi-recs-count">—</div>
       <div class="kpi-l">Open Recs</div>
       <div class="kpi-delta warn">Awaiting your approval</div>
       <div class="kpi-bar" style="background:linear-gradient(90deg,#D4910A,#FDE68A)"></div>
@@ -829,16 +829,16 @@ select.brief-input{height:34px;cursor:pointer}
       <div class="kpi-icon" style="background:#DBEAFE">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       </div>
-      <div class="kpi-v">3</div>
+      <div class="kpi-v" id="kpi-tickets-count">—</div>
       <div class="kpi-l">AM Tickets</div>
-      <div class="kpi-delta warn">3 open · 1 in progress</div>
+      <div class="kpi-delta warn" id="kpi-tickets-delta">Loading…</div>
       <div class="kpi-bar" style="background:linear-gradient(90deg,#3B82F6,#93C5FD)"></div>
     </div>
     <div class="kpi">
       <div class="kpi-icon" style="background:var(--cug)">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C8964E" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
       </div>
-      <div class="kpi-v" style="font-size:22px">$5,390</div>
+      <div class="kpi-v" id="kpi-spend" style="font-size:22px">—</div>
       <div class="kpi-l">Monthly Spend</div>
       <div class="kpi-delta up">All enrolled services</div>
       <div class="kpi-bar" style="background:linear-gradient(90deg,var(--cu),var(--cul))"></div>
@@ -847,51 +847,42 @@ select.brief-input{height:34px;cursor:pointer}
 
   <!-- Leasing Health Row -->
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">
-    <div class="kpi" style="border-top:3px solid var(--sage)">
+    <div class="kpi" id="kpi-occ-card" style="border-top:3px solid var(--sage)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--sage)">Occupancy</div>
-        <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:rgba(143,166,142,0.12);color:var(--sage)">ABOVE SUB</span>
+        <span id="kpi-occ-badge" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:rgba(143,166,142,0.12);color:var(--sage)">—</span>
       </div>
-      <div class="kpi-v" style="font-size:32px;color:var(--tp)">93.2<span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
-      <div class="kpi-l" style="margin-top:4px">Physical occupancy · Mar 2026</div>
-      <div class="kpi-delta up" style="margin-top:6px">↑ +0.4pts from Feb · Sub avg 91.8%</div>
+      <div class="kpi-v" style="font-size:32px;color:var(--tp)"><span id="kpi-occ-value">—</span><span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
+      <div class="kpi-l" style="margin-top:4px" id="kpi-occ-label">Physical occupancy</div>
+      <div class="kpi-delta up" style="margin-top:6px" id="kpi-occ-delta">Loading…</div>
       <div class="kpi-bar" style="background:linear-gradient(90deg,var(--sage),#A8C4A7)"></div>
     </div>
-    <div class="kpi" style="border-top:3px solid var(--amb)">
+    <div class="kpi" id="kpi-atr-card" style="border-top:3px solid var(--amb)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--amb)">ATR</div>
-        <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:rgba(212,145,10,0.12);color:var(--amb)">WATCH</span>
+        <span id="kpi-atr-badge" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:rgba(212,145,10,0.12);color:var(--amb)">—</span>
       </div>
-      <div class="kpi-v" style="font-size:32px;color:var(--tp)">8.4<span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
+      <div class="kpi-v" style="font-size:32px;color:var(--tp)"><span id="kpi-atr-value">—</span><span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
       <div class="kpi-l" style="margin-top:4px">Available to rent · lower is better</div>
-      <div class="kpi-delta down" style="margin-top:6px">↑ +1.2pts from Feb · Target ≤ 5%</div>
+      <div class="kpi-delta down" style="margin-top:6px" id="kpi-atr-delta">Loading…</div>
       <div class="kpi-bar" style="background:linear-gradient(90deg,var(--amb),#F5C842)"></div>
     </div>
     <div class="kpi" style="border-top:3px solid #9CA3AF">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--ts)">120-Day Lease Trend</div>
-        <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:#F3F4F6;color:var(--ts)">EXPIRING</span>
+        <span id="kpi-trend-badge" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:#F3F4F6;color:var(--ts)">—</span>
       </div>
-      <div class="kpi-v" style="font-size:32px;color:var(--tp)">34<span style="font-size:14px;font-weight:600;color:var(--ts);margin-left:4px">leases</span></div>
+      <div class="kpi-v" style="font-size:32px;color:var(--tp)"><span id="kpi-trend-value">—</span><span style="font-size:14px;font-weight:600;color:var(--ts);margin-left:4px">leases</span></div>
       <div class="kpi-l" style="margin-top:4px">Renewals + new leases needed · 120d window</div>
-      <div class="kpi-delta warn" style="margin-top:6px">↓ 6 from prior period · renewal focus needed</div>
+      <div class="kpi-delta warn" style="margin-top:6px" id="kpi-trend-delta">Loading…</div>
       <div class="kpi-bar" style="background:linear-gradient(90deg,#9CA3AF,#D1D5DB)"></div>
     </div>
   </div><!-- /leasing-row -->
 
   <div class="three-col">
     <div class="card card-p digest-card">
-      <span class="digest-label">✦ AI-curated · March 2026</span>
-      <div class="digest-text">
-        <strong>What changed this month</strong>
-        Overall score dropped 4 points to 72. The biggest shift was in Experience, which fell 8 points to 67 — the main area needing attention this month.
-        <strong>What is working</strong>
-        Market position holds strong at 78. SEO organic traffic is up 12% following the content calendar update. Paid search impression share has been competitive in the Scottsdale submarket.
-        <strong>What needs your input</strong>
-        Two recommendations are waiting for your approval — one on reputation management and one on paid search budget ahead of peak leasing season.
-        <strong>What we are handling</strong>
-        SEO and social programs are running on schedule. The March local pin report has been delivered. No action needed from you on these items.
-      </div>
+      <span class="digest-label" id="digest-label">✦ AI-curated</span>
+      <div class="digest-text" id="digest-text" style="color:var(--tm);font-style:italic">Loading your property summary…</div>
     </div>
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card card-p-sm">
@@ -899,19 +890,19 @@ select.brief-input{height:34px;cursor:pointer}
         <div style="display:flex;flex-direction:column;gap:8px">
           <div class="qa-item" onclick="nav('recommendations',document.querySelector('[onclick*=recommendations]'))">
             <div class="qa-icon" style="background:#FEF9C3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#854D0E" stroke-width="2"><path d="M12 2a7 7 0 017 7c0 3-1.7 5.6-4.3 6.8V18H9.3v-2.2C6.7 14.6 5 12 5 9a7 7 0 017-7z"/><path d="M9 21h6"/></svg></div>
-            <div><div class="qa-text">Review Recommendations</div><div class="qa-sub">2 pending approvals</div></div>
+            <div><div class="qa-text">Review Recommendations</div><div class="qa-sub" id="qa-recs-sub">Loading…</div></div>
           </div>
           <div class="qa-item" onclick="nav('performance',document.querySelector('[onclick*=performance]'))">
             <div class="qa-icon" style="background:var(--ml)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#53606C" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
-            <div><div class="qa-text">View Performance Report</div><div class="qa-sub">Red Light · March 2026</div></div>
+            <div><div class="qa-text">View Performance Report</div><div class="qa-sub" id="qa-perf-sub">Red Light Report</div></div>
           </div>
           <div class="qa-item" onclick="nav('services',document.querySelector('[onclick*=services]'))">
             <div class="qa-icon" style="background:var(--cug)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8964E" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg></div>
-            <div><div class="qa-text">Manage Services</div><div class="qa-sub">Configure & self-checkout</div></div>
+            <div><div class="qa-text">Manage Services</div><div class="qa-sub">Configure &amp; self-checkout</div></div>
           </div>
           <div class="qa-item" onclick="nav('tickets',document.querySelector('[onclick*=tickets]'))">
             <div class="qa-icon" style="background:#DBEAFE"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
-            <div><div class="qa-text">AM Tickets</div><div class="qa-sub">3 open items</div></div>
+            <div><div class="qa-text">AM Tickets</div><div class="qa-sub" id="qa-tickets-sub">Loading…</div></div>
           </div>
         </div>
       </div>
@@ -920,19 +911,8 @@ select.brief-input{height:34px;cursor:pointer}
           <div style="font-size:12px;font-weight:700;color:var(--jd);text-transform:uppercase;letter-spacing:.06em">Recent Activity</div>
           <span style="font-size:11px;color:var(--cu);cursor:pointer;font-weight:600" onclick="nav('activity',document.querySelector('[onclick*=activity]'))">View all →</span>
         </div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <div style="display:flex;align-items:flex-start;gap:8px;font-size:12px">
-            <div style="width:7px;height:7px;border-radius:50%;background:var(--sage);flex-shrink:0;margin-top:4px"></div>
-            <div><div style="font-weight:600;color:var(--jd)">Rec approved: Review response rate</div><div style="color:var(--tm);font-size:11px;margin-top:2px">Today · Deal created</div></div>
-          </div>
-          <div style="display:flex;align-items:flex-start;gap:8px;font-size:12px">
-            <div style="width:7px;height:7px;border-radius:50%;background:var(--j);flex-shrink:0;margin-top:4px"></div>
-            <div><div style="font-weight:600;color:var(--jd)">Red Light Report generated</div><div style="color:var(--tm);font-size:11px;margin-top:2px">Mar 15 · YELLOW (72)</div></div>
-          </div>
-          <div style="display:flex;align-items:flex-start;gap:8px;font-size:12px">
-            <div style="width:7px;height:7px;border-radius:50%;background:var(--cu);flex-shrink:0;margin-top:4px"></div>
-            <div><div style="font-weight:600;color:var(--jd)">SEO Local Pin Report uploaded</div><div style="color:var(--tm);font-size:11px;margin-top:2px">Mar 15</div></div>
-          </div>
+        <div id="overview-recent-activity" style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:12px;color:var(--tm);font-style:italic">Loading…</div>
         </div>
       </div>
     </div>
@@ -2216,8 +2196,10 @@ select.brief-input{height:34px;cursor:pointer}
   </div>
 
   <div class="timeline" id="activity-timeline">
-    <div class="tl-group" data-cat="portal approval deal">
-      <div class="tl-date">March 29, 2026</div>
+    <!-- Dynamic items prepended here by loadActivity() -->
+    <div id="activity-loading" style="padding:20px;text-align:center;color:var(--tm);font-size:13px;font-style:italic">Loading activity…</div>
+    <div class="tl-group" data-cat="portal approval deal" id="tl-session-group">
+      <div class="tl-date">Today</div>
       <div class="tl-item" data-cat="portal">
         <div class="tl-dot portal"></div>
         <div class="tl-content"><div class="tl-text">You viewed the client portal</div><div class="tl-meta"><span class="tl-time">2:34 PM</span><span class="tl-tag portal">Portal</span></div></div>
@@ -2307,13 +2289,13 @@ select.brief-input{height:34px;cursor:pointer}
 
   <!-- KPI row -->
   <div class="dash-kpi-row">
-    <div class="dash-kpi"><div class="dash-kpi-v">12</div><div class="dash-kpi-l">Properties</div></div>
-    <div class="dash-kpi"><div class="dash-kpi-v">3,840</div><div class="dash-kpi-l">Total Units</div></div>
-    <div class="dash-kpi"><div class="dash-kpi-v" style="color:var(--amb)">74</div><div class="dash-kpi-l">Avg Health</div></div>
-    <div class="dash-kpi"><div class="dash-kpi-v" style="font-size:20px">$64,680</div><div class="dash-kpi-l">Monthly Spend</div></div>
+    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-count">—</div><div class="dash-kpi-l">Properties</div></div>
+    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-units">—</div><div class="dash-kpi-l">Total Units</div></div>
+    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-health" style="color:var(--amb)">—</div><div class="dash-kpi-l">Avg Health</div></div>
+    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-spend" style="font-size:20px">—</div><div class="dash-kpi-l">Monthly Spend</div></div>
     <div class="dash-kpi">
-      <div style="display:flex;justify-content:center;gap:8px;margin-bottom:4px">
-        <span class="mflag r">2 RED</span><span class="mflag y">5 YLW</span><span class="mflag g">5 GRN</span>
+      <div style="display:flex;justify-content:center;gap:8px;margin-bottom:4px" id="port-kpi-flags">
+        <span class="mflag r">— RED</span><span class="mflag y">— YLW</span><span class="mflag g">— GRN</span>
       </div>
       <div class="dash-kpi-l">Health Breakdown</div>
     </div>
@@ -2338,14 +2320,8 @@ select.brief-input{height:34px;cursor:pointer}
       </div>
       <table class="ptable">
         <thead><tr><th>Property</th><th>Market</th><th style="text-align:right">Units</th><th style="text-align:right">Health</th><th style="text-align:right">Mgmt</th><th style="text-align:right">Ad Spend</th><th style="text-align:right">Flags</th></tr></thead>
-        <tbody>
-          <tr onclick="switchDemo('property',document.querySelector('.demo-bar button'))"><td><div class="p-name">The Quincy at Kierland</div><div class="p-loc">Scottsdale, AZ</div></td><td>Scottsdale</td><td style="text-align:right">320</td><td style="text-align:right"><span class="hdot w"></span>72</td><td style="text-align:right">$2,840</td><td style="text-align:right;color:var(--cu);font-weight:700">$3,200</td><td style="text-align:right"><span class="fcount has">2</span></td></tr>
-          <tr><td><div class="p-name">Orland Ridge Towns</div><div class="p-loc">Orland Park, IL</div></td><td>Chicago</td><td style="text-align:right">294</td><td style="text-align:right"><span class="hdot h"></span>84</td><td style="text-align:right">$3,645</td><td style="text-align:right;color:var(--cu);font-weight:700">$2,000</td><td style="text-align:right"><span class="fcount none">0</span></td></tr>
-          <tr><td><div class="p-name">The Ravine</div><div class="p-loc">Denver, CO</div></td><td>Denver</td><td style="text-align:right">210</td><td style="text-align:right"><span class="hdot c"></span>58</td><td style="text-align:right">$2,600</td><td style="text-align:right;color:var(--cu);font-weight:700">$1,500</td><td style="text-align:right"><span class="fcount has">3</span></td></tr>
-          <tr><td><div class="p-name">Maverick on the Green</div><div class="p-loc">Austin, TX</div></td><td>Austin</td><td style="text-align:right">380</td><td style="text-align:right"><span class="hdot h"></span>81</td><td style="text-align:right">$3,700</td><td style="text-align:right;color:var(--cu);font-weight:700">$2,500</td><td style="text-align:right"><span class="fcount has">1</span></td></tr>
-          <tr><td><div class="p-name">The Farmhouse</div><div class="p-loc">Charlotte, NC</div></td><td>Charlotte</td><td style="text-align:right">178</td><td style="text-align:right"><span class="hdot w"></span>69</td><td style="text-align:right">$2,200</td><td style="text-align:right;color:var(--cu);font-weight:700">$1,600</td><td style="text-align:right"><span class="fcount has">2</span></td></tr>
-          <tr><td><div class="p-name">Parkside at Westshore</div><div class="p-loc">Tampa, FL</div></td><td>Tampa</td><td style="text-align:right">252</td><td style="text-align:right"><span class="hdot c"></span>44</td><td style="text-align:right">$2,100</td><td style="text-align:right;color:var(--cu);font-weight:700">$1,800</td><td style="text-align:right"><span class="fcount has">4</span></td></tr>
-          <tr><td><div class="p-name">The Linden</div><div class="p-loc">Phoenix, AZ</div></td><td>Phoenix</td><td style="text-align:right">188</td><td style="text-align:right"><span class="hdot h"></span>79</td><td style="text-align:right">$1,900</td><td style="text-align:right;color:var(--tm);font-weight:600">—</td><td style="text-align:right"><span class="fcount none">0</span></td></tr>
+        <tbody id="port-properties-tbody">
+          <tr><td colspan="7" style="padding:24px;text-align:center;color:var(--tm);font-style:italic">Loading portfolio…</td></tr>
         </tbody>
       </table>
     </div>
@@ -2577,47 +2553,20 @@ select.brief-input{height:34px;cursor:pointer}
 </div>
 
 <script>
-// ── Portal property globals — injected by HubL from HubSpot company record ──
-window.__PORTAL_API_BASE     = 'https://rpm-portal-server.onrender.com';
-window.__PORTAL_COMPANY_ID   = '{{ property.id }}';
-window.__PORTAL_COMPANY_ID__ = '{{ property.id }}';
-window.__PORTAL_MARKET       = '{{ property.rpmmarket|default("") }}';
-window.__PORTAL_EMAIL        = '{{ request.contact.email|default("") }}';
-window.__PORTAL_EMAIL__      = '{{ request.contact.email|default("") }}';
-window.__PORTAL_UNIT_COUNT   = {{ property.totalunits|default(0)|int }};
-window.__PORTAL_HEALTH_SCORE = {{ property.redlight_report_score|default(0)|int }};
-window.__PORTAL_OCCUPANCY    = 0; // populated async from /api/forecast-context
-window.__PORTAL_ASSET_CLASS  = '{{ property.asset_class|default("") }}';
-window.__PORTAL_PROP_TYPE    = '{{ property.proptype|default("") }}';
-window.__PORTAL_DEV_TYPE     = '{{ property.developtype|default("") }}';
-window.__PORTAL_OCC_STATUS   = '{{ property.occupancy|default("") }}';
-// Packages and current perf populated async from /api/budget and /api/portfolio
-window.__PORTAL_PROP_PACKAGES = [];
-window.__PORTAL_CURRENT_PERF  = {};
+// ── Portal property globals (real portal injects via HubL; demo falls back to hardcoded values) ──
+window.__PORTAL_MARKET      = window.__PORTAL_MARKET      || 'Scottsdale';
+window.__PORTAL_UNIT_COUNT  = window.__PORTAL_UNIT_COUNT  || 320;
+window.__PORTAL_OCCUPANCY   = window.__PORTAL_OCCUPANCY   || 93.2;
+window.__PORTAL_HEALTH_SCORE = window.__PORTAL_HEALTH_SCORE || 72;
+window.__PORTAL_PROP_PACKAGES = window.__PORTAL_PROP_PACKAGES || [
+  {label:'SEO: Standard', budget:800,  channel:'seo_organic'},
+  {label:'Google Ads',    budget:2500, channel:'google_ads'},
+  {label:'Meta Ads',      budget:1500, channel:'meta'},
+];
+window.__PORTAL_CURRENT_PERF = window.__PORTAL_CURRENT_PERF || {leads:58, cpl:83};
 
-// ── Sidebar init: apply health score color class on first paint ──
-(function() {
-  var hs = window.__PORTAL_HEALTH_SCORE || 0;
-  var badge = document.getElementById('sb-score-badge');
-  var label = document.getElementById('sb-score-label');
-  if (badge) {
-    if (hs >= 80) { badge.classList.add('healthy'); }
-    else if (hs < 50) { badge.classList.add('critical'); }
-  }
-  if (label) {
-    label.textContent = hs >= 80 ? 'Healthy' : hs >= 60 ? 'Warning' : hs > 0 ? 'Critical' : '—';
-    if (hs >= 80) label.classList.add('healthy');
-    else if (hs < 50 && hs > 0) label.classList.add('critical');
-  }
-  // OCC widget: populated by loadForecast() → _loadForecastContext(); default from occ_status
-  var occEl = document.getElementById('sb-occ-val');
-  if (occEl) {
-    var occStatus = window.__PORTAL_OCC_STATUS || '';
-    if (occStatus === 'Stable' || occStatus === 'Stabilized') occEl.textContent = '94%+';
-    else if (occStatus === 'Lease Up' || occStatus === 'Lease-Up') occEl.textContent = 'Lease Up';
-    // real value filled in when forecast-context loads
-  }
-})();
+// Auto-load overview on page init (it's the default active section)
+document.addEventListener('DOMContentLoaded', function() { loadOverview(); });
 
 // ── Navigation ──
 function nav(id, el) {
@@ -2626,12 +2575,14 @@ function nav(id, el) {
   document.getElementById('section-'+id).classList.add('active');
   if (el) el.classList.add('active');
   // Lazy-load live data when sections open
+  if (id === 'overview')    { loadOverview(); }
   if (id === 'tickets')     { loadTickets(); }
   if (id === 'brief')       { loadClientBrief(); }
   if (id === 'budget')      { loadBudget(); }
   if (id === 'video')       { loadVideoCreative(); }
   if (id === 'forecast')    { loadForecast(); }
   if (id === 'performance') { loadPerformance(); }
+  if (id === 'activity')    { loadActivity(); }
 }
 
 function switchDemo(view, btn) {
@@ -2639,7 +2590,8 @@ function switchDemo(view, btn) {
   document.getElementById('demo-'+view).classList.add('active');
   document.querySelectorAll('.demo-bar button').forEach(function(b){b.classList.remove('active')});
   if (btn) btn.classList.add('active');
-  if (view === 'spend') { loadSpendSheet(); }
+  if (view === 'spend')     { loadSpendSheet(); }
+  if (view === 'portfolio') { loadPortfolio(); }
 }
 
 // ── Tier selection ──
@@ -2787,7 +2739,7 @@ function submitTicket() {
   var existingPanel = form.querySelector('.kb-deflect-panel');
   if (existingPanel) existingPanel.remove();
 
-  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   // Step 1 — search KB first
   fetch(API_BASE + '/api/kb-search?q=' + encodeURIComponent(title), {
@@ -2839,7 +2791,7 @@ function _doSubmitTicket(form, title, desc, priority, category) {
   submitBtn.disabled = true;
 
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/ticket', {
     method: 'POST',
@@ -2890,7 +2842,7 @@ function _doSubmitTicket(form, title, desc, priority, category) {
 
 function loadTickets() {
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/tickets?company_id=' + COMPANY_ID, {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
@@ -2963,7 +2915,7 @@ function loadTicketThread(ticketId, containerId, btn) {
     return;
   }
 
-  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   btn.textContent = 'Loading…';
   btn.disabled = true;
 
@@ -3016,7 +2968,7 @@ function replyToTicket(ticketId, threadId) {
   var text = input.value.trim();
   if (!text) return;
 
-  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   input.disabled = true;
 
   fetch(API_BASE + '/api/ticket/' + ticketId + '/reply', {
@@ -3050,7 +3002,7 @@ var _briefLoaded = false;
 function loadClientBrief() {
   if (_briefLoaded) return;
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/client-brief?company_id=' + COMPANY_ID, {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
@@ -3123,7 +3075,7 @@ var _budgetLoaded = false;
 function loadBudget() {
   if (_budgetLoaded) return;
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/budget?company_id=' + COMPANY_ID, {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
@@ -3258,7 +3210,7 @@ function cancelBriefEdit(card) {
 
 function saveBriefCard(card) {
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
-  var API_BASE   = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   var fields = {};
   card.querySelectorAll('[data-input-field]').forEach(function(inp) {
@@ -3343,7 +3295,7 @@ var _spendLoaded = false;
 
 function loadSpendSheet(force) {
   if (_spendLoaded && !force) return;
-  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   var tbody = document.getElementById('spend-tbody');
   var url = API_BASE + '/api/spend-sheet' + (force ? '?refresh=true' : '');
 
@@ -3502,6 +3454,362 @@ var _currentPerf    = {};      // { leads, cpl, channels: {ch: {leads,spend}} }
 var _propContext    = {};      // { unit_count, market, occupancy, health_score, size_band }
 var _forecastCtx    = null;   // result from /api/forecast-context
 
+// ── Red Light Report PDF Download ─────────────────────────────────────────────
+
+// ── Overview ─────────────────────────────────────────────────────────────────
+var _overviewLoaded = false;
+
+function loadOverview() {
+  if (_overviewLoaded) return;
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var cid   = window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || '';
+  var uuid  = window.__PORTAL_UUID__ || window.__PORTAL_UUID || '';
+  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL__ || 'demo@rpmliving.com';
+  var market = window.__PORTAL_MARKET || '';
+
+  if (!cid) {
+    // Demo mode — use hardcoded fallbacks
+    _renderOverview({
+      property: { name: 'The Quincy at Kierland', market: 'Scottsdale', units: 320 },
+      leasing:  { occupancy: 93.2, atr: 8.4, lease_trend_120: 34, renewal_trend_120: 28 },
+      health:   { overall: 72, status: 'WARNING', last_scored: '2026-03-01', flag_count: 4 }
+    }, null, null);
+    _loadOverviewActivity([], true);
+    return;
+  }
+
+  _overviewLoaded = true;
+
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Fire all three fetches in parallel
+  var propertyP = fetch(API_BASE + '/api/property?company_id=' + encodeURIComponent(cid),
+    { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+
+  var budgetP = fetch(API_BASE + '/api/budget?company_id=' + encodeURIComponent(cid),
+    { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+
+  var ticketsP = fetch(API_BASE + '/api/tickets?company_id=' + encodeURIComponent(cid),
+    { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+
+  var digestP = (uuid || cid) ? fetch(
+    API_BASE + '/api/digest?company_id=' + encodeURIComponent(cid) +
+    '&uuid=' + encodeURIComponent(uuid || cid) +
+    '&name=' + encodeURIComponent(window.__PORTAL_PROP_NAME || '') +
+    '&market=' + encodeURIComponent(market),
+    { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; })
+    : Promise.resolve(null);
+
+  // Also pull 5 most recent HubSpot activity items for the mini-feed
+  var activityP = fetch(API_BASE + '/api/report-data?company_id=' + encodeURIComponent(cid),
+    { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+
+  Promise.all([propertyP, budgetP, ticketsP, digestP, activityP])
+  .then(function(results) {
+    var propData    = results[0];
+    var budgetData  = results[1];
+    var ticketsData = results[2];
+    var digestData  = results[3];
+    var activityData = results[4];
+
+    if (propData) {
+      _renderOverview(propData, ticketsData, budgetData);
+    }
+
+    // Digest
+    if (digestData && digestData.digest) {
+      var digestEl = document.getElementById('digest-text');
+      if (digestEl) {
+        digestEl.style.fontStyle = '';
+        digestEl.style.color = '';
+        digestEl.innerHTML = digestData.digest.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+      }
+      var labelEl = document.getElementById('digest-label');
+      if (labelEl) {
+        var now = new Date();
+        labelEl.textContent = '\u2736 AI-curated \u00B7 ' + months[now.getMonth()] + ' ' + now.getFullYear();
+      }
+    }
+
+    // Recent activity mini-feed
+    var acts = activityData && activityData.activity ? activityData.activity : [];
+    _loadOverviewActivity(acts.slice(0, 4), false);
+  });
+}
+
+function _renderOverview(propData, ticketsData, budgetData) {
+  var prop    = propData.property || {};
+  var leasing = propData.leasing  || {};
+  var health  = propData.health   || {};
+  var months  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var now     = new Date();
+  var monthStr = months[now.getMonth()] + ' ' + now.getFullYear();
+
+  // Sec-sub header
+  var sub = document.getElementById('overview-sub');
+  if (sub && prop.name) sub.textContent = prop.name + ' \u00B7 ' + monthStr;
+
+  // Health Score KPI
+  var hs = health.overall != null ? Math.round(health.overall) : null;
+  var hsEl = document.getElementById('kpi-health-score');
+  if (hsEl) hsEl.textContent = hs != null ? hs : '—';
+  var st = (health.status || '').toUpperCase();
+  var hsColor = st === 'HEALTHY' || hs >= 75 ? '#8FA68E' : st === 'RED ALERT' || hs < 50 ? '#C94444' : '#D4910A';
+  if (hsEl) hsEl.style.color = hsColor;
+  var hsDelta = document.getElementById('kpi-health-delta');
+  if (hsDelta) {
+    var scored = health.last_scored;
+    if (scored) {
+      var d = new Date(scored + 'T00:00:00');
+      hsDelta.textContent = 'Last scored ' + months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+    } else {
+      hsDelta.textContent = st ? st.charAt(0) + st.slice(1).toLowerCase() : '';
+    }
+  }
+  var hsBar = document.getElementById('kpi-health-bar');
+  if (hsBar) hsBar.style.background = 'linear-gradient(90deg,' + hsColor + ',' + hsColor + 'AA)';
+
+  // Quick Actions: Performance sub-label
+  var qaPerfSub = document.getElementById('qa-perf-sub');
+  if (qaPerfSub && health.last_scored) {
+    var d2 = new Date(health.last_scored + 'T00:00:00');
+    qaPerfSub.textContent = 'Red Light \u00B7 ' + months[d2.getMonth()] + ' ' + d2.getFullYear();
+  }
+
+  // Pending Recs button (stays at 2 — driven by portal logic)
+  // Tickets KPI
+  if (ticketsData) {
+    var tList = ticketsData.tickets || [];
+    var openCount = tList.filter(function(t){ return t.status !== 'done' && t.status !== 'closed'; }).length;
+    var inProg = tList.filter(function(t){ return t.status === 'in_progress' || t.status === 'in progress'; }).length;
+    var tcEl = document.getElementById('kpi-tickets-count');
+    if (tcEl) tcEl.textContent = openCount;
+    var tdEl = document.getElementById('kpi-tickets-delta');
+    if (tdEl) tdEl.textContent = openCount + ' open' + (inProg ? ' \u00B7 ' + inProg + ' in progress' : '');
+    var qaTickSub = document.getElementById('qa-tickets-sub');
+    if (qaTickSub) qaTickSub.textContent = openCount + ' open item' + (openCount === 1 ? '' : 's');
+    var btnRecs = document.getElementById('btn-pending-recs');
+    if (btnRecs) {
+      // Keep rec count from static HTML logic — tickets don't affect this
+    }
+  }
+
+  // Monthly Spend KPI
+  if (budgetData) {
+    var totalSpend = null;
+    if (budgetData.summary && budgetData.summary.total != null) totalSpend = budgetData.summary.total;
+    else if (budgetData.total != null) totalSpend = budgetData.total;
+    if (totalSpend != null) {
+      var spEl = document.getElementById('kpi-spend');
+      if (spEl) spEl.textContent = '$' + Math.round(totalSpend).toLocaleString();
+    }
+  }
+
+  // Occupancy
+  if (leasing.occupancy != null) {
+    var occ = parseFloat(leasing.occupancy);
+    var occEl = document.getElementById('kpi-occ-value');
+    if (occEl) occEl.textContent = occ.toFixed(1);
+    var occBadge = document.getElementById('kpi-occ-badge');
+    if (occBadge) {
+      occBadge.textContent = occ >= 95 ? 'FULLY LEASED' : occ >= 90 ? 'ABOVE SUB' : occ >= 85 ? 'AT MARKET' : 'BELOW SUB';
+      occBadge.style.background = occ >= 90 ? 'rgba(143,166,142,0.12)' : occ >= 85 ? 'rgba(212,145,10,0.12)' : 'rgba(201,68,68,0.1)';
+      occBadge.style.color = occ >= 90 ? 'var(--sage)' : occ >= 85 ? 'var(--amb)' : '#C94444';
+    }
+    var occDelta = document.getElementById('kpi-occ-delta');
+    if (occDelta) occDelta.textContent = 'Physical occupancy rate';
+  }
+
+  // ATR
+  if (leasing.atr != null) {
+    var atr = parseFloat(leasing.atr);
+    var atrEl = document.getElementById('kpi-atr-value');
+    if (atrEl) atrEl.textContent = atr.toFixed(1);
+    var atrBadge = document.getElementById('kpi-atr-badge');
+    if (atrBadge) {
+      atrBadge.textContent = atr <= 5 ? 'ON TARGET' : atr <= 8 ? 'WATCH' : 'HIGH';
+      atrBadge.style.color = atr <= 5 ? 'var(--sage)' : atr <= 8 ? 'var(--amb)' : '#C94444';
+    }
+    var atrDelta = document.getElementById('kpi-atr-delta');
+    if (atrDelta) atrDelta.textContent = (atr <= 5 ? '\u2713 At or below 5% target' : 'Target \u2264 5%');
+  }
+
+  // 120-day lease trend
+  if (leasing.lease_trend_120 != null) {
+    var trendEl = document.getElementById('kpi-trend-value');
+    if (trendEl) trendEl.textContent = leasing.lease_trend_120;
+    var trendBadge = document.getElementById('kpi-trend-badge');
+    var trendDelta = document.getElementById('kpi-trend-delta');
+    var renew = leasing.renewal_trend_120;
+    if (trendBadge) trendBadge.textContent = renew != null && renew < 20 ? 'RENEWAL FOCUS' : 'EXPIRING';
+    if (trendDelta && renew != null) trendDelta.textContent = renew + ' renewals tracked in window';
+  }
+}
+
+function _loadOverviewActivity(acts, isDemo) {
+  var container = document.getElementById('overview-recent-activity');
+  if (!container) return;
+  var typeColors = { Note:'var(--ts)', Call:'var(--sage)', Email:'var(--cu)', Deal:'#7B9EC9' };
+
+  if (isDemo) {
+    acts = [
+      { date: '2026-03-15', type: 'Report',  summary: 'Red Light Report generated: YELLOW (72)' },
+      { date: '2026-03-10', type: 'Call',    summary: 'Monthly check-in with owner' },
+      { date: '2026-03-05', type: 'Email',   summary: 'February performance report sent' },
+    ];
+  }
+
+  if (!acts || acts.length === 0) {
+    container.innerHTML = '<div style="font-size:12px;color:var(--tm)">No recent activity found.</div>';
+    return;
+  }
+
+  var html = '';
+  acts.forEach(function(a) {
+    var color = typeColors[a.type] || 'var(--ts)';
+    html += '<div style="display:flex;align-items:flex-start;gap:8px;font-size:12px">' +
+      '<div style="width:7px;height:7px;border-radius:50%;background:' + color + ';flex-shrink:0;margin-top:4px"></div>' +
+      '<div><div style="font-weight:600;color:var(--jd)">' + (a.summary || '').substring(0, 60) + (a.summary && a.summary.length > 60 ? '…' : '') + '</div>' +
+      '<div style="color:var(--tm);font-size:11px;margin-top:2px">' + (a.date || '') + (a.type ? ' \u00B7 ' + a.type : '') + '</div></div>' +
+    '</div>';
+  });
+  container.innerHTML = html;
+}
+
+// ── Activity Timeline ─────────────────────────────────────────────────────────
+var _activityLoaded = false;
+
+function loadActivity() {
+  if (_activityLoaded) return;
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var cid   = window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || '';
+  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL__ || 'demo@rpmliving.com';
+
+  var loadingEl = document.getElementById('activity-loading');
+  if (!cid) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    return;
+  }
+
+  fetch(API_BASE + '/api/report-data?company_id=' + encodeURIComponent(cid),
+        { headers: { 'X-Portal-Email': email } })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    _activityLoaded = true;
+    if (loadingEl) loadingEl.style.display = 'none';
+    var acts = data.activity || [];
+    if (acts.length === 0) return;
+
+    var typeColors = { Note:'var(--ts)', Call:'var(--sage)', Email:'var(--cu)', Deal:'#7B9EC9', Email_reply:'var(--cu)' };
+    var tagColors  = { Note:'notes', Call:'notes', Email:'portal', Deal:'deal', Email_reply:'portal' };
+
+    // Group by date
+    var groups = {};
+    var order = [];
+    acts.forEach(function(a) {
+      var d = a.date || 'Unknown';
+      if (!groups[d]) { groups[d] = []; order.push(d); }
+      groups[d].push(a);
+    });
+
+    var html = '';
+    order.forEach(function(dateStr) {
+      var items = groups[dateStr];
+      // Format date
+      var dObj = new Date(dateStr + 'T00:00:00');
+      var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      var label = months[dObj.getMonth()] + ' ' + dObj.getDate() + ', ' + dObj.getFullYear();
+      html += '<div class="tl-group" data-cat="notes">' +
+        '<div class="tl-date">' + label + '</div>';
+      items.forEach(function(a) {
+        var type = a.type || 'Note';
+        var tagCls = tagColors[type] || 'notes';
+        var dotCls = tagCls;
+        html += '<div class="tl-item" data-cat="' + tagCls + '">' +
+          '<div class="tl-dot ' + dotCls + '"></div>' +
+          '<div class="tl-content">' +
+            '<div class="tl-text">' + (a.summary || '') + '</div>' +
+            '<div class="tl-meta">' +
+              (a.author ? '<span class="tl-time">' + a.author + '</span>' : '') +
+              '<span class="tl-tag ' + tagCls + '">' + type + '</span>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+    });
+
+    // Insert before the session-group (today's live actions)
+    var sessionGroup = document.getElementById('tl-session-group');
+    if (sessionGroup) {
+      sessionGroup.insertAdjacentHTML('beforebegin', html);
+    }
+  })
+  .catch(function(err){ console.warn('loadActivity failed:', err); if (loadingEl) loadingEl.style.display = 'none'; });
+}
+
+// ── Portfolio Dashboard ───────────────────────────────────────────────────────
+var _portfolioLoaded = false;
+
+function loadPortfolio() {
+  if (_portfolioLoaded) return;
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
+
+  fetch(API_BASE + '/api/portfolio',
+        { headers: { 'X-Portal-Email': email } })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    _portfolioLoaded = true;
+    var props = data.properties || [];
+    var summary = data.summary  || {};
+
+    // KPI row
+    function setEl(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+    setEl('port-kpi-count',  props.length || summary.count || '—');
+    setEl('port-kpi-units',  summary.total_units ? summary.total_units.toLocaleString() : '—');
+    var avgH = summary.avg_health != null ? Math.round(summary.avg_health) : null;
+    var hEl = document.getElementById('port-kpi-health');
+    if (hEl && avgH != null) {
+      hEl.textContent = avgH;
+      hEl.style.color = avgH >= 75 ? 'var(--sage)' : avgH >= 50 ? 'var(--amb)' : '#C94444';
+    }
+    if (summary.total_spend != null) {
+      setEl('port-kpi-spend', '$' + Math.round(summary.total_spend).toLocaleString());
+    }
+    var flagsEl = document.getElementById('port-kpi-flags');
+    if (flagsEl && summary.health_breakdown) {
+      var hb = summary.health_breakdown;
+      flagsEl.innerHTML =
+        '<span class="mflag r">' + (hb.critical || 0) + ' RED</span>' +
+        '<span class="mflag y">' + (hb.warning  || 0) + ' YLW</span>' +
+        '<span class="mflag g">' + (hb.healthy  || 0) + ' GRN</span>';
+    }
+
+    // Table rows
+    var tbody = document.getElementById('port-properties-tbody');
+    if (!tbody || props.length === 0) return;
+    var hdotClass = function(s) { return s >= 75 ? 'h' : s >= 50 ? 'w' : 'c'; };
+    var rows = props.map(function(p) {
+      var score = p.health_score != null ? Math.round(p.health_score) : null;
+      var flags = p.flag_count || 0;
+      var mgmt  = p.mgmt_spend ? '$' + Math.round(p.mgmt_spend).toLocaleString() : '—';
+      var spend = p.ad_spend   ? '$' + Math.round(p.ad_spend).toLocaleString()   : '—';
+      return '<tr>' +
+        '<td><div class="p-name">' + (p.name || '') + '</div><div class="p-loc">' + (p.city_state || p.market || '') + '</div></td>' +
+        '<td>' + (p.market || '') + '</td>' +
+        '<td style="text-align:right">' + (p.units || '—') + '</td>' +
+        '<td style="text-align:right">' + (score != null ? '<span class="hdot ' + hdotClass(score) + '"></span>' + score : '—') + '</td>' +
+        '<td style="text-align:right">' + mgmt + '</td>' +
+        '<td style="text-align:right;color:var(--cu);font-weight:700">' + spend + '</td>' +
+        '<td style="text-align:right"><span class="fcount ' + (flags > 0 ? 'has' : 'none') + '">' + flags + '</span></td>' +
+      '</tr>';
+    });
+    tbody.innerHTML = rows.join('');
+  })
+  .catch(function(err){ console.warn('loadPortfolio failed:', err); });
+}
+
 // ── Performance gauges ──────────────────────────────────────────────────────
 var _perfLoaded = false;
 
@@ -3510,7 +3818,7 @@ function loadPerformance() {
   var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
   var cid   = window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || '';
   var email = window.__PORTAL_EMAIL__     || window.__PORTAL_EMAIL       || 'demo@rpmliving.com';
-  if (!cid) return;
+  if (!cid) return; // demo mode — gauges stay at hardcoded values
 
   fetch(API_BASE + '/api/property-metrics?company_id=' + encodeURIComponent(cid),
         { headers: { 'X-Portal-Email': email } })
@@ -3525,6 +3833,7 @@ function loadPerformance() {
     _applyGauge('funnel',     h.funnel,     false);
     _applyGauge('experience', h.experience, false);
 
+    // Header badge + date
     var badge = document.getElementById('perf-status-badge');
     if (badge) {
       var st = (h.status || '').toUpperCase();
@@ -3548,6 +3857,7 @@ function _applyGauge(name, score, isLarge) {
   var color = score >= 75 ? '#8FA68E' : score >= 50 ? '#D4910A' : '#C94444';
   var statusTxt = score >= 75 ? 'HEALTHY' : score >= 50 ? 'WARNING' : 'CRITICAL';
 
+  // Update arc dasharray
   var arc = document.getElementById('gauge-' + name + '-arc');
   if (arc) {
     var total = isLarge ? 311 : 207;
@@ -3556,9 +3866,11 @@ function _applyGauge(name, score, isLarge) {
     arc.setAttribute('stroke-dasharray', filled + ' ' + (full - filled));
     arc.setAttribute('stroke', color);
   }
+  // Update score text
   var scoreTxt = document.getElementById('gauge-' + name + '-score');
   if (scoreTxt) scoreTxt.textContent = score;
 
+  // Update status text
   var statusEl = document.getElementById('gauge-' + name + '-status');
   if (statusEl) {
     statusEl.textContent = statusTxt;
@@ -3567,8 +3879,6 @@ function _applyGauge(name, score, isLarge) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-
-// ── Red Light Report PDF Download ─────────────────────────────────────────────
 
 function downloadReport() {
   var btn = document.getElementById('btn-download-report');
@@ -3761,6 +4071,7 @@ function _buildReportHTML(d) {
 
   // ── PAGE 1: COVER ──
   '<div style="min-height:9.5in;display:flex;flex-direction:column">' +
+    // Top bar: logo left, report type + date right
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:56px">' +
       '<img src="'+RPM_LOGO+'" style="height:32px;filter:brightness(0)" onerror="this.style.display=\'none\'">' +
       '<div style="text-align:right">' +
@@ -3769,6 +4080,7 @@ function _buildReportHTML(d) {
       '</div>' +
     '</div>' +
 
+    // Body: property info left, score box right
     '<div style="flex:1;display:flex;justify-content:space-between;align-items:flex-start;gap:40px">' +
       '<div style="flex:1">' +
         '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#B8956A;margin-bottom:14px">PROPERTY HEALTH REPORT</div>' +
@@ -3793,6 +4105,7 @@ function _buildReportHTML(d) {
       '</div>' +
     '</div>' +
 
+    // Cover footer
     '<div style="margin-top:40px;border-top:1px solid #E5E7EB;padding-top:14px;text-align:center;font-size:9px;color:#B8C4B8">' +
       'RPM LIVING | Digital Products &amp; Services | <span style="color:#B8956A">/ EXCEED EVERY NEED /</span>' +
     '</div>' +
@@ -3888,7 +4201,7 @@ function _buildReportHTML(d) {
 
 function loadForecast() {
   if (_benchmarks) { _renderForecast(); _loadForecastContext(); return; }
-  var API_BASE = window.__PORTAL_API_BASE || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   var email    = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
   var cid      = typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '';
 
@@ -3956,7 +4269,7 @@ function _loadForecastContext() {
   if (!peerEl) return;
   peerEl.innerHTML = '<div class="fomo-panel"><div class="fomo-panel-hdr">Peer Insights</div><div style="padding:14px 16px;color:var(--tm);font-size:12px">Analysing comparable properties…</div></div>';
 
-  var API_BASE = window.__PORTAL_API_BASE || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   var email    = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
   var cid      = (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '') || window.__PORTAL_COMPANY_ID || '';
 
@@ -4514,7 +4827,7 @@ function switchVideoView(view, btn) {
 
 function loadVideoCreative() {
   if (_videoData) { _renderVideoCreative(_videoData); return; }
-  var API_BASE = window.__PORTAL_API_BASE || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
   var cid = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '');
 
@@ -4806,7 +5119,7 @@ function submitEnrollment() {
     current_specials: document.getElementById('enroll-specials').value,
   };
 
-  var API_BASE = window.__PORTAL_API_BASE || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   var email    = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
   var cid      = typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '';
 
@@ -4894,7 +5207,7 @@ function toggleApproveSelect(variantId, btn) {
 }
 
 function approveVariants(ids) {
-  var API_BASE = window.__PORTAL_API_BASE || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
   var cid = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '');
 
@@ -4937,7 +5250,7 @@ function closeRevisionModal() {
 }
 
 function submitRevision() {
-  var API_BASE = window.__PORTAL_API_BASE || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
   var cid = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '');
 
@@ -5151,29 +5464,3 @@ document.addEventListener('click', function(e) {
 </script>
 </body>
 </html>
-
-    {% endif %}
-  {% endif %}
-
-{% else %}
-
-  {# ══════════════════════════════════════════
-     ROUTE 2: Portfolio Dashboard
-     HubSpot Membership gates this page — if we reach here,
-     request.contact is the authenticated user.
-     ══════════════════════════════════════════ #}
-
-  {# Read contact identity from HubSpot Membership session #}
-  {% set contact_email = request.contact.email|default("") %}
-  {% set contact_role = request.contact.portal_role|default("marketing_manager") %}
-
-  <script>
-    window.__PORTAL_API_BASE = 'https://rpm-portal-server.onrender.com';
-    window.__PORTAL_EMAIL = '{{ contact_email }}';
-    window.__PORTAL_ROLE = '{{ contact_role }}';
-  </script>
-
-  {% include "./partials/dashboard.html" %}
-  <script src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/js/dashboard.js"></script>
-
-{% endif %}
