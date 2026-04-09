@@ -133,6 +133,113 @@ def get_digest():
         return jsonify({"digest": "Your property summary is being prepared — check back shortly.", "uuid": uuid})
 
 
+def _compute_leasing_score(props):
+    """Compute a lead-gen health score from available HubSpot leasing fields.
+
+    Uses Occupancy, ATR%, and 120-day lease expiration trend.
+    Applies different formulas for stabilized vs lease-up properties.
+    Returns None if both occupancy and ATR are missing.
+    Preserves backward-compat: if red_light_report_score is populated, callers
+    should prefer that over this computed score.
+    """
+    def _fv(k):
+        v = props.get(k)
+        try:
+            return float(v) if v not in (None, "") else None
+        except (ValueError, TypeError):
+            return None
+
+    occ   = _fv("occupancy__")
+    atr   = _fv("atr__")
+    trend = _fv("trending_120_days_lease_expiration")
+    units = _fv("totalunits") or 0
+
+    if occ is None and atr is None:
+        return None
+
+    occ_status   = (props.get("occupancy_status") or "").strip()
+    is_lease_up  = occ_status in ("Lease-Up", "In-Transition")
+    is_renovation = occ_status == "Renovation"
+
+    if is_renovation:
+        return {
+            "score": None, "status": "Renovation",
+            "is_lease_up": False, "is_renovation": True,
+            "occupancy_score": None, "atr_score": None, "exposure_score": None,
+            "occupancy_raw": occ, "atr_raw": atr, "trend_raw": None,
+        }
+
+    def _occ_score(o):
+        if o is None:
+            return 75
+        if is_lease_up:
+            if o >= 88: return 90
+            if o >= 75: return 75
+            if o >= 60: return 60
+            if o >= 45: return 45
+            return 30
+        else:
+            if o >= 95: return 100
+            if o >= 93: return 85
+            if o >= 90: return 70
+            if o >= 87: return 55
+            return 35
+
+    def _atr_score(a):
+        if a is None:
+            return 75
+        if is_lease_up:
+            if a <= 10: return 90
+            if a <= 20: return 75
+            if a <= 35: return 55
+            if a <= 50: return 35
+            return 20
+        else:
+            if a <= 4:  return 100
+            if a <= 6:  return 80
+            if a <= 9:  return 60
+            if a <= 13: return 40
+            return 20
+
+    def _exposure_score(t, u):
+        if t is None or u == 0:
+            return 75
+        pct = (t / u) * 100
+        if pct <= 8:  return 100
+        if pct <= 15: return 75
+        if pct <= 22: return 50
+        return 25
+
+    o_score = _occ_score(occ)
+    a_score = _atr_score(atr)
+    e_score = _exposure_score(trend, units)
+
+    if is_lease_up:
+        overall = round(o_score * 0.60 + a_score * 0.40)
+    else:
+        overall = round(o_score * 0.50 + a_score * 0.30 + e_score * 0.20)
+
+    if overall >= 75:
+        status = "ON TRACK"
+    elif overall >= 50:
+        status = "WATCH"
+    else:
+        status = "NEEDS LEADS"
+
+    return {
+        "score":           overall,
+        "status":          status,
+        "is_lease_up":     is_lease_up,
+        "is_renovation":   False,
+        "occupancy_score": o_score,
+        "atr_score":       a_score,
+        "exposure_score":  e_score,
+        "occupancy_raw":   occ,
+        "atr_raw":         atr,
+        "trend_raw":       int(trend) if trend is not None else None,
+    }
+
+
 @app.route("/api/property", methods=["GET", "OPTIONS"])
 def get_property_metrics():
     """Return all key metrics for a single property, keyed by HubSpot company ID.
@@ -169,7 +276,9 @@ def get_property_metrics():
         "occupancy__", "atr__", "atr__formatted",
         "trending_120_days_lease_expiration",
         "brf___renewal_leases_120_trend",
-        # Red Light scores
+        # Property type / occupancy status (for scoring model selection)
+        "occupancy_status",
+        # Red Light scores (pipeline-generated — may be null)
         "red_light_report_score", "red_light_report_status",
         "red_light_market_score", "red_light_marketing_score",
         "red_light_funnel_score", "red_light_experience_score",
@@ -200,6 +309,14 @@ def get_property_metrics():
             except (ValueError, TypeError):
                 return v
 
+        ls = _compute_leasing_score(props)
+
+        # Overall score: prefer pipeline score if populated, else use computed leasing score
+        rl_overall = _f("red_light_report_score")
+        rl_status  = props.get("red_light_report_status", "")
+        display_overall = rl_overall if rl_overall is not None else (ls["score"] if ls else None)
+        display_status  = rl_status  if rl_status  else (ls["status"] if ls else "Not Scored")
+
         return jsonify({
             "property": {
                 "name": props.get("name", ""),
@@ -207,6 +324,7 @@ def get_property_metrics():
                 "units": int(_f("totalunits", 0)),
                 "uuid": props.get("uuid", ""),
                 "hubspot_company_id": company_id,
+                "occupancy_status": props.get("occupancy_status", ""),
             },
             "leasing": {
                 "occupancy": _f("occupancy__"),
@@ -216,14 +334,18 @@ def get_property_metrics():
                 "renewal_trend_120": int(_f("brf___renewal_leases_120_trend", 0)) if _f("brf___renewal_leases_120_trend") is not None else None,
             },
             "health": {
-                "overall": _f("red_light_report_score"),
-                "status": props.get("red_light_report_status", ""),
+                "overall": display_overall,
+                "status": display_status,
+                # Legacy pipeline category scores — preserved, not displayed until pipeline runs
                 "market": _f("red_light_market_score"),
                 "marketing": _f("red_light_marketing_score"),
                 "funnel": _f("red_light_funnel_score"),
                 "experience": _f("red_light_experience_score"),
                 "flag_count": int(_f("redlight_flag_count", 0)),
                 "last_scored": props.get("red_light_run_date", ""),
+                # Computed leasing score (always present when data available)
+                "leasing_score": ls,
+                "is_lease_up": ls["is_lease_up"] if ls else False,
             },
         })
     except Exception as e:
@@ -2015,6 +2137,8 @@ def get_report_data():
     # ── 1. Company properties ──────────────────────────────────────────────────
     props_list = ",".join([
         "name", "rpmmarket", "totalunits", "plestatus",
+        # Leasing fields for computed score
+        "occupancy__", "atr__", "trending_120_days_lease_expiration", "occupancy_status",
         # Try both naming conventions — pipeline writes redlight_*, metrics endpoint uses red_light_*
         "redlight_report_score", "red_light_report_score",
         "redlight_market_score", "red_light_market_score",
@@ -2041,23 +2165,32 @@ def get_report_data():
         except (ValueError, TypeError):
             return None
 
-    overall   = _score("redlight_report_score", "red_light_report_score")
-    mkt_score = _score("redlight_market_score", "red_light_market_score")
-    mktg_score= _score("redlight_marketing_score", "red_light_marketing_score")
-    funnel    = _score("redlight_funnel_score", "red_light_funnel_score")
-    exp_score = _score("redlight_experience_score", "red_light_experience_score")
-    flag_count= int(props.get("redlight_flag_count") or 0)
-    run_date  = props.get("red_light_run_date") or props.get("redlight_run_date") or ""
+    rl_overall  = _score("redlight_report_score", "red_light_report_score")
+    mkt_score   = _score("redlight_market_score", "red_light_market_score")
+    mktg_score  = _score("redlight_marketing_score", "red_light_marketing_score")
+    funnel      = _score("redlight_funnel_score", "red_light_funnel_score")
+    exp_score   = _score("redlight_experience_score", "red_light_experience_score")
+    flag_count  = int(props.get("redlight_flag_count") or 0)
+    run_date    = props.get("red_light_run_date") or props.get("redlight_run_date") or ""
 
-    # Derive status label from score
-    if overall is None:
+    # Computed leasing score — used when pipeline score is null
+    ls = _compute_leasing_score(props)
+
+    # Prefer pipeline score; fall back to computed leasing score
+    overall = rl_overall if rl_overall is not None else (ls["score"] if ls else None)
+
+    # Derive status label
+    if ls and ls.get("is_renovation"):
+        status_label = "Renovation"
+    elif overall is None:
         status_label = "Not Scored"
-    elif overall >= 75:
-        status_label = "HEALTHY"
-    elif overall >= 50:
-        status_label = "WARNING"
+    elif rl_overall is not None:
+        # Legacy pipeline labels (keep for backward compat)
+        if overall >= 75:   status_label = "ON TRACK"
+        elif overall >= 50: status_label = "WATCH"
+        else:               status_label = "NEEDS LEADS"
     else:
-        status_label = "RED ALERT"
+        status_label = ls["status"] if ls else "Not Scored"
 
     # Parse JSON flag arrays
     def _parse_json_prop(key):
@@ -2139,16 +2272,20 @@ def get_report_data():
 
     return jsonify({
         "property": {
-            "id":          company_id,
-            "name":        props.get("name", ""),
-            "market":      props.get("rpmmarket", ""),
-            "units":       int(props.get("totalunits") or 0),
-            "status":      props.get("plestatus", ""),
-            "report_date": run_date,
+            "id":              company_id,
+            "name":            props.get("name", ""),
+            "market":          props.get("rpmmarket", ""),
+            "units":           int(props.get("totalunits") or 0),
+            "status":          props.get("plestatus", ""),
+            "occupancy_status": props.get("occupancy_status", ""),
+            "report_date":     run_date,
         },
         "health": {
             "overall":      overall,
             "status":       status_label,
+            "is_lease_up":  ls["is_lease_up"] if ls else False,
+            "leasing_score": ls,
+            # Legacy pipeline category scores (null until pipeline runs)
             "market":       mkt_score,
             "marketing":    mktg_score,
             "funnel":       funnel,

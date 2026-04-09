@@ -952,7 +952,56 @@ select.brief-input{height:34px;cursor:pointer}
           <div class="gauge-label">Overall</div>
         </div>
       </div>
-      <div class="gauge-sub-grid">
+      <!-- ── Leasing metric breakdown cards ── -->
+      <div id="perf-stabilized-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;flex:1;align-self:center">
+        <div style="background:rgba(143,166,142,0.07);border:1px solid rgba(143,166,142,0.3);border-radius:12px;padding:16px 18px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sage);margin-bottom:8px">Occupancy</div>
+          <div style="font-size:28px;font-weight:800;color:var(--tp);line-height:1"><span id="pm-occ-raw">93.2</span><span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
+          <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:11px;color:var(--ts)">Score: <strong id="pm-occ-score">70</strong> &nbsp;·&nbsp; Wt: 50%</span>
+            <span id="pm-occ-badge" class="badge badge-yellow" style="font-size:9px">WATCH</span>
+          </div>
+        </div>
+        <div style="background:rgba(212,145,10,0.07);border:1px solid rgba(212,145,10,0.3);border-radius:12px;padding:16px 18px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--amb);margin-bottom:8px">Available to Rent</div>
+          <div style="font-size:28px;font-weight:800;color:var(--tp);line-height:1"><span id="pm-atr-raw">8.4</span><span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
+          <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:11px;color:var(--ts)">Score: <strong id="pm-atr-score">60</strong> &nbsp;·&nbsp; Wt: 30%</span>
+            <span id="pm-atr-badge" class="badge badge-yellow" style="font-size:9px">WATCH</span>
+          </div>
+        </div>
+        <div style="background:#F9FAFB;border:1px solid var(--bd);border-radius:12px;padding:16px 18px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">120-Day Trend</div>
+          <div style="font-size:28px;font-weight:800;color:var(--tp);line-height:1"><span id="pm-exp-raw">34</span><span style="font-size:14px;font-weight:600;color:var(--ts);margin-left:4px">leases</span></div>
+          <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:11px;color:var(--ts)">Score: <strong id="pm-exp-score">75</strong> &nbsp;·&nbsp; Wt: 20%</span>
+            <span id="pm-exp-badge" class="badge badge-green" style="font-size:9px">ON TRACK</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lease-up metric cards (2-up) -->
+      <div id="perf-leaseup-grid" style="display:none;grid-template-columns:repeat(2,1fr);gap:14px;flex:1;align-self:center">
+        <div style="background:rgba(143,166,142,0.07);border:1px solid rgba(143,166,142,0.3);border-radius:12px;padding:16px 18px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sage);margin-bottom:8px">Occupancy Progress</div>
+          <div style="font-size:28px;font-weight:800;color:var(--tp);line-height:1"><span id="pm-lu-occ-raw">78</span><span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
+          <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:11px;color:var(--ts)">Score: <strong id="pm-lu-occ-score">75</strong> &nbsp;·&nbsp; Wt: 60%</span>
+            <span id="pm-lu-occ-badge" class="badge badge-green" style="font-size:9px">ON TRACK</span>
+          </div>
+        </div>
+        <div style="background:rgba(212,145,10,0.07);border:1px solid rgba(212,145,10,0.3);border-radius:12px;padding:16px 18px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--amb);margin-bottom:8px">Lead Demand (ATR)</div>
+          <div style="font-size:28px;font-weight:800;color:var(--tp);line-height:1"><span id="pm-lu-atr-raw">22</span><span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
+          <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:11px;color:var(--ts)">Score: <strong id="pm-lu-atr-score">55</strong> &nbsp;·&nbsp; Wt: 40%</span>
+            <span id="pm-lu-atr-badge" class="badge badge-yellow" style="font-size:9px">WATCH</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legacy RedLight gauges — preserved for future pipeline re-enable -->
+      <div id="perf-redlight-gauges" style="display:none" class="gauge-sub-grid">
         <div class="gauge" id="gauge-market"><svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="44" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="207 69" stroke-dashoffset="-34" stroke-linecap="round"/><circle cx="55" cy="55" r="44" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="161 115" stroke-dashoffset="-34" stroke-linecap="round" id="gauge-market-arc"/><text x="55" y="51" text-anchor="middle" class="gauge-score-text" font-size="22" fill="#1F2937" id="gauge-market-score">78</text><text x="55" y="66" text-anchor="middle" font-size="8" fill="#D4910A" font-weight="700" id="gauge-market-status">WARNING</text></svg><div class="gauge-label">Market</div></div>
         <div class="gauge" id="gauge-marketing"><svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="44" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="207 69" stroke-dashoffset="-34" stroke-linecap="round"/><circle cx="55" cy="55" r="44" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="141 135" stroke-dashoffset="-34" stroke-linecap="round" id="gauge-marketing-arc"/><text x="55" y="51" text-anchor="middle" class="gauge-score-text" font-size="22" fill="#1F2937" id="gauge-marketing-score">68</text><text x="55" y="66" text-anchor="middle" font-size="8" fill="#D4910A" font-weight="700" id="gauge-marketing-status">WARNING</text></svg><div class="gauge-label">Marketing</div></div>
         <div class="gauge" id="gauge-funnel"><svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="44" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="207 69" stroke-dashoffset="-34" stroke-linecap="round"/><circle cx="55" cy="55" r="44" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="145 131" stroke-dashoffset="-34" stroke-linecap="round" id="gauge-funnel-arc"/><text x="55" y="51" text-anchor="middle" class="gauge-score-text" font-size="22" fill="#1F2937" id="gauge-funnel-score">70</text><text x="55" y="66" text-anchor="middle" font-size="8" fill="#D4910A" font-weight="700" id="gauge-funnel-status">WARNING</text></svg><div class="gauge-label">Funnel</div></div>
@@ -3832,30 +3881,74 @@ function loadPerformance() {
     var h = data && data.health;
     if (h) {
       _perfLoaded = true;
-      _applyGauge('overall',    h.overall,    true);
-      _applyGauge('market',     h.market,     false);
-      _applyGauge('marketing',  h.marketing,  false);
-      _applyGauge('funnel',     h.funnel,     false);
-      _applyGauge('experience', h.experience, false);
+      _applyGauge('overall', h.overall, true);
 
-      // Header badge + date
+      // Header badge + date — new lead-gen status labels
       var badge = document.getElementById('perf-status-badge');
       if (badge) {
         var st = (h.status || '').toUpperCase();
-        badge.textContent = st === 'HEALTHY' ? 'Healthy' : st === 'WARNING' ? 'Warning' : st === 'RED ALERT' ? 'Critical' : h.status;
-        badge.className   = 'badge ' + (st === 'HEALTHY' ? 'badge-green' : st === 'RED ALERT' ? 'badge-red' : 'badge-yellow');
+        var badgeLabel = st === 'ON TRACK' ? 'On Track'
+          : st === 'WATCH' ? 'Watch'
+          : st === 'NEEDS LEADS' ? 'Needs Leads'
+          : st === 'RENOVATION' ? 'Renovation'
+          : st === 'HEALTHY' ? 'On Track'
+          : st === 'WARNING' ? 'Watch'
+          : st === 'RED ALERT' ? 'Needs Leads'
+          : (h.status || 'Not Scored');
+        var badgeCls = (st === 'ON TRACK' || st === 'HEALTHY') ? 'badge-green'
+          : (st === 'NEEDS LEADS' || st === 'RED ALERT') ? 'badge-red'
+          : 'badge-yellow';
+        badge.textContent = badgeLabel;
+        badge.className   = 'badge ' + badgeCls;
       }
       if (h.last_scored) {
-        var ls = document.getElementById('perf-last-scored');
-        if (ls) {
+        var lsEl = document.getElementById('perf-last-scored');
+        if (lsEl) {
           var d = new Date(h.last_scored + 'T00:00:00');
           var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-          ls.textContent = 'Last scored ' + months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+          lsEl.textContent = 'Last scored ' + months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+        }
+      }
+
+      // Show leasing score metric cards
+      var lsc = h.leasing_score;
+      if (lsc && !lsc.is_renovation) {
+        var isLeaseUp = lsc.is_lease_up;
+        var stabGrid  = document.getElementById('perf-stabilized-grid');
+        var luGrid    = document.getElementById('perf-leaseup-grid');
+        if (stabGrid) stabGrid.style.display = isLeaseUp ? 'none' : 'grid';
+        if (luGrid)   luGrid.style.display   = isLeaseUp ? 'grid' : 'none';
+
+        function _setBadge(id, score) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          el.textContent = score >= 75 ? 'ON TRACK' : score >= 50 ? 'WATCH' : 'NEEDS LEADS';
+          el.className = 'badge ' + (score >= 75 ? 'badge-green' : score >= 50 ? 'badge-yellow' : 'badge-red');
+          el.style.fontSize = '9px';
+        }
+
+        if (!isLeaseUp) {
+          var v = document.getElementById('pm-occ-raw');   if (v && lsc.occupancy_raw != null) v.textContent = parseFloat(lsc.occupancy_raw).toFixed(1);
+          var v = document.getElementById('pm-occ-score'); if (v) v.textContent = lsc.occupancy_score;
+          _setBadge('pm-occ-badge', lsc.occupancy_score);
+          var v = document.getElementById('pm-atr-raw');   if (v && lsc.atr_raw != null) v.textContent = parseFloat(lsc.atr_raw).toFixed(1);
+          var v = document.getElementById('pm-atr-score'); if (v) v.textContent = lsc.atr_score;
+          _setBadge('pm-atr-badge', lsc.atr_score);
+          var v = document.getElementById('pm-exp-raw');   if (v && lsc.trend_raw != null) v.textContent = lsc.trend_raw;
+          var v = document.getElementById('pm-exp-score'); if (v) v.textContent = lsc.exposure_score;
+          _setBadge('pm-exp-badge', lsc.exposure_score);
+        } else {
+          var v = document.getElementById('pm-lu-occ-raw');   if (v && lsc.occupancy_raw != null) v.textContent = parseFloat(lsc.occupancy_raw).toFixed(1);
+          var v = document.getElementById('pm-lu-occ-score'); if (v) v.textContent = lsc.occupancy_score;
+          _setBadge('pm-lu-occ-badge', lsc.occupancy_score);
+          var v = document.getElementById('pm-lu-atr-raw');   if (v && lsc.atr_raw != null) v.textContent = parseFloat(lsc.atr_raw).toFixed(1);
+          var v = document.getElementById('pm-lu-atr-score'); if (v) v.textContent = lsc.atr_score;
+          _setBadge('pm-lu-atr-badge', lsc.atr_score);
         }
       }
     }
 
-    // Leasing snapshot strip
+    // Leasing snapshot strip (bottom of performance card)
     if (propData && propData.leasing) {
       var l = propData.leasing;
       if (l.occupancy != null) {
@@ -3942,9 +4035,15 @@ function downloadReport() {
 
 function _demoReportData() {
   return {
-    property: { id: '', name: 'The Quincy at Kierland', market: 'Scottsdale', units: 320, status: 'RPM Managed', report_date: '2026-03-01' },
+    property: { id: '', name: 'The Quincy at Kierland', market: 'Scottsdale', units: 320, status: 'RPM Managed', occupancy_status: 'Stabilized', report_date: '2026-03-01' },
     health: {
-      overall: 72, status: 'WARNING',
+      overall: 68, status: 'WATCH',
+      is_lease_up: false,
+      leasing_score: {
+        score: 68, status: 'WATCH', is_lease_up: false, is_renovation: false,
+        occupancy_score: 70, atr_score: 60, exposure_score: 75,
+        occupancy_raw: 93.2, atr_raw: 8.4, trend_raw: 34
+      },
       market: 78, marketing: 68, funnel: 70, experience: 67,
       flag_count: 4,
       digital_flags: [
@@ -3984,11 +4083,14 @@ function _buildReportHTML(d) {
   var dateStr = months[rDate.getMonth()] + ' ' + rDate.getFullYear();
 
   var overall  = health.overall   != null ? health.overall   : '—';
+  var status   = health.status    || 'Not Scored';
+  var lsc      = health.leasing_score || null;
+  var isLeaseUp = health.is_lease_up || false;
+  // Legacy pipeline scores (kept for potential future use)
   var mktS     = health.market    != null ? health.market    : '—';
   var mktgS    = health.marketing != null ? health.marketing : '—';
   var funnelS  = health.funnel    != null ? health.funnel    : '—';
   var expS     = health.experience!= null ? health.experience: '—';
-  var status   = health.status    || 'Not Scored';
 
   var dFlags   = health.digital_flags    || [];
   var pmFlags  = health.pm_flags         || [];
@@ -3996,8 +4098,19 @@ function _buildReportHTML(d) {
   var recs     = health.recommendations  || [];
 
   // Status color
-  var statusColor = status === 'HEALTHY' ? '#4A7C6E' : status === 'WARNING' ? '#F4A520' : status === 'RED ALERT' ? '#C6332C' : '#6B7280';
-  var statusLabel = status === 'HEALTHY' ? 'HEALTHY' : status === 'WARNING' ? 'NEEDS ATTENTION' : status === 'RED ALERT' ? 'CRITICAL' : 'NOT SCORED';
+  var statusColor = (status === 'ON TRACK' || status === 'HEALTHY') ? '#4A7C6E'
+    : (status === 'NEEDS LEADS' || status === 'RED ALERT') ? '#C6332C'
+    : (status === 'RENOVATION') ? '#6B7280'
+    : '#F4A520';
+  // Map all status variants to display labels
+  var statusLabel = status === 'ON TRACK'    ? 'ON TRACK'
+    : status === 'WATCH'                     ? 'WATCH'
+    : status === 'NEEDS LEADS'               ? 'NEEDS LEADS'
+    : status === 'RENOVATION'                ? 'RENOVATION'
+    : status === 'HEALTHY'                   ? 'ON TRACK'
+    : status === 'WARNING'                   ? 'WATCH'
+    : status === 'RED ALERT'                 ? 'NEEDS LEADS'
+    : 'NOT SCORED';
 
   function scoreColor(s) {
     if (s === '—' || s == null) return '#6B7280';
@@ -4006,7 +4119,7 @@ function _buildReportHTML(d) {
   function scoreBadge(s) {
     if (s === '—' || s == null) return '<span style="font-size:10px;color:#6B7280">—</span>';
     var c = scoreColor(s);
-    var lbl = s >= 75 ? 'Healthy' : s >= 50 ? 'Warning' : 'Critical';
+    var lbl = s >= 75 ? 'On Track' : s >= 50 ? 'Watch' : 'Needs Leads';
     return '<span style="background:'+c+';color:#fff;font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.06em;text-transform:uppercase">'+lbl+'</span>';
   }
   function sevColor(sev) {
@@ -4150,39 +4263,70 @@ function _buildReportHTML(d) {
       '<span style="color:#B8956A">⬥</span> HEALTH SCORECARD' +
     '</div>' +
 
-    '<div style="display:flex;gap:12px;margin-bottom:24px">' +
-      catBox('Market',     mktS,   '25%') +
-      catBox('Marketing',  mktgS,  '30%') +
-      catBox('Funnel',     funnelS,'25%') +
-      catBox('Experience', expS,   '20%') +
-    '</div>' +
+    // ── Scorecard: leasing model (3-metric stabilized or 2-metric lease-up) ──
+    (function() {
+      if (!lsc) {
+        return '<div style="color:#9CA3AF;font-size:12px;padding:20px 0">Scoring data not available.</div>';
+      }
 
-    '<div style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:8px;padding:16px 20px;margin-bottom:24px">' +
-      '<div style="font-size:11px;font-weight:700;color:#4A5A5A;margin-bottom:8px">OVERALL SCORE FORMULA</div>' +
-      '<div style="font-size:11px;color:#6B7280">' +
-        'Market ('+mktS+'×0.25) + Marketing ('+mktgS+'×0.30) + Funnel ('+funnelS+'×0.25) + Experience ('+expS+'×0.20) ' +
-        '= <strong style="color:'+statusColor+';font-size:14px">'+overall+'/100</strong>' +
-      '</div>' +
-    '</div>' +
+      var occRaw    = lsc.occupancy_raw  != null ? parseFloat(lsc.occupancy_raw).toFixed(1) + '%' : '—';
+      var atrRaw    = lsc.atr_raw        != null ? parseFloat(lsc.atr_raw).toFixed(1) + '%'        : '—';
+      var trendRaw  = lsc.trend_raw      != null ? lsc.trend_raw + ' leases'                       : '—';
+      var occScore  = lsc.occupancy_score  || '—';
+      var atrScore  = lsc.atr_score        || '—';
+      var expScore  = lsc.exposure_score   || '—';
 
-    '<table style="width:100%;border-collapse:collapse">' +
-      '<thead><tr style="background:#4A5A5A;color:#fff">' +
-        '<th style="padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Category</th>' +
-        '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Score</th>' +
-        '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Weight</th>' +
-        '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Status</th>' +
-      '</tr></thead>' +
-      '<tbody>' +
-        [['Market',mktS,'25%'],['Marketing',mktgS,'30%'],['Leasing Funnel',funnelS,'25%'],['Follow Up & Experience',expS,'20%']].map(function(row,i) {
-          return '<tr style="background:'+(i%2===0?'#fff':'#F9FAFB')+'">' +
-            '<td style="padding:10px 12px;font-weight:600;color:#1F2937">'+row[0]+'</td>' +
-            '<td style="padding:10px 12px;text-align:center;font-size:18px;font-weight:800;color:'+scoreColor(row[1])+'">'+row[1]+'</td>' +
-            '<td style="padding:10px 12px;text-align:center;color:#9CA3AF">'+row[2]+'</td>' +
-            '<td style="padding:10px 12px;text-align:center">'+scoreBadge(row[1])+'</td>' +
-          '</tr>';
-        }).join('') +
-      '</tbody>' +
-    '</table>' +
+      if (isLeaseUp) {
+        var cols = [
+          { label: 'Occupancy Progress', raw: occRaw, score: occScore, weight: '60%' },
+          { label: 'Lead Demand (ATR)',   raw: atrRaw, score: atrScore, weight: '40%' },
+        ];
+        var tag = '<div style="display:inline-block;background:#B8956A;color:#fff;font-size:8px;font-weight:700;padding:2px 7px;border-radius:8px;letter-spacing:.07em;text-transform:uppercase;margin-bottom:12px">Lease-Up Scoring Model</div>';
+      } else {
+        var cols = [
+          { label: 'Occupancy',      raw: occRaw,   score: occScore, weight: '50%' },
+          { label: 'Available to Rent (ATR)', raw: atrRaw,   score: atrScore, weight: '30%' },
+          { label: '120-Day Trend',  raw: trendRaw, score: expScore, weight: '20%' },
+        ];
+        var tag = '';
+      }
+
+      var boxes = cols.map(function(col) {
+        return catBox(col.label + '<br><span style="font-size:11px;font-weight:400;color:#9CA3AF">' + col.raw + '</span>', col.score, col.weight);
+      }).join('');
+
+      var formula = isLeaseUp
+        ? 'Occupancy Progress ('+occScore+'×0.60) + Lead Demand ('+atrScore+'×0.40) = <strong style="color:'+statusColor+';font-size:14px">'+overall+'/100</strong>'
+        : 'Occupancy ('+occScore+'×0.50) + ATR ('+atrScore+'×0.30) + 120-Day ('+expScore+'×0.20) = <strong style="color:'+statusColor+';font-size:14px">'+overall+'/100</strong>';
+
+      var tableRows = cols.map(function(col, i) {
+        return '<tr style="background:'+(i%2===0?'#fff':'#F9FAFB')+'">' +
+          '<td style="padding:10px 12px;font-weight:600;color:#1F2937">'+col.label+'</td>' +
+          '<td style="padding:10px 12px;text-align:center;color:#9CA3AF">'+col.raw+'</td>' +
+          '<td style="padding:10px 12px;text-align:center;font-size:18px;font-weight:800;color:'+scoreColor(col.score)+'">'+col.score+'</td>' +
+          '<td style="padding:10px 12px;text-align:center">'+col.weight+'</td>' +
+          '<td style="padding:10px 12px;text-align:center">'+scoreBadge(col.score)+'</td>' +
+        '</tr>';
+      }).join('');
+
+      return tag +
+        '<div style="display:flex;gap:12px;margin-bottom:24px">'+boxes+'</div>' +
+        '<div style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:8px;padding:16px 20px;margin-bottom:24px">' +
+          '<div style="font-size:11px;font-weight:700;color:#4A5A5A;margin-bottom:8px">OVERALL SCORE FORMULA</div>' +
+          '<div style="font-size:11px;color:#6B7280">'+formula+'</div>' +
+        '</div>' +
+        '<table style="width:100%;border-collapse:collapse">' +
+          '<thead><tr style="background:#4A5A5A;color:#fff">' +
+            '<th style="padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Metric</th>' +
+            '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Value</th>' +
+            '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Score</th>' +
+            '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Weight</th>' +
+            '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Status</th>' +
+          '</tr></thead>' +
+          '<tbody>'+tableRows+'</tbody>' +
+        '</table>' +
+        '<div style="margin-top:14px;font-size:9px;color:#9CA3AF;font-style:italic">Scored from occupancy &amp; availability data. Full marketing analytics integration coming Q2.</div>';
+    })() +
     pageFooter +
   '</div>' +
 
