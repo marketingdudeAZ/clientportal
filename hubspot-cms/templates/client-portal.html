@@ -5464,3 +5464,10 @@ document.addEventListener('click', function(e) {
 </script>
 </body>
 </html>
+    {% endif %}{# /plestatus check #}
+  {% endif %}{# /companies found #}
+{% else %}
+<!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;color:#374151">
+<h2>Invalid link</h2><p>No property ID was found in this URL. Please use the link provided by your account manager.</p>
+</body></html>
+{% endif %}{# /uuid_param #}
