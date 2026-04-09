@@ -931,7 +931,7 @@ select.brief-input{height:34px;cursor:pointer}
   <div class="sec-topbar">
     <div><div class="sec-title">Performance</div><div class="sec-sub">Health scores · reporting · deliverables</div></div>
     <div class="sec-actions">
-      <button class="btn btn-secondary btn-sm">
+      <button class="btn btn-secondary btn-sm" id="btn-download-report" onclick="downloadReport()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         Download Report PDF
       </button>
@@ -3457,6 +3457,308 @@ var _baseBudgets    = {};      // current-state budgets (read-only reference)
 var _currentPerf    = {};      // { leads, cpl, channels: {ch: {leads,spend}} }
 var _propContext    = {};      // { unit_count, market, occupancy, health_score, size_band }
 var _forecastCtx    = null;   // result from /api/forecast-context
+
+// ── Red Light Report PDF Download ─────────────────────────────────────────────
+
+function downloadReport() {
+  var btn = document.getElementById('btn-download-report');
+  if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
+
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var cid   = window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || '';
+  var email = window.__PORTAL_EMAIL__     || window.__PORTAL_EMAIL       || 'demo@rpmliving.com';
+
+  var p = cid
+    ? fetch(API_BASE + '/api/report-data?company_id=' + encodeURIComponent(cid),
+            { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); })
+    : Promise.resolve(_demoReportData());
+
+  p.then(function(d) {
+    var html = _buildReportHTML(d);
+    var win = window.open('', '_blank');
+    if (!win) { alert('Pop-ups are blocked. Please allow pop-ups for this site to download the report.'); return; }
+    win.document.write(html);
+    win.document.close();
+    setTimeout(function() { win.focus(); win.print(); }, 700);
+  }).catch(function(err) {
+    console.error('Report generation failed:', err);
+    alert('Could not generate the report. Please try again.');
+  }).finally(function() {
+    if (btn) { btn.textContent = 'Download Report PDF'; btn.disabled = false; }
+  });
+}
+
+function _demoReportData() {
+  return {
+    property: { id: '', name: 'The Quincy at Kierland', market: 'Scottsdale', units: 320, status: 'RPM Managed', report_date: '2026-03-01' },
+    health: {
+      overall: 72, status: 'WARNING',
+      market: 78, marketing: 68, funnel: 70, experience: 67,
+      flag_count: 4,
+      digital_flags: [
+        { flag: 'CTR Below Benchmark', category: 'Paid Search', severity: 'High', notes: 'CTR at 2.8% — benchmark is 5%+. Ad copy refresh recommended.' },
+        { flag: 'Session Duration Low', category: 'Website', severity: 'Medium', notes: 'Average 0:52 — benchmark is 1:30+. Landing page UX review needed.' },
+        { flag: 'Cost Per Conversion Elevated', category: 'Paid Social', severity: 'Medium', notes: '$168 CPL vs $100 benchmark. Audience targeting may need refinement.' },
+      ],
+      pm_flags: [
+        { flag: 'ATR Above 8%', category: 'Leasing', severity: 'High', notes: 'Annualized turnover at 8.4%. Retention programs may be needed.' },
+      ],
+      recommendations: [
+        'Refresh paid search ad copy — current CTR of 2.8% is significantly below the 5% benchmark. Test 3 new headline variants.',
+        'Review landing page experience — session duration below 1:30 suggests visitors are not finding what they need quickly.',
+        'Audit Meta audience targeting — CPL of $168 is above benchmark. Test lookalike audiences based on recent lease conversions.',
+      ]
+    },
+    activity: [
+      { date: '2026-03-15', type: 'Note',  summary: 'AM reviewed March performance data — paid search impression share down 14% vs competitors.' },
+      { date: '2026-03-10', type: 'Call',  summary: 'Monthly check-in with owner. Discussed spring leasing strategy and budget reallocation.' },
+      { date: '2026-03-05', type: 'Email', summary: 'Sent February performance report and Health Score summary.' },
+      { date: '2026-02-28', type: 'Deal',  summary: 'Deal created: Reputation Management Upgrade ($3,060/yr) — pending approval.' },
+      { date: '2026-02-20', type: 'Note',  summary: 'Completed ad copy refresh for Google Search campaigns. New variants live.' },
+    ]
+  };
+}
+
+function _buildReportHTML(d) {
+  var prop   = d.property || {};
+  var health = d.health   || {};
+  var acts   = d.activity || [];
+
+  var name    = prop.name    || 'Property';
+  var market  = prop.market  || '';
+  var units   = prop.units   || 0;
+  var rDate   = prop.report_date ? new Date(prop.report_date + 'T00:00:00') : new Date();
+  var months  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var dateStr = months[rDate.getMonth()] + ' ' + rDate.getFullYear();
+
+  var overall  = health.overall   != null ? health.overall   : '—';
+  var mktS     = health.market    != null ? health.market    : '—';
+  var mktgS    = health.marketing != null ? health.marketing : '—';
+  var funnelS  = health.funnel    != null ? health.funnel    : '—';
+  var expS     = health.experience!= null ? health.experience: '—';
+  var status   = health.status    || 'Not Scored';
+
+  var dFlags   = health.digital_flags    || [];
+  var pmFlags  = health.pm_flags         || [];
+  var allFlags = dFlags.concat(pmFlags);
+  var recs     = health.recommendations  || [];
+
+  // Status color
+  var statusColor = status === 'HEALTHY' ? '#4A7C6E' : status === 'WARNING' ? '#F4A520' : status === 'RED ALERT' ? '#C6332C' : '#6B7280';
+  var statusLabel = status === 'HEALTHY' ? 'HEALTHY' : status === 'WARNING' ? 'NEEDS ATTENTION' : status === 'RED ALERT' ? 'CRITICAL' : 'NOT SCORED';
+
+  function scoreColor(s) {
+    if (s === '—' || s == null) return '#6B7280';
+    return s >= 75 ? '#4A7C6E' : s >= 50 ? '#F4A520' : '#C6332C';
+  }
+  function scoreBadge(s) {
+    if (s === '—' || s == null) return '<span style="font-size:10px;color:#6B7280">—</span>';
+    var c = scoreColor(s);
+    var lbl = s >= 75 ? 'Healthy' : s >= 50 ? 'Warning' : 'Critical';
+    return '<span style="background:'+c+';color:#fff;font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.06em;text-transform:uppercase">'+lbl+'</span>';
+  }
+  function sevColor(sev) {
+    var s = (sev||'').toLowerCase();
+    return s === 'high' ? '#C6332C' : s === 'medium' ? '#F4A520' : '#4A7C6E';
+  }
+
+  var RPM_LOGO = 'https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/images/rpm-logo.png';
+
+  // ── Category score HTML helper ──
+  function catBox(label, score, weight) {
+    var c = scoreColor(score);
+    return '<div style="flex:1;border:1px solid #E5E7EB;border-radius:10px;padding:18px 14px;text-align:center;background:#FAFAFA">' +
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#4A5A5A;margin-bottom:10px">'+label+'</div>' +
+      '<div style="font-size:36px;font-weight:800;color:'+c+';line-height:1">'+score+'</div>' +
+      '<div style="font-size:10px;color:#9CA3AF;margin-top:2px">of 100</div>' +
+      '<div style="margin-top:10px">'+scoreBadge(score)+'</div>' +
+      '<div style="font-size:10px;color:#9CA3AF;margin-top:8px">Weight: '+weight+'</div>' +
+    '</div>';
+  }
+
+  // ── Flags table rows ──
+  var flagRows = '';
+  if (allFlags.length === 0) {
+    flagRows = '<tr><td colspan="4" style="padding:16px;text-align:center;color:#4A7C6E;font-weight:600">✓ No flags raised this period.</td></tr>';
+  } else {
+    allFlags.forEach(function(f) {
+      var sc = sevColor(f.severity || f.level || '');
+      flagRows += '<tr>' +
+        '<td style="padding:9px 12px;border-bottom:1px solid #F3F4F6;color:#1F2937;font-weight:600">'+( f.flag || f.name || '')+'</td>' +
+        '<td style="padding:9px 12px;border-bottom:1px solid #F3F4F6;color:#6B7280">'+( f.category || '')+'</td>' +
+        '<td style="padding:9px 12px;border-bottom:1px solid #F3F4F6">' +
+          '<span style="background:'+sc+';color:#fff;font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase">'+(f.severity||f.level||'')+'</span>' +
+        '</td>' +
+        '<td style="padding:9px 12px;border-bottom:1px solid #F3F4F6;color:#6B7280;font-size:11px">'+( f.notes || f.description || '')+'</td>' +
+      '</tr>';
+    });
+  }
+
+  // ── Activity rows ──
+  var actRows = '';
+  if (acts.length === 0) {
+    actRows = '<tr><td colspan="3" style="padding:16px;text-align:center;color:#9CA3AF">No activity recorded in the last 90 days.</td></tr>';
+  } else {
+    var typeColors = { Note:'#53606C', Call:'#4A7C6E', Email:'#C8964E', Deal:'#7B9EC9', Email_reply:'#C8964E' };
+    acts.forEach(function(a) {
+      var tc = typeColors[a.type] || '#9CA3AF';
+      actRows += '<tr>' +
+        '<td style="padding:9px 12px;border-bottom:1px solid #F3F4F6;color:#9CA3AF;white-space:nowrap;font-size:11px">'+a.date+'</td>' +
+        '<td style="padding:9px 12px;border-bottom:1px solid #F3F4F6">' +
+          '<span style="background:'+tc+';color:#fff;font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px">'+a.type+'</span>' +
+        '</td>' +
+        '<td style="padding:9px 12px;border-bottom:1px solid #F3F4F6;color:#374151;font-size:12px">'+a.summary+'</td>' +
+      '</tr>';
+    });
+  }
+
+  // ── Recommendations section ──
+  var recsHTML = '';
+  if (recs.length > 0) {
+    recsHTML = '<div style="page-break-before:always">' +
+      '<div style="background:#4A5A5A;color:#fff;padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:20px">' +
+        '<span style="color:#B8956A">⬥</span> RECOMMENDATIONS' +
+      '</div>';
+    recs.forEach(function(rec, i) {
+      recsHTML += '<div style="display:flex;gap:14px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #F3F4F6">' +
+        '<div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;background:#4A5A5A;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">'+(i+1)+'</div>' +
+        '<div style="font-size:12px;color:#374151;line-height:1.6">'+rec+'</div>' +
+      '</div>';
+    });
+    recsHTML += '</div>';
+  }
+
+  var pageHeader = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:12px;border-bottom:2px solid #4A5A5A">' +
+    '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#9CA3AF">RPM LIVING DIGITAL PRODUCTS &amp; SERVICES</div>' +
+    '<div style="font-size:10px;color:#9CA3AF">Health Report</div>' +
+  '</div>';
+
+  var pageFooter = '<div style="position:fixed;bottom:0.5in;left:0.75in;right:0.75in;text-align:center;font-size:9px;color:#B8C4B8;border-top:1px solid #E5E7EB;padding-top:8px">' +
+    'RPM LIVING | Digital Products &amp; Services | <span style="color:#B8956A">/ EXCEED EVERY NEED /</span>' +
+  '</div>';
+
+  return '<!DOCTYPE html><html><head>' +
+    '<meta charset="UTF-8">' +
+    '<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">' +
+    '<style>' +
+      '*{box-sizing:border-box;margin:0;padding:0}' +
+      'body{font-family:Montserrat,sans-serif;font-size:12px;color:#1F2937;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+      '@page{size:letter;margin:0.75in}' +
+      '@media print{.no-print{display:none}body{margin:0}}' +
+    '</style>' +
+  '</head><body>' +
+
+  // ── PAGE 1: COVER ──
+  '<div style="min-height:9.5in;display:flex;flex-direction:column">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:48px">' +
+      '<img src="'+RPM_LOGO+'" style="height:32px;filter:brightness(0)" onerror="this.style.display=\'none\'">' +
+      '<div style="text-align:right">' +
+        '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#9CA3AF">MONTHLY HEALTH REPORT</div>' +
+        '<div style="font-size:11px;color:#9CA3AF;margin-top:3px">'+dateStr+'</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div style="flex:1;display:flex;flex-direction:column;justify-content:center">' +
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#B8956A;margin-bottom:12px">PROPERTY HEALTH REPORT</div>' +
+      '<div style="font-size:32px;font-weight:800;color:#1A2530;line-height:1.15;margin-bottom:8px">'+name+'</div>' +
+      '<div style="font-size:14px;color:#6B7280;margin-bottom:36px">'+market+(units ? ' &nbsp;·&nbsp; '+units+' units' : '')+'</div>' +
+      '<div style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;background:'+statusColor+';color:#fff;border-radius:14px;padding:28px 40px;width:220px">' +
+        '<div style="font-size:60px;font-weight:800;line-height:1">'+overall+'</div>' +
+        '<div style="font-size:13px;margin-top:4px;opacity:.8">/ 100</div>' +
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-top:10px;border-top:1px solid rgba(255,255,255,.3);padding-top:10px;width:100%;text-align:center">'+statusLabel+'</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div style="border-top:1px solid #E5E7EB;padding-top:14px;text-align:center;font-size:9px;color:#B8C4B8">' +
+      'RPM LIVING | Digital Products &amp; Services | <span style="color:#B8956A">/ EXCEED EVERY NEED /</span>' +
+    '</div>' +
+  '</div>' +
+
+  // ── PAGE 2: HEALTH SCORECARD ──
+  '<div style="page-break-before:always">' +
+    pageHeader +
+    '<div style="background:#4A5A5A;color:#fff;padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:20px">' +
+      '<span style="color:#B8956A">⬥</span> HEALTH SCORECARD' +
+    '</div>' +
+
+    '<div style="display:flex;gap:12px;margin-bottom:24px">' +
+      catBox('Market',     mktS,   '25%') +
+      catBox('Marketing',  mktgS,  '30%') +
+      catBox('Funnel',     funnelS,'25%') +
+      catBox('Experience', expS,   '20%') +
+    '</div>' +
+
+    '<div style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:8px;padding:16px 20px;margin-bottom:24px">' +
+      '<div style="font-size:11px;font-weight:700;color:#4A5A5A;margin-bottom:8px">OVERALL SCORE FORMULA</div>' +
+      '<div style="font-size:11px;color:#6B7280">' +
+        'Market ('+mktS+'×0.25) + Marketing ('+mktgS+'×0.30) + Funnel ('+funnelS+'×0.25) + Experience ('+expS+'×0.20) ' +
+        '= <strong style="color:'+statusColor+';font-size:14px">'+overall+'/100</strong>' +
+      '</div>' +
+    '</div>' +
+
+    '<table style="width:100%;border-collapse:collapse">' +
+      '<thead><tr style="background:#4A5A5A;color:#fff">' +
+        '<th style="padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Category</th>' +
+        '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Score</th>' +
+        '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Weight</th>' +
+        '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Status</th>' +
+      '</tr></thead>' +
+      '<tbody>' +
+        [['Market',mktS,'25%'],['Marketing',mktgS,'30%'],['Leasing Funnel',funnelS,'25%'],['Follow Up & Experience',expS,'20%']].map(function(row,i) {
+          return '<tr style="background:'+(i%2===0?'#fff':'#F9FAFB')+'">' +
+            '<td style="padding:10px 12px;font-weight:600;color:#1F2937">'+row[0]+'</td>' +
+            '<td style="padding:10px 12px;text-align:center;font-size:18px;font-weight:800;color:'+scoreColor(row[1])+'">'+row[1]+'</td>' +
+            '<td style="padding:10px 12px;text-align:center;color:#9CA3AF">'+row[2]+'</td>' +
+            '<td style="padding:10px 12px;text-align:center">'+scoreBadge(row[1])+'</td>' +
+          '</tr>';
+        }).join('') +
+      '</tbody>' +
+    '</table>' +
+  '</div>' +
+
+  // ── PAGE 3: FLAGS ──
+  '<div style="page-break-before:always">' +
+    pageHeader +
+    '<div style="background:#4A5A5A;color:#fff;padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:20px">' +
+      '<span style="color:#B8956A">⬥</span> FLAGS RAISED' +
+      (allFlags.length ? ' <span style="background:#C6332C;font-size:10px;padding:1px 7px;border-radius:10px;margin-left:8px">'+allFlags.length+'</span>' : '') +
+    '</div>' +
+    '<table style="width:100%;border-collapse:collapse">' +
+      '<thead><tr style="background:#4A5A5A;color:#fff">' +
+        '<th style="padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.07em;width:28%">Flag</th>' +
+        '<th style="padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.07em;width:15%">Category</th>' +
+        '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em;width:12%">Severity</th>' +
+        '<th style="padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Notes</th>' +
+      '</tr></thead>' +
+      '<tbody>'+flagRows+'</tbody>' +
+    '</table>' +
+  '</div>' +
+
+  // ── PAGE 4: RECOMMENDATIONS (conditional) ──
+  recsHTML +
+
+  // ── PAGE 5: RECENT ACTIVITY ──
+  '<div style="page-break-before:always">' +
+    pageHeader +
+    '<div style="background:#4A5A5A;color:#fff;padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:20px">' +
+      '<span style="color:#B8956A">⬥</span> RECENT ACTIVITY <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">(last 90 days)</span>' +
+    '</div>' +
+    '<table style="width:100%;border-collapse:collapse">' +
+      '<thead><tr style="background:#4A5A5A;color:#fff">' +
+        '<th style="padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.07em;width:14%">Date</th>' +
+        '<th style="padding:9px 12px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em;width:12%">Type</th>' +
+        '<th style="padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.07em">Summary</th>' +
+      '</tr></thead>' +
+      '<tbody>'+actRows+'</tbody>' +
+    '</table>' +
+    '<div style="margin-top:12px;font-size:10px;color:#9CA3AF;font-style:italic">Activity sourced from HubSpot CRM — last 90 days.</div>' +
+    pageFooter +
+  '</div>' +
+
+  '</body></html>';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function loadForecast() {
   if (_benchmarks) { _renderForecast(); _loadForecastContext(); return; }

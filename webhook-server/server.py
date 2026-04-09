@@ -1986,6 +1986,169 @@ def video_revise():
     return jsonify({"revision_count": revision_count + 1, "status": "revision_in_progress"})
 
 
+@app.route("/api/report-data", methods=["GET", "OPTIONS"])
+def get_report_data():
+    """Return all data needed to generate the Red Light Report PDF.
+
+    Fetches from HubSpot:
+      - Company properties: name, market, units, all redlight_* scores + flags JSON
+      - Last 90 days of CRM activity (calls, notes, emails, deals) via engagements API
+
+    Returns consolidated JSON consumed by the client-side _buildReportHTML() function.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    company_id = request.args.get("company_id", "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    import requests as req, json as _json, datetime
+    from config import HUBSPOT_API_KEY
+
+    hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
+
+    # ── 1. Company properties ──────────────────────────────────────────────────
+    props_list = ",".join([
+        "name", "rpmmarket", "totalunits", "plestatus",
+        # Try both naming conventions — pipeline writes redlight_*, metrics endpoint uses red_light_*
+        "redlight_report_score", "red_light_report_score",
+        "redlight_market_score", "red_light_market_score",
+        "redlight_marketing_score", "red_light_marketing_score",
+        "redlight_funnel_score", "red_light_funnel_score",
+        "redlight_experience_score", "red_light_experience_score",
+        "redlight_flag_count",
+        "red_light_run_date", "redlight_run_date",
+        "redlight_digital_flags", "redlight_pm_flags", "redlight_recommendations",
+    ])
+    r = req.get(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props_list}",
+        headers=hs_headers, timeout=10,
+    )
+    props = {}
+    if r.ok:
+        props = r.json().get("properties", {})
+
+    def _score(key_a, key_b):
+        """Return first non-None value between two possible property names."""
+        v = props.get(key_a) or props.get(key_b)
+        try:
+            return int(float(v)) if v else None
+        except (ValueError, TypeError):
+            return None
+
+    overall   = _score("redlight_report_score", "red_light_report_score")
+    mkt_score = _score("redlight_market_score", "red_light_market_score")
+    mktg_score= _score("redlight_marketing_score", "red_light_marketing_score")
+    funnel    = _score("redlight_funnel_score", "red_light_funnel_score")
+    exp_score = _score("redlight_experience_score", "red_light_experience_score")
+    flag_count= int(props.get("redlight_flag_count") or 0)
+    run_date  = props.get("red_light_run_date") or props.get("redlight_run_date") or ""
+
+    # Derive status label from score
+    if overall is None:
+        status_label = "Not Scored"
+    elif overall >= 75:
+        status_label = "HEALTHY"
+    elif overall >= 50:
+        status_label = "WARNING"
+    else:
+        status_label = "RED ALERT"
+
+    # Parse JSON flag arrays
+    def _parse_json_prop(key):
+        raw = props.get(key, "") or ""
+        if not raw:
+            return []
+        try:
+            v = _json.loads(raw)
+            return v if isinstance(v, list) else []
+        except Exception:
+            return []
+
+    digital_flags   = _parse_json_prop("redlight_digital_flags")
+    pm_flags        = _parse_json_prop("redlight_pm_flags")
+    recommendations = _parse_json_prop("redlight_recommendations")
+
+    # ── 2. Recent HubSpot activity (last 90 days) ─────────────────────────────
+    activity = []
+    cutoff = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
+
+    try:
+        # Get associated engagement IDs
+        assoc_r = req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}/associations/engagements",
+            headers=hs_headers, timeout=10,
+        )
+        if assoc_r.ok:
+            eng_ids = [item["id"] for item in assoc_r.json().get("results", [])][:30]
+
+            for eid in eng_ids:
+                eng_r = req.get(
+                    f"https://api.hubapi.com/engagements/v1/engagements/{eid}",
+                    headers=hs_headers, timeout=6,
+                )
+                if not eng_r.ok:
+                    continue
+                data = eng_r.json()
+                eng   = data.get("engagement", {})
+                meta  = data.get("metadata", {})
+                ts    = eng.get("createdAt", 0)
+                if ts:
+                    eng_date = datetime.datetime.utcfromtimestamp(ts / 1000).strftime("%Y-%m-%d")
+                    if eng_date < cutoff:
+                        continue
+                else:
+                    continue
+
+                eng_type = eng.get("type", "").capitalize()
+                summary  = (
+                    meta.get("subject") or
+                    meta.get("title") or
+                    meta.get("body", "")[:120] or
+                    ""
+                ).strip()
+
+                activity.append({
+                    "date": eng_date,
+                    "type": eng_type,
+                    "summary": summary,
+                })
+
+        activity.sort(key=lambda x: x["date"], reverse=True)
+        activity = activity[:20]
+    except Exception as e:
+        logger.warning("Activity fetch failed for company %s: %s", company_id, e)
+
+    return jsonify({
+        "property": {
+            "id":          company_id,
+            "name":        props.get("name", ""),
+            "market":      props.get("rpmmarket", ""),
+            "units":       int(props.get("totalunits") or 0),
+            "status":      props.get("plestatus", ""),
+            "report_date": run_date,
+        },
+        "health": {
+            "overall":      overall,
+            "status":       status_label,
+            "market":       mkt_score,
+            "marketing":    mktg_score,
+            "funnel":       funnel,
+            "experience":   exp_score,
+            "flag_count":   flag_count,
+            "digital_flags":   digital_flags,
+            "pm_flags":        pm_flags,
+            "recommendations": recommendations,
+        },
+        "activity": activity,
+    })
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return '{"status":"ok"}', 200, {"Content-Type": "application/json"}
