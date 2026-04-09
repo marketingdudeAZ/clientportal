@@ -3857,7 +3857,40 @@ function loadPerformance() {
   var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
   var cid   = window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || '';
   var email = window.__PORTAL_EMAIL__     || window.__PORTAL_EMAIL       || 'demo@rpmliving.com';
-  if (!cid) return; // demo mode — gauges stay at hardcoded values
+  if (!cid) {
+    // Demo mode — apply hardcoded demo leasing score directly
+    var demoData = _demoReportData();
+    var dh = demoData.health;
+    _applyGauge('overall', dh.overall, true);
+    var badge = document.getElementById('perf-status-badge');
+    if (badge) { badge.textContent = 'Watch'; badge.className = 'badge badge-yellow'; }
+    var lsc = dh.leasing_score;
+    if (lsc) {
+      var stabGrid = document.getElementById('perf-stabilized-grid');
+      var luGrid   = document.getElementById('perf-leaseup-grid');
+      if (stabGrid) stabGrid.style.display = 'grid';
+      if (luGrid)   luGrid.style.display   = 'none';
+      function _sdBadge(id, score) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = score >= 75 ? 'ON TRACK' : score >= 50 ? 'WATCH' : 'NEEDS LEADS';
+        el.className = 'badge ' + (score >= 75 ? 'badge-green' : score >= 50 ? 'badge-yellow' : 'badge-red');
+        el.style.fontSize = '9px';
+      }
+      var v;
+      v = document.getElementById('pm-occ-raw');   if (v) v.textContent = lsc.occupancy_raw;
+      v = document.getElementById('pm-occ-score'); if (v) v.textContent = lsc.occupancy_score;
+      _sdBadge('pm-occ-badge', lsc.occupancy_score);
+      v = document.getElementById('pm-atr-raw');   if (v) v.textContent = lsc.atr_raw;
+      v = document.getElementById('pm-atr-score'); if (v) v.textContent = lsc.atr_score;
+      _sdBadge('pm-atr-badge', lsc.atr_score);
+      v = document.getElementById('pm-exp-raw');   if (v) v.textContent = lsc.trend_raw;
+      v = document.getElementById('pm-exp-score'); if (v) v.textContent = lsc.exposure_score;
+      _sdBadge('pm-exp-badge', lsc.exposure_score);
+    }
+    _perfLoaded = true;
+    return;
+  }
 
   var metricsP = fetch(API_BASE + '/api/property-metrics?company_id=' + encodeURIComponent(cid),
         { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); });
