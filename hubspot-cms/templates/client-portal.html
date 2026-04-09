@@ -955,28 +955,28 @@ select.brief-input{height:34px;cursor:pointer}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
       <div style="font-size:16px;font-weight:700;color:var(--jd)">Property Health Score</div>
       <div style="display:flex;align-items:center;gap:8px">
-        <span class="badge badge-yellow">Warning</span>
-        <span style="font-size:12px;color:var(--tm)">Last scored Mar 1, 2026</span>
+        <span class="badge badge-yellow" id="perf-status-badge">Warning</span>
+        <span style="font-size:12px;color:var(--tm)" id="perf-last-scored">Last scored Mar 1, 2026</span>
       </div>
     </div>
-    <div style="font-size:12px;color:var(--tm);margin-bottom:4px">RedLight digital marketing health assessment · down 4 points from February (76)</div>
+    <div style="font-size:12px;color:var(--tm);margin-bottom:4px" id="perf-sub-label">RedLight digital marketing health assessment</div>
     <div class="gauge-row">
       <div class="gauge-main-wrap">
-        <div class="gauge">
+        <div class="gauge" id="gauge-overall">
           <svg width="160" height="160" viewBox="0 0 160 160">
             <circle cx="80" cy="80" r="66" fill="none" stroke="#E5E7EB" stroke-width="8" stroke-dasharray="311 103" stroke-dashoffset="-51" stroke-linecap="round"/>
-            <circle cx="80" cy="80" r="66" fill="none" stroke="#D4910A" stroke-width="8" stroke-dasharray="224 190" stroke-dashoffset="-51" stroke-linecap="round" class="gauge-arc"/>
-            <text x="80" y="74" text-anchor="middle" class="gauge-score-text" font-size="32" fill="#1F2937">72</text>
-            <text x="80" y="95" text-anchor="middle" font-size="10" fill="#D4910A" font-weight="700" letter-spacing="0.06em">WARNING</text>
+            <circle cx="80" cy="80" r="66" fill="none" stroke="#D4910A" stroke-width="8" stroke-dasharray="224 190" stroke-dashoffset="-51" stroke-linecap="round" class="gauge-arc" id="gauge-overall-arc"/>
+            <text x="80" y="74" text-anchor="middle" class="gauge-score-text" font-size="32" fill="#1F2937" id="gauge-overall-score">72</text>
+            <text x="80" y="95" text-anchor="middle" font-size="10" fill="#D4910A" font-weight="700" letter-spacing="0.06em" id="gauge-overall-status">WARNING</text>
           </svg>
           <div class="gauge-label">Overall</div>
         </div>
       </div>
       <div class="gauge-sub-grid">
-        <div class="gauge"><svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="44" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="207 69" stroke-dashoffset="-34" stroke-linecap="round"/><circle cx="55" cy="55" r="44" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="161 115" stroke-dashoffset="-34" stroke-linecap="round"/><text x="55" y="51" text-anchor="middle" class="gauge-score-text" font-size="22" fill="#1F2937">78</text><text x="55" y="66" text-anchor="middle" font-size="8" fill="#D4910A" font-weight="700">WARNING</text></svg><div class="gauge-label">Market</div></div>
-        <div class="gauge"><svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="44" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="207 69" stroke-dashoffset="-34" stroke-linecap="round"/><circle cx="55" cy="55" r="44" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="141 135" stroke-dashoffset="-34" stroke-linecap="round"/><text x="55" y="51" text-anchor="middle" class="gauge-score-text" font-size="22" fill="#1F2937">68</text><text x="55" y="66" text-anchor="middle" font-size="8" fill="#D4910A" font-weight="700">WARNING</text></svg><div class="gauge-label">Marketing</div></div>
-        <div class="gauge"><svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="44" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="207 69" stroke-dashoffset="-34" stroke-linecap="round"/><circle cx="55" cy="55" r="44" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="145 131" stroke-dashoffset="-34" stroke-linecap="round"/><text x="55" y="51" text-anchor="middle" class="gauge-score-text" font-size="22" fill="#1F2937">70</text><text x="55" y="66" text-anchor="middle" font-size="8" fill="#D4910A" font-weight="700">WARNING</text></svg><div class="gauge-label">Funnel</div></div>
-        <div class="gauge"><svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="44" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="207 69" stroke-dashoffset="-34" stroke-linecap="round"/><circle cx="55" cy="55" r="44" fill="none" stroke="#C94444" stroke-width="6" stroke-dasharray="139 137" stroke-dashoffset="-34" stroke-linecap="round"/><text x="55" y="51" text-anchor="middle" class="gauge-score-text" font-size="22" fill="#1F2937">67</text><text x="55" y="66" text-anchor="middle" font-size="8" fill="#C94444" font-weight="700">CRITICAL</text></svg><div class="gauge-label">Experience</div></div>
+        <div class="gauge" id="gauge-market"><svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="44" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="207 69" stroke-dashoffset="-34" stroke-linecap="round"/><circle cx="55" cy="55" r="44" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="161 115" stroke-dashoffset="-34" stroke-linecap="round" id="gauge-market-arc"/><text x="55" y="51" text-anchor="middle" class="gauge-score-text" font-size="22" fill="#1F2937" id="gauge-market-score">78</text><text x="55" y="66" text-anchor="middle" font-size="8" fill="#D4910A" font-weight="700" id="gauge-market-status">WARNING</text></svg><div class="gauge-label">Market</div></div>
+        <div class="gauge" id="gauge-marketing"><svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="44" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="207 69" stroke-dashoffset="-34" stroke-linecap="round"/><circle cx="55" cy="55" r="44" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="141 135" stroke-dashoffset="-34" stroke-linecap="round" id="gauge-marketing-arc"/><text x="55" y="51" text-anchor="middle" class="gauge-score-text" font-size="22" fill="#1F2937" id="gauge-marketing-score">68</text><text x="55" y="66" text-anchor="middle" font-size="8" fill="#D4910A" font-weight="700" id="gauge-marketing-status">WARNING</text></svg><div class="gauge-label">Marketing</div></div>
+        <div class="gauge" id="gauge-funnel"><svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="44" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="207 69" stroke-dashoffset="-34" stroke-linecap="round"/><circle cx="55" cy="55" r="44" fill="none" stroke="#D4910A" stroke-width="6" stroke-dasharray="145 131" stroke-dashoffset="-34" stroke-linecap="round" id="gauge-funnel-arc"/><text x="55" y="51" text-anchor="middle" class="gauge-score-text" font-size="22" fill="#1F2937" id="gauge-funnel-score">70</text><text x="55" y="66" text-anchor="middle" font-size="8" fill="#D4910A" font-weight="700" id="gauge-funnel-status">WARNING</text></svg><div class="gauge-label">Funnel</div></div>
+        <div class="gauge" id="gauge-experience"><svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="44" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="207 69" stroke-dashoffset="-34" stroke-linecap="round"/><circle cx="55" cy="55" r="44" fill="none" stroke="#C94444" stroke-width="6" stroke-dasharray="139 137" stroke-dashoffset="-34" stroke-linecap="round" id="gauge-experience-arc"/><text x="55" y="51" text-anchor="middle" class="gauge-score-text" font-size="22" fill="#1F2937" id="gauge-experience-score">67</text><text x="55" y="66" text-anchor="middle" font-size="8" fill="#C94444" font-weight="700" id="gauge-experience-status">CRITICAL</text></svg><div class="gauge-label">Experience</div></div>
       </div>
     </div>
 
@@ -2626,11 +2626,12 @@ function nav(id, el) {
   document.getElementById('section-'+id).classList.add('active');
   if (el) el.classList.add('active');
   // Lazy-load live data when sections open
-  if (id === 'tickets') { loadTickets(); }
-  if (id === 'brief')   { loadClientBrief(); }
-  if (id === 'budget')  { loadBudget(); }
-  if (id === 'video')    { loadVideoCreative(); }
-  if (id === 'forecast') { loadForecast(); }
+  if (id === 'tickets')     { loadTickets(); }
+  if (id === 'brief')       { loadClientBrief(); }
+  if (id === 'budget')      { loadBudget(); }
+  if (id === 'video')       { loadVideoCreative(); }
+  if (id === 'forecast')    { loadForecast(); }
+  if (id === 'performance') { loadPerformance(); }
 }
 
 function switchDemo(view, btn) {
@@ -3501,6 +3502,72 @@ var _currentPerf    = {};      // { leads, cpl, channels: {ch: {leads,spend}} }
 var _propContext    = {};      // { unit_count, market, occupancy, health_score, size_band }
 var _forecastCtx    = null;   // result from /api/forecast-context
 
+// ── Performance gauges ──────────────────────────────────────────────────────
+var _perfLoaded = false;
+
+function loadPerformance() {
+  if (_perfLoaded) return;
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var cid   = window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || '';
+  var email = window.__PORTAL_EMAIL__     || window.__PORTAL_EMAIL       || 'demo@rpmliving.com';
+  if (!cid) return;
+
+  fetch(API_BASE + '/api/property-metrics?company_id=' + encodeURIComponent(cid),
+        { headers: { 'X-Portal-Email': email } })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    var h = data.health;
+    if (!h) return;
+    _perfLoaded = true;
+    _applyGauge('overall',    h.overall,    true);
+    _applyGauge('market',     h.market,     false);
+    _applyGauge('marketing',  h.marketing,  false);
+    _applyGauge('funnel',     h.funnel,     false);
+    _applyGauge('experience', h.experience, false);
+
+    var badge = document.getElementById('perf-status-badge');
+    if (badge) {
+      var st = (h.status || '').toUpperCase();
+      badge.textContent = st === 'HEALTHY' ? 'Healthy' : st === 'WARNING' ? 'Warning' : st === 'RED ALERT' ? 'Critical' : h.status;
+      badge.className   = 'badge ' + (st === 'HEALTHY' ? 'badge-green' : st === 'RED ALERT' ? 'badge-red' : 'badge-yellow');
+    }
+    if (h.last_scored) {
+      var ls = document.getElementById('perf-last-scored');
+      if (ls) {
+        var d = new Date(h.last_scored + 'T00:00:00');
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        ls.textContent = 'Last scored ' + months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+      }
+    }
+  })
+  .catch(function(err){ console.warn('loadPerformance failed:', err); });
+}
+
+function _applyGauge(name, score, isLarge) {
+  if (score == null) return;
+  var color = score >= 75 ? '#8FA68E' : score >= 50 ? '#D4910A' : '#C94444';
+  var statusTxt = score >= 75 ? 'HEALTHY' : score >= 50 ? 'WARNING' : 'CRITICAL';
+
+  var arc = document.getElementById('gauge-' + name + '-arc');
+  if (arc) {
+    var total = isLarge ? 311 : 207;
+    var full  = isLarge ? 414 : 276;
+    var filled = Math.round((score / 100) * total);
+    arc.setAttribute('stroke-dasharray', filled + ' ' + (full - filled));
+    arc.setAttribute('stroke', color);
+  }
+  var scoreTxt = document.getElementById('gauge-' + name + '-score');
+  if (scoreTxt) scoreTxt.textContent = score;
+
+  var statusEl = document.getElementById('gauge-' + name + '-status');
+  if (statusEl) {
+    statusEl.textContent = statusTxt;
+    statusEl.setAttribute('fill', color);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 // ── Red Light Report PDF Download ─────────────────────────────────────────────
 
 function downloadReport() {
@@ -3659,6 +3726,7 @@ function _buildReportHTML(d) {
   var recsHTML = '';
   if (recs.length > 0) {
     recsHTML = '<div style="page-break-before:always">' +
+      pageHeader +
       '<div style="background:#4A5A5A;color:#fff;padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:20px">' +
         '<span style="color:#B8956A">⬥</span> RECOMMENDATIONS' +
       '</div>';
@@ -3668,7 +3736,7 @@ function _buildReportHTML(d) {
         '<div style="font-size:12px;color:#374151;line-height:1.6">'+rec+'</div>' +
       '</div>';
     });
-    recsHTML += '</div>';
+    recsHTML += pageFooter + '</div>';
   }
 
   var pageHeader = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:12px;border-bottom:2px solid #4A5A5A">' +
@@ -3676,7 +3744,7 @@ function _buildReportHTML(d) {
     '<div style="font-size:10px;color:#9CA3AF">Health Report</div>' +
   '</div>';
 
-  var pageFooter = '<div style="position:fixed;bottom:0.5in;left:0.75in;right:0.75in;text-align:center;font-size:9px;color:#B8C4B8;border-top:1px solid #E5E7EB;padding-top:8px">' +
+  var pageFooter = '<div style="margin-top:28px;padding-top:10px;border-top:1px solid #E5E7EB;text-align:center;font-size:9px;color:#B8C4B8">' +
     'RPM LIVING | Digital Products &amp; Services | <span style="color:#B8956A">/ EXCEED EVERY NEED /</span>' +
   '</div>';
 
@@ -3693,7 +3761,7 @@ function _buildReportHTML(d) {
 
   // ── PAGE 1: COVER ──
   '<div style="min-height:9.5in;display:flex;flex-direction:column">' +
-    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:48px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:56px">' +
       '<img src="'+RPM_LOGO+'" style="height:32px;filter:brightness(0)" onerror="this.style.display=\'none\'">' +
       '<div style="text-align:right">' +
         '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#9CA3AF">MONTHLY HEALTH REPORT</div>' +
@@ -3701,18 +3769,31 @@ function _buildReportHTML(d) {
       '</div>' +
     '</div>' +
 
-    '<div style="flex:1;display:flex;flex-direction:column;justify-content:center">' +
-      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#B8956A;margin-bottom:12px">PROPERTY HEALTH REPORT</div>' +
-      '<div style="font-size:32px;font-weight:800;color:#1A2530;line-height:1.15;margin-bottom:8px">'+name+'</div>' +
-      '<div style="font-size:14px;color:#6B7280;margin-bottom:36px">'+market+(units ? ' &nbsp;·&nbsp; '+units+' units' : '')+'</div>' +
-      '<div style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;background:'+statusColor+';color:#fff;border-radius:14px;padding:28px 40px;width:220px">' +
-        '<div style="font-size:60px;font-weight:800;line-height:1">'+overall+'</div>' +
-        '<div style="font-size:13px;margin-top:4px;opacity:.8">/ 100</div>' +
-        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-top:10px;border-top:1px solid rgba(255,255,255,.3);padding-top:10px;width:100%;text-align:center">'+statusLabel+'</div>' +
+    '<div style="flex:1;display:flex;justify-content:space-between;align-items:flex-start;gap:40px">' +
+      '<div style="flex:1">' +
+        '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#B8956A;margin-bottom:14px">PROPERTY HEALTH REPORT</div>' +
+        '<div style="font-size:34px;font-weight:800;color:#1A2530;line-height:1.15;margin-bottom:10px">'+name+'</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:28px">' +
+          (market ? '<span style="font-size:13px;color:#6B7280">'+market+'</span>' : '') +
+          (market && units ? '<span style="color:#D1D5DB">·</span>' : '') +
+          (units  ? '<span style="font-size:13px;color:#6B7280">'+units+' units</span>' : '') +
+          (prop.status ? '<span style="color:#D1D5DB">·</span><span style="font-size:12px;font-weight:600;color:#4A5A5A">'+prop.status+'</span>' : '') +
+        '</div>' +
+        '<div style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:8px;padding:14px 18px;max-width:340px">' +
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9CA3AF;margin-bottom:6px">Prepared by</div>' +
+          '<div style="font-size:12px;font-weight:600;color:#4A5A5A">RPM Living Digital Products &amp; Services</div>' +
+          '<div style="font-size:11px;color:#9CA3AF;margin-top:2px">Report period: '+dateStr+'</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:'+statusColor+';color:#fff;border-radius:16px;padding:36px 48px;min-width:210px;text-align:center">' +
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;opacity:.75;margin-bottom:8px">Health Score</div>' +
+        '<div style="font-size:72px;font-weight:800;line-height:1">'+overall+'</div>' +
+        '<div style="font-size:13px;opacity:.7;margin-top:4px">/ 100</div>' +
+        '<div style="width:100%;border-top:1px solid rgba(255,255,255,.3);margin-top:16px;padding-top:14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em">'+statusLabel+'</div>' +
       '</div>' +
     '</div>' +
 
-    '<div style="border-top:1px solid #E5E7EB;padding-top:14px;text-align:center;font-size:9px;color:#B8C4B8">' +
+    '<div style="margin-top:40px;border-top:1px solid #E5E7EB;padding-top:14px;text-align:center;font-size:9px;color:#B8C4B8">' +
       'RPM LIVING | Digital Products &amp; Services | <span style="color:#B8956A">/ EXCEED EVERY NEED /</span>' +
     '</div>' +
   '</div>' +
@@ -3757,6 +3838,7 @@ function _buildReportHTML(d) {
         }).join('') +
       '</tbody>' +
     '</table>' +
+    pageFooter +
   '</div>' +
 
   // ── PAGE 3: FLAGS ──
@@ -3775,6 +3857,7 @@ function _buildReportHTML(d) {
       '</tr></thead>' +
       '<tbody>'+flagRows+'</tbody>' +
     '</table>' +
+    pageFooter +
   '</div>' +
 
   // ── PAGE 4: RECOMMENDATIONS (conditional) ──
