@@ -956,24 +956,24 @@ select.brief-input{height:34px;cursor:pointer}
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sage)">Occupancy</div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--sage)" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
           </div>
-          <div style="font-size:24px;font-weight:800;color:var(--tp);line-height:1">93.2<span style="font-size:14px;font-weight:600;color:var(--ts)">%</span></div>
-          <div style="font-size:11px;color:var(--ts);margin-top:4px">+0.4pts · Sub avg 91.8%</div>
+          <div style="font-size:24px;font-weight:800;color:var(--tp);line-height:1"><span id="perf-occ-value">93.2</span><span style="font-size:14px;font-weight:600;color:var(--ts)">%</span></div>
+          <div style="font-size:11px;color:var(--ts);margin-top:4px" id="perf-occ-sub">+0.4pts · Sub avg 91.8%</div>
         </div>
         <div style="background:rgba(212,145,10,0.07);border:1px solid rgba(212,145,10,0.25);border-radius:10px;padding:14px 16px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--amb)">ATR</div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--amb)" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
           </div>
-          <div style="font-size:24px;font-weight:800;color:var(--tp);line-height:1">8.4<span style="font-size:14px;font-weight:600;color:var(--ts)">%</span></div>
-          <div style="font-size:11px;color:var(--ts);margin-top:4px">+1.2pts · Target ≤ 5%</div>
+          <div style="font-size:24px;font-weight:800;color:var(--tp);line-height:1"><span id="perf-atr-value">8.4</span><span style="font-size:14px;font-weight:600;color:var(--ts)">%</span></div>
+          <div style="font-size:11px;color:var(--ts);margin-top:4px" id="perf-atr-sub">+1.2pts · Target ≤ 5%</div>
         </div>
         <div style="background:#F9FAFB;border:1px solid var(--bd);border-radius:10px;padding:14px 16px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts)">120-Day Trend</div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--amb)" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
           </div>
-          <div style="font-size:24px;font-weight:800;color:var(--tp);line-height:1">34<span style="font-size:13px;font-weight:600;color:var(--ts);margin-left:3px">leases</span></div>
-          <div style="font-size:11px;color:var(--ts);margin-top:4px">↓ 6 vs prior · renewals due</div>
+          <div style="font-size:24px;font-weight:800;color:var(--tp);line-height:1"><span id="perf-trend-value">34</span><span style="font-size:13px;font-weight:600;color:var(--ts);margin-left:3px">leases</span></div>
+          <div style="font-size:11px;color:var(--ts);margin-top:4px" id="perf-trend-sub">↓ 6 vs prior · renewals due</div>
         </div>
       </div>
     </div>
@@ -3807,32 +3807,64 @@ function loadPerformance() {
   var email = window.__PORTAL_EMAIL__     || window.__PORTAL_EMAIL       || 'demo@rpmliving.com';
   if (!cid) return; // demo mode — gauges stay at hardcoded values
 
-  fetch(API_BASE + '/api/property-metrics?company_id=' + encodeURIComponent(cid),
-        { headers: { 'X-Portal-Email': email } })
-  .then(function(r){ return r.json(); })
-  .then(function(data) {
-    var h = data.health;
-    if (!h) return;
-    _perfLoaded = true;
-    _applyGauge('overall',    h.overall,    true);
-    _applyGauge('market',     h.market,     false);
-    _applyGauge('marketing',  h.marketing,  false);
-    _applyGauge('funnel',     h.funnel,     false);
-    _applyGauge('experience', h.experience, false);
+  var metricsP = fetch(API_BASE + '/api/property-metrics?company_id=' + encodeURIComponent(cid),
+        { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); });
+  var propP = fetch(API_BASE + '/api/property?company_id=' + encodeURIComponent(cid),
+        { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; });
 
-    // Header badge + date
-    var badge = document.getElementById('perf-status-badge');
-    if (badge) {
-      var st = (h.status || '').toUpperCase();
-      badge.textContent = st === 'HEALTHY' ? 'Healthy' : st === 'WARNING' ? 'Warning' : st === 'RED ALERT' ? 'Critical' : h.status;
-      badge.className   = 'badge ' + (st === 'HEALTHY' ? 'badge-green' : st === 'RED ALERT' ? 'badge-red' : 'badge-yellow');
+  Promise.all([metricsP, propP]).then(function(results) {
+    var data    = results[0];
+    var propData = results[1];
+
+    var h = data && data.health;
+    if (h) {
+      _perfLoaded = true;
+      _applyGauge('overall',    h.overall,    true);
+      _applyGauge('market',     h.market,     false);
+      _applyGauge('marketing',  h.marketing,  false);
+      _applyGauge('funnel',     h.funnel,     false);
+      _applyGauge('experience', h.experience, false);
+
+      // Header badge + date
+      var badge = document.getElementById('perf-status-badge');
+      if (badge) {
+        var st = (h.status || '').toUpperCase();
+        badge.textContent = st === 'HEALTHY' ? 'Healthy' : st === 'WARNING' ? 'Warning' : st === 'RED ALERT' ? 'Critical' : h.status;
+        badge.className   = 'badge ' + (st === 'HEALTHY' ? 'badge-green' : st === 'RED ALERT' ? 'badge-red' : 'badge-yellow');
+      }
+      if (h.last_scored) {
+        var ls = document.getElementById('perf-last-scored');
+        if (ls) {
+          var d = new Date(h.last_scored + 'T00:00:00');
+          var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          ls.textContent = 'Last scored ' + months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+        }
+      }
     }
-    if (h.last_scored) {
-      var ls = document.getElementById('perf-last-scored');
-      if (ls) {
-        var d = new Date(h.last_scored + 'T00:00:00');
-        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        ls.textContent = 'Last scored ' + months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+
+    // Leasing snapshot strip
+    if (propData && propData.leasing) {
+      var l = propData.leasing;
+      if (l.occupancy != null) {
+        var occEl = document.getElementById('perf-occ-value');
+        if (occEl) occEl.textContent = parseFloat(l.occupancy).toFixed(1);
+        var occSub = document.getElementById('perf-occ-sub');
+        var occ = parseFloat(l.occupancy);
+        if (occSub) occSub.textContent = occ >= 95 ? 'Fully leased · above submarket' : occ >= 90 ? 'Above submarket avg' : occ >= 85 ? 'Near submarket avg' : 'Below submarket avg';
+      }
+      if (l.atr != null) {
+        var atrEl = document.getElementById('perf-atr-value');
+        if (atrEl) atrEl.textContent = parseFloat(l.atr).toFixed(1);
+        var atrSub = document.getElementById('perf-atr-sub');
+        var atr = parseFloat(l.atr);
+        if (atrSub) atrSub.textContent = atr <= 5 ? 'On target · ≤ 5% goal' : atr <= 8 ? 'Elevated · watch closely' : 'High ATR · action needed';
+      }
+      if (l.lease_trend_120 != null) {
+        var trendEl = document.getElementById('perf-trend-value');
+        if (trendEl) trendEl.textContent = l.lease_trend_120;
+        var trendSub = document.getElementById('perf-trend-sub');
+        var renew = l.renewal_trend_120;
+        if (trendSub && renew != null) trendSub.textContent = renew + ' renewals tracked in window';
       }
     }
   })
