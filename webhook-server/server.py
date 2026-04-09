@@ -1311,7 +1311,7 @@ def get_forecast_context():
     hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
 
     # 1. Fetch company properties
-    props_to_fetch = "asset_class,property_type,occupancy_status,totalunits,rpmmarket,plestatus"
+    props_to_fetch = "asset_class,proptype,occupancy,developtype,totalunits,rpmmarket,plestatus"
     r = req.get(
         f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props_to_fetch}",
         headers=hs_headers, timeout=10,
@@ -1322,9 +1322,10 @@ def get_forecast_context():
 
     unit_count = int(company_props.get("totalunits") or 0) or None
     market     = company_props.get("rpmmarket", "")
-    asset_cls  = company_props.get("asset_class", "")
-    prop_type  = company_props.get("property_type", "Conventional")
-    occ_status = company_props.get("occupancy_status", "")
+    asset_cls    = company_props.get("asset_class", "")
+    prop_type    = company_props.get("proptype", "")
+    dev_type     = company_props.get("developtype", "")
+    occ_status   = company_props.get("occupancy", "")
 
     # 2. Pull spend sheet to find comps
     from spend_sheet import get_spend_sheet_data
@@ -1486,6 +1487,7 @@ def get_forecast_context():
         "company_context": {
             "asset_class":      asset_cls,
             "property_type":    prop_type,
+            "development_type": dev_type,
             "occupancy_status": occ_status,
             "market":           market,
             "unit_count":       this_units,

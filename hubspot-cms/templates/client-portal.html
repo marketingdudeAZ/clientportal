@@ -11,7 +11,7 @@
 {% if uuid_param %}
   {% set companies = crm_objects("company",
     "uuid=" ~ uuid_param,
-    "name,rpmmarket,plestatus,totalunits,redlight_report_score,asset_class,property_type,occupancy_status") %}
+    "name,rpmmarket,plestatus,totalunits,redlight_report_score,asset_class,proptype,occupancy,developtype") %}
 
   {% if companies.results|length == 0 %}
     <!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;color:#374151">
@@ -2588,8 +2588,9 @@ window.__PORTAL_UNIT_COUNT   = {{ property.totalunits|default(0)|int }};
 window.__PORTAL_HEALTH_SCORE = {{ property.redlight_report_score|default(0)|int }};
 window.__PORTAL_OCCUPANCY    = 0; // populated async from /api/forecast-context
 window.__PORTAL_ASSET_CLASS  = '{{ property.asset_class|default("") }}';
-window.__PORTAL_PROP_TYPE    = '{{ property.property_type|default("") }}';
-window.__PORTAL_OCC_STATUS   = '{{ property.occupancy_status|default("") }}';
+window.__PORTAL_PROP_TYPE    = '{{ property.proptype|default("") }}';
+window.__PORTAL_DEV_TYPE     = '{{ property.developtype|default("") }}';
+window.__PORTAL_OCC_STATUS   = '{{ property.occupancy|default("") }}';
 // Packages and current perf populated async from /api/budget and /api/portfolio
 window.__PORTAL_PROP_PACKAGES = [];
 window.__PORTAL_CURRENT_PERF  = {};
