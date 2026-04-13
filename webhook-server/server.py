@@ -1906,9 +1906,9 @@ def get_video_creative():
         "cycle_month":   p.get("video_cycle_month", ""),
         "variants":      _parse_json(p.get("video_variants_json")),
         "history":       _parse_json(p.get("video_cycle_history_json")),
-        "perf_snapshot": _parse_json(p.get("video_perf_snapshot_json")) if p.get("video_perf_snapshot_json", "").startswith("[") else (
+        "perf_snapshot": _parse_json(p.get("video_perf_snapshot_json")) if isinstance(p.get("video_perf_snapshot_json"), str) and p["video_perf_snapshot_json"].startswith("[") else (
             {} if not p.get("video_perf_snapshot_json") else
-            __import__("json").loads(p.get("video_perf_snapshot_json"))
+            _json.loads(p["video_perf_snapshot_json"])
         ),
     })
 
