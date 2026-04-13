@@ -40,6 +40,7 @@ COMPANY_PROPS = [
     "atr__",                             # Available to rent %
     "trending_120_days_lease_expiration", # Leases expiring in 120-day window
     "brf___renewal_leases_120_trend",     # Renewal lease 120-day trend
+    "occupancy_status",                   # Lease-Up / Stabilized / In-Transition / Renovation
     # Red Light score fields
     "red_light_report_score", "red_light_report_status",
     "red_light_market_score", "red_light_marketing_score",
@@ -268,6 +269,91 @@ def compute_rollups(companies):
     }
 
 
+def _compute_leasing_score(props):
+    """Compute a lead-gen health score from Occupancy, ATR%, and 120-day trend.
+
+    Mirrors server.py's _compute_leasing_score — keep in sync.
+    Returns None if both occupancy and ATR are missing.
+    """
+    def _fv(k):
+        v = props.get(k)
+        try:
+            return float(v) if v not in (None, "") else None
+        except (ValueError, TypeError):
+            return None
+
+    occ   = _fv("occupancy__")
+    atr   = _fv("atr__")
+    trend = _fv("trending_120_days_lease_expiration")
+    units = _fv("totalunits") or 0
+
+    if occ is None and atr is None:
+        return None
+
+    occ_status    = (props.get("occupancy_status") or "").strip()
+    is_lease_up   = occ_status in ("Lease-Up", "In-Transition")
+    is_renovation = occ_status == "Renovation"
+
+    if is_renovation:
+        return {"score": None, "status": "Renovation", "is_lease_up": False}
+
+    def _occ_score(o):
+        if o is None: return 75
+        if is_lease_up:
+            if o >= 88: return 90
+            if o >= 75: return 75
+            if o >= 60: return 60
+            if o >= 45: return 45
+            return 30
+        else:
+            if o >= 95: return 100
+            if o >= 93: return 85
+            if o >= 90: return 70
+            if o >= 87: return 55
+            return 35
+
+    def _atr_score(a):
+        if a is None: return 75
+        if is_lease_up:
+            if a <= 10: return 90
+            if a <= 20: return 75
+            if a <= 35: return 55
+            if a <= 50: return 35
+            return 20
+        else:
+            if a <= 4:  return 100
+            if a <= 6:  return 80
+            if a <= 9:  return 60
+            if a <= 13: return 40
+            return 20
+
+    def _exposure_score(t, u):
+        if t is None or u == 0: return 75
+        pct = (t / u) * 100
+        if pct <= 8:  return 100
+        if pct <= 15: return 75
+        if pct <= 22: return 50
+        return 25
+
+    o_score = _occ_score(occ)
+    a_score = _atr_score(atr)
+    e_score = _exposure_score(trend, units)
+
+    if is_lease_up:
+        overall = round(o_score * 0.60 + a_score * 0.40)
+    else:
+        overall = round(o_score * 0.50 + a_score * 0.30 + e_score * 0.20)
+
+    if overall >= 75:
+        status = "ON TRACK"
+    elif overall >= 50:
+        status = "WATCH"
+    else:
+        status = "NEEDS LEADS"
+
+    return {"score": overall, "status": status, "is_lease_up": is_lease_up}
+
+
 def format_portfolio_response(companies):
     """Format companies into a clean JSON response with rollups."""
     # Compute rollups
@@ -277,11 +363,23 @@ def format_portfolio_response(companies):
     properties = []
     for props in companies:
         monthly = _compute_monthly_spend(props)
-        score = props.get("redlight_report_score")
+        rl_score = props.get("redlight_report_score")
 
         occ_raw = props.get("occupancy__")
         atr_raw = props.get("atr__")
         trend_raw = props.get("trending_120_days_lease_expiration")
+
+        # Prefer pipeline score; fall back to computed leasing score
+        ls = _compute_leasing_score(props)
+        if rl_score not in (None, ""):
+            health_score = _safe_float(rl_score)
+            health_status = props.get("red_light_report_status", "")
+        elif ls:
+            health_score = ls["score"]
+            health_status = ls["status"]
+        else:
+            health_score = None
+            health_status = ""
 
         properties.append({
             "uuid": props.get("uuid", ""),
@@ -291,8 +389,8 @@ def format_portfolio_response(companies):
             "state": props.get("state", ""),
             "market": props.get("rpmmarket", ""),
             "units": _safe_int(props.get("totalunits")),
-            "health_score": _safe_float(score) if score else None,
-            "health_status": props.get("red_light_report_status", ""),
+            "health_score": health_score,
+            "health_status": health_status,
             "market_score": _safe_float(props.get("red_light_market_score")) if props.get("red_light_market_score") else None,
             "marketing_score": _safe_float(props.get("red_light_marketing_score")) if props.get("red_light_marketing_score") else None,
             "funnel_score": _safe_float(props.get("red_light_funnel_score")) if props.get("red_light_funnel_score") else None,

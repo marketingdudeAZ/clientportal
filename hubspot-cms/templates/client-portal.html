@@ -1184,7 +1184,7 @@ body{padding-top:36px}
         <div class="tier-card"><div class="tier-n">Lite</div><div class="tier-p">$300<span>/mo</span></div><div class="tier-d">Local SEO + off-page authority building</div></div>
         <div class="tier-card"><div class="tier-n">Basic</div><div class="tier-p">$500<span>/mo</span></div><div class="tier-d">Full local program + content calendar</div></div>
         <div class="tier-card current-tier selected" onclick="selectTier(this,'seo')"><div class="tier-n">Standard</div><div class="tier-p">$800<span>/mo</span></div><div class="tier-d">Standard + competitor gap analysis <em>(current)</em></div></div>
-        <div class="tier-card recommended-tier" onclick="selectTier(this,'seo')"><div class="tier-n">Premium</div><div class="tier-p">$1,300<span>/mo</span></div><div class="tier-d">Full keyword program, ILS integration, local pin strategy</div><div class="tier-why">Your current standard tier doesn't include ILS schema sync. Competitors in Scottsdale ranking above you on Apartments.com are on Premium.</div></div>
+        <div class="tier-card recommended-tier" onclick="selectTier(this,'seo')"><div class="tier-n">Premium</div><div class="tier-p">$1,300<span>/mo</span></div><div class="tier-d">Full keyword program, ILS integration, local pin strategy</div><div class="tier-why">Your current standard tier doesn't include ILS schema sync. Competitors in your submarket ranking above you on Apartments.com are on Premium.</div></div>
       </div>
     </div>
 
@@ -1285,7 +1285,7 @@ body{padding-top:36px}
           <div class="tier-p-mgmt">$1,000<span>/mo mgmt</span></div>
           <div class="tier-spend">$3,000<span>/mo ad spend</span></div>
           <div class="tier-d">Meta + TikTok + Pinterest · influencer integration</div>
-          <div class="tier-why">TikTok drives 38% of Scottsdale renter searches under 35. Strong lead-gen channel for spring season.</div>
+          <div class="tier-why">TikTok drives strong renter engagement in your market. Strong lead-gen channel for renters under 35.</div>
         </div>
         <div class="tier-card custom-tier" id="soc-custom" onclick="selectTierCustom(this,'paid_social')">
           <div class="tier-n">Custom</div>
@@ -1374,7 +1374,7 @@ body{padding-top:36px}
     </div>
     <div class="cp-card">
       <div class="cp-card-label cp-label-working">What's Working</div>
-      <div class="cp-card-text">Market position strong at 78 — Scottsdale competitive positioning is holding. SEO organic traffic up 12% after the content calendar update. Paid search impression share competitive in the submarket.</div>
+      <div class="cp-card-text" id="brief-whats-working">Market position holding — SEO organic traffic trending up after the content calendar update. Paid search impression share competitive in the submarket.</div>
     </div>
     <div class="cp-card">
       <div class="cp-card-label cp-label-handling">What We're Handling</div>
@@ -1498,7 +1498,7 @@ body{padding-top:36px}
     <div class="question-item" id="q-4">
       <div class="question-num">4</div>
       <div style="flex:1">
-        <div class="question-text">Your rent pricing is running above comparable properties in the Scottsdale submarket. Can you walk us through the value story — finishes, amenities, location advantages — so we can better build that into ad copy and campaign positioning?</div>
+        <div class="question-text">Your rent pricing is running above comparable properties in the submarket. Can you walk us through the value story — finishes, amenities, location advantages — so we can better build that into ad copy and campaign positioning?</div>
         <div class="question-answer-area" id="qa-4">
           <textarea placeholder="Type the client's answer here during the call…" id="qa-text-4"></textarea>
           <div class="question-answer-saved" id="qa-saved-4">✓ Answer saved</div>
@@ -1901,10 +1901,10 @@ body{padding-top:36px}
       <div class="brief-row">
         <div class="brief-key">Neighborhoods</div>
         <div class="brief-val" id="b-hoods" data-field="neighborhoods" data-edittype="pills">
-          <span class="brief-pill">Scottsdale</span><span class="brief-pill">Kierland</span><span class="brief-pill">North Scottsdale</span>
+          <!-- populated by loadClientBrief() -->
         </div>
       </div>
-      <div class="brief-row"><div class="brief-key">Landmarks</div><div class="brief-val" id="b-landmarks" data-field="landmarks" data-edittype="input">Kierland Commons · Scottsdale Quarter · TPC Scottsdale</div></div>
+      <div class="brief-row"><div class="brief-key">Landmarks</div><div class="brief-val" id="b-landmarks" data-field="landmarks" data-edittype="input"><!-- populated by loadClientBrief() --></div></div>
       <div class="brief-row" style="border-bottom:none">
         <div class="brief-key">Tag Lines</div>
         <div class="brief-val" id="b-taglines" data-field="taglines" data-edittype="taglines">
@@ -2043,12 +2043,12 @@ body{padding-top:36px}
     </div>
   </div>
 
-  <!-- Latest deal header -->
-  <div class="budget-deal-header" id="budget-deal-card">
+  <!-- Latest deal header — hidden until loadBudget() populates it -->
+  <div class="budget-deal-header" id="budget-deal-card" style="display:none">
     <div class="budget-deal-badge">Latest Deal · Closed Won</div>
     <div style="flex:1">
-      <div class="budget-deal-name" id="budget-deal-name">The Quincy at Kierland — Budget Change — 12/5/25</div>
-      <div class="budget-deal-meta">Deal closed <span id="budget-deal-date">Dec 5, 2025</span> · <span id="budget-deal-count">5 active services</span> · assigned to Logan McOien</div>
+      <div class="budget-deal-name" id="budget-deal-name"></div>
+      <div class="budget-deal-meta">Deal closed <span id="budget-deal-date"></span> · <span id="budget-deal-count"></span> · assigned to Logan McOien</div>
     </div>
     <div class="budget-deal-total">
       <div class="budget-deal-amount" id="budget-deal-total">$8,080</div>
@@ -2284,7 +2284,7 @@ body{padding-top:36px}
       </div>
       <div class="tl-item" id="tl-deal-rep" style="display:none" data-cat="deal">
         <div class="tl-dot deal"></div>
-        <div class="tl-content"><div class="tl-text">Deal created: The Quincy — Reputation Management Upgrade ($3,060/yr)</div><div class="tl-meta"><span class="tl-tag deal">Deal</span></div></div>
+        <div class="tl-content"><div class="tl-text">Deal created: Reputation Management Upgrade ($3,060/yr)</div><div class="tl-meta"><span class="tl-tag deal">Deal</span></div></div>
       </div>
       <div class="tl-item" id="tl-rec2-approved" style="display:none" data-cat="approval">
         <div class="tl-dot approval"></div>
@@ -2292,7 +2292,7 @@ body{padding-top:36px}
       </div>
       <div class="tl-item" id="tl-deal-ps" style="display:none" data-cat="deal">
         <div class="tl-dot deal"></div>
-        <div class="tl-content"><div class="tl-text">Deal created: The Quincy — Paid Search Budget Increase</div><div class="tl-meta"><span class="tl-tag deal">Deal</span></div></div>
+        <div class="tl-content"><div class="tl-text">Deal created: Paid Search Budget Increase</div><div class="tl-meta"><span class="tl-tag deal">Deal</span></div></div>
       </div>
       <div class="tl-item" id="tl-checkout-deal" style="display:none" data-cat="deal">
         <div class="tl-dot deal"></div>
@@ -2308,43 +2308,13 @@ body{padding-top:36px}
       </div>
     </div>
 
-    <div class="tl-group" data-cat="report">
-      <div class="tl-date">March 15, 2026</div>
-      <div class="tl-item" data-cat="report">
-        <div class="tl-dot report"></div>
-        <div class="tl-content"><div class="tl-text">Red Light Report generated: YELLOW (72) — down 4 from February</div><div class="tl-meta"><span class="tl-tag report">Report</span></div></div>
-      </div>
-      <div class="tl-item" data-cat="report">
-        <div class="tl-dot report"></div>
-        <div class="tl-content"><div class="tl-text">SEO Deliverable uploaded: Local Pin Report — March 2026</div><div class="tl-meta"><span class="tl-tag report">Report</span></div></div>
-      </div>
-    </div>
-
-    <div class="tl-group" data-cat="report deal">
-      <div class="tl-date">February 15, 2026</div>
-      <div class="tl-item" data-cat="report">
-        <div class="tl-dot report"></div>
-        <div class="tl-content"><div class="tl-text">Red Light Report generated: YELLOW (76)</div><div class="tl-meta"><span class="tl-tag report">Report</span></div></div>
-      </div>
-    </div>
-
-    <div class="tl-group" data-cat="deal approval">
-      <div class="tl-date">February 1, 2026</div>
-      <div class="tl-item" data-cat="approval">
-        <div class="tl-dot approval"></div>
-        <div class="tl-content"><div class="tl-text">Package changed: Reputation → Response + Removal ($255/mo)</div><div class="tl-meta"><span class="tl-tag approval">Approval</span></div></div>
-      </div>
-      <div class="tl-item" data-cat="deal">
-        <div class="tl-dot deal"></div>
-        <div class="tl-content"><div class="tl-text">Deal created: Reputation Management — Response + Removal ($3,060/yr)</div><div class="tl-meta"><span class="tl-tag deal">Deal</span></div></div>
-      </div>
-    </div>
-
-    <div class="tl-group" data-cat="portal">
-      <div class="tl-date">January 15, 2026</div>
-      <div class="tl-item" data-cat="portal">
-        <div class="tl-dot portal"></div>
-        <div class="tl-content"><div class="tl-text">The Quincy at Kierland joined the RPM Living client portal</div><div class="tl-meta"><span class="tl-tag portal">Portal</span></div></div>
+    <!-- Static history placeholder — hidden by loadActivity() once real data arrives -->
+    <div id="tl-static-history">
+      <div class="tl-group" data-cat="portal">
+        <div class="tl-item" data-cat="portal">
+          <div class="tl-dot portal"></div>
+          <div class="tl-content"><div class="tl-text">{{ property.name }} joined the RPM Living client portal</div><div class="tl-meta"><span class="tl-tag portal">Portal</span></div></div>
+        </div>
       </div>
     </div>
   </div>
@@ -2710,7 +2680,7 @@ function approveRec(num, type, channel, tier, cardId, confirmId) {
       // Show in activity log
       showActivityItem('tl-rec'+num+'-approved');
       showActivityItem('tl-deal-ps');
-      logDeal('The Quincy — Paid Search Budget Increase (→ Better tier)');
+      logDeal('Paid Search Budget Increase (→ Better tier)');
       // Navigate to services with preload after delay
       setTimeout(function(){
         preloadServicesRec(channel, tier, 'Paid Search → Better tier pre-loaded from your approved recommendation.');
@@ -2720,7 +2690,7 @@ function approveRec(num, type, channel, tier, cardId, confirmId) {
       confirm.textContent = '✓ Approved. Your team has been notified and a task has been created.';
       showActivityItem('tl-rec'+num+'-approved');
       showActivityItem('tl-deal-rep');
-      logDeal('The Quincy — Reputation Management Upgrade ($3,060/yr)');
+      logDeal('Reputation Management Upgrade ($3,060/yr)');
     }
 
     updatePendingCount(-1);
@@ -2824,7 +2794,7 @@ function submitTicket() {
 
   // Step 1 — search KB first
   fetch(API_BASE + '/api/kb-search?q=' + encodeURIComponent(title), {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' }
   })
   .then(function(r){ return r.json(); })
   .then(function(kb) {
@@ -2871,14 +2841,14 @@ function _doSubmitTicket(form, title, desc, priority, category) {
   submitBtn.textContent = 'Submitting…';
   submitBtn.disabled = true;
 
-  var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
+  var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '';
   var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/ticket', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com',
+      'X-Portal-Email': window.__PORTAL_EMAIL__ || '',
     },
     body: JSON.stringify({ company_id: COMPANY_ID, subject: title, description: desc, priority: priority, category: category })
   })
@@ -2922,16 +2892,20 @@ function _doSubmitTicket(form, title, desc, priority, category) {
 }
 
 function loadTickets() {
-  var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
+  var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '';
   var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/tickets?company_id=' + COMPANY_ID, {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' }
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
-    if (!data.tickets || !data.tickets.length) return; // keep demo data if empty
     var list = document.getElementById('tickets-list');
+    if (!list) return;
+    if (!data.tickets || !data.tickets.length) {
+      list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tm);font-size:13px">No open requests</div>';
+      return;
+    }
     list.innerHTML = data.tickets.map(_renderTicketCard).join('') +
       '<div id="submitted-ticket-placeholder"></div>';
     // Update sidebar badge
@@ -2939,7 +2913,7 @@ function loadTickets() {
     var badge = document.getElementById('tickets-badge');
     if (badge) badge.textContent = open;
   })
-  .catch(function(){ /* keep static demo data on error */ });
+  .catch(function(err){ console.warn('loadTickets failed:', err); });
 }
 
 function _renderTicketCard(t) {
@@ -3001,7 +2975,7 @@ function loadTicketThread(ticketId, containerId, btn) {
   btn.disabled = true;
 
   fetch(API_BASE + '/api/ticket/' + ticketId + '/thread', {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' }
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
@@ -3056,7 +3030,7 @@ function replyToTicket(ticketId, threadId) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com'
+      'X-Portal-Email': window.__PORTAL_EMAIL__ || ''
     },
     body: JSON.stringify({ text: text, thread_id: threadId })
   })
@@ -3082,11 +3056,11 @@ function replyToTicket(ticketId, threadId) {
 var _briefLoaded = false;
 function loadClientBrief() {
   if (_briefLoaded) return;
-  var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
+  var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '';
   var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/client-brief?company_id=' + COMPANY_ID, {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' }
   })
   .then(function(r){ return r.json(); })
   .then(function(d) {
@@ -3148,18 +3122,18 @@ function loadClientBrief() {
       if (link) link.href = d.brief_doc_link;
     }
   })
-  .catch(function(){ /* keep static demo data on error */ });
+  .catch(function(err){ console.warn('loadClientBrief failed:', err); });
 }
 
 // ── Budget & SKUs ──
 var _budgetLoaded = false;
 function loadBudget() {
   if (_budgetLoaded) return;
-  var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
+  var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '';
   var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/budget?company_id=' + COMPANY_ID, {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' }
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' }
   })
   .then(function(r){ return r.json(); })
   .then(function(d) {
@@ -3176,7 +3150,9 @@ function loadBudget() {
       return '$' + Number(n || 0).toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0});
     }
 
-    // Deal header
+    // Deal header — show card now that we have data
+    var dealCard = document.getElementById('budget-deal-card');
+    if (dealCard) dealCard.style.display = '';
     set('budget-deal-name', deal.name);
     if (deal.close_date) {
       try {
@@ -3235,7 +3211,7 @@ function loadBudget() {
     if (sheet.portfolio_client) set('bse-portfolio', sheet.portfolio_client);
     if (sheet.market)           set('bse-market', sheet.market);
   })
-  .catch(function(){ /* keep static demo data on error */ });
+  .catch(function(err){ console.warn('loadBudget failed:', err); });
 }
 
 function toggleInactive(btn) {
@@ -3290,7 +3266,7 @@ function cancelBriefEdit(card) {
 }
 
 function saveBriefCard(card) {
-  var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '43739952398';
+  var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '';
   var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   var fields = {};
@@ -3306,7 +3282,7 @@ function saveBriefCard(card) {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
-      'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com',
+      'X-Portal-Email': window.__PORTAL_EMAIL__ || '',
     },
     body: JSON.stringify({ company_id: COMPANY_ID, fields: fields }),
   })
@@ -3391,7 +3367,7 @@ function loadSpendSheet(force) {
   var timeoutId = setTimeout(function(){ controller.abort(); }, 180000); // 3-min timeout
 
   fetch(url, {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'demo@rpmliving.com' },
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' },
     signal: controller.signal
   })
   .then(function(r){ clearTimeout(timeoutId); return r.json(); })
@@ -3759,7 +3735,7 @@ function loadActivity() {
   if (_activityLoaded) return;
   var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
   var cid   = window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || '';
-  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL__ || 'demo@rpmliving.com';
+  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL__ || '';
 
   var loadingEl = document.getElementById('activity-loading');
   if (!cid) {
@@ -3815,6 +3791,10 @@ function loadActivity() {
       html += '</div>';
     });
 
+    // Hide static placeholder now that we have real data
+    var staticHistory = document.getElementById('tl-static-history');
+    if (staticHistory) staticHistory.style.display = 'none';
+
     // Insert before the session-group (today's live actions)
     var sessionGroup = document.getElementById('tl-session-group');
     if (sessionGroup) {
@@ -3830,7 +3810,7 @@ var _portfolioLoaded = false;
 function loadPortfolio() {
   if (_portfolioLoaded) return;
   var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
-  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
+  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || '';
 
   fetch(API_BASE + '/api/portfolio',
         { headers: { 'X-Portal-Email': email } })
@@ -5391,7 +5371,7 @@ function submitEnrollment() {
   };
 
   var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
-  var email    = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
+  var email    = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || '';
   var cid      = typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '';
 
   if (!cid) {
@@ -5479,7 +5459,7 @@ function toggleApproveSelect(variantId, btn) {
 
 function approveVariants(ids) {
   var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
-  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
+  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || '';
   var cid = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '');
 
   if (!cid) { alert('Demo mode — approval would be submitted here.'); return; }
@@ -5522,7 +5502,7 @@ function closeRevisionModal() {
 
 function submitRevision() {
   var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
-  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || 'demo@rpmliving.com';
+  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || '';
   var cid = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '');
 
   var payload = {
