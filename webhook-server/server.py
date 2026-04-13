@@ -2386,6 +2386,7 @@ def video_generate():
     props = ",".join([
         "name", "totalunits", "video_pipeline_enrolled",
         "video_pipeline_tier", "video_creative_brief_json",
+        "aptiq_property_id", "aptiq_market_id",
     ])
     try:
         r = req.get(
@@ -2421,6 +2422,8 @@ def video_generate():
             brief=brief,
             property_url=property_url,
             units=units,
+            aptiq_property_id=p.get("aptiq_property_id") or "",
+            aptiq_market_id=p.get("aptiq_market_id") or "",
         )
         return jsonify({
             "status": "generating",

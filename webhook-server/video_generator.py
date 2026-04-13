@@ -112,8 +112,16 @@ def generate_script_with_assets(
     property_name: str,
     units: int = 0,
     assets: list[dict] | None = None,
+    comp_context: str = "",
 ) -> dict:
     """Call Claude to generate a voiceover script and select matching assets.
+
+    Args:
+        brief: Creative brief dict from HubSpot.
+        property_name: Display name of the property.
+        units: Unit count.
+        assets: Property-specific visual assets from HubDB.
+        comp_context: Formatted ApartmentIQ market intelligence string.
 
     Returns:
         {
@@ -125,10 +133,14 @@ def generate_script_with_assets(
     if not ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
-    # Build the user prompt: brief info + asset inventory
+    # Build the user prompt: brief info + market intelligence + asset inventory
     brief_prompt = build_script_prompt(brief, property_name, units)
     asset_inventory = _build_asset_inventory(assets or [])
-    user_message = f"{brief_prompt}\n\n{asset_inventory}"
+    parts = [brief_prompt]
+    if comp_context:
+        parts.append(comp_context)
+    parts.append(asset_inventory)
+    user_message = "\n\n".join(parts)
 
     logger.info("Generating script for %s (%d assets available)", property_name, len(assets or []))
 
@@ -193,20 +205,35 @@ def generate_videos(
     brief: dict,
     property_url: str,
     units: int = 0,
+    aptiq_property_id: str = "",
+    aptiq_market_id: str = "",
 ) -> list[dict]:
-    """End-to-end: brief → script → asset matching → Creatify submission.
+    """End-to-end: brief → AptIQ context → script → asset matching → Creatify.
 
     Returns list of variant dicts ready to store on HubSpot.
     """
-    # 1. Fetch property-specific assets
+    # 1. Fetch property-specific assets (isolated by property UUID)
     assets = fetch_property_assets(company_id)
 
-    # 2. Generate script + asset plan via Claude
+    # 2. Fetch ApartmentIQ market intelligence
+    comp_context_str = ""
+    if aptiq_property_id or aptiq_market_id:
+        try:
+            from apartmentiq_client import get_comp_context, format_comp_context_for_prompt
+            comp_data = get_comp_context(aptiq_property_id, aptiq_market_id)
+            comp_context_str = format_comp_context_for_prompt(comp_data)
+            if comp_context_str:
+                logger.info("ApartmentIQ data loaded for script generation (%d chars)", len(comp_context_str))
+        except Exception as exc:
+            logger.warning("ApartmentIQ fetch failed (continuing without): %s", exc)
+
+    # 3. Generate script + asset plan via Claude (with market intelligence)
     script_result = generate_script_with_assets(
         brief=brief,
         property_name=property_name,
         units=units,
         assets=assets,
+        comp_context=comp_context_str,
     )
 
     # 3. Prepare brief for Creatify variant builder
