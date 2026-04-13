@@ -2352,6 +2352,87 @@ def portal_identify():
         return jsonify({"error": "Lookup failed"}), 500
 
 
+@app.route("/api/video-generate", methods=["POST", "OPTIONS"])
+def video_generate():
+    """Generate video ads from a property's creative brief and assets.
+
+    Fetches the creative brief and asset library for the property, calls
+    Claude to write a targeted script with asset-matched visual plan,
+    then submits to Creatify for video rendering.
+
+    Body: { "company_id": "...", "property_url": "..." }
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    body = request.get_json(force=True) or {}
+    company_id   = body.get("company_id", "").strip()
+    property_url = body.get("property_url", "").strip()
+
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+    if not property_url:
+        return jsonify({"error": "property_url required"}), 400
+
+    import requests as req, json as _json
+    from config import HUBSPOT_API_KEY
+
+    # Fetch company data from HubSpot
+    hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
+    props = ",".join([
+        "name", "totalunits", "video_pipeline_enrolled",
+        "video_pipeline_tier", "video_creative_brief_json",
+    ])
+    try:
+        r = req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props}",
+            headers=hs_headers, timeout=10,
+        )
+        r.raise_for_status()
+    except Exception as exc:
+        logger.error("HubSpot company fetch failed: %s", exc)
+        return jsonify({"error": "Failed to fetch company data"}), 500
+
+    p = r.json().get("properties", {})
+    property_name = p.get("name", "Property")
+    tier = p.get("video_pipeline_tier", "Starter")
+    units = int(p.get("totalunits") or 0)
+
+    # Parse creative brief
+    brief_raw = p.get("video_creative_brief_json", "")
+    if not brief_raw:
+        return jsonify({"error": "No creative brief found. Enroll first via /api/video-enroll"}), 400
+    try:
+        brief = _json.loads(brief_raw)
+    except Exception:
+        return jsonify({"error": "Invalid creative brief data"}), 400
+
+    # Generate videos
+    try:
+        from video_generator import generate_videos
+        variants = generate_videos(
+            company_id=company_id,
+            property_name=property_name,
+            tier=tier,
+            brief=brief,
+            property_url=property_url,
+            units=units,
+        )
+        return jsonify({
+            "status": "generating",
+            "property": property_name,
+            "tier": tier,
+            "variants": variants,
+        })
+    except Exception as exc:
+        logger.error("Video generation failed for %s: %s", company_id, exc, exc_info=True)
+        return jsonify({"error": f"Video generation failed: {str(exc)}"}), 500
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return '{"status":"ok"}', 200, {"Content-Type": "application/json"}
