@@ -6116,9 +6116,15 @@ function loadPropList() {
   if (_propListLoaded) return;
   if (!_email) {
     var el = document.getElementById('pl-tbody');
-    if (el) el.innerHTML = '<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--tm)">Please <a href="/_hcms/mem/login?redirect_url=/digital/client-portal" style="color:var(--cu)">log in</a> to view your portfolio.</td></tr>';
+    if (el) el.innerHTML = '<tr><td colspan="4" style="padding:60px 40px;text-align:center">' +
+      '<div style="max-width:360px;margin:0 auto">' +
+      '<div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:8px">Sign in to RPM Portal</div>' +
+      '<div style="font-size:13px;color:var(--ts);margin-bottom:24px">Access your property portfolio and marketing dashboard.</div>' +
+      '<a href="/_hcms/mem/login?redirect_url=/digital/client-portal" ' +
+      'style="display:inline-block;padding:10px 28px;background:var(--cu);color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Sign in</a>' +
+      '</div></td></tr>';
     var sub = document.getElementById('pl-subtitle');
-    if (sub) sub.textContent = 'Log in to access your portfolio';
+    if (sub) sub.textContent = 'Sign in to access your portfolio';
     return;
   }
   fetch(_apiBase + '/api/portfolio', { headers: { 'X-Portal-Email': _email } })
@@ -6202,6 +6208,17 @@ function renderPropList(props) {
 // ── Portfolio Dashboard ───────────────────────────────────────────────────────
 function loadPortfolio() {
   if (_portfolioLoaded) return;
+  if (!_email) {
+    var kpiEl = document.getElementById('port-kpi-row');
+    if (kpiEl) kpiEl.innerHTML = '<div style="padding:60px 40px;text-align:center;grid-column:1/-1">' +
+      '<div style="max-width:360px;margin:0 auto">' +
+      '<div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:8px">Sign in to RPM Portal</div>' +
+      '<div style="font-size:13px;color:var(--ts);margin-bottom:24px">Access your property portfolio and marketing dashboard.</div>' +
+      '<a href="/_hcms/mem/login?redirect_url=/digital/client-portal" ' +
+      'style="display:inline-block;padding:10px 28px;background:var(--cu);color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Sign in</a>' +
+      '</div></div>';
+    return;
+  }
   fetch(_apiBase + '/api/portfolio', { headers: { 'X-Portal-Email': _email } })
     .then(function(r) { return r.json(); })
     .then(function(d) {
@@ -6275,6 +6292,17 @@ var _spendRows = [];
 
 function loadSpendSheet(force) {
   if (_spendLoaded && !force) return;
+  if (!_email) {
+    var el = document.getElementById('spend-tbody');
+    if (el) el.innerHTML = '<tr><td colspan="16" style="padding:60px 40px;text-align:center">' +
+      '<div style="max-width:360px;margin:0 auto">' +
+      '<div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:8px">Sign in to RPM Portal</div>' +
+      '<div style="font-size:13px;color:var(--ts);margin-bottom:24px">Access your property portfolio and marketing dashboard.</div>' +
+      '<a href="/_hcms/mem/login?redirect_url=/digital/client-portal" ' +
+      'style="display:inline-block;padding:10px 28px;background:var(--cu);color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Sign in</a>' +
+      '</div></td></tr>';
+    return;
+  }
   if (force) _spendLoaded = false;
   var email  = _email;
   var apiBase = _apiBase;
