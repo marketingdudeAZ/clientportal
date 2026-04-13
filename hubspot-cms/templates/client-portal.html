@@ -6116,7 +6116,7 @@ function loadPropList() {
   if (_propListLoaded) return;
   if (!_email) {
     var el = document.getElementById('pl-tbody');
-    if (el) el.innerHTML = '<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--tm)">Please <a href="/digital/login" style="color:var(--cu)">log in</a> to view your portfolio.</td></tr>';
+    if (el) el.innerHTML = '<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--tm)">Please <a href="/_hcms/mem/login?redirect_url=/digital/client-portal" style="color:var(--cu)">log in</a> to view your portfolio.</td></tr>';
     var sub = document.getElementById('pl-subtitle');
     if (sub) sub.textContent = 'Log in to access your portfolio';
     return;
