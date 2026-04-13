@@ -220,14 +220,18 @@ def compute_rollups(companies):
         # Spend
         total_spend += _compute_monthly_spend(props)
 
-        # Health score
-        score = props.get("redlight_report_score")
-        if score is not None and score != "":
-            s = _safe_float(score)
+        # Health score — prefer pipeline score, fall back to leasing score
+        rl = props.get("redlight_report_score")
+        if rl is not None and rl != "":
+            s = _safe_float(rl)
+        else:
+            ls_r = _compute_leasing_score(props)
+            s = ls_r["score"] if ls_r else None
+        if s is not None:
             health_scores.append(s)
-            if s >= 80:
+            if s >= 75:
                 health_distribution["healthy"] += 1
-            elif s >= 60:
+            elif s >= 50:
                 health_distribution["warning"] += 1
             else:
                 health_distribution["critical"] += 1
