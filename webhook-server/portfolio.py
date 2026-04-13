@@ -22,7 +22,7 @@ HEADERS = {
 
 # In-memory cache: email -> (timestamp, data)
 _portfolio_cache = {}
-CACHE_TTL_SECONDS = 300  # 5 minutes
+CACHE_TTL_SECONDS = 900  # 15 minutes — large query, expensive to re-fetch
 
 # Properties to fetch for each company
 COMPANY_PROPS = [
@@ -119,7 +119,7 @@ def fetch_portfolio(email, role):
     seen_ids = set()
     after = None
 
-    for _ in range(10):  # Safety: max 1000 companies
+    for _ in range(100):  # Safety cap: max 10,000 companies (100 pages × 100 per page)
         results, after = _search_companies(filter_groups, after)
         for company in results:
             cid = company["id"]

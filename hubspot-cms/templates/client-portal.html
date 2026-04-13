@@ -6114,6 +6114,13 @@ var _propListData = [];
 
 function loadPropList() {
   if (_propListLoaded) return;
+  if (!_email) {
+    var el = document.getElementById('pl-tbody');
+    if (el) el.innerHTML = '<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--tm)">Please <a href="/digital/login" style="color:var(--cu)">log in</a> to view your portfolio.</td></tr>';
+    var sub = document.getElementById('pl-subtitle');
+    if (sub) sub.textContent = 'Log in to access your portfolio';
+    return;
+  }
   fetch(_apiBase + '/api/portfolio', { headers: { 'X-Portal-Email': _email } })
     .then(function(r) { return r.json(); })
     .then(function(d) {
