@@ -49,9 +49,16 @@ DEPLOY_MANIFEST = [
     {"local": "js/dashboard.js", "path": "custom/client-portal/js/dashboard.js", "type": 22, "label": "dashboard.js"},
     # Page error template
     {"local": "templates/portal-error.html", "path": "custom/client-portal/portal-error.html", "type": 22, "label": "portal-error.html"},
-    # Main page templates (type 2 = page template)
-    {"local": "templates/client-portal.html", "path": "custom/client-portal/client-portal.html", "type": 2, "label": "Client Portal", "page": True},
+    # Main page template — uses direct PUT to avoid 409 path conflict.
+    # HubSpot has two template entries with conflicting paths:
+    #   ID 209383472929  path: custom/client-portal/client-portal.html
+    #   ID 210702377297  path: custom/client-portal/Client Portal  ← LIVE (served to users)
+    # The deploy_main_template() function below handles this correctly.
 ]
+
+# Template IDs — direct PUT targets (avoid path conflict / different root)
+MAIN_TEMPLATE_ID = 210702377297   # custom/client-portal/Client Portal (live portal)
+DEMO_TEMPLATE_ID = 210277860698   # templates/rpm-portal-demo.html (demo page)
 
 
 def get_existing_templates():
@@ -115,6 +122,68 @@ def deploy_template(item, existing):
         return None
 
 
+def deploy_main_template():
+    """Deploy client-portal.html directly to the known live template ID."""
+    local_path = os.path.join(CMS_DIR, "templates/client-portal.html")
+    if not os.path.exists(local_path):
+        print("  SKIP (file not found): templates/client-portal.html")
+        return False
+    with open(local_path) as f:
+        source = f.read()
+    resp = requests.put(
+        f"{BASE_URL}/{MAIN_TEMPLATE_ID}",
+        headers=HEADERS,
+        json={
+            "source": source,
+            "path": "custom/client-portal/Client Portal",
+            "template_type": 2,
+            "label": "Client Portal",
+            "is_available_for_new_content": True,
+        },
+    )
+    if resp.status_code == 200:
+        print(f"  UPDATED: client-portal.html (ID: {MAIN_TEMPLATE_ID})")
+        return True
+    else:
+        print(f"  FAILED ({resp.status_code}): client-portal.html (ID: {MAIN_TEMPLATE_ID})")
+        try:
+            print(f"    Error: {resp.json().get('message', resp.text[:200])}")
+        except Exception:
+            print(f"    Response: {resp.text[:200]}")
+        return False
+
+
+def deploy_demo_template():
+    """Deploy demo.html directly to the known demo template ID."""
+    local_path = os.path.join(os.path.dirname(__file__), "..", "demo.html")
+    if not os.path.exists(local_path):
+        print("  SKIP (file not found): demo.html")
+        return False
+    with open(local_path) as f:
+        source = f.read()
+    resp = requests.put(
+        f"{BASE_URL}/{DEMO_TEMPLATE_ID}",
+        headers=HEADERS,
+        json={
+            "source": source,
+            "path": "templates/rpm-portal-demo.html",
+            "template_type": 2,
+            "label": "rpm-portal-demo.html",
+            "is_available_for_new_content": False,
+        },
+    )
+    if resp.status_code == 200:
+        print(f"  UPDATED: demo.html (ID: {DEMO_TEMPLATE_ID})")
+        return True
+    else:
+        print(f"  FAILED ({resp.status_code}): demo.html (ID: {DEMO_TEMPLATE_ID})")
+        try:
+            print(f"    Error: {resp.json().get('message', resp.text[:200])}")
+        except Exception:
+            print(f"    Response: {resp.text[:200]}")
+        return False
+
+
 def main():
     print("Fetching existing templates...")
     existing = get_existing_templates()
@@ -132,7 +201,20 @@ def main():
         # Rate limit: 10 requests per second
         time.sleep(0.15)
 
-    print(f"\nDone: {success} deployed, {failed} failed out of {len(DEPLOY_MANIFEST)} total")
+    # Deploy main portal template via direct PUT (avoids 409 path conflict)
+    if deploy_main_template():
+        success += 1
+    else:
+        failed += 1
+
+    # Deploy demo template (separate HubSpot template from main portal)
+    if deploy_demo_template():
+        success += 1
+    else:
+        failed += 1
+
+    total = len(DEPLOY_MANIFEST) + 2
+    print(f"\nDone: {success} deployed, {failed} failed out of {total} total")
 
 
 if __name__ == "__main__":

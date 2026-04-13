@@ -226,6 +226,8 @@ def _compute_leasing_score(props):
     else:
         status = "NEEDS LEADS"
 
+    exposure_pct = round((trend / units * 100), 1) if (not is_lease_up and trend is not None and units > 0) else None
+
     return {
         "score":           overall,
         "status":          status,
@@ -234,6 +236,7 @@ def _compute_leasing_score(props):
         "occupancy_score": o_score,
         "atr_score":       a_score,
         "exposure_score":  e_score,
+        "exposure_pct":    exposure_pct,
         "occupancy_raw":   occ,
         "atr_raw":         atr,
         "trend_raw":       int(trend) if trend is not None else None,
