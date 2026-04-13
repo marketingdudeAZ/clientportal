@@ -6092,33 +6092,70 @@ var PORTAL_BASE_URL       = 'https://digital.rpmliving.com/client-portal';
 var _email = window.__PORTAL_EMAIL__ || (function(){ try { return sessionStorage.getItem('__rpm_email') || ''; } catch(e){ return ''; } })() || '';
 var _apiBase = window.__PORTAL_API_BASE;
 
-// ── UTK-based identity resolution ─────────────────────────────────────────────
-// If HubSpot didn't populate request.contact.email (website page, not gated),
-// but the visitor just logged in via Customer Portal, we can exchange their
-// hubspotutk tracking cookie for their contact email via our Render endpoint.
-(function() {
-  if (_email) return; // already have email, skip
+// ── Identity resolution ────────────────────────────────────────────────────────
+// 1) Try hubspotutk cookie (set by HubSpot tracking code after login).
+//    Retry up to 5× with 2-second gaps to give tracking code time to run.
+// 2) If still no UTK after retries, the sign-in card shows an email input
+//    so users who just logged in can self-identify. Email is verified
+//    server-side — only valid HubSpot contacts in the access group get through.
+
+function _resolveEmailFromUTK(attempts) {
+  if (_email) return;
   var utk = (document.cookie.match(/(?:^|;\s*)hubspotutk=([^;]+)/) || [])[1];
-  if (!utk) return;
-  fetch(_apiBase + '/api/portal/identify?utk=' + encodeURIComponent(utk), {
-    credentials: 'omit'
-  })
-  .then(function(r){ return r.ok ? r.json() : null; })
-  .then(function(d){
-    if (d && d.email) {
-      _email = d.email;
-      try { sessionStorage.setItem('__rpm_email', d.email); } catch(e){}
-      // Reload the active tab now that we have an identity
-      _propListLoaded = false; _portfolioLoaded = false; _spendLoaded = false;
-      var active = document.querySelector('.portal-tab-btn.active');
-      var tab = active ? (active.id.replace('ptab-','') || 'list') : 'list';
-      if (tab === 'list') loadPropList();
-      else if (tab === 'portfolio') loadPortfolio();
-      else if (tab === 'spend') loadSpendSheet();
-    }
-  })
-  .catch(function(){});
-})();
+  if (utk) {
+    fetch(_apiBase + '/api/portal/identify?utk=' + encodeURIComponent(utk), { credentials: 'omit' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        if (d && d.email) {
+          _email = d.email;
+          try { sessionStorage.setItem('__rpm_email', d.email); } catch(e){}
+          _propListLoaded = false; _portfolioLoaded = false; _spendLoaded = false;
+          var active = document.querySelector('.portal-tab-btn.active');
+          var tab = active ? (active.id.replace('ptab-','') || 'list') : 'list';
+          if (tab === 'list') loadPropList();
+          else if (tab === 'portfolio') loadPortfolio();
+          else if (tab === 'spend') loadSpendSheet();
+        }
+      })
+      .catch(function(){});
+  } else if (attempts > 0) {
+    setTimeout(function(){ _resolveEmailFromUTK(attempts - 1); }, 2000);
+  }
+}
+if (!_email) _resolveEmailFromUTK(5);
+
+function _signInWithEmail(email) {
+  email = (email || '').trim().toLowerCase();
+  if (!email) return;
+  _email = email;
+  try { sessionStorage.setItem('__rpm_email', email); } catch(e){}
+  _propListLoaded = false; _portfolioLoaded = false; _spendLoaded = false;
+  var active = document.querySelector('.portal-tab-btn.active');
+  var tab = active ? (active.id.replace('ptab-','') || 'list') : 'list';
+  if (tab === 'list') loadPropList();
+  else if (tab === 'portfolio') loadPortfolio();
+  else if (tab === 'spend') loadSpendSheet();
+}
+
+function _signInCardInner() {
+  return '<div style="max-width:380px;margin:0 auto">' +
+    '<div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:8px">Sign in to RPM Portal</div>' +
+    '<div style="font-size:13px;color:var(--ts);margin-bottom:20px">Access your property portfolio and marketing dashboard.</div>' +
+    '<a href="https://digital.rpmliving.com/_hcms/mem/login?redirect_url=/client-portal" ' +
+    'style="display:inline-block;padding:10px 28px;background:var(--cu);color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Sign in</a>' +
+    '<div style="margin:20px 0 12px;font-size:12px;color:var(--ts)">— or, if you\'re already signed in —</div>' +
+    '<div style="display:flex;gap:8px;justify-content:center">' +
+    '<input id="portal-email-input" type="email" placeholder="your@email.com" ' +
+    'style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:200px;outline:none" />' +
+    '<button onclick="_signInWithEmail(document.getElementById(\'portal-email-input\').value)" ' +
+    'style="padding:8px 16px;background:var(--jd);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Go</button>' +
+    '</div>' +
+    '</div>';
+}
+function _signInCard(colspan) {
+  return '<tr><td colspan="' + colspan + '" style="padding:60px 40px;text-align:center">' +
+    _signInCardInner() + '</td></tr>';
+}
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
 var _propListLoaded  = false;
@@ -6144,13 +6181,7 @@ function loadPropList() {
   if (_propListLoaded) return;
   if (!_email) {
     var el = document.getElementById('pl-tbody');
-    if (el) el.innerHTML = '<tr><td colspan="4" style="padding:60px 40px;text-align:center">' +
-      '<div style="max-width:360px;margin:0 auto">' +
-      '<div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:8px">Sign in to RPM Portal</div>' +
-      '<div style="font-size:13px;color:var(--ts);margin-bottom:24px">Access your property portfolio and marketing dashboard.</div>' +
-      '<a href="https://digital.rpmliving.com/portal/auth?next=/client-portal" ' +
-      'style="display:inline-block;padding:10px 28px;background:var(--cu);color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Sign in</a>' +
-      '</div></td></tr>';
+    if (el) el.innerHTML = _signInCard(4);
     var sub = document.getElementById('pl-subtitle');
     if (sub) sub.textContent = 'Sign in to access your portfolio';
     return;
@@ -6238,13 +6269,7 @@ function loadPortfolio() {
   if (_portfolioLoaded) return;
   if (!_email) {
     var kpiEl = document.getElementById('port-kpi-row');
-    if (kpiEl) kpiEl.innerHTML = '<div style="padding:60px 40px;text-align:center;grid-column:1/-1">' +
-      '<div style="max-width:360px;margin:0 auto">' +
-      '<div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:8px">Sign in to RPM Portal</div>' +
-      '<div style="font-size:13px;color:var(--ts);margin-bottom:24px">Access your property portfolio and marketing dashboard.</div>' +
-      '<a href="https://digital.rpmliving.com/portal/auth?next=/client-portal" ' +
-      'style="display:inline-block;padding:10px 28px;background:var(--cu);color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Sign in</a>' +
-      '</div></div>';
+    if (kpiEl) kpiEl.innerHTML = '<div style="padding:60px 40px;text-align:center;grid-column:1/-1">' + _signInCardInner() + '</div>';
     return;
   }
   fetch(_apiBase + '/api/portfolio', { headers: { 'X-Portal-Email': _email } })
@@ -6322,13 +6347,7 @@ function loadSpendSheet(force) {
   if (_spendLoaded && !force) return;
   if (!_email) {
     var el = document.getElementById('spend-tbody');
-    if (el) el.innerHTML = '<tr><td colspan="16" style="padding:60px 40px;text-align:center">' +
-      '<div style="max-width:360px;margin:0 auto">' +
-      '<div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:8px">Sign in to RPM Portal</div>' +
-      '<div style="font-size:13px;color:var(--ts);margin-bottom:24px">Access your property portfolio and marketing dashboard.</div>' +
-      '<a href="https://digital.rpmliving.com/portal/auth?next=/client-portal" ' +
-      'style="display:inline-block;padding:10px 28px;background:var(--cu);color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Sign in</a>' +
-      '</div></td></tr>';
+    if (el) el.innerHTML = _signInCard(16);
     return;
   }
   if (force) _spendLoaded = false;
