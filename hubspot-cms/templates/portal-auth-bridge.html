@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Signing in…</title>
+  <style>
+    body { margin: 0; display: flex; align-items: center; justify-content: center;
+           height: 100vh; font-family: -apple-system, sans-serif; background: #f5f5f5; }
+    .msg { text-align: center; color: #666; font-size: 14px; }
+  </style>
+</head>
+<body>
+<div class="msg">Signing you in…</div>
+<script>
+  {% set _email = request.contact.email %}
+  {% set _next = request.query_dict.next | default('/client-portal', true) %}
+
+  {% if _email %}
+  // Logged in — store email and redirect to portal
+  try { sessionStorage.setItem('__rpm_email', '{{ _email }}'); } catch(e) {}
+  window.location.replace('{{ _next }}');
+  {% else %}
+  // Not logged in — send to HubSpot login then back here
+  var next = encodeURIComponent('{{ _next }}');
+  window.location.replace(
+    'https://digital.rpmliving.com/_hcms/mem/login?redirect_url=' +
+    encodeURIComponent('/portal/auth?next=' + decodeURIComponent(next))
+  );
+  {% endif %}
+</script>
+</body>
+</html>
