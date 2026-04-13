@@ -9,21 +9,14 @@
 {% set uuid_param = request.query_dict.uuid %}
 
 {% if uuid_param %}
+  {# Try CRM lookup; fall back to empty property so JS can fetch via API #}
   {% set companies = crm_objects("company",
     "uuid=" ~ uuid_param,
     "id,hs_object_id,name,rpmmarket,plestatus,totalunits,redlight_report_score,red_light_market_score,red_light_marketing_score,red_light_funnel_score,red_light_experience_score,redlight_flag_count,red_light_run_date,asset_class,proptype,occupancy,occupancy__,developtype,atr__,trending_120_days_lease_expiration,occupancy_status,uuid") %}
 
-  {% if companies.results|length == 0 %}
-    <!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;color:#374151">
-    <h2>Property not found</h2><p>No property found with this ID. Please check your link or contact your account manager.</p>
-    </body></html>
-  {% else %}
+  {% if companies.results|length > 0 %}
     {% set property = companies.results[0] %}
-    {% if property.plestatus not in ["RPM Managed", "Dispositioning", "Onboarding"] %}
-    <!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;color:#374151">
-    <h2>Portal unavailable</h2><p>This property's portal is not currently active. Please contact your account manager.</p>
-    </body></html>
-    {% else %}
+  {% endif %}
 
 <!DOCTYPE html>
 <html lang="en">
@@ -2599,16 +2592,16 @@ body{padding-top:36px}
 <script>
 // ── Portal property globals — injected from HubSpot CRM via HubL ──
 // These are NEVER hardcoded. All values come from the actual company record.
-window.__PORTAL_COMPANY_ID__ = '{{ property.hs_object_id }}';
-window.__PORTAL_UUID__       = '{{ property.uuid }}';
-window.__PORTAL_PROP_NAME    = '{{ property.name | escape_html }}';
-window.__PORTAL_MARKET       = '{{ property.rpmmarket | escape_html }}';
-window.__PORTAL_UNIT_COUNT   = {{ property.totalunits | int(0) }};
-window.__PORTAL_OCCUPANCY    = {{ property.occupancy__ | float(0) }};
-window.__PORTAL_ATR          = {{ property.atr__ | float(0) }};
-window.__PORTAL_TREND_120    = {{ property.trending_120_days_lease_expiration | int(0) }};
-window.__PORTAL_HEALTH_SCORE = {{ property.redlight_report_score | int(0) }};
-window.__PORTAL_OCC_STATUS   = '{{ property.occupancy_status | escape_html }}';
+window.__PORTAL_COMPANY_ID__ = '{{ property.hs_object_id|default(uuid_param, true) }}';
+window.__PORTAL_UUID__       = '{{ property.uuid|default(uuid_param, true) }}';
+window.__PORTAL_PROP_NAME    = '{{ property.name|default("", true) | escape_html }}';
+window.__PORTAL_MARKET       = '{{ property.rpmmarket|default("", true) | escape_html }}';
+window.__PORTAL_UNIT_COUNT   = {{ property.totalunits|default(0, true) | int(0) }};
+window.__PORTAL_OCCUPANCY    = {{ property.occupancy__|default(0, true) | float(0) }};
+window.__PORTAL_ATR          = {{ property.atr__|default(0, true) | float(0) }};
+window.__PORTAL_TREND_120    = {{ property.trending_120_days_lease_expiration|default(0, true) | int(0) }};
+window.__PORTAL_HEALTH_SCORE = {{ property.redlight_report_score|default(0, true) | int(0) }};
+window.__PORTAL_OCC_STATUS   = '{{ property.occupancy_status|default("", true) | escape_html }}';
 window.__PORTAL_EMAIL__      = '{{ request.contact.email | escape_html }}';
 window.__PORTAL_API_BASE     = 'https://rpm-portal-server.onrender.com';
 window.__WEBHOOK_URL__       = 'https://rpm-portal-server.onrender.com';
@@ -5793,8 +5786,6 @@ setTimeout(loadPropertySwitcher, 1500);
 </script>
 </body>
 </html>
-    {% endif %}{# /plestatus check #}
-  {% endif %}{# /companies found #}
 {% else %}
 <!DOCTYPE html>
 <html lang="en">
