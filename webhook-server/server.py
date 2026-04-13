@@ -33,6 +33,7 @@ app = Flask(__name__)
 ALLOWED_ORIGINS = [
     "https://go.rpmliving.com",
     "https://www.rpmliving.com",
+    "https://digital.rpmliving.com",
 ]
 if os.getenv("FLASK_ENV") == "development":
     ALLOWED_ORIGINS.append("http://localhost:3000")

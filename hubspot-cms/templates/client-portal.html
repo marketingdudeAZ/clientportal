@@ -713,7 +713,7 @@ body{padding-top:36px}
 
 <!-- ════════════ PROPERTY NAV BAR ════════════ -->
 <div class="prop-nav-bar" id="prop-nav-bar">
-  <a class="pnb-back" href="https://go.rpmliving.com/digital/client-portal">
+  <a class="pnb-back" href="https://digital.rpmliving.com/client-portal">
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
     Properties
   </a>
@@ -5725,7 +5725,7 @@ document.addEventListener('click', function(e) {
 var _switcherProps = [];
 var _switcherLoaded = false;
 var _currentUUID = window.__PORTAL_UUID__ || '';
-var PORTAL_BASE_URL = 'https://go.rpmliving.com/digital/client-portal';
+var PORTAL_BASE_URL = 'https://digital.rpmliving.com/client-portal';
 
 function loadPropertySwitcher() {
   if (_switcherLoaded) return;
@@ -6088,7 +6088,7 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 // ── Globals ────────────────────────────────────────────────────────────────────
 window.__PORTAL_EMAIL__   = '{{ request.contact.email | escape_html }}';
 window.__PORTAL_API_BASE  = 'https://rpm-portal-server.onrender.com';
-var PORTAL_BASE_URL       = 'https://go.rpmliving.com/digital/client-portal';
+var PORTAL_BASE_URL       = 'https://digital.rpmliving.com/client-portal';
 var _email = window.__PORTAL_EMAIL__ || '';
 var _apiBase = window.__PORTAL_API_BASE;
 
@@ -6120,7 +6120,7 @@ function loadPropList() {
       '<div style="max-width:360px;margin:0 auto">' +
       '<div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:8px">Sign in to RPM Portal</div>' +
       '<div style="font-size:13px;color:var(--ts);margin-bottom:24px">Access your property portfolio and marketing dashboard.</div>' +
-      '<a href="/_hcms/mem/login?redirect_url=/digital/client-portal" ' +
+      '<a href="https://digital.rpmliving.com/_hcms/mem/login?redirect_url=/client-portal" ' +
       'style="display:inline-block;padding:10px 28px;background:var(--cu);color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Sign in</a>' +
       '</div></td></tr>';
     var sub = document.getElementById('pl-subtitle');
@@ -6214,7 +6214,7 @@ function loadPortfolio() {
       '<div style="max-width:360px;margin:0 auto">' +
       '<div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:8px">Sign in to RPM Portal</div>' +
       '<div style="font-size:13px;color:var(--ts);margin-bottom:24px">Access your property portfolio and marketing dashboard.</div>' +
-      '<a href="/_hcms/mem/login?redirect_url=/digital/client-portal" ' +
+      '<a href="https://digital.rpmliving.com/_hcms/mem/login?redirect_url=/client-portal" ' +
       'style="display:inline-block;padding:10px 28px;background:var(--cu);color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Sign in</a>' +
       '</div></div>';
     return;
@@ -6298,7 +6298,7 @@ function loadSpendSheet(force) {
       '<div style="max-width:360px;margin:0 auto">' +
       '<div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:8px">Sign in to RPM Portal</div>' +
       '<div style="font-size:13px;color:var(--ts);margin-bottom:24px">Access your property portfolio and marketing dashboard.</div>' +
-      '<a href="/_hcms/mem/login?redirect_url=/digital/client-portal" ' +
+      '<a href="https://digital.rpmliving.com/_hcms/mem/login?redirect_url=/client-portal" ' +
       'style="display:inline-block;padding:10px 28px;background:var(--cu);color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Sign in</a>' +
       '</div></td></tr>';
     return;

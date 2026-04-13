@@ -59,7 +59,7 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", "8443"))
 
 # --- URLs ---
-PORTAL_BASE_URL = os.getenv("PORTAL_BASE_URL", "https://go.rpmliving.com/digital/client-portal")
+PORTAL_BASE_URL = os.getenv("PORTAL_BASE_URL", "https://digital.rpmliving.com/client-portal")
 NINJACAT_DASHBOARD_ID = os.getenv("NINJACAT_DASHBOARD_ID", "16866")
 
 # --- Service Tiers ---
