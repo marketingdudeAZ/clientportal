@@ -55,26 +55,23 @@ ROLE_EMAIL_FIELDS = {
 }
 
 
-def _build_filter_groups(email, role):
-    """Build CRM search filter groups based on role."""
-    fields = ROLE_EMAIL_FIELDS.get(role, ["marketing_manager_email"])
-    groups = []
-    for field in fields:
-        groups.append({
+def _build_filter_groups(email=None, role=None):
+    """Return a single filter group matching all active RPM properties.
+
+    All authenticated portal members see all properties — no per-user filtering.
+    The email/role params are kept for backward compatibility but are unused.
+    """
+    return [
+        {
             "filters": [
-                {
-                    "propertyName": field,
-                    "operator": "EQ",
-                    "value": email.lower().strip(),
-                },
                 {
                     "propertyName": "plestatus",
                     "operator": "IN",
                     "values": ["RPM Managed", "Dispositioning", "Onboarding"],
-                },
+                }
             ]
-        })
-    return groups
+        }
+    ]
 
 
 def _search_companies(filter_groups, after=None):
@@ -102,11 +99,12 @@ def _search_companies(filter_groups, after=None):
 
 
 def fetch_portfolio(email, role):
-    """Fetch all properties for a user. Returns list of company dicts.
+    """Fetch all active RPM properties. Returns list of company dicts.
 
-    Uses in-memory cache with 5-minute TTL.
+    All authenticated portal members see all properties.
+    Uses a shared in-memory cache with 5-minute TTL.
     """
-    cache_key = f"{email.lower().strip()}:{role}"
+    cache_key = "all_properties"
     now = time.time()
 
     cached = _portfolio_cache.get(cache_key)
