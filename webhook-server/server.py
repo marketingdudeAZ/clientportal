@@ -2303,6 +2303,55 @@ def get_report_data():
     })
 
 
+@app.route("/api/portal/identify", methods=["GET", "OPTIONS"])
+def portal_identify():
+    """Identify a portal visitor by their HubSpot tracking cookie (hubspotutk).
+
+    Called client-side when request.contact.email is not available (i.e. the
+    page is not a Content-Hub-gated page).  After Customer Portal login the
+    browser has a hubspotutk cookie that is already associated with the
+    logged-in contact; we exchange it for the contact's email via HubSpot's
+    contacts API so the portal can load data for that user.
+
+    Query param: utk=<hubspotutk value>
+    Returns: {"email": "..."} or 401
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    utk = request.args.get("utk", "").strip()
+    if not utk:
+        return jsonify({"error": "Missing utk"}), 400
+
+    import requests as req
+    hs_key = os.getenv("HUBSPOT_API_KEY", "")
+    if not hs_key:
+        return jsonify({"error": "Server misconfigured"}), 500
+
+    try:
+        resp = req.get(
+            f"https://api.hubapi.com/contacts/v1/contact/utk/{utk}/profile",
+            headers={"Authorization": f"Bearer {hs_key}"},
+            params={"property": "email", "showListMemberships": "false"},
+            timeout=5,
+        )
+        if resp.status_code == 404:
+            return jsonify({"error": "Contact not found"}), 401
+        resp.raise_for_status()
+        data = resp.json()
+        email = (
+            data.get("properties", {})
+                .get("email", {})
+                .get("value", "")
+        )
+        if not email:
+            return jsonify({"error": "No email on contact"}), 401
+        return jsonify({"email": email})
+    except Exception as exc:
+        logger.warning("portal/identify failed: %s", exc)
+        return jsonify({"error": "Lookup failed"}), 500
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return '{"status":"ok"}', 200, {"Content-Type": "application/json"}

@@ -6092,6 +6092,34 @@ var PORTAL_BASE_URL       = 'https://digital.rpmliving.com/client-portal';
 var _email = window.__PORTAL_EMAIL__ || (function(){ try { return sessionStorage.getItem('__rpm_email') || ''; } catch(e){ return ''; } })() || '';
 var _apiBase = window.__PORTAL_API_BASE;
 
+// ── UTK-based identity resolution ─────────────────────────────────────────────
+// If HubSpot didn't populate request.contact.email (website page, not gated),
+// but the visitor just logged in via Customer Portal, we can exchange their
+// hubspotutk tracking cookie for their contact email via our Render endpoint.
+(function() {
+  if (_email) return; // already have email, skip
+  var utk = (document.cookie.match(/(?:^|;\s*)hubspotutk=([^;]+)/) || [])[1];
+  if (!utk) return;
+  fetch(_apiBase + '/api/portal/identify?utk=' + encodeURIComponent(utk), {
+    credentials: 'omit'
+  })
+  .then(function(r){ return r.ok ? r.json() : null; })
+  .then(function(d){
+    if (d && d.email) {
+      _email = d.email;
+      try { sessionStorage.setItem('__rpm_email', d.email); } catch(e){}
+      // Reload the active tab now that we have an identity
+      _propListLoaded = false; _portfolioLoaded = false; _spendLoaded = false;
+      var active = document.querySelector('.portal-tab-btn.active');
+      var tab = active ? (active.id.replace('ptab-','') || 'list') : 'list';
+      if (tab === 'list') loadPropList();
+      else if (tab === 'portfolio') loadPortfolio();
+      else if (tab === 'spend') loadSpendSheet();
+    }
+  })
+  .catch(function(){});
+})();
+
 // ── Tab switching ──────────────────────────────────────────────────────────────
 var _propListLoaded  = false;
 var _portfolioLoaded = false;
