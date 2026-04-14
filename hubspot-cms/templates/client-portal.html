@@ -749,11 +749,11 @@ body{padding-top:36px}
         <div style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.3);margin-top:2px;text-transform:uppercase;letter-spacing:.06em">OCC</div>
       </div>
       <div style="background:rgba(212,145,10,0.15);border:1px solid rgba(212,145,10,0.3);border-radius:6px;padding:4px 8px;display:flex;flex-direction:column;align-items:center;flex:1;min-width:52px">
-        <div style="font-size:13px;font-weight:800;color:#D4910A;line-height:1">{% if property.atr__ %}{{ property.atr__|float|round(1) }}%{% else %}—{% endif %}</div>
+        <div style="font-size:13px;font-weight:800;color:#D4910A;line-height:1" id="sb-atr-val">—</div>
         <div style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.3);margin-top:2px;text-transform:uppercase;letter-spacing:.06em">ATR</div>
       </div>
       <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 8px;display:flex;flex-direction:column;align-items:center;flex:1;min-width:52px">
-        <div style="font-size:13px;font-weight:800;color:rgba(255,255,255,0.7);line-height:1">{% if property.trending_120_days_lease_expiration %}{{ property.trending_120_days_lease_expiration|int }}{% else %}—{% endif %}</div>
+        <div style="font-size:13px;font-weight:800;color:rgba(255,255,255,0.7);line-height:1" id="sb-trend-val">—</div>
         <div style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.3);margin-top:2px;text-transform:uppercase;letter-spacing:.06em">120D</div>
       </div>
     </div>
@@ -1439,85 +1439,8 @@ body{padding-top:36px}
     </div>
   </div>
   <div class="question-list" id="question-list">
-    <div class="question-item" id="q-1">
-      <div class="question-num">1</div>
-      <div style="flex:1">
-        <div class="question-text">Are you open to increasing the paid search budget for April–June to protect impression share during peak leasing season? We need a decision before the next billing cycle.</div>
-        <div class="question-answer-area" id="qa-1">
-          <textarea placeholder="Type the client's answer here during the call…" id="qa-text-1"></textarea>
-          <div class="question-answer-saved" id="qa-saved-1">✓ Answer saved</div>
-        </div>
-        <div class="question-btns">
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px" onclick="toggleAnswer('1',this)">+ Add Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;display:none" id="qa-save-1" onclick="saveAnswer('1')">Save Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;color:var(--sage);display:none" id="qa-done-1" onclick="markAnswered('q-1',this)">✓ Mark Complete</button>
-        </div>
-      </div>
-    </div>
-    <div class="question-item" id="q-2">
-      <div class="question-num">2</div>
-      <div style="flex:1">
-        <div class="question-text">We're seeing strong lead and tour volume from campaigns, but lease conversion is running below expected. From your perspective on the ground, what do you think is happening between tour and signed lease?</div>
-        <div class="question-answer-area" id="qa-2">
-          <textarea placeholder="Type the client's answer here during the call…" id="qa-text-2"></textarea>
-          <div class="question-answer-saved" id="qa-saved-2">✓ Answer saved</div>
-        </div>
-        <div class="question-btns">
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px" onclick="toggleAnswer('2',this)">+ Add Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;display:none" id="qa-save-2" onclick="saveAnswer('2')">Save Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;color:var(--sage);display:none" id="qa-done-2" onclick="markAnswered('q-2',this)">✓ Mark Complete</button>
-        </div>
-      </div>
-    </div>
-    <div class="question-item" id="q-3">
-      <div class="question-num">3</div>
-      <div style="flex:1">
-        <div class="question-text">The spring leasing campaign creative is ready for review — we have 3 ad concepts with headline copy and imagery for Paid Search and Meta. Can you review and approve by Friday so Tom K. can launch before April 1st?</div>
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-          <a href="#" style="font-size:11px;font-weight:700;color:var(--cu);text-decoration:none" onclick="return false">View Creative Concepts →</a>
-          <span style="font-size:10px;color:var(--tm)">3 items pending your approval</span>
-        </div>
-        <div class="question-answer-area" id="qa-3">
-          <textarea placeholder="Type the client's answer here during the call…" id="qa-text-3"></textarea>
-          <div class="question-answer-saved" id="qa-saved-3">✓ Answer saved</div>
-        </div>
-        <div class="question-btns">
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px" onclick="toggleAnswer('3',this)">+ Add Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;display:none" id="qa-save-3" onclick="saveAnswer('3')">Save Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;color:var(--sage);display:none" id="qa-done-3" onclick="markAnswered('q-3',this)">✓ Mark Complete</button>
-        </div>
-      </div>
-    </div>
-    <div class="question-item" id="q-4">
-      <div class="question-num">4</div>
-      <div style="flex:1">
-        <div class="question-text">Your rent pricing is running above comparable properties in the submarket. Can you walk us through the value story — finishes, amenities, location advantages — so we can better build that into ad copy and campaign positioning?</div>
-        <div class="question-answer-area" id="qa-4">
-          <textarea placeholder="Type the client's answer here during the call…" id="qa-text-4"></textarea>
-          <div class="question-answer-saved" id="qa-saved-4">✓ Answer saved</div>
-        </div>
-        <div class="question-btns">
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px" onclick="toggleAnswer('4',this)">+ Add Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;display:none" id="qa-save-4" onclick="saveAnswer('4')">Save Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;color:var(--sage);display:none" id="qa-done-4" onclick="markAnswered('q-4',this)">✓ Mark Complete</button>
-        </div>
-      </div>
-    </div>
-    <div class="question-item" id="q-5">
-      <div class="question-num">5</div>
-      <div style="flex:1">
-        <div class="question-text">Are there any upcoming events, renovations, or property changes we should know about? New amenities, common area updates, or community events are great campaign hooks we can build content around.</div>
-        <div class="question-answer-area" id="qa-5">
-          <textarea placeholder="Type the client's answer here during the call…" id="qa-text-5"></textarea>
-          <div class="question-answer-saved" id="qa-saved-5">✓ Answer saved</div>
-        </div>
-        <div class="question-btns">
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px" onclick="toggleAnswer('5',this)">+ Add Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;display:none" id="qa-save-5" onclick="saveAnswer('5')">Save Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;color:var(--sage);display:none" id="qa-done-5" onclick="markAnswered('q-5',this)">✓ Mark Complete</button>
-        </div>
-      </div>
-    </div>
+    <!-- Call prep questions are populated dynamically by loadCallPrep() -->
+    <div style="padding:24px;text-align:center;color:var(--tm);font-size:12px">Loading call prep questions…</div>
   </div>
   <div class="question-add">
     <input type="text" id="new-question-input" placeholder="Add a question from your AM…" onkeydown="if(event.key==='Enter')addQuestion()">
@@ -3597,6 +3520,27 @@ function _renderOverview(propData, ticketsData, budgetData) {
   var hsBar = document.getElementById('kpi-health-bar');
   if (hsBar) hsBar.style.background = 'linear-gradient(90deg,' + hsColor + ',' + hsColor + 'AA)';
 
+  // Sidebar gauges (OCC, ATR, 120D) + property name
+  var sbOcc = document.getElementById('sb-occ-val');
+  if (sbOcc && leasing.occupancy != null) sbOcc.textContent = Math.round(leasing.occupancy * 10) / 10 + '%';
+  var sbAtr = document.getElementById('sb-atr-val');
+  if (sbAtr && leasing.atr != null) sbAtr.textContent = Math.round(leasing.atr * 10) / 10 + '%';
+  var sbTrend = document.getElementById('sb-trend-val');
+  if (sbTrend && leasing.lease_trend_120 != null) sbTrend.textContent = leasing.lease_trend_120;
+  // Update sidebar property name + market if HubL didn't populate
+  var sbName = document.querySelector('.sb-prop-name');
+  if (sbName && prop.name && !sbName.textContent.trim()) sbName.textContent = prop.name;
+  var sbSub = document.querySelector('.sb-prop-sub');
+  if (sbSub && prop.market && !sbSub.textContent.trim()) sbSub.textContent = prop.market + (prop.units ? ' · ' + prop.units + ' units' : '');
+  // Update sidebar score ring
+  var sbRing = document.getElementById('sb-score-ring');
+  if (sbRing && hs != null) {
+    sbRing.textContent = hs;
+    sbRing.parentElement.style.background = hs >= 75 ? '#8FA68E' : hs >= 50 ? '#D4910A' : '#C94444';
+  }
+  var sbLabel = document.getElementById('sb-score-label');
+  if (sbLabel && st) sbLabel.textContent = st.charAt(0) + st.slice(1).toLowerCase();
+
   // Quick Actions: Performance sub-label
   var qaPerfSub = document.getElementById('qa-perf-sub');
   if (qaPerfSub && health.last_scored) {
@@ -4514,36 +4458,7 @@ function _loadForecastContext() {
   .catch(function(e){ console.warn('forecast-context failed:', e); });
 }
 
-function _demoForecastContext() {
-  return {
-    company_context: {
-      asset_class: 'Class A',
-      property_type: 'Conventional',
-      occupancy_status: 'Stabilized',
-      market: 'Scottsdale',
-      unit_count: 320
-    },
-    comp_stats: {
-      comp_count: 7,
-      spend_percentile: 42,
-      this_total: 4800,
-      comp_avg_total: 6200,
-      this_spu: 15.0
-    },
-    fomo_insights: [
-      {type:'spend_rank', icon:'📊', urgency:'high',   text:'Your marketing spend per unit puts you in the bottom 42% of RPM-managed properties. Properties spending more are benchmarked at significantly higher lead volumes.'},
-      {type:'comp_gap',   icon:'🏆', urgency:'high',   text:'7 comparable properties in similar markets are spending $1,400/mo more on average. At benchmark rates, that gap translates to roughly +8 leads/month.'},
-      {type:'seasonal',   icon:'📅', urgency:'medium', text:'April is historically 25% above average for lead volume. Properties that increased paid media ahead of peak are outpacing those that waited.'},
-      {type:'video_adoption', icon:'🎬', urgency:'medium', text:'71% of comparable Class A properties have added video creative or CTV. Early adopters are reporting a 12–18% drop in blended CPL as video warms retargeting audiences.'},
-      {type:'asset_class', icon:'✨', urgency:'low',   text:'Class A properties consistently see stronger ROI from video and lifestyle-focused Meta campaigns — renters are brand-comparing, not just price-shopping.'}
-    ],
-    top_comps: [
-      {market:'Austin',  unit_band:'~300 units', total_spend:7200, search:2800, seo:1300, social:1800, video:1300},
-      {market:'Denver',  unit_band:'~350 units', total_spend:6500, search:2500, seo:1000, social:1500, video:1500},
-      {market:'Phoenix', unit_band:'~300 units', total_spend:5800, search:2200, seo:800,  social:1800, video:1000},
-    ]
-  };
-}
+// _demoForecastContext removed — forecast data loaded from API
 
 function _renderPeerInsights(data) {
   var peerEl = document.getElementById('forecast-peer-insights');
