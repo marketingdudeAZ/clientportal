@@ -6288,7 +6288,7 @@ function filterSpendSheet() {
   var mkt = document.getElementById('sf-market')  ? document.getElementById('sf-market').value   : '';
   var mgr = document.getElementById('sf-manager') ? document.getElementById('sf-manager').value  : '';
   var rows = _spendRows.filter(function(r) {
-    if (q   && !(r.name||'').toLowerCase().includes(q)) return false;
+    if (q   && !(r.property_name||r.name||'').toLowerCase().includes(q)) return false;
     if (mkt && (r.market||'') !== mkt) return false;
     if (mgr && (r.marketing_manager||r.manager||'') !== mgr) return false;
     return true;
@@ -6304,9 +6304,10 @@ function renderSpendSheet(rows) {
   function fmt(v) { return v ? '$' + Math.round(v).toLocaleString() : '—'; }
   if (!rows.length) { tbody.innerHTML = '<tr><td colspan="16" style="padding:32px;text-align:center;color:var(--tm)">No results.</td></tr>'; return; }
   tbody.innerHTML = rows.map(function(r) {
+    var pname = r.property_name || r.name || '';
     return '<tr>' +
-      '<td>' + (r.name||'') + '</td>' +
-      '<td>' + (r.plestatus||r.status||'') + '</td>' +
+      '<td><span class="s-prop-name" title="'+pname+'">'+pname+'</span></td>' +
+      '<td>' + (r.ple_status||r.plestatus||r.status||'') + '</td>' +
       '<td>' + (r.market||'') + '</td>' +
       '<td>' + (r.marketing_manager||r.manager||'') + '</td>' +
       '<td class="s-num">' + fmt(r.search) + '</td>' +
@@ -6317,7 +6318,7 @@ function renderSpendSheet(rows) {
       '<td class="s-num">' + fmt(r.retargeting) + '</td>' +
       '<td class="s-num">' + fmt(r.ctv) + '</td>' +
       '<td class="s-num">' + fmt(r.seo) + '</td>' +
-      '<td class="s-num">' + fmt(r.social_content||r.social_posting) + '</td>' +
+      '<td class="s-num">' + fmt(r.social_posting||r.social_content) + '</td>' +
       '<td class="s-num">' + fmt(r.eblast||r.eblasts) + '</td>' +
       '<td class="s-num">' + fmt(r.email_drip||r.email_drips) + '</td>' +
       '<td class="s-num s-total" style="color:var(--cu);font-weight:700">' + fmt(r.total||r.total_spend) + '</td>' +
