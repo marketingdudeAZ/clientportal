@@ -351,7 +351,7 @@ def _compute_leasing_score(props):
     elif overall >= 50:
         status = "WATCH"
     else:
-        status = "NEEDS LEADS"
+        status = "NEEDS ATTENTION"
 
     return {"score": overall, "status": status, "is_lease_up": is_lease_up}
 

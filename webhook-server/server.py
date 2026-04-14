@@ -225,7 +225,7 @@ def _compute_leasing_score(props):
     elif overall >= 50:
         status = "WATCH"
     else:
-        status = "NEEDS LEADS"
+        status = "NEEDS ATTENTION"
 
     exposure_pct = round((trend / units * 100), 1) if (not is_lease_up and trend is not None and units > 0) else None
 
@@ -2192,7 +2192,7 @@ def get_report_data():
         # Legacy pipeline labels (keep for backward compat)
         if overall >= 75:   status_label = "ON TRACK"
         elif overall >= 50: status_label = "WATCH"
-        else:               status_label = "NEEDS LEADS"
+        else:               status_label = "NEEDS ATTENTION"
     else:
         status_label = ls["status"] if ls else "Not Scored"
 

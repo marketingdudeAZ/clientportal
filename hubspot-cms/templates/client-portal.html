@@ -818,7 +818,7 @@ body{padding-top:36px}
   <div class="sb-footer">
     <div class="sb-user">
       <div class="sb-avatar">KD</div>
-      <div class="sb-user-email">marketing@quincy.com</div>
+      <div class="sb-user-email"></div>
       <button class="sb-signout">Sign out</button>
     </div>
   </div>
@@ -1205,7 +1205,7 @@ body{padding-top:36px}
       </div>
       <div class="tier-cards">
         <div class="tier-card current-tier selected" id="rep-good" onclick="selectTier(this,'reputation')"><div class="tier-n">Response Only</div><div class="tier-p">$190<span>/mo</span></div><div class="tier-d">Professional responses within 48h <em>(current)</em></div></div>
-        <div class="tier-card recommended-tier" id="rep-better" onclick="selectTier(this,'reputation')"><div class="tier-n">Response + Removal</div><div class="tier-p">$255<span>/mo</span></div><div class="tier-d">24h responses + fraudulent review disputes</div><div class="tier-why">23 unresponded reviews are actively pulling your Experience score down. Response + Removal closes that gap within one billing cycle.</div></div>
+        <div class="tier-card recommended-tier" id="rep-better" onclick="selectTier(this,'reputation')"><div class="tier-n">Response + Removal</div><div class="tier-p">$255<span>/mo</span></div><div class="tier-d">24h responses + fraudulent review disputes</div><div class="tier-why">Upgrading improves your experience score — details populated from your latest health assessment.</div></div>
         <div class="tier-card" id="rep-best" onclick="selectTier(this,'reputation')"><div class="tier-n">Full Management</div><div class="tier-p">$400<span>/mo</span></div><div class="tier-d">Response + removal + proactive review generation</div></div>
       </div>
     </div>
@@ -1363,15 +1363,15 @@ body{padding-top:36px}
   <div class="callprep-grid">
     <div class="cp-card">
       <div class="cp-card-label cp-label-changed">What Changed</div>
-      <div class="cp-card-text">Overall score dropped 4 points to 72 (Yellow). Biggest shift: Experience fell 8 points to 67 — driven by 23 unresponded reviews over 60 days. Market and Funnel scores held steady.</div>
+      <div class="cp-card-text" id="cp-changed">Loading…</div>
     </div>
     <div class="cp-card">
       <div class="cp-card-label cp-label-working">What's Working</div>
-      <div class="cp-card-text" id="brief-whats-working">Market position holding — SEO organic traffic trending up after the content calendar update. Paid search impression share competitive in the submarket.</div>
+      <div class="cp-card-text" id="cp-working">Loading…</div>
     </div>
     <div class="cp-card">
       <div class="cp-card-label cp-label-handling">What We're Handling</div>
-      <div class="cp-card-text">SEO and social programs running on schedule. March local pin report delivered. ILS accuracy audit in progress (AM Tickets). No client action needed on these items.</div>
+      <div class="cp-card-text" id="cp-handling">Loading…</div>
     </div>
   </div>
 
@@ -1396,10 +1396,10 @@ body{padding-top:36px}
         <span class="badge badge-blue">Strategy</span>
         <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--red)">High Priority</span>
       </div>
-      <div class="rec-title">Increase review response rate to improve resident experience score</div>
+      <div class="rec-title" id="rec-1-title">Loading…</div>
     </div>
     <div class="rec-body">
-      <div class="rec-body-text">Your resident experience subscore dropped 8 points to 67. The primary driver is an unresponded review backlog — 23 reviews over the past 60 days have no response. Google weighs response rate heavily in local ranking. Activating the Response + Removal tier would address this within the current billing cycle.</div>
+      <div class="rec-body-text" id="rec-1-body">Loading…</div>
       <div class="rec-action-box"><span class="rec-action-box-label">What we need from you</span>Approve to create a task for your reputation management team</div>
       <div class="rec-btns">
         <button class="btn-approve" onclick="approveRec(1,'strategy_change','reputation','better','rec-1','rec-confirm-1')">Approve</button>
@@ -1416,10 +1416,10 @@ body{padding-top:36px}
         <span class="badge badge-purple">Budget Change</span>
         <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--amb)">Medium Priority</span>
       </div>
-      <div class="rec-title">Increase paid search budget ahead of peak leasing season</div>
+      <div class="rec-title" id="rec-2-title">Loading…</div>
     </div>
     <div class="rec-body">
-      <div class="rec-body-text">Your market subscore of 78 shows strong competitive positioning, but paid search impression share dropped 14% as two competing properties increased spend. Kierland is entering peak leasing season (April–June). Moving to the Better tier adds retargeting audiences and weekly bid optimization projected to recover impression share.</div>
+      <div class="rec-body-text" id="rec-2-body">Loading…</div>
       <div class="rec-action-box"><span class="rec-action-box-label">What happens when you approve</span>Your AM will create a budget change request and a new deal will be opened for your review</div>
       <div class="rec-btns">
         <button class="btn-approve-go" onclick="approveRec(2,'budget_change','paid_search','better','rec-2','rec-confirm-2')">
@@ -1901,8 +1901,7 @@ body{padding-top:36px}
       <div class="brief-row" style="border-bottom:none">
         <div class="brief-key">Tag Lines</div>
         <div class="brief-val" id="b-taglines" data-field="taglines" data-edittype="taglines">
-          <div style="font-weight:600;color:var(--jd)">"LIVE ELEVATED. LIVE KIERLAND."</div>
-          <div style="color:var(--ts);margin-top:2px">"Where Luxury Meets Lifestyle"</div>
+          <!-- populated by loadClientBrief() -->
         </div>
       </div>
       <div class="brief-save-row">
@@ -1924,15 +1923,15 @@ body{padding-top:36px}
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
         <div>
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Unique Solutions</div>
-          <div class="brief-quote brief-val" id="b-unique" data-field="unique_solutions" data-edittype="textarea">Luxury resort-style living in the heart of Kierland with walkability to premier dining and retail — unmatched in the submarket.</div>
+          <div class="brief-quote brief-val" id="b-unique" data-field="unique_solutions" data-edittype="textarea"></div>
         </div>
         <div>
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Adjectives</div>
-          <div class="brief-quote brief-val" id="b-adjectives" data-field="adjectives" data-edittype="textarea">Sophisticated · Vibrant · Walkable · Resort-style · Elevated</div>
+          <div class="brief-quote brief-val" id="b-adjectives" data-field="adjectives" data-edittype="textarea"></div>
         </div>
         <div>
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Additional Selling Points</div>
-          <div class="brief-quote brief-val" id="b-selling" data-field="additional_selling_points" data-edittype="textarea">Rooftop pool · Co-working spaces · Concierge service · Attached parking · EV charging stations</div>
+          <div class="brief-quote brief-val" id="b-selling" data-field="additional_selling_points" data-edittype="textarea"></div>
         </div>
       </div>
       <div class="brief-save-row">
@@ -1954,24 +1953,21 @@ body{padding-top:36px}
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
         <div>
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Overarching Goals</div>
-          <div class="brief-quote brief-val" id="b-goals" data-field="goals" data-edittype="textarea">Maintain occupancy above 94% through Q2 peak leasing season. Secondary goal: reduce ATR below 5% by May.</div>
+          <div class="brief-quote brief-val" id="b-goals" data-field="goals" data-edittype="textarea"></div>
         </div>
         <div>
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Challenges (6–8 Mo)</div>
-          <div class="brief-quote brief-val" id="b-challenges" data-field="challenges" data-edittype="textarea">New luxury comp opening Q3 (The Vue at Kierland). Pricing pressure from existing comps running heavy concessions.</div>
+          <div class="brief-quote brief-val" id="b-challenges" data-field="challenges" data-edittype="textarea"></div>
         </div>
         <div>
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Onsite / Upcoming</div>
-          <div class="brief-quote brief-val" id="b-onsite" data-field="onsite_upcoming" data-edittype="textarea">Pool deck renovation completing April 15. New co-working lounge opening May 1 — strong campaign hook for spring leasing.</div>
+          <div class="brief-quote brief-val" id="b-onsite" data-field="onsite_upcoming" data-edittype="textarea"></div>
         </div>
       </div>
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--bdl)">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Competitors</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap" id="b-comps" data-field="competitors" data-edittype="pills">
-          <span class="brief-pill">The Vue at Kierland</span>
-          <span class="brief-pill">Optima Kierland</span>
-          <span class="brief-pill">Broadstone Fashion Center</span>
-          <span class="brief-pill">7180 Optima</span>
+          <!-- populated by loadClientBrief() -->
         </div>
       </div>
       <div class="brief-save-row">
@@ -2196,7 +2192,7 @@ body{padding-top:36px}
     <div class="ticket-card" id="ticket-1">
       <div class="ticket-head" onclick="toggleTicket('ticket-1')">
         <div class="ticket-priority high"></div>
-        <div class="ticket-title">Update Google Business Profile — 23 unresponded reviews affecting experience score</div>
+        <div class="ticket-title" id="ticket-1-title">Loading…</div>
         <div class="ticket-owner">Sarah M.</div>
         <span class="ticket-status open">Open</span>
         <svg class="ticket-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
@@ -2351,7 +2347,7 @@ body{padding-top:36px}
         <div style="font-size:15px;font-weight:700;color:var(--jd)">Properties</div>
         <div class="dash-table-controls">
           <input class="dash-search" placeholder="Search properties…"/>
-          <select class="dash-select"><option>All Markets</option><option>Scottsdale</option><option>Phoenix</option><option>Chicago</option><option>Denver</option><option>Austin</option><option>Charlotte</option></select>
+          <select class="dash-select"><option>All Markets</option></select>
           <select class="dash-select"><option>All Health</option><option>Healthy (75+)</option><option>Warning (50-74)</option><option>Critical (&lt;50)</option></select>
         </div>
       </div>
@@ -2384,20 +2380,7 @@ body{padding-top:36px}
           </tr>
         </thead>
         <tbody>
-          <tr onclick="drillToMarket('Scottsdale')">
-            <td><div class="market-name">Scottsdale</div><div class="market-sub">Arizona · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">320</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--amb)">72</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:72%;background:#D4910A"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag y">1 YLW</span></div></td>
-            <td style="text-align:right">$6,040</td>
-            <td style="text-align:right"><span class="fcount has">2</span></td>
-          </tr>
+          <!-- populated by loadPortfolio() -->
           <tr onclick="drillToMarket('Chicago')">
             <td><div class="market-name">Chicago</div><div class="market-sub">Illinois · 1 property</div></td>
             <td style="text-align:right">1</td>
@@ -3895,14 +3878,14 @@ function loadPerformance() {
         var st = (h.status || '').toUpperCase();
         var badgeLabel = st === 'ON TRACK' ? 'On Track'
           : st === 'WATCH' ? 'Watch'
-          : st === 'NEEDS LEADS' ? 'Needs Leads'
+          : st === 'NEEDS ATTENTION' ? 'Needs Attention'
           : st === 'RENOVATION' ? 'Renovation'
           : st === 'HEALTHY' ? 'On Track'
           : st === 'WARNING' ? 'Watch'
-          : st === 'RED ALERT' ? 'Needs Leads'
+          : st === 'RED ALERT' ? 'Needs Attention'
           : (h.status || 'Not Scored');
         var badgeCls = (st === 'ON TRACK' || st === 'HEALTHY') ? 'badge-green'
-          : (st === 'NEEDS LEADS' || st === 'RED ALERT') ? 'badge-red'
+          : (st === 'NEEDS ATTENTION' || st === 'RED ALERT') ? 'badge-red'
           : 'badge-yellow';
         badge.textContent = badgeLabel;
         badge.className   = 'badge ' + badgeCls;
@@ -3928,7 +3911,7 @@ function loadPerformance() {
         function _setBadge(id, score) {
           var el = document.getElementById(id);
           if (!el) return;
-          el.textContent = score >= 75 ? 'ON TRACK' : score >= 50 ? 'WATCH' : 'NEEDS LEADS';
+          el.textContent = score >= 75 ? 'ON TRACK' : score >= 50 ? 'WATCH' : 'NEEDS ATTENTION';
           el.className = 'badge ' + (score >= 75 ? 'badge-green' : score >= 50 ? 'badge-yellow' : 'badge-red');
           el.style.fontSize = '9px';
         }
@@ -4176,17 +4159,17 @@ function _buildReportHTML(d) {
 
   // Status color
   var statusColor = (status === 'ON TRACK' || status === 'HEALTHY') ? '#4A7C6E'
-    : (status === 'NEEDS LEADS' || status === 'RED ALERT') ? '#C6332C'
+    : (status === 'NEEDS ATTENTION' || status === 'RED ALERT') ? '#C6332C'
     : (status === 'RENOVATION') ? '#6B7280'
     : '#F4A520';
   // Map all status variants to display labels
   var statusLabel = status === 'ON TRACK'    ? 'ON TRACK'
     : status === 'WATCH'                     ? 'WATCH'
-    : status === 'NEEDS LEADS'               ? 'NEEDS LEADS'
+    : status === 'NEEDS ATTENTION'               ? 'NEEDS ATTENTION'
     : status === 'RENOVATION'                ? 'RENOVATION'
     : status === 'HEALTHY'                   ? 'ON TRACK'
     : status === 'WARNING'                   ? 'WATCH'
-    : status === 'RED ALERT'                 ? 'NEEDS LEADS'
+    : status === 'RED ALERT'                 ? 'NEEDS ATTENTION'
     : 'NOT SCORED';
 
   function scoreColor(s) {
@@ -4196,7 +4179,7 @@ function _buildReportHTML(d) {
   function scoreBadge(s) {
     if (s === '—' || s == null) return '<span style="font-size:10px;color:#6B7280">—</span>';
     var c = scoreColor(s);
-    var lbl = s >= 75 ? 'On Track' : s >= 50 ? 'Watch' : 'Needs Leads';
+    var lbl = s >= 75 ? 'On Track' : s >= 50 ? 'Watch' : 'Needs Attention';
     return '<span style="background:'+c+';color:#fff;font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.06em;text-transform:uppercase">'+lbl+'</span>';
   }
   function sevColor(sev) {
@@ -5843,7 +5826,7 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 .h-badge{padding:3px 9px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.04em;white-space:nowrap}
 .h-badge.on-track{background:rgba(143,166,142,.15);color:var(--sage)}
 .h-badge.watch{background:rgba(212,145,10,.15);color:var(--amb)}
-.h-badge.needs-leads{background:rgba(201,68,68,.12);color:var(--red)}
+.h-badge.needs-attention{background:rgba(201,68,68,.12);color:var(--red)}
 .h-badge.no-data{background:var(--bdl);color:var(--tm)}
 
 /* ── Status chip ── */
@@ -5932,7 +5915,7 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
       <option value="">All Health Status</option>
       <option value="on-track">On Track (≥75)</option>
       <option value="watch">Watch (50–74)</option>
-      <option value="needs-leads">Needs Leads (&lt;50)</option>
+      <option value="needs-attention">Needs Attention (&lt;50)</option>
     </select>
   </div>
   <!-- Properties table -->
@@ -6147,7 +6130,7 @@ function filterPropList() {
       var sc = p.health_score != null ? Math.round(p.health_score) : null;
       if (health === 'on-track'    && (sc == null || sc < 75))  return false;
       if (health === 'watch'       && (sc == null || sc < 50 || sc >= 75)) return false;
-      if (health === 'needs-leads' && (sc == null || sc >= 50)) return false;
+      if (health === 'needs-attention' && (sc == null || sc >= 50)) return false;
     }
     return true;
   });
@@ -6165,8 +6148,8 @@ function renderPropList(props) {
     var initials = (p.name||'').split(' ').filter(function(w){return w.length>0;}).slice(0,2)
       .map(function(w){return w[0].toUpperCase();}).join('');
     var score = p.health_score != null ? Math.round(p.health_score) : null;
-    var badgeClass = score == null ? 'no-data' : score >= 75 ? 'on-track' : score >= 50 ? 'watch' : 'needs-leads';
-    var badgeLabel = score == null ? 'No Data' : score >= 75 ? score + ' ON TRACK' : score >= 50 ? score + ' WATCH' : score + ' NEEDS LEADS';
+    var badgeClass = score == null ? 'no-data' : score >= 75 ? 'on-track' : score >= 50 ? 'watch' : 'needs-attention';
+    var badgeLabel = score == null ? 'No Data' : score >= 75 ? score + ' ON TRACK' : score >= 50 ? score + ' WATCH' : score + ' NEEDS ATTENTION';
     var ple = p.status || p.plestatus || 'RPM Managed';
     var isActive = (ple === 'RPM Managed' || ple === 'Onboarding');
     var url = PORTAL_BASE_URL + '?uuid=' + encodeURIComponent(p.uuid);
