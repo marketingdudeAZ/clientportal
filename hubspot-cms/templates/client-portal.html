@@ -1104,55 +1104,21 @@ body{padding-top:36px}
   <div class="card" style="margin-bottom:20px;overflow:hidden">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bd)">
       <div style="font-size:14px;font-weight:700;color:var(--jd)">Enrolled Services</div>
-      <div style="text-align:right">
-        <div style="font-size:11px;color:var(--tm);font-weight:600">$2,190/mo management · <span style="color:var(--cu)">$3,200/mo ad spend</span></div>
-        <div style="font-size:13px;font-weight:800;color:var(--tp)">$5,390/mo total</div>
+      <div style="text-align:right" id="svc-totals-hdr">
+        <div style="font-size:11px;color:var(--tm);font-weight:600" id="svc-totals-detail">Loading...</div>
+        <div style="font-size:13px;font-weight:800;color:var(--tp)" id="svc-totals-main"></div>
       </div>
     </div>
     <table class="services-table">
       <thead><tr><th>Service</th><th>Current Tier</th><th>Mgmt</th><th style="color:var(--cu)">Ad Spend</th><th></th></tr></thead>
-      <tbody>
-        <tr>
-          <td><div class="svc-name"><div class="svc-icon" style="background:var(--ml)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#53606C" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>SEO</div></td>
-          <td><span class="badge badge-gray">Standard</span></td>
-          <td class="svc-price">$800/mo</td>
-          <td style="color:var(--tm);font-size:12px">—</td>
-          <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="scrollToChannel('seo')">Configure</button></td>
-        </tr>
-        <tr>
-          <td><div class="svc-name"><div class="svc-icon" style="background:#FEF9C3"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#854D0E" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>Social Posting</div></td>
-          <td><span class="badge badge-green">Premium</span></td>
-          <td class="svc-price">$700/mo</td>
-          <td style="color:var(--tm);font-size:12px">—</td>
-          <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="scrollToChannel('social')">Configure</button></td>
-        </tr>
-        <tr id="rep-service-row">
-          <td><div class="svc-name"><div class="svc-icon" style="background:#FEE2E2"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#991B1B" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>Reputation</div></td>
-          <td><span class="badge badge-gray">Response Only</span></td>
-          <td class="svc-price">$190/mo</td>
-          <td style="color:var(--tm);font-size:12px">—</td>
-          <td style="text-align:right"><button class="btn btn-primary btn-sm" onclick="scrollToChannel('reputation')">Upgrade ↑</button></td>
-        </tr>
-        <tr>
-          <td><div class="svc-name"><div class="svc-icon" style="background:var(--cug)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C8964E" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/></svg></div>Paid Search</div></td>
-          <td><span class="badge badge-copper">Active</span></td>
-          <td class="svc-price">$500/mo</td>
-          <td style="font-weight:700;color:var(--cu)">$2,000/mo</td>
-          <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="scrollToChannel('paid_search')">Configure</button></td>
-        </tr>
-        <tr>
-          <td><div class="svc-name"><div class="svc-icon" style="background:#EDE9FE"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5B21B6" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg></div>Paid Social</div></td>
-          <td><span class="badge badge-copper">Active</span></td>
-          <td class="svc-price">$650/mo</td>
-          <td style="font-weight:700;color:var(--cu)">$1,200/mo</td>
-          <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="scrollToChannel('paid_social')">Configure</button></td>
-        </tr>
+      <tbody id="svc-tbody">
+        <tr><td colspan="5" style="padding:32px;text-align:center;color:var(--tm);font-size:12px">Loading enrolled services...</td></tr>
       </tbody>
-      <tfoot>
+      <tfoot id="svc-tfoot" style="display:none">
         <tr style="background:var(--bg)">
           <td colspan="2" style="padding:10px 16px;font-weight:700;font-size:12px;color:var(--j)">Total</td>
-          <td style="padding:10px 16px;font-weight:800;font-size:13px;color:var(--tp)">$2,840/mo</td>
-          <td style="padding:10px 16px;font-weight:800;font-size:13px;color:var(--cu)">$3,200/mo</td>
+          <td style="padding:10px 16px;font-weight:800;font-size:13px;color:var(--tp)" id="svc-total-mgmt"></td>
+          <td style="padding:10px 16px;font-weight:800;font-size:13px;color:var(--cu)" id="svc-total-spend"></td>
           <td></td>
         </tr>
       </tfoot>
@@ -2481,14 +2447,16 @@ function nav(id, el) {
   document.getElementById('section-'+id).classList.add('active');
   if (el) el.classList.add('active');
   // Lazy-load live data when sections open
-  if (id === 'overview')    { loadOverview(); }
-  if (id === 'tickets')     { loadTickets(); }
-  if (id === 'brief')       { loadClientBrief(); }
-  if (id === 'budget')      { loadBudget(); }
-  if (id === 'video')       { loadVideoCreative(); }
-  if (id === 'forecast')    { loadForecast(); }
-  if (id === 'performance') { loadPerformance(); }
-  if (id === 'activity')    { loadActivity(); }
+  if (id === 'overview')         { loadOverview(); }
+  if (id === 'tickets')          { loadTickets(); }
+  if (id === 'brief')            { loadClientBrief(); }
+  if (id === 'budget')           { loadBudget(); }
+  if (id === 'video')            { loadVideoCreative(); }
+  if (id === 'forecast')         { loadForecast(); }
+  if (id === 'performance')      { loadPerformance(); }
+  if (id === 'activity')         { loadActivity(); }
+  if (id === 'recommendations')  { loadCallPrep(); }
+  if (id === 'services')         { loadServices(); }
 }
 
 function switchDemo(view, btn) {
@@ -5394,6 +5362,190 @@ function switchAssetTab(btn, tab) {
 }
 
 // ── Call Notes: Save to HubSpot ──
+// ── Call Prep: generate property-specific questions from health data ────────
+var _callPrepLoaded = false;
+function loadCallPrep() {
+  if (_callPrepLoaded) return;
+  _callPrepLoaded = true;
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var cid = window.__PORTAL_COMPANY_ID__ || '';
+  var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  if (!cid) return;
+
+  // Fetch property data + client brief in parallel to build context
+  var propP = fetch(API_BASE + '/api/property?company_id=' + encodeURIComponent(cid),
+    { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+  var briefP = fetch(API_BASE + '/api/client-brief?company_id=' + encodeURIComponent(cid),
+    { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+
+  Promise.all([propP, briefP]).then(function(results) {
+    var propData = results[0] || {};
+    var briefData = results[1] || {};
+    var health = propData.health || {};
+    var leasing = propData.leasing || {};
+    var prop = propData.property || {};
+
+    // Build What Changed / What's Working / What We're Handling from health data
+    var score = health.overall != null ? Math.round(health.overall) : null;
+    var status = health.status || '';
+    var occ = leasing.occupancy;
+    var atr = leasing.atr;
+
+    // What Changed
+    var changedEl = document.getElementById('cp-changed');
+    if (changedEl) {
+      if (score != null) {
+        var statusWord = score >= 75 ? 'On Track' : score >= 50 ? 'Watch' : 'Needs Attention';
+        changedEl.textContent = 'Current health score is ' + score + ' (' + statusWord + '). ' +
+          (occ != null ? 'Occupancy at ' + Math.round(occ*10)/10 + '%. ' : '') +
+          (atr != null ? 'ATR at ' + Math.round(atr*10)/10 + '%. ' : '') +
+          (health.flag_count ? health.flag_count + ' health flag(s) identified.' : 'No active health flags.');
+      } else {
+        changedEl.textContent = 'Health score has not been computed yet for this property.';
+      }
+    }
+
+    // What's Working
+    var workingEl = document.getElementById('cp-working');
+    if (workingEl) {
+      var wins = [];
+      if (occ != null && occ >= 93) wins.push('Occupancy is strong at ' + Math.round(occ*10)/10 + '%');
+      if (atr != null && atr < 6) wins.push('ATR is healthy at ' + Math.round(atr*10)/10 + '%');
+      if (health.leasing_score && health.leasing_score.exposure_score >= 75) wins.push('Lease exposure trending well');
+      if (briefData.goals) wins.push('Strategic goals documented in client brief');
+      workingEl.textContent = wins.length ? wins.join('. ') + '.' : 'Review property metrics to identify areas of strength.';
+    }
+
+    // What We're Handling
+    var handlingEl = document.getElementById('cp-handling');
+    if (handlingEl) {
+      handlingEl.textContent = 'Marketing programs running on schedule. Review the Budget & SKUs tab for current spend allocation and the Services tab for enrolled programs.';
+    }
+
+    // Generate property-specific questions
+    var questions = [];
+    if (occ != null && occ < 90) {
+      questions.push('Occupancy is at ' + Math.round(occ*10)/10 + '% — below the 93% stabilized target. Are there any on-site factors affecting leasing velocity (staffing, pricing, unit turns)?');
+    }
+    if (atr != null && atr > 8) {
+      questions.push('ATR is running at ' + Math.round(atr*10)/10 + '% which is above the 8% threshold. What is the renewal strategy? Are there specific units or floor plans with higher turnover?');
+    }
+    if (score != null && score < 50) {
+      questions.push('The property health score is ' + score + ' (Needs Attention). What is your biggest priority right now — occupancy, retention, or marketing performance?');
+    }
+    if (briefData.challenges) {
+      questions.push('Your brief notes these challenges: "' + briefData.challenges.substring(0, 100) + '". Has anything changed on this front?');
+    }
+    if (briefData.onsite_upcoming) {
+      questions.push('Your brief mentions: "' + briefData.onsite_upcoming.substring(0, 100) + '". Is this still on track? We can build campaign hooks around it.');
+    }
+    // Always include these standard questions
+    questions.push('Are there any upcoming events, renovations, or property changes we should incorporate into marketing campaigns?');
+    questions.push('From your perspective on-site, what is the #1 thing you want marketing to focus on this month?');
+
+    // Render questions
+    var qList = document.getElementById('question-list');
+    if (qList) {
+      qList.innerHTML = questions.map(function(q, i) {
+        var n = i + 1;
+        return '<div class="question-item" id="q-' + n + '">' +
+          '<div class="question-num">' + n + '</div>' +
+          '<div style="flex:1">' +
+            '<div class="question-text">' + q + '</div>' +
+            '<div class="question-answer-area" id="qa-' + n + '">' +
+              '<textarea placeholder="Type the client\'s answer here during the call\u2026" id="qa-text-' + n + '"></textarea>' +
+              '<div class="question-answer-saved" id="qa-saved-' + n + '">\u2713 Answer saved</div>' +
+            '</div>' +
+            '<div class="question-btns">' +
+              '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px" onclick="toggleAnswer(\'' + n + '\',this)">+ Add Answer</button>' +
+              '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;display:none" id="qa-save-' + n + '" onclick="saveAnswer(\'' + n + '\')">Save Answer</button>' +
+              '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;color:var(--sage);display:none" id="qa-done-' + n + '" onclick="markAnswered(\'q-' + n + '\',this)">\u2713 Mark Complete</button>' +
+            '</div>' +
+          '</div></div>';
+      }).join('');
+    }
+  });
+}
+
+// ── Services: populate enrolled services from budget/deal data ──────────────
+var _servicesLoaded = false;
+function loadServices() {
+  if (_servicesLoaded) return;
+  _servicesLoaded = true;
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var cid = window.__PORTAL_COMPANY_ID__ || '';
+  var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  if (!cid) return;
+
+  fetch(API_BASE + '/api/budget?company_id=' + encodeURIComponent(cid), {
+    headers: { 'X-Portal-Email': email }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.error) return;
+    var items = d.line_items || [];
+    var tbody = document.getElementById('svc-tbody');
+    var tfoot = document.getElementById('svc-tfoot');
+    if (!tbody) return;
+
+    // Filter to active items with amount > 0
+    var active = items.filter(function(li) { return li.active !== false && (li.amount || 0) > 0; });
+
+    if (!active.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:32px;text-align:center;color:var(--tm)">No active services found. Check the Budget & SKUs tab.</td></tr>';
+      return;
+    }
+
+    // SKU → display name mapping
+    var skuLabels = {
+      'SEO_Package': 'SEO', 'Search_Ads': 'Paid Search', 'Search_Budget': 'Paid Search Ad Spend',
+      'Social_Ads': 'Paid Social', 'Social_Budget': 'Paid Social Ad Spend',
+      'Social_Posting': 'Social Posting', 'Reputation_Management': 'Reputation',
+      'Eblast': 'Eblasts', 'Website_Hosting': 'Website Hosting',
+      'Geofence': 'Geofence', 'Google_Display_Ads': 'Display Ads',
+      'YouTube_Reach_Campaign': 'YouTube', 'Retargeting': 'Retargeting',
+      'CTV_OTT': 'CTV/OTT', 'Demand_Gen': 'Demand Gen',
+      'Management_Fee': 'Management Fee', 'PMax': 'Performance Max',
+      'Paid_TikTok_Ads': 'TikTok Ads'
+    };
+
+    var totalMgmt = 0, totalSpend = 0;
+    var html = active.map(function(li) {
+      var name = skuLabels[li.sku] || li.name || li.sku || 'Service';
+      var type = li.type || 'mgmt';
+      var amt = li.amount || 0;
+      if (type === 'spend') { totalSpend += amt; } else { totalMgmt += amt; }
+      var badge = type === 'spend' ? '<span class="badge badge-copper">Ad Spend</span>' : '<span class="badge badge-gray">Active</span>';
+      var mgmtCol = type === 'mgmt' ? '$' + Math.round(amt).toLocaleString() + '/mo' : '\u2014';
+      var spendCol = type === 'spend' ? '<span style="font-weight:700;color:var(--cu)">$' + Math.round(amt).toLocaleString() + '/mo</span>' : '\u2014';
+      return '<tr>' +
+        '<td style="padding:10px 16px;font-size:13px;font-weight:600;color:var(--jd)">' + name + '</td>' +
+        '<td>' + badge + '</td>' +
+        '<td class="svc-price">' + mgmtCol + '</td>' +
+        '<td style="font-size:12px">' + spendCol + '</td>' +
+        '<td></td></tr>';
+    }).join('');
+
+    tbody.innerHTML = html;
+    if (tfoot) {
+      tfoot.style.display = '';
+      var mgmtEl = document.getElementById('svc-total-mgmt');
+      var spendEl = document.getElementById('svc-total-spend');
+      if (mgmtEl) mgmtEl.textContent = '$' + Math.round(totalMgmt).toLocaleString() + '/mo';
+      if (spendEl) spendEl.textContent = '$' + Math.round(totalSpend).toLocaleString() + '/mo';
+    }
+    var hdrDetail = document.getElementById('svc-totals-detail');
+    var hdrMain = document.getElementById('svc-totals-main');
+    if (hdrDetail) hdrDetail.innerHTML = '$' + Math.round(totalMgmt).toLocaleString() + '/mo management \u00B7 <span style="color:var(--cu)">$' + Math.round(totalSpend).toLocaleString() + '/mo ad spend</span>';
+    if (hdrMain) hdrMain.textContent = '$' + Math.round(totalMgmt + totalSpend).toLocaleString() + '/mo total';
+  })
+  .catch(function(err) {
+    console.warn('loadServices failed:', err);
+    var tbody = document.getElementById('svc-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="padding:32px;text-align:center;color:var(--tm)">Could not load service data.</td></tr>';
+  });
+}
+
 function submitCallNotes() {
   var btn = document.getElementById('save-notes-btn');
   var confirm = document.getElementById('save-notes-confirm');
@@ -5419,17 +5571,39 @@ function submitCallNotes() {
   btn.textContent = 'Saving…';
   btn.disabled = true;
 
-  // Simulate API call (demo mode)
-  setTimeout(function() {
-    btn.innerHTML = '✓ Saved to HubSpot';
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var cid = window.__PORTAL_COMPANY_ID__ || '';
+  var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  var propName = window.__PORTAL_PROP_NAME || '';
+
+  fetch(API_BASE + '/api/call-notes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Email': email },
+    body: JSON.stringify({
+      company_id: cid,
+      property_uuid: cid,
+      property_name: propName,
+      qa_pairs: pairs
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.error) { btn.textContent = 'Error: ' + d.error; btn.style.background = 'var(--red)'; return; }
+    btn.innerHTML = '\u2713 Saved to HubSpot';
     btn.style.background = 'var(--sage)';
     confirm.style.display = '';
-
-    // Log to activity timeline
-    var noteText = 'Call prep notes saved to HubSpot — ' + answeredCount + ' question' + (answeredCount !== 1 ? 's' : '') + ' answered';
-    document.getElementById('tl-call-notes-text').textContent = noteText;
-    showActivityItem('tl-call-notes-saved');
-  }, 900);
+    confirm.textContent = 'Saved ' + answeredCount + ' answer(s) as activity note on HubSpot.';
+    var tlEl = document.getElementById('tl-call-notes-text');
+    if (tlEl) tlEl.textContent = 'Call prep notes saved — ' + answeredCount + ' question(s) answered';
+    var tlItem = document.getElementById('tl-call-notes-saved');
+    if (tlItem && typeof showActivityItem === 'function') showActivityItem('tl-call-notes-saved');
+  })
+  .catch(function(err) {
+    btn.textContent = 'Save failed — try again';
+    btn.style.background = 'var(--red)';
+    btn.disabled = false;
+    console.error('submitCallNotes failed:', err);
+  });
 }
 
 // ── Portfolio: view toggle ──
