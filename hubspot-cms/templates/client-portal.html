@@ -6203,6 +6203,10 @@ function renderSpendSheet(rows) {
   if (!rows.length) { tbody.innerHTML = '<tr><td colspan="16" style="padding:32px;text-align:center;color:var(--tm)">No results.</td></tr>'; return; }
   tbody.innerHTML = rows.map(function(r) {
     var pname = r.property_name || r.name || '';
+    var rowTotal = (r.search||0) + (r.pmax||0) + (r.paid_social||0) +
+                   (r.geofence||0) + (r.display||0) + (r.retargeting||0) +
+                   (r.ctv||0) + (r.seo||0) + (r.social_posting||r.social_content||0) +
+                   (r.eblast||r.eblasts||0) + (r.email_drip||r.email_drips||0);
     return '<tr>' +
       '<td><span class="s-prop-name" title="'+pname+'">'+pname+'</span></td>' +
       '<td>' + (r.ple_status||r.plestatus||r.status||'') + '</td>' +
@@ -6219,7 +6223,7 @@ function renderSpendSheet(rows) {
       '<td class="s-num">' + fmt(r.social_posting||r.social_content) + '</td>' +
       '<td class="s-num">' + fmt(r.eblast||r.eblasts) + '</td>' +
       '<td class="s-num">' + fmt(r.email_drip||r.email_drips) + '</td>' +
-      '<td class="s-num s-total" style="color:var(--cu);font-weight:700">' + fmt(r.total||r.total_spend) + '</td>' +
+      '<td class="s-num s-total" style="color:var(--cu);font-weight:700">' + fmt(rowTotal) + '</td>' +
       '</tr>';
   }).join('');
   // Footer totals
