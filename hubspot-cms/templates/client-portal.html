@@ -1465,7 +1465,7 @@ body{padding-top:36px}
   <div class="sec-topbar">
     <div><div class="sec-title">Asset Library</div><div class="sec-sub">Photography · video · brand · collateral</div></div>
     <div class="sec-actions">
-      <button class="btn btn-secondary btn-sm">
+      <button class="btn btn-secondary btn-sm" onclick="openUploadModal()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         Upload Assets
       </button>
@@ -1485,6 +1485,50 @@ body{padding-top:36px}
     <div class="asset-card"><div class="asset-thumb" style="background:linear-gradient(135deg,#C5B8D0,#A090B0)">Kitchen</div><div class="asset-info"><div class="asset-name">Model Unit — Kitchen</div><div class="asset-meta">Interior · Jan 2026</div></div></div>
     <div class="asset-card"><div class="asset-thumb" style="background:linear-gradient(135deg,#8FA68E,#6E8B6D)">Courtyard</div><div class="asset-info"><div class="asset-name">Courtyard — Evening</div><div class="asset-meta">Exterior · Mar 2026</div></div></div>
   </div>
+
+<!-- Asset Upload Modal -->
+<div id="upload-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:32px;max-width:480px;width:90%;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:700;color:var(--jd)">Upload Assets</div>
+      <button onclick="closeUploadModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--tm)">&times;</button>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;font-weight:600;color:var(--ts);display:block;margin-bottom:4px">Category</label>
+      <select id="upload-category" style="width:100%;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px">
+        <option value="Photography">Photography</option>
+        <option value="Video">Video</option>
+        <option value="Brand & Creative">Brand & Creative</option>
+        <option value="Marketing Collateral">Marketing Collateral</option>
+      </select>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;font-weight:600;color:var(--ts);display:block;margin-bottom:4px">Subcategory</label>
+      <select id="upload-subcategory" style="width:100%;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px">
+        <option value="">None</option>
+        <option value="Exterior">Exterior</option>
+        <option value="Interior">Interior</option>
+        <option value="Amenity">Amenity</option>
+        <option value="Aerial">Aerial</option>
+        <option value="Neighborhood">Neighborhood</option>
+        <option value="Ad Creative">Ad Creative</option>
+        <option value="Property Tour">Property Tour</option>
+        <option value="Testimonial">Testimonial</option>
+      </select>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;font-weight:600;color:var(--ts);display:block;margin-bottom:4px">Description</label>
+      <input id="upload-desc" type="text" placeholder="e.g., 1 Bed Interior, Pool Area" style="width:100%;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px">
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:12px;font-weight:600;color:var(--ts);display:block;margin-bottom:4px">Files</label>
+      <input id="upload-files" type="file" multiple accept="image/*,video/*,.pdf,.ai,.eps,.psd,.svg" style="font-size:13px">
+    </div>
+    <div id="upload-status" style="display:none;margin-bottom:16px;padding:12px;border-radius:8px;font-size:13px"></div>
+    <button onclick="submitUpload()" style="width:100%;padding:10px;background:var(--cu);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Upload</button>
+  </div>
+</div>
+
 </section>
 
 <!-- ── VIDEO CREATIVE ── -->
@@ -2304,90 +2348,6 @@ body{padding-top:36px}
         </thead>
         <tbody>
           <!-- populated by loadPortfolio() -->
-          <tr onclick="drillToMarket('Chicago')">
-            <td><div class="market-name">Chicago</div><div class="market-sub">Illinois · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">294</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--sage)">84</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:84%;background:#8FA68E"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag g">1 GRN</span></div></td>
-            <td style="text-align:right">$5,645</td>
-            <td style="text-align:right"><span class="fcount none">0</span></td>
-          </tr>
-          <tr onclick="drillToMarket('Denver')">
-            <td><div class="market-name">Denver</div><div class="market-sub">Colorado · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">210</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--red)">58</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:58%;background:#C94444"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag r">1 RED</span></div></td>
-            <td style="text-align:right">$4,100</td>
-            <td style="text-align:right"><span class="fcount has">3</span></td>
-          </tr>
-          <tr onclick="drillToMarket('Austin')">
-            <td><div class="market-name">Austin</div><div class="market-sub">Texas · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">380</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--sage)">81</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:81%;background:#8FA68E"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag g">1 GRN</span></div></td>
-            <td style="text-align:right">$6,200</td>
-            <td style="text-align:right"><span class="fcount has">1</span></td>
-          </tr>
-          <tr onclick="drillToMarket('Charlotte')">
-            <td><div class="market-name">Charlotte</div><div class="market-sub">North Carolina · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">178</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--amb)">69</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:69%;background:#D4910A"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag y">1 YLW</span></div></td>
-            <td style="text-align:right">$3,800</td>
-            <td style="text-align:right"><span class="fcount has">2</span></td>
-          </tr>
-          <tr onclick="drillToMarket('Tampa')">
-            <td><div class="market-name">Tampa</div><div class="market-sub">Florida · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">252</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--red)">44</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:44%;background:#C94444"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag r">1 RED</span></div></td>
-            <td style="text-align:right">$3,900</td>
-            <td style="text-align:right"><span class="fcount has">4</span></td>
-          </tr>
-          <tr onclick="drillToMarket('Phoenix')">
-            <td><div class="market-name">Phoenix</div><div class="market-sub">Arizona · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">188</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--sage)">79</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:79%;background:#8FA68E"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag g">1 GRN</span></div></td>
-            <td style="text-align:right">$1,900</td>
-            <td style="text-align:right"><span class="fcount none">0</span></td>
-          </tr>
         </tbody>
         <tfoot>
           <tr style="background:var(--bg)">
@@ -3921,12 +3881,12 @@ function downloadReport() {
 
   var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
   var cid   = window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || '';
-  var email = window.__PORTAL_EMAIL__     || window.__PORTAL_EMAIL       || 'demo@rpmliving.com';
+  var email = window.__PORTAL_EMAIL__     || window.__PORTAL_EMAIL       || 'portal@rpmliving.com';
 
   var p = cid
     ? fetch(API_BASE + '/api/report-data?company_id=' + encodeURIComponent(cid),
             { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); })
-    : Promise.resolve(_demoReportData());
+    : Promise.resolve({error: 'No property ID available'});
 
   p.then(function(d) {
     var html = _buildReportHTML(d);
@@ -4037,42 +3997,7 @@ function _renderLeasingTrendChart(propData) {
   });
 }
 
-function _demoReportData() {
-  return {
-    property: { id: '', name: 'The Quincy at Kierland', market: 'Scottsdale', units: 320, status: 'RPM Managed', occupancy_status: 'Stabilized', report_date: '2026-03-01' },
-    health: {
-      overall: 68, status: 'WATCH',
-      is_lease_up: false,
-      leasing_score: {
-        score: 68, status: 'WATCH', is_lease_up: false, is_renovation: false,
-        occupancy_score: 70, atr_score: 60, exposure_score: 75,
-        occupancy_raw: 93.2, atr_raw: 8.4, trend_raw: 34
-      },
-      market: 78, marketing: 68, funnel: 70, experience: 67,
-      flag_count: 4,
-      digital_flags: [
-        { flag: 'CTR Below Benchmark', category: 'Paid Search', severity: 'High', notes: 'CTR at 2.8% — benchmark is 5%+. Ad copy refresh recommended.' },
-        { flag: 'Session Duration Low', category: 'Website', severity: 'Medium', notes: 'Average 0:52 — benchmark is 1:30+. Landing page UX review needed.' },
-        { flag: 'Cost Per Conversion Elevated', category: 'Paid Social', severity: 'Medium', notes: '$168 CPL vs $100 benchmark. Audience targeting may need refinement.' },
-      ],
-      pm_flags: [
-        { flag: 'ATR Above 8%', category: 'Leasing', severity: 'High', notes: 'Annualized turnover at 8.4%. Retention programs may be needed.' },
-      ],
-      recommendations: [
-        'Refresh paid search ad copy — current CTR of 2.8% is significantly below the 5% benchmark. Test 3 new headline variants.',
-        'Review landing page experience — session duration below 1:30 suggests visitors are not finding what they need quickly.',
-        'Audit Meta audience targeting — CPL of $168 is above benchmark. Test lookalike audiences based on recent lease conversions.',
-      ]
-    },
-    activity: [
-      { date: '2026-03-15', type: 'Note',  summary: 'AM reviewed March performance data — paid search impression share down 14% vs competitors.' },
-      { date: '2026-03-10', type: 'Call',  summary: 'Monthly check-in with owner. Discussed spring leasing strategy and budget reallocation.' },
-      { date: '2026-03-05', type: 'Email', summary: 'Sent February performance report and Health Score summary.' },
-      { date: '2026-02-28', type: 'Deal',  summary: 'Deal created: Reputation Management Upgrade ($3,060/yr) — pending approval.' },
-      { date: '2026-02-20', type: 'Note',  summary: 'Completed ad copy refresh for Google Search campaigns. New variants live.' },
-    ]
-  };
-}
+// _demoReportData removed — report data loaded from API
 
 function _buildReportHTML(d) {
   var prop   = d.property || {};
@@ -4993,34 +4918,7 @@ function loadVideoCreative() {
   });
 }
 
-function _demoVideoData() {
-  return {
-    enrolled: true, tier: 'Standard',
-    cycle_status: 'Pending Review', cycle_month: '2026-04',
-    perf_snapshot: {impressions: 48200, leads: 142, cpl: 28.50, channels: {meta: 0.58, google: 0.42}},
-    variants: [
-      { variant_id: 'v1', title: 'Variant A: Value-Driven, 30s Vertical',
-        video_url: '', poster_url: '',
-        platform: 'Meta', duration_seconds: 30, aspect_ratio: '9:16',
-        script: {hook: 'Stop paying too much for apartment hunting.',
-          body: 'At Quincy Apartments, you get resort-style amenities at a price that makes sense. Rooftop pool, coworking lounge, and a location you can actually afford.',
-          cta: 'Tour today — limited availability.', overlays: ['From $1,495/mo','Pet friendly'], visual_notes: 'Upbeat lifestyle B-roll, golden hour exterior.'},
-        rationale: 'Prior month data showed 62% of leads came from price-sensitive searchers. Value positioning outperformed lifestyle in A/B tests by 18% CTR.',
-        status: 'pending_review', revision_count: 0, approved_at: null },
-      { variant_id: 'v2', title: 'Variant B: Lifestyle, 15s Horizontal',
-        video_url: '', poster_url: '',
-        platform: 'YouTube', duration_seconds: 15, aspect_ratio: '16:9',
-        script: {hook: 'This is not your average apartment.', body: 'Rooftop. Pool. Walking distance to everything. Quincy Apartments — live differently.',
-          cta: 'See availability now.', overlays: ['Rooftop Pool','Downtown access'], visual_notes: 'Fast-cut montage, aspirational music.'},
-        rationale: 'YouTube skippable placement benefits from immediate visual hook. Short lifestyle format drove 22% higher view-through in comparable campaigns.',
-        status: 'pending_review', revision_count: 0, approved_at: null },
-    ],
-    history: [
-      {month: '2026-03', variant_count: 3, cycle_status: 'Approved'},
-      {month: '2026-02', variant_count: 2, cycle_status: 'Approved'},
-    ]
-  };
-}
+// _demoVideoData removed — video data loaded from API
 
 function _renderVideoCreative(d) {
   _renderCycleView(d);
@@ -5268,9 +5166,9 @@ function submitEnrollment() {
   if (!cid) {
     closeEnrollModal();
     document.getElementById('video-cycle-content').innerHTML =
-      '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:28px;text-align:center">' +
-      '<div style="font-size:16px;font-weight:800;color:#166534;margin-bottom:8px">You are enrolled!</div>' +
-      '<div style="font-size:13px;color:#166534">Demo mode — in production, your enrollment would be submitted and your AM notified.</div></div>';
+      '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:28px;text-align:center">' +
+      '<div style="font-size:14px;font-weight:700;color:#991b1b;margin-bottom:8px">Property ID not available</div>' +
+      '<div style="font-size:13px;color:#991b1b">Please navigate to this property from the Properties list.</div></div>';
     return;
   }
 
@@ -5353,7 +5251,7 @@ function approveVariants(ids) {
   var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || '';
   var cid = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '');
 
-  if (!cid) { alert('Demo mode — approval would be submitted here.'); return; }
+  if (!cid) { alert('Property ID not available. Please navigate from the Properties list.'); return; }
 
   fetch(API_BASE + '/api/video-approve', {
     method: 'POST',
@@ -5406,7 +5304,7 @@ function submitRevision() {
   };
 
   if (!cid) {
-    alert('Demo mode — revision would be submitted:\n' + JSON.stringify(payload, null, 2));
+    alert('Property ID not available. Please navigate from the Properties list.');
     closeRevisionModal(); return;
   }
 
@@ -5446,6 +5344,54 @@ function filterActivity(cat, btn) {
 }
 
 // ── Assets ──
+function openUploadModal() {
+  var modal = document.getElementById('upload-modal');
+  if (modal) modal.style.display = 'flex';
+}
+function closeUploadModal() {
+  var modal = document.getElementById('upload-modal');
+  if (modal) modal.style.display = 'none';
+  var status = document.getElementById('upload-status');
+  if (status) status.style.display = 'none';
+}
+function submitUpload() {
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var uuid = window.__PORTAL_UUID__ || window.__PORTAL_COMPANY_ID__ || '';
+  var files = document.getElementById('upload-files').files;
+  var category = document.getElementById('upload-category').value;
+  var subcategory = document.getElementById('upload-subcategory').value;
+  var desc = document.getElementById('upload-desc').value;
+  var statusEl = document.getElementById('upload-status');
+
+  if (!files.length) { statusEl.style.display='block'; statusEl.style.background='#fef2f2'; statusEl.style.color='#991b1b'; statusEl.textContent='Please select files to upload.'; return; }
+  if (!uuid) { statusEl.style.display='block'; statusEl.style.background='#fef2f2'; statusEl.style.color='#991b1b'; statusEl.textContent='Property ID not available.'; return; }
+
+  statusEl.style.display='block'; statusEl.style.background='#f0f9ff'; statusEl.style.color='#1e40af'; statusEl.textContent='Uploading ' + files.length + ' file(s)...';
+
+  var fd = new FormData();
+  fd.append('property_uuid', uuid);
+  fd.append('category', category);
+  fd.append('subcategory', subcategory);
+  fd.append('description', desc);
+  for (var i = 0; i < files.length; i++) fd.append('files', files[i]);
+
+  fetch(API_BASE + '/api/asset-upload', { method: 'POST', body: fd })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.error) { statusEl.style.background='#fef2f2'; statusEl.style.color='#991b1b'; statusEl.textContent='Error: ' + d.error; }
+      else { statusEl.style.background='#f0fdf4'; statusEl.style.color='#166534'; statusEl.textContent='Uploaded ' + (d.assets||[]).length + ' asset(s) successfully!'; loadAssets(); }
+    })
+    .catch(function(err) { statusEl.style.background='#fef2f2'; statusEl.style.color='#991b1b'; statusEl.textContent='Upload failed: ' + err.message; });
+}
+function loadAssets() {
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var uuid = window.__PORTAL_UUID__ || window.__PORTAL_COMPANY_ID__ || '';
+  var grid = document.getElementById('asset-grid');
+  if (!grid || !uuid) return;
+  // For now just show a refresh message — full HubDB query can be added later
+  grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--tm);font-size:12px">Assets uploaded. Refresh the page to see them.</div>';
+}
+
 function switchAssetTab(btn, tab) {
   document.querySelectorAll('.asset-tab').forEach(function(b){b.classList.remove('active')});
   btn.classList.add('active');
