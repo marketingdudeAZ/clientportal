@@ -1528,9 +1528,9 @@ body{padding-top:36px}
 
 <!-- Enrollment Modal -->
 <div class="modal-overlay" id="enroll-modal">
-  <div class="modal-box" style="width:min(600px,92vw)">
+  <div class="modal-box" style="width:min(500px,92vw)">
     <div class="modal-title">Enroll in Video Creative Pipeline</div>
-    <div class="modal-sub">Select your tier and complete your creative brief. Your AM will confirm setup within 2 business days.</div>
+    <div class="modal-sub">Select your tier below. Your creative brief data will be pulled automatically from the Client Brief tab.</div>
 
     <label class="modal-label">Package Tier</label>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
@@ -1551,63 +1551,14 @@ body{padding-top:36px}
       </div>
     </div>
 
-    <label class="modal-label">Voice &amp; Tone</label>
-    <select class="modal-select" id="enroll-tone">
-      <option value="">— Select —</option>
-      <option value="Professional">Professional</option>
-      <option value="Friendly">Friendly</option>
-      <option value="Luxury">Luxury</option>
-      <option value="Energetic">Energetic</option>
-      <option value="Relaxed">Relaxed</option>
-    </select>
-    <input type="text" class="modal-input" id="enroll-tone-text" placeholder="Optional: refine further (e.g. 'warm but aspirational')" maxlength="120">
-
-    <label class="modal-label">Target Audience <span style="font-weight:400;text-transform:none;letter-spacing:0">(select all that apply)</span></label>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Young professionals"> Young professionals</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Families"> Families</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Students"> Students</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Seniors"> Seniors</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Military"> Military</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-audience" value="Corporate relocations"> Corporate relocations</label>
+    <div style="background:var(--bg);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:12px;color:var(--ts)">
+      <strong style="color:var(--jd)">Brief data auto-filled from Client Brief tab:</strong><br>
+      Voice &amp; tone, target audience, unit mix, differentiators, taglines, competitors, and marketing goals will all be pulled from your existing client brief. Edit them there before enrolling if needed.
     </div>
-
-    <label class="modal-label">Marketing Goals <span style="font-weight:400;text-transform:none;letter-spacing:0">(select all that apply)</span></label>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-goals" value="Drive leasing traffic"> Drive leasing traffic</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-goals" value="Reduce vacancy"> Reduce vacancy</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-goals" value="Build brand awareness"> Build brand awareness</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-goals" value="Promote specials"> Promote specials/concessions</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-goals" value="Highlight renovations"> Highlight renovations</label>
-    </div>
-
-    <label class="modal-label">Unit Mix to Highlight</label>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="Studio"> Studio</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="1BR"> 1BR</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="2BR"> 2BR</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="3BR"> 3BR</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="Townhome"> Townhome</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="enroll-units" value="Penthouse"> Penthouse</label>
-    </div>
-
-    <label class="modal-label">Key Differentiators <span style="font-weight:400;text-transform:none;letter-spacing:0">(max 500 chars)</span></label>
-    <textarea class="modal-textarea" id="enroll-diff" maxlength="500" placeholder="What makes this property stand out?"></textarea>
-
-    <label class="modal-label">Taglines <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — up to 3)</span></label>
-    <textarea class="modal-textarea" id="enroll-taglines" style="min-height:60px" placeholder="One per line"></textarea>
-
-    <label class="modal-label">Competitor Focus <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
-    <input type="text" class="modal-input" id="enroll-comp" placeholder="Up to 3 competitors to position against" maxlength="200">
-
-    <label class="modal-label">Current Specials <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
-    <input type="text" class="modal-input" id="enroll-specials" placeholder="Active concessions or promotions to feature" maxlength="200">
-
-    <div style="font-size:11px;color:var(--tm);margin-bottom:14px">Changes take effect on the next monthly pipeline run.</div>
 
     <div class="modal-footer">
       <button class="btn btn-secondary btn-sm" onclick="closeEnrollModal()">Cancel</button>
-      <button class="btn btn-primary btn-sm" id="enroll-submit-btn" onclick="submitEnrollment()">Submit Enrollment</button>
+      <button class="btn btn-primary btn-sm" id="enroll-submit-btn" onclick="submitEnrollment()">Enroll &amp; Pull Brief</button>
     </div>
   </div>
 </div>
@@ -5104,28 +5055,11 @@ function selectEnrollTier(tier, el) {
 function submitEnrollment() {
   var tier = document.querySelector('input[name=enroll-tier]:checked');
   if (!tier) { alert('Please select a tier.'); return; }
-  var tone = document.getElementById('enroll-tone');
-  var audience = Array.from(document.querySelectorAll('input[name=enroll-audience]:checked')).map(function(c){return c.value;});
-  var goals = Array.from(document.querySelectorAll('input[name=enroll-goals]:checked')).map(function(c){return c.value;});
-  if (!tone || !tone.value) { alert('Please select a voice and tone.'); return; }
-  if (!audience.length) { alert('Please select at least one target audience.'); return; }
-  if (!goals.length)    { alert('Please select at least one marketing goal.'); return; }
-
-  var brief = {
-    voice_tone:       tone.value,
-    tone_freetext:    document.getElementById('enroll-tone-text').value,
-    taglines:         document.getElementById('enroll-taglines').value,
-    target_audience:  audience,
-    unit_mix:         Array.from(document.querySelectorAll('input[name=enroll-units]:checked')).map(function(c){return c.value;}),
-    marketing_goals:  goals,
-    differentiators:  document.getElementById('enroll-diff').value,
-    competitor_focus: document.getElementById('enroll-comp').value,
-    current_specials: document.getElementById('enroll-specials').value,
-  };
 
   var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
-  var email    = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL || '';
-  var cid      = typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '';
+  var email    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  var cid      = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '') || window.__PORTAL_COMPANY_ID__ || '';
+  var propName = window.__PORTAL_PROP_NAME || '';
 
   if (!cid) {
     closeEnrollModal();
@@ -5137,12 +5071,33 @@ function submitEnrollment() {
   }
 
   var submitBtn = document.getElementById('enroll-submit-btn');
-  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…'; }
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Enrolling \u2014 pulling brief from Client Brief...'; }
 
-  fetch(API_BASE + '/api/video-enroll', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json','X-Portal-Email':email},
-    body: JSON.stringify({company_id:cid, contact_email:email, tier:tier.value, brief:brief})
+  // Fetch the client brief automatically instead of asking user to re-enter it
+  fetch(API_BASE + '/api/client-brief?company_id=' + encodeURIComponent(cid), {
+    headers: { 'X-Portal-Email': email }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(briefData) {
+    if (briefData.error) { briefData = {}; }
+    // Build the video brief from existing client brief data
+    var brief = {
+      voice_tone:       briefData.voice_and_tone || '',
+      tone_freetext:    '',
+      taglines:         briefData.taglines || '',
+      target_audience:  (briefData.units_offered || '').split(',').map(function(s){return s.trim();}).filter(Boolean),
+      unit_mix:         (briefData.units_offered || '').split(',').map(function(s){return s.trim();}).filter(Boolean),
+      marketing_goals:  (briefData.goals || '').split('.').map(function(s){return s.trim();}).filter(Boolean),
+      differentiators:  (briefData.unique_solutions || '') + (briefData.additional_selling_points ? ' ' + briefData.additional_selling_points : ''),
+      competitor_focus: briefData.competitors || '',
+      current_specials: '',
+    };
+
+    return fetch(API_BASE + '/api/video-enroll', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-Portal-Email':email},
+      body: JSON.stringify({company_id:cid, property_name:propName, contact_email:email, tier:tier.value, brief:brief})
+    });
   })
   .then(function(r){ return r.json(); })
   .then(function(d){
@@ -5151,10 +5106,10 @@ function submitEnrollment() {
     _videoData = null;
     document.getElementById('video-cycle-content').innerHTML =
       '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:28px;text-align:center">' +
-      '<div style="font-size:16px;font-weight:800;color:#166534;margin-bottom:8px">You\'re enrolled in the ' + d.tier + ' plan!</div>' +
-      '<div style="font-size:13px;color:#166534">' + (d.message||'Your account manager will confirm setup within 2 business days.') + '</div></div>';
+      '<div style="font-size:16px;font-weight:800;color:#166534;margin-bottom:8px">Enrolled in the ' + d.tier + ' plan!</div>' +
+      '<div style="font-size:13px;color:#166534">Brief pulled from Client Brief automatically. ' + (d.message||'Your account manager will confirm setup within 2 business days.') + '</div></div>';
   })
-  .catch(function(){ alert('Submission failed. Please try again.'); if (submitBtn) {submitBtn.disabled=false;submitBtn.textContent='Submit Enrollment';} });
+  .catch(function(err){ alert('Enrollment failed: ' + err.message); if (submitBtn) {submitBtn.disabled=false;submitBtn.textContent='Submit Enrollment';} });
 }
 
 function _renderHistoryView(history) {
