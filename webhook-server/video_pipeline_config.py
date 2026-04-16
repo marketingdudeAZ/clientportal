@@ -168,6 +168,15 @@ APPROVED_MALE_VOICES = [
         "style":       "authoritative",
         "recommended": False,
     },
+    {
+        "id":          "6d2fbf04-cddb-46ba-b483-4064d1a85fc2",
+        "name":        "Trustworthy Man",
+        "display":     "Trustworthy — Warm & Credible",
+        "gender":      "male",
+        "accent":      "English",
+        "style":       "trustworthy",
+        "recommended": False,
+    },
 ]
 
 APPROVED_FEMALE_VOICES = [
@@ -206,6 +215,15 @@ APPROVED_FEMALE_VOICES = [
         "gender":      "female",
         "accent":      "American English",
         "style":       "upbeat",
+        "recommended": False,
+    },
+    {
+        "id":          "7ae5cf01-03dc-49ef-b4f1-e81f939e18db",
+        "name":        "Sophie",
+        "display":     "Sophie — Contemporary & Approachable",
+        "gender":      "female",
+        "accent":      "American English",
+        "style":       "approachable",
         "recommended": False,
     },
 ]

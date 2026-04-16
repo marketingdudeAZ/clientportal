@@ -512,6 +512,16 @@ select.brief-input{height:34px;cursor:pointer}
 .btn-revise:hover{border-color:var(--cu);color:var(--cu)}
 .btn-revise:disabled{opacity:.4;cursor:not-allowed}
 .video-revision-counter{font-size:10px;color:var(--tm);margin-left:auto;align-self:center}
+.editor-asset-row{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#fff;border:1px solid var(--bd);border-radius:6px;margin-bottom:4px;cursor:move}
+.editor-asset-row:hover{border-color:var(--cu)}
+.editor-drag-handle{color:var(--tm);font-size:14px;cursor:move;user-select:none}
+.editor-remove-btn{background:transparent;border:none;color:#991B1B;font-size:18px;cursor:pointer;padding:0 4px;line-height:1}
+.editor-remove-btn:hover{color:#7f1d1d}
+.editor-available-row{display:flex;align-items:center;padding:6px 10px;border-bottom:1px solid #f3f4f6;cursor:pointer}
+.editor-available-row:hover{background:var(--bg)}
+.editor-available-row:last-child{border-bottom:none}
+.history-revision-entry{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:12px 14px;margin-bottom:8px}
+.history-diff{background:var(--bg);padding:6px 10px;border-radius:6px;font-size:11px;font-family:monospace;margin:4px 0;color:var(--ts);white-space:pre-wrap;line-height:1.5}
 .video-approve-all-bar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
 .perf-snap{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:16px 20px;margin-bottom:20px}
 .perf-snap-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tm);margin-bottom:12px}
@@ -4969,7 +4979,10 @@ function _renderVideoCard(v, actionable) {
       '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><polyline points="20 6 9 17 4 12"/></svg>Approve</button>' +
       (atLimit
         ? '<span class="btn-revise" style="opacity:.4;cursor:default">Revision limit reached</span>'
-        : '<button class="btn-revise" onclick="openRevisionModal(\'' + v.variant_id + '\',\'' + _escHtml(v.title) + '\')">Request Revision</button>') +
+        : '<button class="btn-revise" onclick="openVariantEditor(\'' + v.variant_id + '\')">Edit &amp; Regenerate</button>') +
+      (atLimit
+        ? ''
+        : ' <button class="btn-revise" style="margin-left:6px;background:transparent" onclick="openRevisionModal(\'' + v.variant_id + '\',\'' + _escHtml(v.title) + '\')">Request Revision</button>') +
       (revCount > 0 ? '<span class="video-revision-counter">Revision ' + revCount + ' of 5</span>' : '') +
       '</div>';
   } else if (isApproved) {
@@ -4981,7 +4994,12 @@ function _renderVideoCard(v, actionable) {
       '</div>';
   }
 
-  return '<div class="video-card">' +
+  // Voice display line
+  var voiceHtml = v.voice_name
+    ? '<div style="font-size:11px;color:var(--ts);margin-bottom:8px"><span style="font-weight:700;color:var(--tp)">Voice:</span> ' + _escHtml(v.voice_name) + '</div>'
+    : '';
+
+  return '<div class="video-card" id="vcard-' + v.variant_id + '">' +
     playerHtml +
     '<div class="video-card-body">' +
     '<div class="video-card-title">' + _escHtml(v.title||'Video Variant') + '</div>' +
@@ -4990,6 +5008,7 @@ function _renderVideoCard(v, actionable) {
     '<span class="video-meta-tag">' + (v.duration_seconds||'?') + 's</span>' +
     '<span class="video-meta-tag">' + _escHtml(v.aspect_ratio||'') + '</span>' +
     '</div>' +
+    voiceHtml +
     (v.script ? '<button class="video-expand-btn" onclick="toggleVideoExpand(this,\'script-' + v.variant_id + '\')">' +
       '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg> Script' +
       '</button><div class="video-expand-content" id="script-' + v.variant_id + '">' + scriptHtml + '</div>' : '') +
@@ -4997,6 +5016,7 @@ function _renderVideoCard(v, actionable) {
       '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg> Creative Rationale' +
       '</button><div class="video-expand-content" id="rationale-' + v.variant_id + '">' + _escHtml(v.rationale) + '</div>' : '') +
     actionsHtml +
+    '<div class="variant-editor" id="editor-' + v.variant_id + '" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--bd)"></div>' +
     '</div></div>';
 }
 
@@ -5114,10 +5134,54 @@ function submitEnrollment() {
 
 function _renderHistoryView(history) {
   var el = document.getElementById('video-history-content');
-  if (!history.length) {
-    el.innerHTML = '<div style="color:var(--tm);font-size:13px;padding:40px 0;text-align:center">No past cycles on record.</div>';
+  if (!history || !history.length) {
+    el.innerHTML = '<div style="color:var(--tm);font-size:13px;padding:40px 0;text-align:center">No revision history yet. Edits you make will appear here.</div>';
     return;
   }
+
+  // Detect format: new revision entries (have 'action' field) vs old cycle summaries (have 'cycle_status')
+  var isRevisionLog = history[0] && history[0].action;
+
+  if (isRevisionLog) {
+    el.innerHTML = history.slice().reverse().map(function(entry, idx) {
+      var ts = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '';
+      var actionLabel = entry.action === 'regenerate' ? 'Regenerated' : (entry.action === 'revision_request' ? 'Revision Requested' : _escHtml(entry.action||''));
+      var actionColor = entry.action === 'regenerate' ? '#0369A1' : '#854D0E';
+      var changes = entry.changes || {};
+      var rows = [];
+
+      if (changes.script_before !== undefined && changes.script_after !== undefined) {
+        rows.push('<div style="font-size:11px;font-weight:700;color:var(--tp);margin-top:6px">Script change</div>' +
+          '<div class="history-diff"><span style="color:#991B1B">- ' + _escHtml(changes.script_before||'(empty)') + '</span>\n<span style="color:#065F46">+ ' + _escHtml(changes.script_after||'') + '</span></div>');
+      }
+      if (changes.voice_before && changes.voice_after && changes.voice_before !== changes.voice_after) {
+        rows.push('<div style="font-size:11px;color:var(--ts);margin-top:4px"><b>Voice:</b> ' + _escHtml(changes.voice_before) + ' \u2192 ' + _escHtml(changes.voice_after) + '</div>');
+      }
+      if ((changes.assets_removed||[]).length) {
+        rows.push('<div style="font-size:11px;color:var(--ts);margin-top:4px"><b>Removed assets:</b> ' + changes.assets_removed.length + '</div>');
+      }
+      if ((changes.assets_added||[]).length) {
+        rows.push('<div style="font-size:11px;color:var(--ts);margin-top:4px"><b>Added assets:</b> ' + changes.assets_added.length + '</div>');
+      }
+      if (changes.tone_shift)      rows.push('<div style="font-size:11px;color:var(--ts);margin-top:4px"><b>Tone shift:</b> ' + _escHtml(changes.tone_shift) + '</div>');
+      if (changes.emphasis_change) rows.push('<div style="font-size:11px;color:var(--ts);margin-top:4px"><b>Emphasis:</b> ' + _escHtml(changes.emphasis_change) + '</div>');
+      if (changes.cta_update)      rows.push('<div style="font-size:11px;color:var(--ts);margin-top:4px"><b>CTA:</b> ' + _escHtml(changes.cta_update) + '</div>');
+      if (changes.notes)           rows.push('<div style="font-size:11px;color:var(--ts);margin-top:4px"><b>Notes:</b> ' + _escHtml(changes.notes) + '</div>');
+
+      return '<div class="history-revision-entry">' +
+        '<div style="display:flex;align-items:center;gap:10px;font-size:12px">' +
+        '<span style="font-weight:800;color:' + actionColor + '">' + actionLabel + '</span>' +
+        '<span style="color:var(--tm);font-size:11px">' + _escHtml(entry.variant_id||'') + '</span>' +
+        '<span style="margin-left:auto;color:var(--tm);font-size:11px">' + _escHtml(ts) + '</span>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--tm);margin-top:2px">by ' + _escHtml(entry.submitted_by||'') + '</div>' +
+        (rows.length ? rows.join('') : '<div style="font-size:11px;color:var(--tm);margin-top:4px">No detail recorded.</div>') +
+        '</div>';
+    }).join('');
+    return;
+  }
+
+  // Legacy cycle-summary format (fallback)
   el.innerHTML = history.slice().reverse().map(function(cycle, idx) {
     var statusCls = cycle.cycle_status === 'Approved' ? 'approved' : 'pending';
     return '<div class="video-history-row" onclick="toggleHistoryRow(\'hr-' + idx + '\')">' +
@@ -5128,7 +5192,7 @@ function _renderHistoryView(history) {
       '<span class="video-status-badge ' + statusCls + '" style="font-size:10px;margin-left:auto">' + _escHtml(cycle.cycle_status||'') + '</span>' +
       '</div>' +
       '<div class="video-history-detail" id="hr-' + idx + '">' +
-      '<div style="color:var(--tm);font-size:12px;padding:8px 0">Detailed variant history will load here from HubSpot.</div>' +
+      '<div style="color:var(--tm);font-size:12px;padding:8px 0">Legacy cycle record.</div>' +
       '</div></div>';
   }).join('');
 }
@@ -5240,6 +5304,245 @@ function submitRevision() {
     loadVideoCreative();
   })
   .catch(function(){ alert('Failed to submit revision. Please try again.'); });
+}
+
+// ── Variant Editor: inline script/voice/asset edits + regenerate ──
+var _editorState = {}; // variantId → { script, voice_id, media_urls }
+var _voiceCache = null;
+var _assetCache = null;
+
+function _getApiBase() {
+  return window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+}
+function _getEmail() { return window.__PORTAL_EMAIL__ || 'portal@rpmliving.com'; }
+function _getCid() { return (typeof COMPANY_ID_VIDEO !== 'undefined' ? COMPANY_ID_VIDEO : '') || window.__PORTAL_COMPANY_ID__ || ''; }
+
+function _loadVoicesOnce() {
+  if (_voiceCache) return Promise.resolve(_voiceCache);
+  return fetch(_getApiBase() + '/api/video-voices', { headers: { 'X-Portal-Email': _getEmail() } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) { _voiceCache = d; return d; })
+    .catch(function(){ return { male: [], female: [] }; });
+}
+function _loadAssetsOnce() {
+  if (_assetCache) return Promise.resolve(_assetCache);
+  var cid = _getCid();
+  if (!cid) return Promise.resolve({ assets: [] });
+  return fetch(_getApiBase() + '/api/property-assets?company_id=' + encodeURIComponent(cid),
+    { headers: { 'X-Portal-Email': _getEmail() } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) { _assetCache = d; return d; })
+    .catch(function(){ return { assets: [] }; });
+}
+
+function openVariantEditor(variantId) {
+  var container = document.getElementById('editor-' + variantId);
+  if (!container) return;
+  if (container.style.display !== 'none') { closeVariantEditor(variantId); return; }
+
+  // Find the variant data
+  var v = null;
+  if (_videoData && _videoData.variants) {
+    for (var i = 0; i < _videoData.variants.length; i++) {
+      if (_videoData.variants[i].variant_id === variantId) { v = _videoData.variants[i]; break; }
+    }
+  }
+  if (!v) { alert('Variant data not loaded. Refresh and try again.'); return; }
+
+  // Seed editor state
+  var scriptText = '';
+  if (v.script && typeof v.script === 'object') {
+    scriptText = [v.script.hook||'', v.script.body||'', v.script.cta||''].filter(Boolean).join(' ');
+  } else if (typeof v.script === 'string') {
+    scriptText = v.script;
+  }
+  var currentMedia = (v.media_plan || []).map(function(m){ return m.asset_url || ''; }).filter(Boolean);
+  _editorState[variantId] = {
+    script:     scriptText,
+    voice_id:   v.voice_id || '',
+    media_urls: currentMedia.slice(),
+  };
+
+  container.style.display = '';
+  container.innerHTML = '<div style="font-size:12px;color:var(--tm)">Loading editor...</div>';
+
+  Promise.all([_loadVoicesOnce(), _loadAssetsOnce()]).then(function(results) {
+    var voiceData = results[0] || {};
+    var assetData = results[1] || {};
+    _renderVariantEditor(variantId, voiceData, assetData.assets || []);
+  });
+}
+
+function closeVariantEditor(variantId) {
+  var container = document.getElementById('editor-' + variantId);
+  if (!container) return;
+  container.style.display = 'none';
+  container.innerHTML = '';
+  delete _editorState[variantId];
+}
+
+function _renderVariantEditor(variantId, voiceData, allAssets) {
+  var state = _editorState[variantId];
+  if (!state) return;
+  var container = document.getElementById('editor-' + variantId);
+  if (!container) return;
+
+  // Build voice dropdown
+  var maleOpts = (voiceData.male || []).map(function(v) {
+    var sel = v.id === state.voice_id ? ' selected' : '';
+    return '<option value="' + v.id + '"' + sel + '>' + _escHtml(v.display || v.name) + '</option>';
+  }).join('');
+  var femaleOpts = (voiceData.female || []).map(function(v) {
+    var sel = v.id === state.voice_id ? ' selected' : '';
+    return '<option value="' + v.id + '"' + sel + '>' + _escHtml(v.display || v.name) + '</option>';
+  }).join('');
+
+  // Build selected assets list (reorderable, removable)
+  var selectedAssetsHtml = state.media_urls.length
+    ? state.media_urls.map(function(url, idx) {
+        var a = allAssets.filter(function(x){ return x.file_url === url; })[0] || {};
+        var label = a.asset_name || a.description || 'Asset ' + (idx + 1);
+        var sub = (a.subcategory || a.category || '').trim();
+        return '<div class="editor-asset-row" draggable="true" data-idx="' + idx + '" data-vid="' + variantId + '" ' +
+          'ondragstart="_assetDragStart(event)" ondragover="_assetDragOver(event)" ondrop="_assetDrop(event)">' +
+          '<span class="editor-drag-handle">\u2261</span>' +
+          '<span style="flex:1;font-size:12px">' + _escHtml(label) + (sub ? ' <span style="color:var(--tm)">\u00B7 ' + _escHtml(sub) + '</span>' : '') + '</span>' +
+          '<button class="editor-remove-btn" onclick="removeVariantAsset(\'' + variantId + '\',' + idx + ')">\u00D7</button>' +
+          '</div>';
+      }).join('')
+    : '<div style="font-size:11px;color:var(--tm);padding:8px 0">No assets selected. Creatify will use property-site imagery.</div>';
+
+  // Build "add from library" options (exclude already-selected)
+  var availableAssets = allAssets.filter(function(a) { return state.media_urls.indexOf(a.file_url) === -1; });
+  var availableHtml = availableAssets.length
+    ? availableAssets.map(function(a) {
+        var label = a.asset_name || a.description || a.file_url;
+        var sub = (a.subcategory || a.category || '').trim();
+        return '<div class="editor-available-row" onclick="addVariantAsset(\'' + variantId + '\',\'' + _escAttr(a.file_url) + '\')">' +
+          '<span style="font-size:11px;color:var(--cu);font-weight:700">+ Add</span>' +
+          '<span style="flex:1;font-size:12px;margin-left:8px">' + _escHtml(label) + (sub ? ' <span style="color:var(--tm)">\u00B7 ' + _escHtml(sub) + '</span>' : '') + '</span>' +
+          '</div>';
+      }).join('')
+    : '<div style="font-size:11px;color:var(--tm);padding:8px 0">No additional assets in this property\'s library.</div>';
+
+  container.innerHTML =
+    '<div style="font-size:12px;font-weight:700;color:var(--jd);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Edit Variant</div>' +
+
+    '<label style="font-size:11px;font-weight:700;color:var(--ts);display:block;margin-bottom:4px">Script (full voiceover text)</label>' +
+    '<textarea id="ed-script-' + variantId + '" class="modal-textarea" style="width:100%;min-height:100px" oninput="_editorState[\'' + variantId + '\'].script=this.value">' +
+      _escHtml(state.script) +
+    '</textarea>' +
+
+    '<label style="font-size:11px;font-weight:700;color:var(--ts);display:block;margin:12px 0 4px">Voice</label>' +
+    '<select id="ed-voice-' + variantId + '" class="modal-select" style="width:100%" onchange="_editorState[\'' + variantId + '\'].voice_id=this.value">' +
+      (maleOpts ? '<optgroup label="Male voices">' + maleOpts + '</optgroup>' : '') +
+      (femaleOpts ? '<optgroup label="Female voices">' + femaleOpts + '</optgroup>' : '') +
+    '</select>' +
+
+    '<label style="font-size:11px;font-weight:700;color:var(--ts);display:block;margin:12px 0 4px">Selected assets (drag to reorder, \u00D7 to remove)</label>' +
+    '<div id="ed-assets-' + variantId + '" class="editor-assets-list">' + selectedAssetsHtml + '</div>' +
+
+    '<label style="font-size:11px;font-weight:700;color:var(--ts);display:block;margin:12px 0 4px">Add from library</label>' +
+    '<div id="ed-available-' + variantId + '" class="editor-available-list" style="max-height:160px;overflow-y:auto;border:1px solid var(--bd);border-radius:6px;background:#fff">' +
+      availableHtml +
+    '</div>' +
+
+    '<label style="font-size:11px;font-weight:700;color:var(--ts);display:block;margin:12px 0 4px">Change notes (optional)</label>' +
+    '<input id="ed-notes-' + variantId + '" class="modal-input" style="width:100%" placeholder="What did you change and why?">' +
+
+    '<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">' +
+    '<button class="btn btn-secondary btn-sm" onclick="closeVariantEditor(\'' + variantId + '\')">Cancel</button>' +
+    '<button class="btn btn-primary btn-sm" id="regen-btn-' + variantId + '" onclick="regenerateVariant(\'' + variantId + '\')">Regenerate This Variant</button>' +
+    '</div>';
+}
+
+function removeVariantAsset(variantId, idx) {
+  var state = _editorState[variantId];
+  if (!state) return;
+  state.media_urls.splice(idx, 1);
+  _loadAssetsOnce().then(function(d) {
+    _loadVoicesOnce().then(function(voiceData) {
+      _renderVariantEditor(variantId, voiceData, d.assets || []);
+    });
+  });
+}
+
+function addVariantAsset(variantId, url) {
+  var state = _editorState[variantId];
+  if (!state) return;
+  if (state.media_urls.indexOf(url) === -1) state.media_urls.push(url);
+  _loadAssetsOnce().then(function(d) {
+    _loadVoicesOnce().then(function(voiceData) {
+      _renderVariantEditor(variantId, voiceData, d.assets || []);
+    });
+  });
+}
+
+// Drag-reorder for asset rows
+var _dragFrom = null;
+function _assetDragStart(e) { _dragFrom = { vid: e.currentTarget.dataset.vid, idx: parseInt(e.currentTarget.dataset.idx, 10) }; e.dataTransfer.effectAllowed = 'move'; }
+function _assetDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+function _assetDrop(e) {
+  e.preventDefault();
+  if (!_dragFrom) return;
+  var vid = e.currentTarget.dataset.vid;
+  var toIdx = parseInt(e.currentTarget.dataset.idx, 10);
+  if (vid !== _dragFrom.vid) return;
+  var state = _editorState[vid];
+  if (!state) return;
+  var item = state.media_urls.splice(_dragFrom.idx, 1)[0];
+  state.media_urls.splice(toIdx, 0, item);
+  _dragFrom = null;
+  _loadAssetsOnce().then(function(d) {
+    _loadVoicesOnce().then(function(voiceData) {
+      _renderVariantEditor(vid, voiceData, d.assets || []);
+    });
+  });
+}
+
+function regenerateVariant(variantId) {
+  var state = _editorState[variantId];
+  if (!state) return;
+  if (!state.script || !state.script.trim()) { alert('Script cannot be empty.'); return; }
+
+  var cid = _getCid();
+  if (!cid) { alert('Property ID not available.'); return; }
+
+  var btn = document.getElementById('regen-btn-' + variantId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting to Creatify...'; }
+
+  var notesEl = document.getElementById('ed-notes-' + variantId);
+  var change_notes = notesEl ? notesEl.value : '';
+
+  fetch(_getApiBase() + '/api/video-regenerate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-Portal-Email': _getEmail()},
+    body: JSON.stringify({
+      company_id:   cid,
+      variant_id:   variantId,
+      script:       state.script,
+      voice_id:     state.voice_id,
+      media_urls:   state.media_urls,
+      change_notes: change_notes,
+    }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.error) {
+      var msg = d.error;
+      if (d.issues && d.issues.length) msg += '\n\n' + d.issues.join('\n');
+      alert(msg);
+      if (btn) { btn.disabled = false; btn.textContent = 'Regenerate This Variant'; }
+      return;
+    }
+    closeVariantEditor(variantId);
+    _videoData = null;
+    loadVideoCreative();
+  })
+  .catch(function(err) {
+    alert('Regeneration failed: ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Regenerate This Variant'; }
+  });
 }
 
 // ── Activity ──

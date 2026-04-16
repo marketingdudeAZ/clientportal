@@ -2060,16 +2060,21 @@ def video_revise():
 
     r = req.get(
         f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
-        "?properties=video_variants_json",
+        "?properties=video_variants_json,video_cycle_history_json",
         headers=hs_headers, timeout=10,
     )
     if not r.ok:
         return jsonify({"error": "Failed to fetch company"}), 500
 
+    props = r.json().get("properties", {})
     try:
-        variants = _json.loads(r.json().get("properties", {}).get("video_variants_json") or "[]")
+        variants = _json.loads(props.get("video_variants_json") or "[]")
     except Exception:
         variants = []
+    try:
+        history = _json.loads(props.get("video_cycle_history_json") or "[]")
+    except Exception:
+        history = []
 
     MAX_REVISIONS = 5
     target = None
@@ -2096,12 +2101,28 @@ def video_revise():
         "submitted_by":    email,
     }
 
+    # Append to revision history
+    import datetime as _dt
+    history.append({
+        "timestamp":    _dt.datetime.utcnow().isoformat() + "Z",
+        "variant_id":   variant_id,
+        "action":       "revision_request",
+        "submitted_by": email,
+        "changes": {
+            "tone_shift":      body.get("tone_shift", ""),
+            "emphasis_change": body.get("emphasis_change", ""),
+            "cta_update":      body.get("cta_update", ""),
+            "notes":           body.get("notes", ""),
+        },
+    })
+
     update_r = req.patch(
         f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
         headers=hs_headers,
         json={"properties": {
-            "video_variants_json": _json.dumps(variants),
-            "video_cycle_status": "Revision Requested",
+            "video_variants_json":      _json.dumps(variants),
+            "video_cycle_history_json": _json.dumps(history),
+            "video_cycle_status":       "Revision Requested",
         }},
         timeout=10,
     )
@@ -2110,6 +2131,238 @@ def video_revise():
 
     logger.info("Revision %d submitted for variant %s on company %s", revision_count + 1, variant_id, company_id)
     return jsonify({"revision_count": revision_count + 1, "status": "revision_in_progress"})
+
+
+@app.route("/api/video-regenerate", methods=["POST", "OPTIONS"])
+def video_regenerate():
+    """Regenerate a single variant with edited script, voice, and/or media.
+
+    Body: {
+        company_id, variant_id,
+        script (string, required),
+        voice_id (optional, must be approved),
+        media_urls (optional, list of asset URLs),
+        change_notes (optional, user description)
+    }
+    Submits a new Creatify job, updates the variant, logs to history.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    body = request.get_json(force=True) or {}
+    company_id = body.get("company_id", "").strip()
+    variant_id = body.get("variant_id", "").strip()
+    new_script = (body.get("script") or "").strip()
+    new_voice_id = (body.get("voice_id") or "").strip()
+    new_media_urls = body.get("media_urls") or None
+    change_notes = (body.get("change_notes") or "").strip()
+
+    if not company_id or not variant_id:
+        return jsonify({"error": "company_id and variant_id required"}), 400
+    if not new_script:
+        return jsonify({"error": "script is required"}), 400
+
+    import requests as req, json as _json, datetime as _dt
+    from config import HUBSPOT_API_KEY
+
+    hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+
+    r = req.get(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
+        "?properties=name,domain,video_variants_json,video_cycle_history_json",
+        headers=hs_headers, timeout=10,
+    )
+    if not r.ok:
+        return jsonify({"error": "Failed to fetch company"}), 500
+
+    props = r.json().get("properties", {})
+    property_name = props.get("name", "Property")
+    property_url = "https://" + (props.get("domain") or "rpmliving.com")
+
+    try:
+        variants = _json.loads(props.get("video_variants_json") or "[]")
+    except Exception:
+        variants = []
+    try:
+        history = _json.loads(props.get("video_cycle_history_json") or "[]")
+    except Exception:
+        history = []
+
+    MAX_REVISIONS = 5
+    target = None
+    for v in variants:
+        if v.get("variant_id") == variant_id:
+            target = v
+            break
+
+    if not target:
+        return jsonify({"error": "Variant not found"}), 404
+
+    revision_count = target.get("revision_count", 0)
+    if revision_count >= MAX_REVISIONS:
+        return jsonify({"error": f"Revision limit ({MAX_REVISIONS}) reached for this variant"}), 400
+
+    # Snapshot before-state for history
+    old_script_text = ""
+    old_script = target.get("script")
+    if isinstance(old_script, dict):
+        old_script_text = " ".join(filter(None, [
+            old_script.get("hook", ""), old_script.get("body", ""), old_script.get("cta", "")
+        ])).strip()
+    elif isinstance(old_script, str):
+        old_script_text = old_script
+
+    old_voice_id = target.get("voice_id", "")
+    old_voice_name = target.get("voice_name", "")
+    old_media = target.get("media_plan") or []
+    old_media_urls = [m.get("asset_url", "") for m in old_media if isinstance(m, dict)]
+
+    # Determine new voice (fall back to current if not changed)
+    voice_id = new_voice_id or old_voice_id
+    voice_name = old_voice_name
+
+    try:
+        from video_pipeline_config import _ALL_APPROVED
+        if voice_id and voice_id in _ALL_APPROVED:
+            voice_name = _ALL_APPROVED[voice_id].get("display", old_voice_name)
+        elif new_voice_id and new_voice_id not in _ALL_APPROVED:
+            return jsonify({"error": "Voice not in approved list"}), 400
+    except Exception as exc:
+        logger.warning("Voice validation failed: %s", exc)
+
+    # Validate and sanitize the edited script (pricing rules)
+    try:
+        from video_pipeline_config import validate_script
+        validation = validate_script(new_script)
+        if not validation["ok"]:
+            return jsonify({"error": "Script validation failed", "issues": validation["errors"]}), 400
+        clean_script = validation["cleaned_script"]
+    except Exception as exc:
+        logger.error("Script validation error: %s", exc)
+        return jsonify({"error": "Script validation failed"}), 500
+
+    # Determine media URLs
+    media_urls = new_media_urls if new_media_urls is not None else old_media_urls
+
+    # Submit new Creatify job
+    try:
+        from creatify_client import create_video_job
+        job = create_video_job(
+            property_url=property_url,
+            script=clean_script,
+            accent_id=voice_id or None,
+            aspect_ratio=target.get("aspect_ratio"),
+            duration=target.get("duration_seconds", 15),
+            media_urls=media_urls,
+        )
+    except Exception as exc:
+        logger.error("Creatify job submission failed: %s", exc, exc_info=True)
+        return jsonify({"error": f"Creatify submission failed: {str(exc)}"}), 500
+
+    # Update the variant in place
+    target["creatify_job_id"] = job.get("id")
+    target["status"] = "pending"
+    target["video_output"] = None
+    target["video_url"] = None
+    target["thumbnail_url"] = None
+    target["poster_url"] = None
+    target["voice_id"] = voice_id
+    target["voice_name"] = voice_name
+    target["script"] = clean_script
+    target["revision_count"] = revision_count + 1
+    if new_media_urls is not None:
+        target["media_plan"] = [{"asset_url": u, "reason": "user-selected"} for u in new_media_urls]
+
+    # Compute asset diff for history
+    assets_removed = [u for u in old_media_urls if u not in (media_urls or [])]
+    assets_added = [u for u in (media_urls or []) if u not in old_media_urls]
+
+    history.append({
+        "timestamp":    _dt.datetime.utcnow().isoformat() + "Z",
+        "variant_id":   variant_id,
+        "action":       "regenerate",
+        "submitted_by": email,
+        "changes": {
+            "script_before":  old_script_text,
+            "script_after":   clean_script,
+            "voice_before":   old_voice_name,
+            "voice_after":    voice_name,
+            "assets_removed": assets_removed,
+            "assets_added":   assets_added,
+            "notes":          change_notes,
+        },
+    })
+
+    update_r = req.patch(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+        headers=hs_headers,
+        json={"properties": {
+            "video_variants_json":      _json.dumps(variants),
+            "video_cycle_history_json": _json.dumps(history),
+            "video_cycle_status":       "Processing",
+        }},
+        timeout=10,
+    )
+    if not update_r.ok:
+        return jsonify({"error": "Failed to update company record"}), 500
+
+    logger.info("Regeneration %d submitted for variant %s on company %s (job %s)",
+                revision_count + 1, variant_id, company_id, job.get("id"))
+    return jsonify({
+        "status": "pending",
+        "creatify_job_id": job.get("id"),
+        "revision_count": revision_count + 1,
+    })
+
+
+@app.route("/api/property-assets", methods=["GET", "OPTIONS"])
+def property_assets():
+    """Return the list of visual assets (images + videos) for a property.
+
+    Query: company_id=<hs_object_id>
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    company_id = request.args.get("company_id", "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    try:
+        from video_generator import fetch_property_assets
+        assets = fetch_property_assets(company_id)
+        return jsonify({"assets": assets, "count": len(assets)})
+    except Exception as exc:
+        logger.error("property-assets fetch failed: %s", exc, exc_info=True)
+        return jsonify({"error": "Failed to fetch assets"}), 500
+
+
+@app.route("/api/video-voices", methods=["GET", "OPTIONS"])
+def video_voices():
+    """Return the approved voice list for the video pipeline.
+
+    Returns grouped male + female voices from video_pipeline_config.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    try:
+        from video_pipeline_config import APPROVED_MALE_VOICES, APPROVED_FEMALE_VOICES
+        return jsonify({
+            "male":   APPROVED_MALE_VOICES,
+            "female": APPROVED_FEMALE_VOICES,
+        })
+    except Exception as exc:
+        logger.error("video-voices fetch failed: %s", exc)
+        return jsonify({"error": "Failed to load voices"}), 500
 
 
 @app.route("/api/report-data", methods=["GET", "OPTIONS"])
