@@ -2336,13 +2336,38 @@ def property_assets():
     if not company_id:
         return jsonify({"error": "company_id required"}), 400
 
+    import requests as req
+    from config import HUBSPOT_API_KEY, HUBDB_ASSET_TABLE_ID
+
+    if not HUBDB_ASSET_TABLE_ID:
+        return jsonify({"assets": [], "count": 0})
+
+    _VISUAL_TYPES = {"jpg", "jpeg", "png", "webp", "mp4", "mov"}
+    assets = []
     try:
-        from video_generator import fetch_property_assets
-        assets = fetch_property_assets(company_id)
-        return jsonify({"assets": assets, "count": len(assets)})
+        url = (
+            f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_ASSET_TABLE_ID}/rows"
+            f"?property_uuid__eq={company_id}&status__eq=live&limit=100"
+        )
+        resp = req.get(url, headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"}, timeout=15)
+        if resp.ok:
+            for row in resp.json().get("results", []):
+                vals = row.get("values", {})
+                file_type = (vals.get("file_type") or "").lower().strip(".")
+                if file_type and file_type not in _VISUAL_TYPES:
+                    continue
+                assets.append({
+                    "file_url":    vals.get("file_url", ""),
+                    "asset_name":  vals.get("asset_name", ""),
+                    "category":    vals.get("category", ""),
+                    "subcategory": vals.get("subcategory", ""),
+                    "file_type":   file_type,
+                    "description": vals.get("description", ""),
+                })
     except Exception as exc:
-        logger.error("property-assets fetch failed: %s", exc, exc_info=True)
-        return jsonify({"error": "Failed to fetch assets"}), 500
+        logger.warning("property-assets fetch error (returning empty): %s", exc)
+
+    return jsonify({"assets": assets, "count": len(assets)})
 
 
 @app.route("/api/video-voices", methods=["GET", "OPTIONS"])
