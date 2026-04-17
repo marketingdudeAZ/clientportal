@@ -198,14 +198,13 @@ def create_video_job(
     except Exception as exc:
         raise RuntimeError(f"Failed to register link with Creatify: {exc}")
 
-    # NOTE: Creatify's /api/link_to_videos/ endpoint always renders an avatar.
-    # FullScreenTemplate minimizes the avatar footprint (small corner) and
-    # maximizes property imagery. True voice-only rendering requires a Custom
-    # Template with API variables built in Creatify's web editor (see docs).
+    # OverCardsTemplate renders property imagery with card overlays that fully
+    # cover any avatar — produces true voice-over-only videos with no visible
+    # presenter. Verified manually by Kyle on 2026-04-17.
     payload: dict[str, Any] = {
         "link":            link_id,
         "override_script": clean_script,
-        "visual_style":    "FullScreenTemplate",  # Max property imagery, minimal avatar
+        "visual_style":    "OverCardsTemplate",   # Cards overlay hides avatar
         "aspect_ratio":    ar,
         "video_length":    dur,
         "no_caption":      False,
