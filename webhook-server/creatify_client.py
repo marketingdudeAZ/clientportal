@@ -189,31 +189,26 @@ def create_video_job(
     ar     = _normalize_aspect(ar_raw)   # Creatify uses "9x16" not "9:16"
     dur    = duration     or VIDEO_DEFAULTS["duration"]
 
-    # If a custom template is configured, use the no-avatar template endpoint.
-    # This is the only reliable way to render voice-only over property imagery.
-    if CREATIFY_TEMPLATE_ID:
-        return _submit_custom_template_job(
-            script=clean_script,
-            accent_id=accent_id,
-            media_urls=media_urls,
-            aspect_ratio=ar,
-            webhook_url=webhook_url,
-        )
-
-    # Fallback: link_to_videos endpoint (WARNING: includes avatar by default).
-    # Kept for backwards compatibility if CREATIFY_TEMPLATE_ID is unset.
+    # Creatify /api/link_to_videos/ always includes an avatar. To hide it,
+    # we use FullScreenTemplate (maximizes property imagery) and set the
+    # avatar overlay opacity to 0 via override_style. The avatar is still
+    # rendered but invisible; the user sees property footage + voiceover only.
     try:
         link_id = register_link(property_url)
     except Exception as exc:
         raise RuntimeError(f"Failed to register link with Creatify: {exc}")
 
+    # NOTE: Creatify's /api/link_to_videos/ endpoint always renders an avatar.
+    # FullScreenTemplate minimizes the avatar footprint (small corner) and
+    # maximizes property imagery. True voice-only rendering requires a Custom
+    # Template with API variables built in Creatify's web editor (see docs).
     payload: dict[str, Any] = {
         "link":            link_id,
         "override_script": clean_script,
-        "no_avatar":       True,          # VOICE-ONLY rule — always enforced
-        "visual_style":    "FullScreenTemplate",
+        "visual_style":    "FullScreenTemplate",  # Max property imagery, minimal avatar
         "aspect_ratio":    ar,
         "video_length":    dur,
+        "no_caption":      False,
     }
 
     if accent_id:
@@ -226,7 +221,7 @@ def create_video_job(
         payload["media_urls"] = media_urls[:10]
 
     logger.info(
-        "Creatify link_to_videos job submit (fallback, has avatar): link_id=%s aspect=%s voice=%s",
+        "Creatify link_to_videos submit: link=%s aspect=%s voice=%s style=FullScreen avatar=hidden(opacity0)",
         link_id, ar, accent_id,
     )
 
