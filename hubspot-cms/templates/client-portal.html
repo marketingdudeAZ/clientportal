@@ -4830,7 +4830,7 @@ function switchVideoView(view, btn) {
 function loadVideoCreative() {
   if (_videoData) { _renderVideoCreative(_videoData); return; }
   var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
-  var email = window.__PORTAL_EMAIL__ || '';
+  var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
   var cid = window.__PORTAL_COMPANY_ID__ || '';
 
   if (!cid) {
@@ -4843,10 +4843,17 @@ function loadVideoCreative() {
   })
   .then(function(r){ return r.json(); })
   .then(function(d){
+    if (d && d.error) {
+      console.warn('video-creative error:', d.error);
+      document.getElementById('video-cycle-content').innerHTML =
+        '<div style="text-align:center;padding:48px;color:var(--tm)">Unable to load video creative data: ' + _escHtml(d.error) + '</div>';
+      return;
+    }
     _videoData = d;
     _renderVideoCreative(d);
   })
-  .catch(function(){
+  .catch(function(err){
+    console.warn('loadVideoCreative failed:', err);
     document.getElementById('video-cycle-content').innerHTML =
       '<div style="text-align:center;padding:48px;color:var(--tm)">Unable to load video creative data.</div>';
   });
