@@ -87,6 +87,46 @@ def list_english_voices() -> dict[str, list]:
     return {"male": male, "female": female}
 
 
+# ─── Link registration ──────────────────────────────────────────────────────
+# Creatify requires POST /api/links/ to pre-register any URL, which returns
+# a UUID that must be passed as `link` in /api/link_to_videos/. We cache the
+# mapping in-process so we don't re-register the same URL every request.
+
+_LINK_CACHE: dict[str, str] = {}
+
+def register_link(url: str) -> str:
+    """Register a URL with Creatify (or return cached UUID)."""
+    if not url:
+        raise ValueError("url is required")
+    if url in _LINK_CACHE:
+        return _LINK_CACHE[url]
+    # Check existing links first
+    try:
+        existing = _get("/api/links/") or []
+        if isinstance(existing, list):
+            for entry in existing:
+                if entry.get("url") == url:
+                    _LINK_CACHE[url] = entry["id"]
+                    return entry["id"]
+    except Exception:
+        pass
+    # Create new link
+    resp = _post("/api/links/", {"url": url})
+    link_id = resp.get("id")
+    if not link_id:
+        raise RuntimeError(f"Creatify link registration returned no id: {resp}")
+    _LINK_CACHE[url] = link_id
+    logger.info("Registered Creatify link: %s -> %s", url, link_id)
+    return link_id
+
+
+# Creatify aspect-ratio values use "x" not ":"
+_ASPECT_MAP = {"9:16": "9x16", "1:1": "1x1", "16:9": "16x9"}
+
+def _normalize_aspect(ar: str) -> str:
+    return _ASPECT_MAP.get(ar, ar.replace(":", "x") if ":" in ar else ar)
+
+
 # ─── Video creation ───────────────────────────────────────────────────────────
 
 def create_video_job(
@@ -145,11 +185,18 @@ def create_video_job(
         accent_id = default["id"] if default else None
 
     # 3. Build payload
-    ar     = aspect_ratio or VIDEO_DEFAULTS["aspect_ratio"]
+    ar_raw = aspect_ratio or VIDEO_DEFAULTS["aspect_ratio"]
+    ar     = _normalize_aspect(ar_raw)   # Creatify uses "9x16" not "9:16"
     dur    = duration     or VIDEO_DEFAULTS["duration"]
 
+    # 3a. Creatify requires a registered link UUID, not a raw URL
+    try:
+        link_id = register_link(property_url)
+    except Exception as exc:
+        raise RuntimeError(f"Failed to register link with Creatify: {exc}")
+
     payload: dict[str, Any] = {
-        "link":            property_url,
+        "link":            link_id,
         "override_script": clean_script,
         "no_avatar":       True,          # VOICE-ONLY rule — always enforced
         "aspect_ratio":    ar,
@@ -167,8 +214,8 @@ def create_video_job(
         payload["media_urls"] = media_urls[:10]  # Creatify cap
 
     logger.info(
-        "Creatify job submit: url=%s aspect=%s dur=%ss voice=%s",
-        property_url, ar, dur, accent_id,
+        "Creatify job submit: link_id=%s url=%s aspect=%s dur=%ss voice=%s",
+        link_id, property_url, ar, dur, accent_id,
     )
 
     result = _post("/api/link_to_videos/", payload)
