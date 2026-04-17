@@ -98,15 +98,32 @@ def compress_image(file_bytes: bytes, filename: str) -> tuple[bytes, str]:
 
 def process_asset_upload(
     property_uuid: str,
-    category: str,
-    subcategory: str,
-    description: str,
     files: list,
+    metadata: list[dict] | None = None,
+    # Legacy batch-level fields (backward compatible if metadata is None)
+    category: str = "",
+    subcategory: str = "",
+    description: str = "",
 ):
-    """Upload files to HubSpot Files API, create HubDB rows, publish table."""
-    results = []
+    """Upload files to HubSpot Files API, create HubDB rows, publish table.
 
-    for file_storage in files:
+    Per-file metadata mode (preferred):
+        metadata = [{"category": ..., "subcategory": ..., "description": ...}, ...]
+        where metadata[i] corresponds to files[i].
+
+    Legacy batch mode (fallback):
+        Pass category/subcategory/description as kwargs — applied to all files.
+    """
+    results = []
+    metadata = metadata or []
+
+    for i, file_storage in enumerate(files):
+        # Resolve per-file metadata
+        m = metadata[i] if i < len(metadata) else {}
+        f_category    = m.get("category")    or category
+        f_subcategory = m.get("subcategory") or subcategory
+        f_description = m.get("description") or description
+
         filename = file_storage.filename
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
@@ -119,8 +136,11 @@ def process_asset_upload(
             logger.warning("Skipping oversized file: %s (%d bytes)", filename, len(file_data))
             continue
 
-        # Determine asset name from filename
-        asset_name = filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").title()
+        # Determine asset name: prefer description if given, otherwise derive from filename
+        if f_description:
+            asset_name = f_description[:100]
+        else:
+            asset_name = filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").title()
 
         # Compress raster images before upload (spec A.2)
         if ext in ALLOWED_IMAGE_TYPES:
@@ -133,7 +153,7 @@ def process_asset_upload(
                 continue
 
         # Upload to HubSpot Files API
-        folder_path = f"/property-assets/{property_uuid}/{category.lower().replace(' ', '-')}/{time.strftime('%Y-%m')}"
+        folder_path = f"/property-assets/{property_uuid}/{(f_category or 'uncategorized').lower().replace(' ', '-')}/{time.strftime('%Y-%m')}"
         file_url = upload_to_files_api(file_data, filename, folder_path)
 
         if not file_url:
@@ -151,19 +171,27 @@ def process_asset_upload(
             "file_url": file_url,
             "thumbnail_url": thumbnail_url or "",
             "asset_name": asset_name,
-            "category": category,
-            "subcategory": subcategory,
+            "category": f_category,
+            "subcategory": f_subcategory,
             "status": "live",
             "source": "client_upload",
             "uploaded_by": "client",
             "uploaded_at": int(time.time() * 1000),
             "file_type": ext,
             "file_size_bytes": len(file_data),
-            "description": description,
+            "description": f_description,
         }
 
         row_id = create_hubdb_row(row_data)
-        results.append({"filename": filename, "file_url": file_url, "row_id": row_id})
+        results.append({
+            "filename": filename,
+            "file_url": file_url,
+            "thumbnail_url": thumbnail_url or "",
+            "asset_name": asset_name,
+            "category": f_category,
+            "subcategory": f_subcategory,
+            "row_id": row_id,
+        })
 
     # Publish HubDB table to make new rows visible
     if results:

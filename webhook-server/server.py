@@ -500,29 +500,57 @@ def configurator_submit():
         return jsonify({"error": "Submission failed", "detail": str(e)}), 500
 
 
-@app.route("/api/asset-upload", methods=["POST"])
+@app.route("/api/asset-upload", methods=["POST", "OPTIONS"])
 def asset_upload():
-    """Phase 4: Receive file uploads, store in Files API, create HubDB rows."""
+    """Upload files + per-file metadata, store in Files API, create HubDB rows.
+
+    Form fields:
+        property_uuid: str (required)
+        files: list of file uploads (required)
+        metadata: JSON string — list of {category, subcategory, description} keyed
+                  positionally to files[]. Falls back to batch-level fields if absent.
+        category/subcategory/description: legacy batch fields (optional if metadata given)
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    import json as _json
+
     property_uuid = request.form.get("property_uuid")
-    category = request.form.get("category")
+    # Per-file metadata (preferred new path)
+    metadata_raw = request.form.get("metadata", "")
+    metadata_list: list = []
+    if metadata_raw:
+        try:
+            metadata_list = _json.loads(metadata_raw)
+            if not isinstance(metadata_list, list):
+                metadata_list = []
+        except Exception as exc:
+            logger.warning("Failed to parse upload metadata: %s", exc)
+            metadata_list = []
+    # Legacy batch fields (still supported)
+    category = request.form.get("category", "")
     subcategory = request.form.get("subcategory", "")
     description = request.form.get("description", "")
     files = request.files.getlist("files")
 
-    if not property_uuid or not category:
-        return jsonify({"error": "Missing property_uuid or category"}), 400
-
+    if not property_uuid:
+        return jsonify({"error": "Missing property_uuid"}), 400
     if not files:
         return jsonify({"error": "No files provided"}), 400
+    # Require either per-file metadata OR a batch-level category
+    if not metadata_list and not category:
+        return jsonify({"error": "Missing metadata or category"}), 400
 
     try:
         from asset_uploader import process_asset_upload
         results = process_asset_upload(
             property_uuid=property_uuid,
+            files=files,
+            metadata=metadata_list,
             category=category,
             subcategory=subcategory,
             description=description,
-            files=files,
         )
         logger.info("Uploaded %d assets for property %s", len(results), property_uuid)
         return jsonify({"status": "success", "assets": results})
@@ -530,6 +558,46 @@ def asset_upload():
     except Exception as e:
         logger.error("Asset upload failed: %s", str(e), exc_info=True)
         return jsonify({"error": "Upload failed", "detail": str(e)}), 500
+
+
+@app.route("/api/asset-analyze", methods=["POST", "OPTIONS"])
+def asset_analyze():
+    """Classify an uploaded image using Claude Vision.
+
+    Form field: file (single image, required)
+
+    Returns: {
+        "category": "Photography|Video|Brand & Creative|Marketing Collateral",
+        "subcategory": "Exterior|Interior|Amenity|Aerial|Neighborhood|Ad Creative|Property Tour|Testimonial",
+        "description": "≤80 char factual description"
+    }
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file_storage = request.files["file"]
+    filename = file_storage.filename or "upload"
+    file_bytes = file_storage.read()
+
+    if not file_bytes:
+        return jsonify({"error": "Empty file"}), 400
+
+    try:
+        from asset_analyzer import analyze_image
+        result = analyze_image(file_bytes, filename)
+        return jsonify(result)
+    except Exception as exc:
+        logger.warning("asset-analyze failed for %s: %s", filename, exc)
+        # Fail soft — return reasonable defaults so frontend can continue
+        return jsonify({
+            "category":    "Photography",
+            "subcategory": "Interior",
+            "description": filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").title()[:80],
+            "fallback":    True,
+        })
 
 
 @app.route("/api/call-notes", methods=["POST", "OPTIONS"])

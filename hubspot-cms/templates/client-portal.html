@@ -472,6 +472,22 @@ select.brief-input{height:34px;cursor:pointer}
 .asset-info{padding:10px 12px}
 .asset-name{font-size:11px;font-weight:700;color:var(--jd);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .asset-meta{font-size:10px;color:var(--tm);margin-top:2px}
+/* Drag-drop zone */
+.asset-dropzone{border:2px dashed var(--bd);border-radius:12px;padding:32px 24px;text-align:center;background:#fafafa;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.asset-dropzone:hover,.asset-dropzone.dragover{border-color:var(--cu);background:var(--cug)}
+/* Batch review grid */
+.asset-batch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.asset-batch-card{border:1px solid var(--bd);border-radius:10px;overflow:hidden;background:#fff;position:relative}
+.asset-batch-thumb{width:100%;height:140px;object-fit:cover;display:block;background:#f3f4f6}
+.asset-batch-fields{padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.asset-batch-fields select,.asset-batch-fields input{width:100%;padding:6px 8px;border:1px solid var(--bd);border-radius:6px;font-size:11px;font-family:inherit;color:var(--jd)}
+.asset-batch-fields input:focus,.asset-batch-fields select:focus{outline:none;border-color:var(--cu)}
+.asset-batch-remove{position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.65);color:#fff;border:none;width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center}
+.asset-batch-remove:hover{background:#991B1B}
+.asset-batch-spinner{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.8);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--tm);font-weight:600}
+.asset-batch-status{font-size:10px;color:var(--tm);text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+.asset-batch-status.ok{color:#166534}
+.asset-batch-status.err{color:#991B1B}
 
 /* ── Video Creative Tab ── */
 .video-view-tabs{display:flex;gap:8px;margin-bottom:20px}
@@ -1440,14 +1456,31 @@ body{padding-top:36px}
 <section id="section-assets" class="section">
   <div class="sec-topbar">
     <div><div class="sec-title">Asset Library</div><div class="sec-sub">Photography · video · brand · collateral</div></div>
-    <div class="sec-actions">
-      <button class="btn btn-secondary btn-sm" onclick="openUploadModal()">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Upload Assets
-      </button>
-    </div>
   </div>
-  <div class="asset-tabs-row">
+
+  <!-- Drag & drop zone -->
+  <div id="asset-dropzone" class="asset-dropzone" onclick="document.getElementById('asset-file-picker').click()">
+    <input id="asset-file-picker" type="file" multiple accept="image/*,video/*,.pdf,.ai,.eps,.psd,.svg" style="display:none" onchange="assetHandleFiles(this.files)">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="color:var(--cu);margin-bottom:10px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <div style="font-size:14px;font-weight:700;color:var(--jd);margin-bottom:4px">Drop photos here or click to browse</div>
+    <div style="font-size:12px;color:var(--tm)">AI will auto-label each file — review and edit before uploading</div>
+  </div>
+
+  <!-- Batch review grid (shown after drop) -->
+  <div id="asset-batch-wrap" style="display:none;margin-top:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:var(--jd)"><span id="asset-batch-count">0</span> ready to upload</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="assetCancelBatch()">Cancel</button>
+        <button id="asset-upload-btn" class="btn btn-primary btn-sm" onclick="assetSubmitBatch()" style="background:var(--cu);color:#fff">Upload All</button>
+      </div>
+    </div>
+    <div id="asset-batch-grid" class="asset-batch-grid"></div>
+    <div id="asset-batch-status" style="display:none;margin-top:12px;padding:12px;border-radius:8px;font-size:13px"></div>
+  </div>
+
+  <!-- Library tabs -->
+  <div class="asset-tabs-row" style="margin-top:24px">
     <button class="asset-tab active" onclick="switchAssetTab(this,'photo')">Photography</button>
     <button class="asset-tab" onclick="switchAssetTab(this,'video')">Video</button>
     <button class="asset-tab" onclick="switchAssetTab(this,'brand')">Brand & Creative</button>
@@ -1455,51 +1488,8 @@ body{padding-top:36px}
   </div>
   <div class="asset-grid" id="asset-grid">
     <!-- populated by loadAssets() -->
-    <div style="padding:40px;text-align:center;color:var(--tm);font-size:13px;grid-column:1/-1">Upload assets using the button above to get started.</div>
+    <div style="padding:40px;text-align:center;color:var(--tm);font-size:13px;grid-column:1/-1">Drop assets above to get started.</div>
   </div>
-
-<!-- Asset Upload Modal -->
-<div id="upload-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;padding:32px;max-width:480px;width:90%;max-height:80vh;overflow-y:auto">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <div style="font-size:16px;font-weight:700;color:var(--jd)">Upload Assets</div>
-      <button onclick="closeUploadModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--tm)">&times;</button>
-    </div>
-    <div style="margin-bottom:16px">
-      <label style="font-size:12px;font-weight:600;color:var(--ts);display:block;margin-bottom:4px">Category</label>
-      <select id="upload-category" style="width:100%;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px">
-        <option value="Photography">Photography</option>
-        <option value="Video">Video</option>
-        <option value="Brand & Creative">Brand & Creative</option>
-        <option value="Marketing Collateral">Marketing Collateral</option>
-      </select>
-    </div>
-    <div style="margin-bottom:16px">
-      <label style="font-size:12px;font-weight:600;color:var(--ts);display:block;margin-bottom:4px">Subcategory</label>
-      <select id="upload-subcategory" style="width:100%;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px">
-        <option value="">None</option>
-        <option value="Exterior">Exterior</option>
-        <option value="Interior">Interior</option>
-        <option value="Amenity">Amenity</option>
-        <option value="Aerial">Aerial</option>
-        <option value="Neighborhood">Neighborhood</option>
-        <option value="Ad Creative">Ad Creative</option>
-        <option value="Property Tour">Property Tour</option>
-        <option value="Testimonial">Testimonial</option>
-      </select>
-    </div>
-    <div style="margin-bottom:16px">
-      <label style="font-size:12px;font-weight:600;color:var(--ts);display:block;margin-bottom:4px">Description</label>
-      <input id="upload-desc" type="text" placeholder="e.g., 1 Bed Interior, Pool Area" style="width:100%;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px">
-    </div>
-    <div style="margin-bottom:20px">
-      <label style="font-size:12px;font-weight:600;color:var(--ts);display:block;margin-bottom:4px">Files</label>
-      <input id="upload-files" type="file" multiple accept="image/*,video/*,.pdf,.ai,.eps,.psd,.svg" style="font-size:13px">
-    </div>
-    <div id="upload-status" style="display:none;margin-bottom:16px;padding:12px;border-radius:8px;font-size:13px"></div>
-    <button onclick="submitUpload()" style="width:100%;padding:10px;background:var(--cu);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Upload</button>
-  </div>
-</div>
 
 </section>
 
@@ -2427,6 +2417,7 @@ function nav(id, el) {
   if (id === 'activity')         { loadActivity(); }
   if (id === 'recommendations')  { loadCallPrep(); }
   if (id === 'services')         { loadServices(); }
+  if (id === 'assets')           { assetInitDropzone(); loadAssets(); }
 }
 
 function switchDemo(view, btn) {
@@ -5632,53 +5623,222 @@ function filterActivity(cat, btn) {
   });
 }
 
-// ── Assets ──
-function openUploadModal() {
-  var modal = document.getElementById('upload-modal');
-  if (modal) modal.style.display = 'flex';
+// ── Asset Library: drag-drop batch upload with AI labeling ─────────────────
+var _assetBatch = [];
+var _assetBatchNextId = 1;
+function _assetApiBase() { return window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com'; }
+function _assetUuid()    { return window.__PORTAL_UUID__ || window.__PORTAL_COMPANY_ID__ || ''; }
+function _assetEmail()   { return window.__PORTAL_EMAIL__ || 'portal@rpmliving.com'; }
+
+function assetInitDropzone() {
+  var zone = document.getElementById('asset-dropzone');
+  if (!zone || zone._bound) return;
+  zone._bound = true;
+  zone.addEventListener('dragover', function(e){ e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', function(e){ e.preventDefault(); zone.classList.remove('dragover'); });
+  zone.addEventListener('drop', function(e){
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) assetHandleFiles(e.dataTransfer.files);
+  });
 }
-function closeUploadModal() {
-  var modal = document.getElementById('upload-modal');
-  if (modal) modal.style.display = 'none';
-  var status = document.getElementById('upload-status');
-  if (status) status.style.display = 'none';
+
+function assetHandleFiles(fileList) {
+  if (!fileList || !fileList.length) return;
+  if (!_assetUuid()) { alert('Property ID not available.'); return; }
+  var wrap = document.getElementById('asset-batch-wrap');
+  if (wrap) wrap.style.display = '';
+  for (var i = 0; i < fileList.length; i++) {
+    var f = fileList[i];
+    var entry = {
+      id: _assetBatchNextId++,
+      file: f,
+      previewUrl: URL.createObjectURL(f),
+      category: 'Photography',
+      subcategory: 'Interior',
+      description: f.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' '),
+      status: 'analyzing',
+    };
+    _assetBatch.push(entry);
+    assetAnalyzeEntry(entry);
+  }
+  assetRenderBatch();
 }
-function submitUpload() {
-  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
-  var uuid = window.__PORTAL_UUID__ || window.__PORTAL_COMPANY_ID__ || '';
-  var files = document.getElementById('upload-files').files;
-  var category = document.getElementById('upload-category').value;
-  var subcategory = document.getElementById('upload-subcategory').value;
-  var desc = document.getElementById('upload-desc').value;
-  var statusEl = document.getElementById('upload-status');
 
-  if (!files.length) { statusEl.style.display='block'; statusEl.style.background='#fef2f2'; statusEl.style.color='#991b1b'; statusEl.textContent='Please select files to upload.'; return; }
-  if (!uuid) { statusEl.style.display='block'; statusEl.style.background='#fef2f2'; statusEl.style.color='#991b1b'; statusEl.textContent='Property ID not available.'; return; }
-
-  statusEl.style.display='block'; statusEl.style.background='#f0f9ff'; statusEl.style.color='#1e40af'; statusEl.textContent='Uploading ' + files.length + ' file(s)...';
-
+function assetAnalyzeEntry(entry) {
   var fd = new FormData();
-  fd.append('property_uuid', uuid);
-  fd.append('category', category);
-  fd.append('subcategory', subcategory);
-  fd.append('description', desc);
-  for (var i = 0; i < files.length; i++) fd.append('files', files[i]);
-
-  fetch(API_BASE + '/api/asset-upload', { method: 'POST', body: fd })
+  fd.append('file', entry.file);
+  fetch(_assetApiBase() + '/api/asset-analyze', { method: 'POST', body: fd })
     .then(function(r){ return r.json(); })
     .then(function(d) {
-      if (d.error) { statusEl.style.background='#fef2f2'; statusEl.style.color='#991b1b'; statusEl.textContent='Error: ' + d.error; }
-      else { statusEl.style.background='#f0fdf4'; statusEl.style.color='#166534'; statusEl.textContent='Uploaded ' + (d.assets||[]).length + ' asset(s) successfully!'; loadAssets(); }
+      if (d && d.category) {
+        entry.category    = d.category    || entry.category;
+        entry.subcategory = d.subcategory || entry.subcategory;
+        entry.description = d.description || entry.description;
+      }
+      entry.status = 'ready';
+      assetRenderBatch();
     })
-    .catch(function(err) { statusEl.style.background='#fef2f2'; statusEl.style.color='#991b1b'; statusEl.textContent='Upload failed: ' + err.message; });
+    .catch(function(){ entry.status = 'ready'; assetRenderBatch(); });
 }
+
+function _assetSubOptions(category, selected) {
+  var opts = category === 'Video'
+    ? ['Ad Creative','Property Tour','Testimonial']
+    : (category === 'Photography'
+       ? ['Exterior','Interior','Amenity','Aerial','Neighborhood']
+       : ['']);
+  return opts.map(function(s) {
+    return '<option value="' + s + '"' + (s === selected ? ' selected' : '') + '>' + (s || 'None') + '</option>';
+  }).join('');
+}
+
+function assetRefreshSubOptions(id) {
+  var entry = _assetBatch.filter(function(e){ return e.id === id; })[0];
+  if (!entry) return;
+  var valid = entry.category === 'Video' ? ['Ad Creative','Property Tour','Testimonial']
+           : (entry.category === 'Photography' ? ['Exterior','Interior','Amenity','Aerial','Neighborhood'] : ['']);
+  if (valid.indexOf(entry.subcategory) === -1) entry.subcategory = valid[0];
+  var sel = document.querySelector('select[data-sub="' + id + '"]');
+  if (sel) sel.innerHTML = _assetSubOptions(entry.category, entry.subcategory);
+}
+
+function assetUpdateBatch(id, field, value) {
+  var entry = _assetBatch.filter(function(e){ return e.id === id; })[0];
+  if (entry) entry[field] = value;
+}
+
+function assetRemoveBatch(id) {
+  var entry = _assetBatch.filter(function(e){ return e.id === id; })[0];
+  if (entry && entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
+  _assetBatch = _assetBatch.filter(function(e){ return e.id !== id; });
+  assetRenderBatch();
+}
+
+function assetCancelBatch() {
+  _assetBatch.forEach(function(e){ if (e.previewUrl) URL.revokeObjectURL(e.previewUrl); });
+  _assetBatch = [];
+  var statusEl = document.getElementById('asset-batch-status');
+  if (statusEl) statusEl.style.display = 'none';
+  assetRenderBatch();
+}
+
+function assetRenderBatch() {
+  var grid = document.getElementById('asset-batch-grid');
+  var countEl = document.getElementById('asset-batch-count');
+  if (!grid) return;
+  if (countEl) countEl.textContent = _assetBatch.length;
+  if (!_assetBatch.length) {
+    var wrap = document.getElementById('asset-batch-wrap');
+    if (wrap) wrap.style.display = 'none';
+    grid.innerHTML = '';
+    return;
+  }
+  grid.innerHTML = _assetBatch.map(function(e) {
+    var overlay = '';
+    if (e.status === 'analyzing') overlay = '<div class="asset-batch-spinner">Analyzing…</div>';
+    if (e.status === 'uploading') overlay = '<div class="asset-batch-spinner">Uploading…</div>';
+    if (e.status === 'done')      overlay = '<div class="asset-batch-spinner" style="background:rgba(220,252,231,0.85);color:#166534">✓ Uploaded</div>';
+    if (e.status === 'failed')    overlay = '<div class="asset-batch-spinner" style="background:rgba(254,226,226,0.85);color:#991B1B">× Failed</div>';
+    var isImage = /^image\//i.test(e.file.type);
+    var thumb = isImage
+      ? '<img src="' + e.previewUrl + '" class="asset-batch-thumb" alt="preview">'
+      : '<div class="asset-batch-thumb" style="display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--tm);font-weight:600">' + (e.file.type || 'file') + '</div>';
+    var catOpts = ['Photography','Video','Brand & Creative','Marketing Collateral'].map(function(c) {
+      return '<option value="' + c + '"' + (c === e.category ? ' selected' : '') + '>' + c + '</option>';
+    }).join('');
+    return '<div class="asset-batch-card" data-id="' + e.id + '">' +
+      thumb +
+      '<button class="asset-batch-remove" onclick="assetRemoveBatch(' + e.id + ')" title="Remove">×</button>' +
+      '<div class="asset-batch-fields">' +
+        '<select onchange="assetUpdateBatch(' + e.id + ',\'category\',this.value);assetRefreshSubOptions(' + e.id + ')">' + catOpts + '</select>' +
+        '<select data-sub="' + e.id + '" onchange="assetUpdateBatch(' + e.id + ',\'subcategory\',this.value)">' + _assetSubOptions(e.category, e.subcategory) + '</select>' +
+        '<input type="text" value="' + (e.description || '').replace(/"/g,'&quot;') + '" maxlength="80" placeholder="Short description" oninput="assetUpdateBatch(' + e.id + ',\'description\',this.value)">' +
+      '</div>' +
+      overlay +
+      '</div>';
+  }).join('');
+}
+
+function assetSubmitBatch() {
+  var ready = _assetBatch.filter(function(e){ return e.status === 'ready' || e.status === 'analyzing'; });
+  if (!ready.length) return;
+  var btn = document.getElementById('asset-upload-btn');
+  var statusEl = document.getElementById('asset-batch-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
+  if (statusEl) { statusEl.style.display = 'block'; statusEl.style.background = '#f0f9ff'; statusEl.style.color = '#1e40af'; statusEl.textContent = 'Uploading ' + ready.length + ' asset(s)…'; }
+  ready.forEach(function(e){ e.status = 'uploading'; });
+  assetRenderBatch();
+
+  var fd = new FormData();
+  fd.append('property_uuid', _assetUuid());
+  fd.append('metadata', JSON.stringify(ready.map(function(e) {
+    return { category: e.category, subcategory: e.subcategory, description: e.description };
+  })));
+  ready.forEach(function(e){ fd.append('files', e.file); });
+
+  fetch(_assetApiBase() + '/api/asset-upload', { method: 'POST', body: fd })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.error) {
+        ready.forEach(function(e){ e.status = 'failed'; });
+        if (statusEl) { statusEl.style.background = '#fef2f2'; statusEl.style.color = '#991b1b'; statusEl.textContent = 'Error: ' + d.error; }
+      } else {
+        ready.forEach(function(e){ e.status = 'done'; });
+        if (statusEl) { statusEl.style.background = '#f0fdf4'; statusEl.style.color = '#166534'; statusEl.textContent = 'Uploaded ' + (d.assets || []).length + ' asset(s)'; }
+        try { _assetCache = null; } catch(e){}
+        setTimeout(function() { assetCancelBatch(); loadAssets(); }, 1500);
+      }
+      if (btn) { btn.disabled = false; btn.textContent = 'Upload All'; }
+      assetRenderBatch();
+    })
+    .catch(function(err) {
+      ready.forEach(function(e){ e.status = 'failed'; });
+      if (statusEl) { statusEl.style.background = '#fef2f2'; statusEl.style.color = '#991b1b'; statusEl.textContent = 'Upload failed: ' + err.message; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Upload All'; }
+      assetRenderBatch();
+    });
+}
+
 function loadAssets() {
-  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
-  var uuid = window.__PORTAL_UUID__ || window.__PORTAL_COMPANY_ID__ || '';
   var grid = document.getElementById('asset-grid');
+  var uuid = _assetUuid();
   if (!grid || !uuid) return;
-  // For now just show a refresh message — full HubDB query can be added later
-  grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--tm);font-size:12px">Assets uploaded. Refresh the page to see them.</div>';
+  grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--tm);font-size:12px;grid-column:1/-1">Loading assets…</div>';
+  fetch(_assetApiBase() + '/api/property-assets?company_id=' + encodeURIComponent(uuid), {
+    headers: { 'X-Portal-Email': _assetEmail() }
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    var assets = (d && d.assets) || [];
+    if (!assets.length) {
+      grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--tm);font-size:12px;grid-column:1/-1">No assets yet. Drop some above to get started.</div>';
+      return;
+    }
+    grid.innerHTML = assets.map(function(a) {
+      var name = a.asset_name || a.description || 'Asset';
+      var sub  = (a.subcategory || a.category || '').trim();
+      var isImg = ['jpg','jpeg','png','webp'].indexOf((a.file_type||'').toLowerCase()) !== -1;
+      var thumb = isImg
+        ? '<div class="asset-thumb" style="background:url(' + (a.file_url||'') + ') center/cover;background-size:cover"></div>'
+        : '<div class="asset-thumb" style="background:linear-gradient(135deg,#C8964E,#8FA68E)">' + ((a.file_type||'FILE').toUpperCase()) + '</div>';
+      return '<div class="asset-card" onclick="window.open(\'' + (a.file_url||'') + '\',\'_blank\')">' +
+        thumb +
+        '<div class="asset-info"><div class="asset-name">' + _escHtml(name) + '</div>' +
+        '<div class="asset-meta">' + _escHtml(sub) + '</div></div></div>';
+    }).join('');
+  })
+  .catch(function() {
+    grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--tm);font-size:12px;grid-column:1/-1">Could not load assets.</div>';
+  });
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', assetInitDropzone);
+  } else {
+    assetInitDropzone();
+  }
 }
 
 function switchAssetTab(btn, tab) {
