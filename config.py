@@ -41,6 +41,15 @@ CLICKUP_LISTS = {
     "onboarding": os.getenv("CLICKUP_LIST_ONBOARDING"),
 }
 
+# --- Creatify (Marquee video pipeline) ---
+CREATIFY_API_ID = os.getenv("CREATIFY_API_ID", "")
+CREATIFY_API_KEY = os.getenv("CREATIFY_API_KEY", "")
+CREATIFY_BASE_URL = "https://api.creatify.ai"
+CREATIFY_WEBHOOK_SECRET = os.getenv("CREATIFY_WEBHOOK_SECRET", "")
+
+# --- ApartmentIQ ---
+APARTMENTIQ_TOKEN = os.getenv("ApartmentIQ_Token", "")
+
 # --- NinjaCat ---
 NINJACAT_EXPORT_BUCKET = os.getenv("NINJACAT_EXPORT_BUCKET")
 
