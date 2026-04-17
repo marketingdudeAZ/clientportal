@@ -19,7 +19,7 @@ from typing import Any
 
 import requests
 
-from config import CREATIFY_API_ID, CREATIFY_API_KEY, CREATIFY_BASE_URL
+from config import CREATIFY_API_ID, CREATIFY_API_KEY, CREATIFY_BASE_URL, CREATIFY_TEMPLATE_ID
 from video_pipeline_config import (
     PIPELINE_RULES,
     validate_script,
@@ -189,7 +189,19 @@ def create_video_job(
     ar     = _normalize_aspect(ar_raw)   # Creatify uses "9x16" not "9:16"
     dur    = duration     or VIDEO_DEFAULTS["duration"]
 
-    # 3a. Creatify requires a registered link UUID, not a raw URL
+    # If a custom template is configured, use the no-avatar template endpoint.
+    # This is the only reliable way to render voice-only over property imagery.
+    if CREATIFY_TEMPLATE_ID:
+        return _submit_custom_template_job(
+            script=clean_script,
+            accent_id=accent_id,
+            media_urls=media_urls,
+            aspect_ratio=ar,
+            webhook_url=webhook_url,
+        )
+
+    # Fallback: link_to_videos endpoint (WARNING: includes avatar by default).
+    # Kept for backwards compatibility if CREATIFY_TEMPLATE_ID is unset.
     try:
         link_id = register_link(property_url)
     except Exception as exc:
@@ -199,7 +211,7 @@ def create_video_job(
         "link":            link_id,
         "override_script": clean_script,
         "no_avatar":       True,          # VOICE-ONLY rule — always enforced
-        "visual_style":    "FullScreenTemplate",  # No avatar bubble on screen
+        "visual_style":    "FullScreenTemplate",
         "aspect_ratio":    ar,
         "video_length":    dur,
     }
@@ -210,17 +222,83 @@ def create_video_job(
     if webhook_url:
         payload["webhook_url"] = webhook_url
 
-    # Extra media assets (property photos/videos from portal asset library)
     if media_urls:
-        payload["media_urls"] = media_urls[:10]  # Creatify cap
+        payload["media_urls"] = media_urls[:10]
 
     logger.info(
-        "Creatify job submit: link_id=%s url=%s aspect=%s dur=%ss voice=%s",
-        link_id, property_url, ar, dur, accent_id,
+        "Creatify link_to_videos job submit (fallback, has avatar): link_id=%s aspect=%s voice=%s",
+        link_id, ar, accent_id,
     )
 
     result = _post("/api/link_to_videos/", payload)
     logger.info("Creatify job created: id=%s status=%s", result.get("id"), result.get("status"))
+    return result
+
+
+def _submit_custom_template_job(
+    *,
+    script: str,
+    accent_id: str | None,
+    media_urls: list[str] | None,
+    aspect_ratio: str,
+    webhook_url: str | None,
+) -> dict:
+    """Submit to /api/custom_template_jobs/ using the RPM no-avatar template.
+
+    The template must define these variables (build once in Creatify's web editor):
+      - voiceover  (type=voiceover): text-to-speech voiceover track
+      - script     (type=text): the voiceover text
+      - image_1, image_2, ... image_N (type=image): property photos
+
+    We fill them from our inputs: the first up-to-10 media_urls map to image_1..N,
+    script text fills the 'script' text variable, accent_id fills voiceover voice_id.
+    """
+    if not CREATIFY_TEMPLATE_ID:
+        raise RuntimeError("CREATIFY_TEMPLATE_ID not configured")
+
+    variables: dict[str, Any] = {
+        "script": {
+            "type": "text",
+            "properties": {"content": script},
+        },
+        "voiceover": {
+            "type": "voiceover",
+            "properties": {"voice_id": accent_id} if accent_id else {},
+        },
+    }
+
+    # Map property photos to image_1, image_2, ...
+    if media_urls:
+        for i, url in enumerate(media_urls[:10], start=1):
+            variables[f"image_{i}"] = {
+                "type": "image",
+                "properties": {"url": url},
+            }
+
+    payload: dict[str, Any] = {
+        "template_id": CREATIFY_TEMPLATE_ID,
+        "variables":   variables,
+    }
+    if webhook_url:
+        payload["webhook_url"] = webhook_url
+
+    logger.info(
+        "Creatify custom_template_jobs submit: template=%s voice=%s media=%d",
+        CREATIFY_TEMPLATE_ID, accent_id, len(media_urls or []),
+    )
+
+    result = _post("/api/custom_template_jobs/", payload)
+    logger.info("Creatify template job created: id=%s status=%s", result.get("id"), result.get("status"))
+
+    # Trigger render (custom_template_jobs is create-then-render flow)
+    job_id = result.get("id")
+    if job_id:
+        try:
+            _post(f"/api/custom_template_jobs/{job_id}/render/", {})
+            logger.info("Creatify render triggered for job %s", job_id)
+        except Exception as exc:
+            logger.warning("Render trigger failed for %s: %s (polling status anyway)", job_id, exc)
+
     return result
 
 

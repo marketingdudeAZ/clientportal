@@ -46,6 +46,7 @@ CREATIFY_API_ID = os.getenv("CREATIFY_API_ID", "")
 CREATIFY_API_KEY = os.getenv("CREATIFY_API_KEY", "")
 CREATIFY_BASE_URL = "https://api.creatify.ai"
 CREATIFY_WEBHOOK_SECRET = os.getenv("CREATIFY_WEBHOOK_SECRET", "")
+CREATIFY_TEMPLATE_ID = os.getenv("CREATIFY_TEMPLATE_ID", "")
 
 # --- ApartmentIQ ---
 APARTMENTIQ_TOKEN = os.getenv("ApartmentIQ_Token", "")

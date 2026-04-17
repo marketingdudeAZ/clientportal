@@ -50,6 +50,9 @@ CREATIFY_API_ID  = os.getenv("CREATIFY_API_ID", "")
 CREATIFY_API_KEY = os.getenv("CREATIFY_API_KEY", "")
 CREATIFY_BASE_URL = "https://api.creatify.ai"
 CREATIFY_WEBHOOK_SECRET = os.getenv("CREATIFY_WEBHOOK_SECRET", "")
+# Custom no-avatar template UUID (built in Creatify's web editor).
+# Expects a single text variable named 'script'. Media passed via media_urls.
+CREATIFY_TEMPLATE_ID = os.getenv("CREATIFY_TEMPLATE_ID", "")
 
 # --- NinjaCat ---
 NINJACAT_EXPORT_BUCKET = os.getenv("NINJACAT_EXPORT_BUCKET")
