@@ -264,6 +264,7 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 .rec-card.actioned{opacity:.45;pointer-events:none}
 .rec-card-head{padding:18px 22px 0}
 .rec-meta{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.rec-cycle-badge{font-size:10px;font-weight:600;color:var(--tm);margin-left:auto;text-transform:none;letter-spacing:0;white-space:nowrap}
 .rec-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:0;line-height:1.4}
 .rec-body{padding:0 22px 22px}
 .rec-body-text{font-size:13px;color:var(--ts);line-height:1.75;margin:12px 0}
@@ -2406,6 +2407,7 @@ window.__PORTAL_CURRENT_PERF  = {};
 // Auto-load overview on page init (it's the default active section)
 document.addEventListener('DOMContentLoaded', function() {
   populateSidebar();  // populate property name + gauges regardless of which tab is active
+  prefetchCallPrep(); // pre-warm monthly call prep data so Call Prep tab loads instantly
   loadOverview();
 });
 
@@ -2442,15 +2444,29 @@ function populateSidebar() {
 
       var hs = health.overall != null ? Math.round(health.overall) : null;
       var st = (health.status || '').toUpperCase();
-      var sbRing = document.getElementById('sb-score-ring') || document.getElementById('sb-score-badge');
-      if (sbRing && hs != null) {
-        sbRing.textContent = hs;
-        if (sbRing.parentElement) {
-          sbRing.parentElement.style.background = hs >= 75 ? '#8FA68E' : hs >= 50 ? '#D4910A' : '#C94444';
+      var sbBadge = document.getElementById('sb-score-badge');
+      var sbRing  = document.getElementById('sb-score-ring');
+      if (hs != null) {
+        // Badge lives in the sidebar (40x40 rounded box)
+        if (sbBadge) {
+          sbBadge.textContent = hs;
+          sbBadge.classList.remove('healthy', 'critical');
+          if (hs >= 75) sbBadge.classList.add('healthy');
+          else if (hs < 50) sbBadge.classList.add('critical');
+        }
+        // Ring lives on other KPI cards (don't touch parent's background)
+        if (sbRing) {
+          sbRing.textContent = hs;
+          sbRing.style.background = hs >= 75 ? '#8FA68E' : hs >= 50 ? '#D4910A' : '#C94444';
         }
       }
       var sbLabel = document.getElementById('sb-score-label');
-      if (sbLabel && st) sbLabel.textContent = st.charAt(0) + st.slice(1).toLowerCase();
+      if (sbLabel && st) {
+        sbLabel.textContent = st.charAt(0) + st.slice(1).toLowerCase();
+        sbLabel.classList.remove('healthy', 'critical');
+        if (hs >= 75) sbLabel.classList.add('healthy');
+        else if (hs < 50) sbLabel.classList.add('critical');
+      }
     })
     .catch(function(err){ console.warn('populateSidebar failed:', err); });
 }
@@ -2500,59 +2516,100 @@ function scrollToChannel(channel) {
 }
 
 // ── Recommendations ──
-var pendingCount = 2;
-
-function approveRec(num, type, channel, tier, cardId, confirmId) {
+function approveRec(recId, cardId, confirmId, isBudgetChange) {
   var card = document.getElementById(cardId);
+  if (!card) return;
   var confirm = document.getElementById(confirmId);
   var btns = card.querySelectorAll('button');
   btns.forEach(function(b){b.disabled=true;});
-  card.querySelector('.btn-approve,.btn-approve-go').textContent = 'Submitting…';
+  var btn = card.querySelector('.btn-approve,.btn-approve-go');
+  if (btn) btn.textContent = 'Submitting…';
 
-  setTimeout(function(){
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var cid = window.__PORTAL_COMPANY_ID__ || '';
+  var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+
+  fetch(API_BASE + '/api/call-prep/approve', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-Portal-Email':email},
+    body: JSON.stringify({company_id: cid, rec_id: recId}),
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.error) throw new Error(d.error);
     card.classList.add('actioned');
-    confirm.className = 'rec-confirm ok';
-    confirm.style.display = '';
-
-    if (type === 'budget_change') {
-      confirm.textContent = '✓ Approved. Pre-loading changes into Services — navigating now…';
-      // Show in activity log
-      showActivityItem('tl-rec'+num+'-approved');
-      showActivityItem('tl-deal-ps');
-      logDeal('Paid Search Budget Increase (→ Better tier)');
-      // Navigate to services with preload after delay
-      setTimeout(function(){
-        preloadServicesRec(channel, tier, 'Paid Search → Better tier pre-loaded from your approved recommendation.');
-        nav('services', document.querySelector('[onclick*=services]'));
-      }, 1200);
-    } else {
-      confirm.textContent = '✓ Approved. Your team has been notified and a task has been created.';
-      showActivityItem('tl-rec'+num+'-approved');
-      showActivityItem('tl-deal-rep');
-      logDeal('Reputation Management Upgrade ($3,060/yr)');
+    card.setAttribute('data-status', 'approved');
+    if (confirm) {
+      confirm.className = 'rec-confirm ok';
+      confirm.style.display = '';
+      confirm.textContent = isBudgetChange
+        ? '✓ Approved. Your AM will open a budget change deal for your review.'
+        : '✓ Approved. A task has been created for your AM.';
     }
-
-    updatePendingCount(-1);
-  }, 900);
+    updatePendingCount();
+  })
+  .catch(function(err){
+    btns.forEach(function(b){b.disabled=false;});
+    if (btn) btn.textContent = isBudgetChange ? 'Approve & Configure →' : 'Approve';
+    if (confirm) {
+      confirm.className = 'rec-confirm dismissed';
+      confirm.style.display = '';
+      confirm.textContent = 'Could not approve: ' + err.message;
+    }
+  });
 }
 
-function dismissRec(cardId, confirmId) {
+function dismissRec(recId, cardId, confirmId) {
   var card = document.getElementById(cardId);
+  if (!card) return;
   var confirm = document.getElementById(confirmId);
-  card.classList.add('actioned');
-  confirm.className = 'rec-confirm dismissed';
-  confirm.style.display = '';
-  confirm.textContent = 'Dismissed.';
-  updatePendingCount(-1);
+  var btns = card.querySelectorAll('button');
+  btns.forEach(function(b){b.disabled=true;});
+
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var cid = window.__PORTAL_COMPANY_ID__ || '';
+  var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+
+  fetch(API_BASE + '/api/call-prep/dismiss', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-Portal-Email':email},
+    body: JSON.stringify({company_id: cid, rec_id: recId}),
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.error) throw new Error(d.error);
+    card.classList.add('actioned');
+    card.setAttribute('data-status', 'dismissed');
+    if (confirm) {
+      confirm.className = 'rec-confirm dismissed';
+      confirm.style.display = '';
+      confirm.textContent = 'Dismissed.';
+    }
+    updatePendingCount();
+  })
+  .catch(function(err){
+    btns.forEach(function(b){b.disabled=false;});
+    if (confirm) {
+      confirm.className = 'rec-confirm dismissed';
+      confirm.style.display = '';
+      confirm.textContent = 'Could not dismiss: ' + err.message;
+    }
+  });
 }
 
-function updatePendingCount(delta) {
-  pendingCount = Math.max(0, pendingCount + delta);
+function updatePendingCount() {
+  var cards = document.querySelectorAll('.rec-card');
+  var pending = 0;
+  cards.forEach(function(c){
+    if ((c.getAttribute('data-status') || 'pending') === 'pending') pending++;
+  });
   var badge = document.getElementById('recs-badge');
   var count = document.getElementById('pending-count');
-  badge.textContent = pendingCount;
-  if (count) count.textContent = pendingCount;
-  if (pendingCount === 0) { badge.style.display = 'none'; }
+  if (count) count.textContent = pending;
+  if (badge) {
+    badge.textContent = pending;
+    badge.style.display = pending === 0 ? 'none' : '';
+  }
 }
 
 function filterRecs(status, btn) {
@@ -3472,14 +3529,23 @@ function _renderOverview(propData, ticketsData, budgetData) {
   if (sbName && prop.name && !sbName.textContent.trim()) sbName.textContent = prop.name;
   var sbSub = document.querySelector('.sb-prop-sub');
   if (sbSub && prop.market && !sbSub.textContent.trim()) sbSub.textContent = prop.market + (prop.units ? ' · ' + prop.units + ' units' : '');
-  // Update sidebar score ring
-  var sbRing = document.getElementById('sb-score-ring');
-  if (sbRing && hs != null) {
-    sbRing.textContent = hs;
-    sbRing.parentElement.style.background = hs >= 75 ? '#8FA68E' : hs >= 50 ? '#D4910A' : '#C94444';
+  // Update sidebar score badge (40x40 box) — style the badge, NOT its parent row
+  var sbBadge = document.getElementById('sb-score-badge');
+  if (sbBadge && hs != null) {
+    sbBadge.textContent = hs;
+    sbBadge.classList.remove('healthy', 'critical');
+    if (hs >= 75) sbBadge.classList.add('healthy');
+    else if (hs < 50) sbBadge.classList.add('critical');
   }
   var sbLabel = document.getElementById('sb-score-label');
-  if (sbLabel && st) sbLabel.textContent = st.charAt(0) + st.slice(1).toLowerCase();
+  if (sbLabel && st) {
+    sbLabel.textContent = st.charAt(0) + st.slice(1).toLowerCase();
+    sbLabel.classList.remove('healthy', 'critical');
+    if (hs != null) {
+      if (hs >= 75) sbLabel.classList.add('healthy');
+      else if (hs < 50) sbLabel.classList.add('critical');
+    }
+  }
 
   // Quick Actions: Performance sub-label
   var qaPerfSub = document.getElementById('qa-perf-sub');
@@ -5931,95 +5997,134 @@ function switchAssetTab(btn, tab) {
 
 // ── Call Notes: Save to HubSpot ──
 // ── Call Prep: generate property-specific questions from health data ────────
+// ── Call Prep: monthly AI-generated recs + questions ─────────────────────
+// window._callPrepData is pre-populated by prefetchCallPrep() during page load
+// so the Call Prep tab renders instantly when opened.
 var _callPrepLoaded = false;
-function loadCallPrep() {
-  if (_callPrepLoaded) return;
-  _callPrepLoaded = true;
+window._callPrepData = window._callPrepData || null;
+
+function prefetchCallPrep() {
   var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
   var cid = window.__PORTAL_COMPANY_ID__ || '';
   var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
   if (!cid) return;
+  fetch(API_BASE + '/api/call-prep?company_id=' + encodeURIComponent(cid),
+        { headers: { 'X-Portal-Email': email } })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d && !d.error) window._callPrepData = d;
+    })
+    .catch(function(err) { console.warn('prefetchCallPrep failed:', err); });
+}
 
-  // Fetch property data + client brief in parallel to build context
-  var propP = fetch(API_BASE + '/api/property?company_id=' + encodeURIComponent(cid),
-    { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; });
-  var briefP = fetch(API_BASE + '/api/client-brief?company_id=' + encodeURIComponent(cid),
-    { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+function _cpFormatCycle(cycle_month) {
+  if (!cycle_month) return '';
+  var parts = cycle_month.split('-');
+  if (parts.length !== 2) return cycle_month;
+  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var m = parseInt(parts[1], 10) - 1;
+  return (months[m] || '') + ' ' + parts[0] + ' cycle';
+}
 
-  Promise.all([propP, briefP]).then(function(results) {
-    var propData = results[0] || {};
-    var briefData = results[1] || {};
-    var health = propData.health || {};
-    var leasing = propData.leasing || {};
-    var prop = propData.property || {};
-
-    // Build What Changed / What's Working / What We're Handling from health data
-    var score = health.overall != null ? Math.round(health.overall) : null;
-    var status = health.status || '';
-    var occ = leasing.occupancy;
-    var atr = leasing.atr;
-
-    // What Changed
-    var changedEl = document.getElementById('cp-changed');
-    if (changedEl) {
-      if (score != null) {
-        var statusWord = score >= 75 ? 'On Track' : score >= 50 ? 'Watch' : 'Needs Attention';
-        changedEl.textContent = 'Current health score is ' + score + ' (' + statusWord + '). ' +
-          (occ != null ? 'Occupancy at ' + Math.round(occ*10)/10 + '%. ' : '') +
-          (atr != null ? 'ATR at ' + Math.round(atr*10)/10 + '%. ' : '') +
-          (health.flag_count ? health.flag_count + ' health flag(s) identified.' : 'No active health flags.');
-      } else {
-        changedEl.textContent = 'Health score has not been computed yet for this property.';
+function loadCallPrep() {
+  if (_callPrepLoaded && window._callPrepData) {
+    _renderCallPrep(window._callPrepData);
+    return;
+  }
+  if (window._callPrepData) {
+    _callPrepLoaded = true;
+    _renderCallPrep(window._callPrepData);
+    return;
+  }
+  // Fallback — prefetch didn't fire or hasn't finished yet
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var cid = window.__PORTAL_COMPANY_ID__ || '';
+  var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  if (!cid) return;
+  fetch(API_BASE + '/api/call-prep?company_id=' + encodeURIComponent(cid),
+        { headers: { 'X-Portal-Email': email } })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d && !d.error) {
+        window._callPrepData = d;
+        _callPrepLoaded = true;
+        _renderCallPrep(d);
       }
-    }
+    })
+    .catch(function(err) { console.warn('loadCallPrep failed:', err); });
+}
 
-    // What's Working
-    var workingEl = document.getElementById('cp-working');
-    if (workingEl) {
-      var wins = [];
-      if (occ != null && occ >= 93) wins.push('Occupancy is strong at ' + Math.round(occ*10)/10 + '%');
-      if (atr != null && atr < 6) wins.push('ATR is healthy at ' + Math.round(atr*10)/10 + '%');
-      if (health.leasing_score && health.leasing_score.exposure_score >= 75) wins.push('Lease exposure trending well');
-      if (briefData.goals) wins.push('Strategic goals documented in client brief');
-      workingEl.textContent = wins.length ? wins.join('. ') + '.' : 'Review property metrics to identify areas of strength.';
-    }
+function _renderCallPrep(d) {
+  var summary = (d && d.summary) || {};
+  var recs    = (d && d.recommendations) || [];
+  var questions = (d && d.questions) || [];
+  var cycleLabel = _cpFormatCycle(d && d.cycle_month);
 
-    // What We're Handling
-    var handlingEl = document.getElementById('cp-handling');
-    if (handlingEl) {
-      handlingEl.textContent = 'Marketing programs running on schedule. Review the Budget & SKUs tab for current spend allocation and the Services tab for enrolled programs.';
-    }
+  // Summary cards
+  var changedEl  = document.getElementById('cp-changed');
+  if (changedEl)  changedEl.textContent  = summary.changed  || '—';
+  var workingEl  = document.getElementById('cp-working');
+  if (workingEl)  workingEl.textContent  = summary.working  || '—';
+  var handlingEl = document.getElementById('cp-handling');
+  if (handlingEl) handlingEl.textContent = summary.handling || '—';
 
-    // Generate property-specific questions
-    var questions = [];
-    if (occ != null && occ < 90) {
-      questions.push('Occupancy is at ' + Math.round(occ*10)/10 + '% — below the 93% stabilized target. Are there any on-site factors affecting leasing velocity (staffing, pricing, unit turns)?');
-    }
-    if (atr != null && atr > 8) {
-      questions.push('ATR is running at ' + Math.round(atr*10)/10 + '% which is above the 8% threshold. What is the renewal strategy? Are there specific units or floor plans with higher turnover?');
-    }
-    if (score != null && score < 50) {
-      questions.push('The property health score is ' + score + ' (Needs Attention). What is your biggest priority right now — occupancy, retention, or marketing performance?');
-    }
-    if (briefData.challenges) {
-      questions.push('Your brief notes these challenges: "' + briefData.challenges.substring(0, 100) + '". Has anything changed on this front?');
-    }
-    if (briefData.onsite_upcoming) {
-      questions.push('Your brief mentions: "' + briefData.onsite_upcoming.substring(0, 100) + '". Is this still on track? We can build campaign hooks around it.');
-    }
-    // Always include these standard questions
-    questions.push('Are there any upcoming events, renovations, or property changes we should incorporate into marketing campaigns?');
-    questions.push('From your perspective on-site, what is the #1 thing you want marketing to focus on this month?');
+  // Recommendations: populate cards rec-1 .. rec-N.
+  // The existing HTML has two static shells (rec-1, rec-2); expand or trim.
+  var recContainer = document.getElementById('rec-1') ? document.getElementById('rec-1').parentElement : null;
+  if (recContainer) {
+    // Remove all existing rec-* cards (keep children that aren't rec cards)
+    Array.prototype.slice.call(recContainer.querySelectorAll('.rec-card')).forEach(function(el){ el.parentElement.removeChild(el); });
+    recs.forEach(function(rec, idx) {
+      var n = idx + 1;
+      var isBudget = rec.type === 'budget_change';
+      var statusCls = rec.status === 'approved' ? 'approved' : rec.status === 'dismissed' ? 'dismissed' : 'pending';
+      var actioned = statusCls !== 'pending' ? ' actioned' : '';
+      var badgeCls = isBudget ? 'badge-purple' : 'badge-blue';
+      var badgeLabel = isBudget ? 'Budget Change' : 'Strategy';
+      var priColor  = rec.priority === 'High' ? 'var(--red)' : 'var(--amb)';
+      var approveBtn = isBudget
+        ? '<button class="btn-approve-go" onclick="approveRec(\'' + _escAttr(rec.rec_id) + '\',\'rec-' + n + '\',\'rec-confirm-' + n + '\',true)">Approve &amp; Configure →</button>'
+        : '<button class="btn-approve" onclick="approveRec(\'' + _escAttr(rec.rec_id) + '\',\'rec-' + n + '\',\'rec-confirm-' + n + '\',false)">Approve</button>';
+      var html = '<div class="rec-card' + actioned + '" id="rec-' + n + '" data-status="' + statusCls + '" data-rec-id="' + _escAttr(rec.rec_id||'') + '">' +
+        '<div class="rec-card-head">' +
+          '<div class="rec-meta">' +
+            '<span class="badge ' + badgeCls + '">' + _escHtml(badgeLabel) + '</span>' +
+            '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:' + priColor + '">' + _escHtml(rec.priority || 'Medium') + ' Priority</span>' +
+            '<span class="rec-cycle-badge">' + _escHtml(cycleLabel) + '</span>' +
+          '</div>' +
+          '<div class="rec-title" id="rec-' + n + '-title">' + _escHtml(rec.title || '') + '</div>' +
+        '</div>' +
+        '<div class="rec-body">' +
+          '<div class="rec-body-text" id="rec-' + n + '-body">' + _escHtml(rec.body || '') + '</div>' +
+          '<div class="rec-btns">' +
+            approveBtn +
+            '<button class="btn-dismiss" onclick="dismissRec(\'' + _escAttr(rec.rec_id) + '\',\'rec-' + n + '\',\'rec-confirm-' + n + '\')">Dismiss</button>' +
+          '</div>' +
+          '<div class="rec-confirm ok" id="rec-confirm-' + n + '">' + (statusCls === 'approved' ? 'Approved.' : statusCls === 'dismissed' ? 'Dismissed.' : '') + '</div>' +
+        '</div></div>';
+      recContainer.insertAdjacentHTML('beforeend', html);
+    });
+  }
 
-    // Render questions
-    var qList = document.getElementById('question-list');
-    if (qList) {
+  // Pending count badge
+  var pendingCountEl = document.getElementById('pending-count');
+  if (pendingCountEl) {
+    var pendingN = recs.filter(function(r){ return (r.status || 'pending') === 'pending'; }).length;
+    pendingCountEl.textContent = pendingN;
+  }
+
+  // Questions
+  var qList = document.getElementById('question-list');
+  if (qList) {
+    if (!questions.length) {
+      qList.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tm);font-size:12px">No questions for this cycle.</div>';
+    } else {
       qList.innerHTML = questions.map(function(q, i) {
         var n = i + 1;
         return '<div class="question-item" id="q-' + n + '">' +
           '<div class="question-num">' + n + '</div>' +
           '<div style="flex:1">' +
-            '<div class="question-text">' + q + '</div>' +
+            '<div class="question-text">' + _escHtml(q) + '</div>' +
             '<div class="question-answer-area" id="qa-' + n + '">' +
               '<textarea placeholder="Type the client\'s answer here during the call\u2026" id="qa-text-' + n + '"></textarea>' +
               '<div class="question-answer-saved" id="qa-saved-' + n + '">\u2713 Answer saved</div>' +
@@ -6032,7 +6137,7 @@ function loadCallPrep() {
           '</div></div>';
       }).join('');
     }
-  });
+  }
 }
 
 // ── Services: populate enrolled services from budget/deal data ──────────────

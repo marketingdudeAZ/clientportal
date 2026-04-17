@@ -2588,6 +2588,339 @@ def video_voices():
         return jsonify({"error": "Failed to load voices"}), 500
 
 
+# ─── Call Prep: monthly AI-generated recommendations + questions ───────────
+
+CALLPREP_SYSTEM_PROMPT = (
+    "You are an RPM Living marketing strategist generating a monthly Call Prep "
+    "briefing for an apartment community.\n\n"
+    "Return ONLY valid JSON (no markdown, no prose) in this exact shape:\n"
+    '{\n'
+    '  "summary": {\n'
+    '    "changed": "1-2 sentences on what changed in the last month",\n'
+    '    "working": "1-2 sentences on what\'s working well",\n'
+    '    "handling": "1-2 sentences on what the agency is already handling"\n'
+    '  },\n'
+    '  "recommendations": [\n'
+    '    {\n'
+    '      "type": "strategy_change" | "budget_change",\n'
+    '      "priority": "High" | "Medium",\n'
+    '      "title": "short title, <90 chars",\n'
+    '      "body": "2-4 sentences describing the recommendation and rationale",\n'
+    '      "channel": "reputation|seo|paid_search|paid_social|social|video_creative|brand|general",\n'
+    '      "tier": "good|better|best"\n'
+    '    }\n'
+    '  ],\n'
+    '  "questions": [\n'
+    '    "AM-facing question 1",\n'
+    '    "AM-facing question 2"\n'
+    '  ]\n'
+    '}\n\n'
+    "Rules:\n"
+    "- Generate exactly 2 recommendations: one strategy_change and one budget_change.\n"
+    "- Generate 5-7 questions. Each targeted to what the AM should ask the client based on the data.\n"
+    "- Base everything on the property data provided. Never invent numbers.\n"
+    "- Plain language. No jargon. No pricing/rent amounts ever.\n"
+    "- If a metric is missing, reference it as 'not available' rather than inventing.\n"
+)
+
+
+def _generate_callprep_payload(company_id: str, company_props: dict, brief: dict, cycle_month: str) -> dict:
+    """Call Claude to produce the monthly Call Prep JSON payload."""
+    import datetime as _dt, json as _json, uuid as _uuid
+    from config import ANTHROPIC_API_KEY, CLAUDE_AGENT_MODEL
+
+    # Build a compact user prompt from property + brief context
+    lines = [
+        f"Property: {company_props.get('name','')}",
+        f"Market: {company_props.get('rpmmarket','')}",
+        f"Units: {company_props.get('totalunits','')}",
+        f"Occupancy: {company_props.get('occupancy__','')}%",
+        f"ATR: {company_props.get('atr__','')}%",
+        f"120-day lease trend: {company_props.get('trending_120_days_lease_expiration','')}",
+        f"Redlight score: {company_props.get('redlight_report_score','not scored')}",
+        f"Redlight flags: {company_props.get('redlight_flag_count','0')}",
+        "",
+        "Client Brief:",
+        f"  Voice & Tone: {brief.get('voice_and_tone','')}",
+        f"  Goals: {brief.get('goals','')}",
+        f"  Challenges: {brief.get('challenges','')}",
+        f"  Onsite/Upcoming: {brief.get('onsite_upcoming','')}",
+        f"  Competitors: {brief.get('competitors','')}",
+        f"  Unique Solutions: {brief.get('unique_solutions','')}",
+        f"  Adjectives: {brief.get('adjectives','')}",
+        f"  Additional Selling Points: {brief.get('additional_selling_points','')}",
+    ]
+    user_prompt = "\n".join(lines)
+
+    payload = None
+    if ANTHROPIC_API_KEY:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            msg = client.messages.create(
+                model=CLAUDE_AGENT_MODEL,
+                max_tokens=1500,
+                temperature=0.4,
+                system=CALLPREP_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            raw = msg.content[0].text.strip() if msg.content else ""
+            import re as _re
+            m = _re.search(r"\{[\s\S]*\}", raw)
+            if m:
+                payload = _json.loads(m.group(0))
+        except Exception as exc:
+            logger.warning("Call Prep Claude call failed: %s", exc)
+
+    # Fallback if Claude failed — keep the portal functional with sensible defaults
+    if not payload or not isinstance(payload, dict):
+        payload = {
+            "summary": {
+                "changed":  "Monthly health scoring not yet available for this property.",
+                "working":  "Marketing programs continue running on schedule.",
+                "handling": "Your AM is monitoring performance and will flag items as data comes in.",
+            },
+            "recommendations": [],
+            "questions": [
+                "Are there any upcoming events, renovations, or amenity changes we should factor into marketing this month?",
+                "From your perspective on-site, what's the #1 thing you want marketing to focus on?",
+            ],
+        }
+
+    # Stamp each recommendation with a stable rec_id + status + cycle_month
+    for rec in payload.get("recommendations", []) or []:
+        if not isinstance(rec, dict):
+            continue
+        rec.setdefault("rec_id", str(_uuid.uuid4()))
+        rec.setdefault("status", "pending")
+
+    payload["cycle_month"]  = cycle_month
+    payload["generated_at"] = _dt.datetime.utcnow().isoformat() + "Z"
+    return payload
+
+
+@app.route("/api/call-prep", methods=["GET", "OPTIONS"])
+def get_call_prep():
+    """Return (or lazily generate) the monthly Call Prep payload for a property.
+
+    Query: company_id
+
+    Behavior:
+      - If stored cycle_month matches the current month, return stored payload.
+      - Else regenerate via Claude and persist, auto-dismissing prior-month items.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    company_id = request.args.get("company_id", "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    import requests as req, json as _json, datetime as _dt
+    from config import HUBSPOT_API_KEY
+
+    hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+
+    # Fetch all props we need in one call
+    props_list = ",".join([
+        "name", "rpmmarket", "totalunits",
+        "occupancy__", "atr__", "trending_120_days_lease_expiration",
+        "redlight_report_score", "redlight_flag_count",
+        "callprep_cycle_month", "callprep_data_json",
+        # Client brief fields (used in Claude prompt context)
+        "property_voice_and_tone", "overarching_goals", "challenges_in_the_next_6_8_months_",
+        "onsite_upcoming_events", "primary_competitors",
+        "what_makes_this_property_unique_", "brand_adjectives", "additional_selling_points",
+    ])
+    r = req.get(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props_list}",
+        headers=hs_headers, timeout=10,
+    )
+    if not r.ok:
+        return jsonify({"error": "Failed to fetch company"}), 500
+    p = r.json().get("properties", {}) or {}
+
+    current_month = _dt.date.today().strftime("%Y-%m")
+    stored_month  = (p.get("callprep_cycle_month") or "").strip()
+    stored_raw    = p.get("callprep_data_json") or ""
+
+    # If we have a fresh cached payload for this month, return it
+    if stored_month == current_month and stored_raw:
+        try:
+            cached = _json.loads(stored_raw)
+            if isinstance(cached, dict):
+                return jsonify(cached)
+        except Exception:
+            logger.warning("callprep_data_json for %s was invalid JSON — regenerating", company_id)
+
+    # Regenerate
+    brief = {
+        "voice_and_tone":            p.get("property_voice_and_tone") or "",
+        "goals":                     p.get("overarching_goals") or "",
+        "challenges":                p.get("challenges_in_the_next_6_8_months_") or "",
+        "onsite_upcoming":           p.get("onsite_upcoming_events") or "",
+        "competitors":               p.get("primary_competitors") or "",
+        "unique_solutions":          p.get("what_makes_this_property_unique_") or "",
+        "adjectives":                p.get("brand_adjectives") or "",
+        "additional_selling_points": p.get("additional_selling_points") or "",
+    }
+
+    payload = _generate_callprep_payload(company_id, p, brief, current_month)
+
+    # Persist back (auto-dismisses prior-month items by overwrite)
+    try:
+        req.patch(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+            headers=hs_headers,
+            json={"properties": {
+                "callprep_cycle_month": current_month,
+                "callprep_data_json":   _json.dumps(payload),
+            }},
+            timeout=10,
+        )
+        logger.info("Call Prep regenerated for %s (cycle=%s)", company_id, current_month)
+    except Exception as exc:
+        logger.warning("Call Prep persist failed for %s: %s", company_id, exc)
+
+    return jsonify(payload)
+
+
+def _callprep_update_rec(company_id: str, rec_id: str, new_status: str, email: str) -> dict | None:
+    """Read stored call-prep payload, update one rec's status, write back.
+
+    Returns the updated payload (or None on failure).
+    """
+    import requests as req, json as _json
+    from config import HUBSPOT_API_KEY
+
+    hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+
+    r = req.get(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties=callprep_data_json,callprep_cycle_month,name",
+        headers=hs_headers, timeout=10,
+    )
+    if not r.ok:
+        return None
+    props = r.json().get("properties", {}) or {}
+    raw = props.get("callprep_data_json") or ""
+    if not raw:
+        return None
+    try:
+        payload = _json.loads(raw)
+    except Exception:
+        return None
+
+    updated = False
+    for rec in payload.get("recommendations", []) or []:
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("rec_id") == rec_id:
+            rec["status"] = new_status
+            rec["actioned_by"] = email
+            import datetime as _dt
+            rec["actioned_at"] = _dt.datetime.utcnow().isoformat() + "Z"
+            updated = True
+            break
+    if not updated:
+        return None
+
+    try:
+        req.patch(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+            headers=hs_headers,
+            json={"properties": {"callprep_data_json": _json.dumps(payload)}},
+            timeout=10,
+        )
+    except Exception as exc:
+        logger.warning("Call Prep rec update persist failed: %s", exc)
+        return None
+
+    return payload
+
+
+@app.route("/api/call-prep/dismiss", methods=["POST", "OPTIONS"])
+def callprep_dismiss():
+    """Mark a single call-prep recommendation as dismissed."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    body = request.get_json(force=True) or {}
+    company_id = str(body.get("company_id", "")).strip()
+    rec_id     = str(body.get("rec_id", "")).strip()
+    if not company_id or not rec_id:
+        return jsonify({"error": "company_id and rec_id required"}), 400
+
+    result = _callprep_update_rec(company_id, rec_id, "dismissed", email)
+    if not result:
+        return jsonify({"error": "Recommendation not found or update failed"}), 404
+    return jsonify({"status": "dismissed", "rec_id": rec_id})
+
+
+@app.route("/api/call-prep/approve", methods=["POST", "OPTIONS"])
+def callprep_approve():
+    """Mark a single call-prep recommendation as approved and create an AM task."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    body = request.get_json(force=True) or {}
+    company_id = str(body.get("company_id", "")).strip()
+    rec_id     = str(body.get("rec_id", "")).strip()
+    if not company_id or not rec_id:
+        return jsonify({"error": "company_id and rec_id required"}), 400
+
+    result = _callprep_update_rec(company_id, rec_id, "approved", email)
+    if not result:
+        return jsonify({"error": "Recommendation not found or update failed"}), 404
+
+    # Create an AM task summarizing what was approved
+    import requests as req, datetime as _dt
+    from config import HUBSPOT_API_KEY, CLICKUP_API_KEY, CLICKUP_LISTS
+
+    approved_rec = None
+    for rec in result.get("recommendations", []) or []:
+        if isinstance(rec, dict) and rec.get("rec_id") == rec_id:
+            approved_rec = rec
+            break
+
+    if approved_rec and CLICKUP_API_KEY:
+        cu_list = CLICKUP_LISTS.get("social") or CLICKUP_LISTS.get("onboarding")
+        if cu_list:
+            try:
+                req.post(
+                    f"https://api.clickup.com/api/v2/list/{cu_list}/task",
+                    headers={"Authorization": CLICKUP_API_KEY, "Content-Type": "application/json"},
+                    json={
+                        "name":        f"[Approved] {approved_rec.get('title','Recommendation')}",
+                        "description": (
+                            f"Approved by: {email}\n"
+                            f"Channel: {approved_rec.get('channel','')}\n"
+                            f"Tier: {approved_rec.get('tier','')}\n\n"
+                            f"{approved_rec.get('body','')}\n\n"
+                            f"HubSpot: https://app.hubspot.com/contacts/19843861/company/{company_id}"
+                        ),
+                        "priority": 2,
+                        "status":   "Open",
+                    },
+                    timeout=10,
+                )
+            except Exception as exc:
+                logger.warning("Call Prep approve ClickUp task failed: %s", exc)
+
+    return jsonify({"status": "approved", "rec_id": rec_id})
+
+
 @app.route("/api/report-data", methods=["GET", "OPTIONS"])
 def get_report_data():
     """Return all data needed to generate the Red Light Report PDF.
