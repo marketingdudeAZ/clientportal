@@ -1789,20 +1789,55 @@ def video_enroll():
 
     hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
 
-    # 1. Write HubSpot company properties
+    # 1. Write HubSpot company properties — immediately mark as active
     hs_r = req.patch(
         f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
         headers=hs_headers,
         json={"properties": {
-            "video_pipeline_enrolled":   "pending_setup",
+            "video_pipeline_enrolled":   "true",
             "video_pipeline_tier":       tier,
             "video_creative_brief_json": _json.dumps(brief),
+            "video_cycle_status":        "Processing",
         }},
         timeout=10,
     )
     if not hs_r.ok:
         logger.error("HubSpot enrollment update failed (%d): %s", hs_r.status_code, hs_r.text[:200])
         return jsonify({"error": "Failed to update HubSpot record"}), 500
+
+    # 1b. Trigger immediate video generation (foundation batch)
+    generation_triggered = False
+    try:
+        # Fetch domain for property_url
+        dom_r = req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties=domain,totalunits,aptiq_property_id,aptiq_market_id",
+            headers=hs_headers, timeout=10,
+        )
+        dom_props = dom_r.json().get("properties", {}) if dom_r.ok else {}
+        property_url = "https://" + (dom_props.get("domain") or "rpmliving.com")
+        units = int(dom_props.get("totalunits") or 0)
+
+        from video_generator import generate_videos
+        import threading
+        def _bg_generate():
+            try:
+                generate_videos(
+                    company_id=company_id,
+                    property_name=property_name,
+                    tier=tier,
+                    brief=brief,
+                    property_url=property_url,
+                    units=units,
+                    aptiq_property_id=dom_props.get("aptiq_property_id") or "",
+                    aptiq_market_id=dom_props.get("aptiq_market_id") or "",
+                )
+                logger.info("Foundation batch generated for %s", company_id)
+            except Exception as exc:
+                logger.error("Foundation generation failed for %s: %s", company_id, exc, exc_info=True)
+        threading.Thread(target=_bg_generate, daemon=True).start()
+        generation_triggered = True
+    except Exception as exc:
+        logger.warning("Could not kick off immediate generation: %s", exc)
 
     # 2. Create ClickUp task for AM
     cu_list_id = CLICKUP_LISTS.get("social") or CLICKUP_LISTS.get("onboarding")
@@ -1843,12 +1878,19 @@ def video_enroll():
             next_first = datetime.date(today.year, today.month + 1, 1)
     next_first_str = next_first.strftime("%B 1, %Y")
 
-    logger.info("Video enrollment submitted: company=%s tier=%s by=%s", company_id, tier, email)
+    logger.info("Video enrollment submitted: company=%s tier=%s by=%s generation=%s",
+                company_id, tier, email, generation_triggered)
+    if generation_triggered:
+        message = (f"You are enrolled in the {tier} plan — your foundation video batch is being generated now. "
+                   f"Variants will appear in the Current Cycle tab within a few minutes.")
+    else:
+        message = (f"You are enrolled in the {tier} plan. Your first video batch will generate on {next_first_str}.")
     return jsonify({
-        "status": "enrolled",
+        "status": "active",
         "tier": tier,
         "next_batch_date": next_first_str,
-        "message": f"You are enrolled in the {tier} plan. Your account manager will confirm setup within 2 business days. Your first video batch will generate on {next_first_str}.",
+        "generating": generation_triggered,
+        "message": message,
     })
 
 

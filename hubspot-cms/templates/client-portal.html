@@ -1507,8 +1507,8 @@ body{padding-top:36px}
 <section id="section-video" class="section">
   <div class="sec-topbar">
     <div>
-      <div class="sec-title">Video Creative</div>
-      <div class="sec-sub">AI-generated ad creative · review &amp; approve variants</div>
+      <div class="sec-title">Marquee <span style="font-size:13px;font-weight:600;color:var(--tm);letter-spacing:0;text-transform:none">· Video Creative</span></div>
+      <div class="sec-sub">Recurring Smart Video Creative · review &amp; approve variants</div>
     </div>
   </div>
 
@@ -1539,25 +1539,34 @@ body{padding-top:36px}
 <!-- Enrollment Modal -->
 <div class="modal-overlay" id="enroll-modal">
   <div class="modal-box" style="width:min(500px,92vw)">
-    <div class="modal-title">Enroll in Video Creative Pipeline</div>
-    <div class="modal-sub">Select your tier below. Your creative brief data will be pulled automatically from the Client Brief tab.</div>
+    <div class="modal-title">Enroll in Marquee</div>
+    <div class="modal-sub">Recurring Smart Video Creative. Select your tier — your creative brief will be pulled automatically from the Client Brief tab.</div>
 
     <label class="modal-label">Package Tier</label>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
-      <div class="enroll-tier-card scenario-card" onclick="selectEnrollTier('Starter',this)" style="text-align:center">
-        <input type="radio" name="enroll-tier" value="Starter" style="display:none">
-        <div style="font-size:13px;font-weight:800;color:var(--tp)">Starter</div>
-        <div style="font-size:11px;color:var(--tm);margin-top:4px">2 videos/mo<br>Meta only<br>2 revision rounds</div>
-      </div>
-      <div class="enroll-tier-card scenario-card selected" onclick="selectEnrollTier('Standard',this)" style="text-align:center">
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:18px">
+      <div class="enroll-tier-card scenario-card selected" onclick="selectEnrollTier('Standard',this)" style="text-align:left;padding:16px">
         <input type="radio" name="enroll-tier" value="Standard" checked style="display:none">
-        <div style="font-size:13px;font-weight:800;color:var(--cu)">Standard</div>
-        <div style="font-size:11px;color:var(--tm);margin-top:4px">4 videos/mo<br>Meta + YouTube<br>4 revision rounds</div>
+        <div style="font-size:13px;font-weight:800;color:var(--tp);margin-bottom:6px">Standard</div>
+        <div style="font-size:18px;font-weight:800;color:var(--cu);margin-bottom:2px">$500 <span style="font-size:11px;color:var(--tm);font-weight:500">setup</span></div>
+        <div style="font-size:16px;font-weight:800;color:var(--tp);margin-bottom:8px">$199 <span style="font-size:11px;color:var(--tm);font-weight:500">per month</span></div>
+        <div style="font-size:11px;color:var(--tm);line-height:1.6">
+          • 3 videos at onboarding<br>
+          • 1 new video per month<br>
+          • 5 platform sizes per video<br>
+          • 90-day learning period
+        </div>
       </div>
-      <div class="enroll-tier-card scenario-card" onclick="selectEnrollTier('Premium',this)" style="text-align:center">
+      <div class="enroll-tier-card scenario-card" onclick="selectEnrollTier('Premium',this)" style="text-align:left;padding:16px">
         <input type="radio" name="enroll-tier" value="Premium" style="display:none">
-        <div style="font-size:13px;font-weight:800;color:var(--tp)">Premium</div>
-        <div style="font-size:11px;color:var(--tm);margin-top:4px">6+ videos/mo<br>Meta + YT + TikTok<br>Unlimited revisions</div>
+        <div style="font-size:13px;font-weight:800;color:var(--cu);margin-bottom:6px">Premium</div>
+        <div style="font-size:18px;font-weight:800;color:var(--cu);margin-bottom:2px">$500 <span style="font-size:11px;color:var(--tm);font-weight:500">setup</span></div>
+        <div style="font-size:16px;font-weight:800;color:var(--tp);margin-bottom:8px">$299 <span style="font-size:11px;color:var(--tm);font-weight:500">per month</span></div>
+        <div style="font-size:11px;color:var(--tm);line-height:1.6">
+          • 6 videos at onboarding<br>
+          • 2 new videos per month<br>
+          • 5 platform sizes per video<br>
+          • 90-day learning period
+        </div>
       </div>
     </div>
 
@@ -5022,14 +5031,36 @@ function _renderVideoCard(v, actionable) {
 
 function _renderEnrollmentLanding(el) {
   el.innerHTML = [
-    '<div style="max-width:680px;margin:0 auto;text-align:center;padding:32px 0 16px">',
-    '<div style="font-size:28px;font-weight:800;color:var(--tp);margin-bottom:10px">AI-Powered Video Ads,<br>Built from Your Data</div>',
-    '<div style="font-size:14px;color:var(--tm);max-width:480px;margin:0 auto 28px;line-height:1.6">RPM generates targeted video ad creative every month using your property\'s performance data, leasing goals, and market position — no production team required.</div>',
+    // Hero
+    '<div style="max-width:720px;margin:0 auto;text-align:center;padding:32px 0 8px">',
+    '<div style="font-size:12px;font-weight:800;color:var(--cu);letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px">Marquee</div>',
+    '<div style="font-size:28px;font-weight:800;color:var(--tp);margin-bottom:12px">Recurring Smart Video Creative</div>',
+    '<div style="font-size:13px;color:var(--tm);max-width:560px;margin:0 auto 24px;line-height:1.7">Marquee generates AI video ads for your property automatically. You get a foundation batch at onboarding, then fresh creative every 30 days. Your team approves one master video — the pipeline renders all platform sizes and delivers to your paid campaigns.</div>',
     '<button class="btn btn-primary" style="font-size:14px;padding:12px 28px" onclick="openEnrollModal()">Enroll Now</button>',
     '</div>',
 
-    // How it works
-    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:28px 0;text-align:center">',
+    // The Problem
+    '<div style="background:#fff;border:1px solid var(--bd);border-radius:10px;padding:18px 22px;margin:28px 0 16px">',
+    '<div style="font-size:10px;font-weight:800;color:var(--cu);letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px">The Problem</div>',
+    '<div style="font-size:13px;color:var(--ts);line-height:1.7">Paid media creative has a shelf life. Most properties run the same ad creative for 90+ days while performance quietly declines and CPL climbs. Getting fresh assets today means a production budget, a two-week wait, and a manual handoff every time.</div>',
+    '</div>',
+
+    // When / Why / Who
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0 28px">',
+    [
+      ['When', 'Any property actively running paid media with RPM. Best timing: onboarding, QBR, or budget review conversation.'],
+      ['Why',  'Fresh creative lowers CPL. Rotating ads avoids algorithm fatigue. Zero production overhead for your team or the property.'],
+      ['Who',  'Properties with $2,500+ in net paid media spend per month. RPM account managers enroll eligible accounts.'],
+    ].map(function(item){
+      return '<div style="background:#fff;border:1px solid var(--bd);border-radius:10px;padding:16px 18px">' +
+        '<div style="font-size:10px;font-weight:800;color:var(--cu);letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px">'+item[0]+'</div>' +
+        '<div style="font-size:12px;color:var(--ts);line-height:1.6">'+item[1]+'</div></div>';
+    }).join(''),
+    '</div>',
+
+    // How it works (operational flow)
+    '<div style="font-size:11px;font-weight:800;color:var(--tm);letter-spacing:.12em;text-transform:uppercase;margin:28px 0 10px;text-align:center">How It Works</div>',
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px;text-align:center">',
     ['Data Collection','Script Generation','Video Production','Review &amp; Approve'].map(function(s,i){
       return '<div style="background:#fff;border:1px solid var(--bd);border-radius:10px;padding:16px 12px">' +
         '<div style="font-size:22px;font-weight:800;color:var(--bdl);margin-bottom:8px">'+(i+1)+'</div>' +
@@ -5037,27 +5068,51 @@ function _renderEnrollmentLanding(el) {
     }).join(''),
     '</div>',
 
-    // Tier table
-    '<div style="background:#fff;border:1px solid var(--bd);border-radius:12px;overflow:hidden;margin-bottom:20px">',
-    '<div style="padding:14px 18px;border-bottom:1px solid var(--bd);font-weight:700;font-size:13px;color:var(--tp)">Choose Your Tier</div>',
-    '<table style="width:100%;border-collapse:collapse;font-size:12px">',
-    '<thead><tr style="background:var(--bg)">',
-    '<th style="padding:10px 14px;text-align:left;color:var(--tm);font-weight:700;font-size:10px;text-transform:uppercase">Feature</th>',
-    '<th style="padding:10px 14px;text-align:center;color:var(--tm);font-weight:700;font-size:10px;text-transform:uppercase">Starter</th>',
-    '<th style="padding:10px 14px;text-align:center;color:var(--cu);font-weight:700;font-size:10px;text-transform:uppercase">Standard</th>',
-    '<th style="padding:10px 14px;text-align:center;color:var(--tm);font-weight:700;font-size:10px;text-transform:uppercase">Premium</th>',
-    '</tr></thead><tbody>',
+    // Pricing & Cadence — 2 tier cards matching PDF layout
+    '<div style="font-size:11px;font-weight:800;color:var(--tm);letter-spacing:.12em;text-transform:uppercase;margin:12px 0 12px;text-align:center">Pricing &amp; Cadence</div>',
+    '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:20px">',
     [
-      ['Videos / month','2','4','6+'],
-      ['Platforms','Meta only','Meta + YouTube','Meta + YouTube + TikTok'],
-      ['Performance data','—','✓','✓ (advanced)'],
-      ['Script rationale','—','✓','✓'],
-      ['Revision rounds','2','4','Unlimited'],
-    ].map(function(row){
-      return '<tr style="border-top:1px solid var(--bdl)">'+
-        row.map(function(c,i){ return '<td style="padding:10px 14px;'+(i===0?'color:var(--ts)':'text-align:center;color:var(--tp)')+'">'+c+'</td>'; }).join('')+'</tr>';
+      {
+        name: 'Standard',
+        accent: 'var(--tp)',
+        setup: '$500',
+        monthly: '$199',
+        features: [
+          '3 videos at onboarding',
+          '1 new video per month',
+          '5 platform sizes per video',
+          '90-day learning period',
+        ],
+      },
+      {
+        name: 'Premium',
+        accent: 'var(--cu)',
+        setup: '$500',
+        monthly: '$299',
+        features: [
+          '6 videos at onboarding',
+          '2 new videos per month',
+          '5 platform sizes per video',
+          '90-day learning period',
+        ],
+      },
+    ].map(function(t){
+      return '<div style="background:#fff;border:1px solid var(--bd);border-left:4px solid '+t.accent+';border-radius:10px;padding:22px 24px">' +
+        '<div style="font-size:11px;font-weight:800;color:'+t.accent+';letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px">'+t.name+'</div>' +
+        '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">' +
+          '<span style="font-size:32px;font-weight:800;color:var(--cu)">'+t.setup+'</span>' +
+          '<span style="font-size:12px;color:var(--tm)">setup</span>' +
+        '</div>' +
+        '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:14px">' +
+          '<span style="font-size:28px;font-weight:800;color:var(--tp)">'+t.monthly+'</span>' +
+          '<span style="font-size:12px;color:var(--tm)">per month</span>' +
+        '</div>' +
+        '<ul style="list-style:none;padding:0;margin:0">' +
+          t.features.map(function(f){ return '<li style="font-size:12px;color:var(--ts);padding:4px 0;border-top:1px solid var(--bdl)"><span style="color:var(--cu);font-weight:800;margin-right:8px">•</span>'+f+'</li>'; }).join('') +
+        '</ul>' +
+        '</div>';
     }).join(''),
-    '</tbody></table></div>',
+    '</div>',
   ].join('');
 }
 
@@ -5126,10 +5181,15 @@ function submitEnrollment() {
     _videoData = null;
     document.getElementById('video-cycle-content').innerHTML =
       '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:28px;text-align:center">' +
-      '<div style="font-size:16px;font-weight:800;color:#166534;margin-bottom:8px">Enrolled in the ' + d.tier + ' plan!</div>' +
-      '<div style="font-size:13px;color:#166534">Brief pulled from Client Brief automatically. ' + (d.message||'Your account manager will confirm setup within 2 business days.') + '</div></div>';
+      '<div style="font-size:16px;font-weight:800;color:#166534;margin-bottom:8px">Enrolled in Marquee ' + d.tier + '!</div>' +
+      '<div style="font-size:13px;color:#166534;margin-bottom:14px">' + (d.message||'Your foundation batch is being generated.') + '</div>' +
+      (d.generating ? '<div style="font-size:12px;color:#166534;opacity:.85">Refreshing automatically in 30 seconds...</div>' : '') +
+      '</div>';
+    if (d.generating) {
+      setTimeout(function() { _videoData = null; loadVideoCreative(); }, 30000);
+    }
   })
-  .catch(function(err){ alert('Enrollment failed: ' + err.message); if (submitBtn) {submitBtn.disabled=false;submitBtn.textContent='Submit Enrollment';} });
+  .catch(function(err){ alert('Enrollment failed: ' + err.message); if (submitBtn) {submitBtn.disabled=false;submitBtn.textContent='Enroll & Pull Brief';} });
 }
 
 function _renderHistoryView(history) {
