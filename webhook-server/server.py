@@ -2009,12 +2009,80 @@ def get_video_creative():
         except Exception:
             return []
 
+    variants = _parse_json(p.get("video_variants_json"))
+
+    # Auto-poll Creatify for variants still in 'pending' or 'running' states and
+    # promote them to 'pending_review' when the render completes. This removes
+    # the need for manual status syncing every time Kyle loads the portal.
+    dirty = False
+    try:
+        from creatify_client import _SESSION as CREATIFY_SESSION, CREATIFY_BASE_URL
+        for v in variants:
+            if not isinstance(v, dict):
+                continue
+            if v.get("video_url") or v.get("video_output"):
+                continue  # already resolved
+            job_id = v.get("creatify_job_id")
+            status = v.get("status")
+            if not job_id or status in ("done", "error", "failed", "approved"):
+                continue
+            try:
+                jr = CREATIFY_SESSION.get(f"{CREATIFY_BASE_URL}/api/link_to_videos/{job_id}/", timeout=8)
+                if not jr.ok:
+                    continue
+                jd = jr.json()
+                c_status = jd.get("status")
+                video_out = jd.get("video_output")
+                thumb = jd.get("video_thumbnail")
+                if c_status == "done" and video_out:
+                    v["status"] = "pending_review"
+                    v["video_url"] = video_out
+                    v["video_output"] = video_out
+                    v["thumbnail_url"] = thumb
+                    v["poster_url"] = thumb
+                    v["duration_seconds"] = int(jd.get("duration") or v.get("duration_seconds") or 15)
+                    dirty = True
+                elif c_status == "failed":
+                    v["status"] = "failed"
+                    v["error"] = jd.get("failed_reason") or "Creatify render failed"
+                    dirty = True
+            except Exception as exc:
+                logger.debug("Polling job %s failed: %s", job_id, exc)
+    except Exception as exc:
+        logger.warning("Auto-poll pass failed: %s", exc)
+
+    # If any variants updated, persist back to HubSpot so subsequent requests
+    # skip the poll and the history view stays consistent.
+    if dirty:
+        pending_review = sum(1 for v in variants if isinstance(v, dict) and v.get("status") == "pending_review")
+        approved_count = sum(1 for v in variants if isinstance(v, dict) and v.get("status") == "approved")
+        if approved_count and approved_count == len(variants):
+            cycle_status = "Approved"
+        elif pending_review:
+            cycle_status = "Pending Review"
+        else:
+            cycle_status = p.get("video_cycle_status") or "Processing"
+        try:
+            req.patch(
+                f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+                headers={**hs_headers, "Content-Type": "application/json"},
+                json={"properties": {
+                    "video_variants_json": _json.dumps(variants),
+                    "video_cycle_status":  cycle_status,
+                }},
+                timeout=10,
+            )
+            p["video_cycle_status"] = cycle_status
+            logger.info("Auto-poll: updated %d variants for company %s", sum(1 for v in variants if isinstance(v,dict) and v.get('video_url')), company_id)
+        except Exception as exc:
+            logger.warning("Auto-poll HubSpot write failed: %s", exc)
+
     return jsonify({
         "enrolled":      p.get("video_pipeline_enrolled", "false") == "true",
         "tier":          p.get("video_pipeline_tier", "Starter"),
         "cycle_status":  p.get("video_cycle_status", ""),
         "cycle_month":   p.get("video_cycle_month", ""),
-        "variants":      _parse_json(p.get("video_variants_json")),
+        "variants":      variants,
         "history":       _parse_json(p.get("video_cycle_history_json")),
         "perf_snapshot": _parse_json(p.get("video_perf_snapshot_json")) if isinstance(p.get("video_perf_snapshot_json"), str) and p["video_perf_snapshot_json"].startswith("[") else (
             {} if not p.get("video_perf_snapshot_json") else
@@ -2355,8 +2423,11 @@ def video_regenerate():
         logger.error("Script validation error: %s", exc)
         return jsonify({"error": "Script validation failed"}), 500
 
-    # Determine media URLs
-    media_urls = new_media_urls if new_media_urls is not None else old_media_urls
+    # Determine media URLs. Filter out placeholder strings like
+    # 'property_website_imagery' and require real http/https URLs — Creatify
+    # returns 400 otherwise.
+    raw_media = new_media_urls if new_media_urls is not None else old_media_urls
+    media_urls = [u for u in (raw_media or []) if isinstance(u, str) and u.startswith(("http://", "https://"))]
 
     # Submit new Creatify job
     try:
@@ -2367,7 +2438,7 @@ def video_regenerate():
             accent_id=voice_id or None,
             aspect_ratio=target.get("aspect_ratio"),
             duration=target.get("duration_seconds", 15),
-            media_urls=media_urls,
+            media_urls=media_urls or None,
         )
     except Exception as exc:
         logger.error("Creatify job submission failed: %s", exc, exc_info=True)

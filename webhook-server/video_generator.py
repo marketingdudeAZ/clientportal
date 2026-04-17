@@ -242,8 +242,16 @@ def generate_videos(
         "duration": brief.get("duration", 15),
     }
 
-    # 4. Submit to Creatify
-    media_urls = script_result["media_urls"] or None
+    # 4. Submit to Creatify. Always filter to real http/https URLs — Claude's
+    # media_plan may include placeholders like "property_website_imagery" which
+    # Creatify rejects with 400. If no real URLs are available, fall back to
+    # raw asset file_urls from HubDB so the video uses property photos instead
+    # of Creatify's website-scrape fallback.
+    plan_urls = [u for u in (script_result.get("media_urls") or []) if isinstance(u, str) and u.startswith(("http://", "https://"))]
+    if not plan_urls and assets:
+        plan_urls = [a.get("file_url") for a in assets if a.get("file_url", "").startswith(("http://", "https://"))][:10]
+    media_urls = plan_urls or None
+
     variants = build_variants_for_brief(
         brief=creatify_brief,
         property_url=property_url,

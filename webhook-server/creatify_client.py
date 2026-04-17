@@ -401,25 +401,34 @@ def build_variants_for_brief(
                 webhook_url=webhook_url,
                 media_urls=media_urls,
             )
+            job_id = job.get("id")
             variants.append({
                 "variant_index":  i,
-                "creatify_job_id": job.get("id"),
+                "variant_id":     job_id,                     # frontend lookup key
+                "creatify_job_id": job_id,
                 "status":         "pending",
                 "voice_id":       voice["id"],
                 "voice_name":     voice["display"],
                 "voice_gender":   voice["gender"],
                 "aspect_ratio":   ar,
+                "duration_seconds": brief.get("duration", 15),
                 "video_output":   None,
+                "video_url":      None,
                 "thumbnail_url":  None,
+                "poster_url":     None,
                 "approved":       False,
                 "revision_count": 0,
+                "title":          f"Variant {i + 1}",
+                "platform":       "Meta" if ar.startswith("9") else ("YouTube" if ar.startswith("16") else "Meta / Instagram"),
             })
             logger.info("Variant %d submitted: job_id=%s voice=%s ar=%s",
-                        i, job.get("id"), voice["name"], ar)
+                        i, job_id, voice["name"], ar)
         except Exception as exc:
             logger.error("Variant %d failed to submit: %s", i, exc)
+            import uuid as _uuid
             variants.append({
                 "variant_index":  i,
+                "variant_id":     str(_uuid.uuid4()),  # stable id for UI even on error
                 "creatify_job_id": None,
                 "status":         "error",
                 "error":          str(exc),
@@ -427,6 +436,7 @@ def build_variants_for_brief(
                 "voice_name":     voice["display"],
                 "voice_gender":   voice["gender"],
                 "aspect_ratio":   ar,
+                "title":          f"Variant {i + 1}",
             })
 
     return variants

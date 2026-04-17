@@ -4963,18 +4963,21 @@ function _renderVideoCard(v, actionable) {
       '</div>';
   }
 
-  // Script section
+  // Script section. Backend stores script as a plain string; legacy demo data
+  // used {hook, body, cta, overlays, visual_notes}. Render either shape.
   var scriptHtml = '';
   if (v.script) {
     var s = v.script;
-    scriptHtml = '<div class="video-script-line"><span class="video-script-label">Hook</span>' + _escHtml(s.hook||'') + '</div>' +
-      '<div class="video-script-line"><span class="video-script-label">Body</span>' + _escHtml(s.body||'') + '</div>' +
-      '<div class="video-script-line"><span class="video-script-label">CTA</span>' + _escHtml(s.cta||'') + '</div>';
-    if ((s.overlays||[]).length) {
-      scriptHtml += '<div class="video-script-line"><span class="video-script-label">On-screen text</span>' + _escHtml(s.overlays.join(' · ')) + '</div>';
-    }
-    if (s.visual_notes) {
-      scriptHtml += '<div class="video-script-line"><span class="video-script-label">Visual notes</span>' + _escHtml(s.visual_notes) + '</div>';
+    if (typeof s === 'string') {
+      scriptHtml = '<div class="video-script-line"><span class="video-script-label">Voiceover</span>' + _escHtml(s) + '</div>';
+    } else if (typeof s === 'object') {
+      if (s.hook)  scriptHtml += '<div class="video-script-line"><span class="video-script-label">Hook</span>' + _escHtml(s.hook) + '</div>';
+      if (s.body)  scriptHtml += '<div class="video-script-line"><span class="video-script-label">Body</span>' + _escHtml(s.body) + '</div>';
+      if (s.cta)   scriptHtml += '<div class="video-script-line"><span class="video-script-label">CTA</span>' + _escHtml(s.cta) + '</div>';
+      if ((s.overlays||[]).length) scriptHtml += '<div class="video-script-line"><span class="video-script-label">On-screen text</span>' + _escHtml(s.overlays.join(' · ')) + '</div>';
+      if (s.visual_notes) scriptHtml += '<div class="video-script-line"><span class="video-script-label">Visual notes</span>' + _escHtml(s.visual_notes) + '</div>';
+      // Fallback if object has no known fields (e.g. only text at root)
+      if (!scriptHtml && s.text) scriptHtml = '<div class="video-script-line"><span class="video-script-label">Voiceover</span>' + _escHtml(s.text) + '</div>';
     }
   }
 
