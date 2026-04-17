@@ -2578,7 +2578,7 @@ function submitTicket() {
 
   // Step 1 — search KB first
   fetch(API_BASE + '/api/kb-search?q=' + encodeURIComponent(title), {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' }
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
   .then(function(r){ return r.json(); })
   .then(function(kb) {
@@ -2632,7 +2632,7 @@ function _doSubmitTicket(form, title, desc, priority, category) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Portal-Email': window.__PORTAL_EMAIL__ || '',
+      'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com',
     },
     body: JSON.stringify({ company_id: COMPANY_ID, subject: title, description: desc, priority: priority, category: category })
   })
@@ -2680,7 +2680,7 @@ function loadTickets() {
   var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/tickets?company_id=' + COMPANY_ID, {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' }
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
@@ -2759,7 +2759,7 @@ function loadTicketThread(ticketId, containerId, btn) {
   btn.disabled = true;
 
   fetch(API_BASE + '/api/ticket/' + ticketId + '/thread', {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' }
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
@@ -2814,7 +2814,7 @@ function replyToTicket(ticketId, threadId) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Portal-Email': window.__PORTAL_EMAIL__ || ''
+      'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com'
     },
     body: JSON.stringify({ text: text, thread_id: threadId })
   })
@@ -2844,7 +2844,7 @@ function loadClientBrief() {
   var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/client-brief?company_id=' + COMPANY_ID, {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' }
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
   .then(function(r){ return r.json(); })
   .then(function(d) {
@@ -2917,7 +2917,7 @@ function loadBudget() {
   var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
   fetch(API_BASE + '/api/budget?company_id=' + COMPANY_ID, {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' }
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
   .then(function(r){ return r.json(); })
   .then(function(d) {
@@ -3066,7 +3066,7 @@ function saveBriefCard(card) {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
-      'X-Portal-Email': window.__PORTAL_EMAIL__ || '',
+      'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com',
     },
     body: JSON.stringify({ company_id: COMPANY_ID, fields: fields }),
   })
@@ -3151,7 +3151,7 @@ function loadSpendSheet(force) {
   var timeoutId = setTimeout(function(){ controller.abort(); }, 180000); // 3-min timeout
 
   fetch(url, {
-    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || '' },
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' },
     signal: controller.signal
   })
   .then(function(r){ clearTimeout(timeoutId); return r.json(); })
@@ -3540,7 +3540,7 @@ function loadActivity() {
   if (_activityLoaded) return;
   var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
   var cid   = window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || '';
-  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL__ || '';
+  var email = window.__PORTAL_EMAIL__ || window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
 
   var loadingEl = document.getElementById('activity-loading');
   if (!cid) {
@@ -4232,7 +4232,7 @@ function _buildReportHTML(d) {
 function loadForecast() {
   if (_benchmarks) { _renderForecast(); _loadForecastContext(); return; }
   var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
-  var email    = window.__PORTAL_EMAIL__ || '';
+  var email    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
   var cid      = window.__PORTAL_COMPANY_ID__ || '';
 
   // Build property context from HubL-injected globals — NO hardcoded fallbacks
@@ -4292,7 +4292,7 @@ function _loadForecastContext() {
   peerEl.innerHTML = '<div class="fomo-panel"><div class="fomo-panel-hdr">Peer Insights</div><div style="padding:14px 16px;color:var(--tm);font-size:12px">Analysing comparable properties…</div></div>';
 
   var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
-  var email    = window.__PORTAL_EMAIL__ || '';
+  var email    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
   var cid      = window.__PORTAL_COMPANY_ID__ || '';
 
   if (!cid) {
@@ -6225,7 +6225,7 @@ var PORTAL_BASE_URL = 'https://digital.rpmliving.com/client-portal';
 function loadPropertySwitcher() {
   if (_switcherLoaded) return;
   var API = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
-  var email = window.__PORTAL_EMAIL__ || '';
+  var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
   fetch(API + '/api/portfolio', { headers: { 'X-Portal-Email': email } })
     .then(function(r) { return r.json(); })
     .then(function(d) {
