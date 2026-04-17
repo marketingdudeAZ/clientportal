@@ -1465,10 +1465,11 @@ body{padding-top:36px}
 
   <!-- Drag & drop zone -->
   <div id="asset-dropzone" class="asset-dropzone" onclick="document.getElementById('asset-file-picker').click()">
-    <input id="asset-file-picker" type="file" multiple accept="image/*,video/*,.pdf,.ai,.eps,.psd,.svg" style="display:none" onchange="assetHandleFiles(this.files)">
+    <input id="asset-file-picker" type="file" multiple accept=".jpg,.jpeg,.png,.gif,.mp4,.mov,.pdf" style="display:none" onchange="assetHandleFiles(this.files)">
     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="color:var(--cu);margin-bottom:10px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
     <div style="font-size:14px;font-weight:700;color:var(--jd);margin-bottom:4px">Drop photos here or click to browse</div>
     <div style="font-size:12px;color:var(--tm)">AI will auto-label each file — review and edit before uploading</div>
+    <div style="font-size:11px;color:var(--tm);margin-top:4px;opacity:.75">Accepted: JPG, PNG, GIF, MP4, MOV, PDF</div>
   </div>
 
   <!-- Batch review grid (shown after drop) -->
@@ -5700,20 +5701,45 @@ function assetInitDropzone() {
   });
 }
 
+var _ASSET_ALLOWED_EXT = ['jpg','jpeg','png','gif','mp4','mov','pdf'];
+
 function assetHandleFiles(fileList) {
   if (!fileList || !fileList.length) return;
   if (!_assetUuid()) { alert('Property ID not available.'); return; }
-  var wrap = document.getElementById('asset-batch-wrap');
-  if (wrap) wrap.style.display = '';
+
+  var accepted = [];
+  var rejected = [];
   for (var i = 0; i < fileList.length; i++) {
     var f = fileList[i];
+    var ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (_ASSET_ALLOWED_EXT.indexOf(ext) === -1) { rejected.push(f.name); continue; }
+    accepted.push(f);
+  }
+
+  if (rejected.length) {
+    var statusEl = document.getElementById('asset-batch-status');
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = '#fef2f2';
+      statusEl.style.color = '#991b1b';
+      statusEl.textContent = 'Skipped ' + rejected.length + ' unsupported file' + (rejected.length === 1 ? '' : 's') + ' (only JPG, PNG, GIF, MP4, MOV, PDF accepted): ' + rejected.slice(0,3).join(', ') + (rejected.length > 3 ? '…' : '');
+    }
+  }
+
+  if (!accepted.length) return;
+
+  var wrap = document.getElementById('asset-batch-wrap');
+  if (wrap) wrap.style.display = '';
+
+  for (var j = 0; j < accepted.length; j++) {
+    var af = accepted[j];
     var entry = {
       id: _assetBatchNextId++,
-      file: f,
-      previewUrl: URL.createObjectURL(f),
+      file: af,
+      previewUrl: URL.createObjectURL(af),
       category: 'Photography',
       subcategory: 'Interior',
-      description: f.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' '),
+      description: af.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' '),
       status: 'analyzing',
     };
     _assetBatch.push(entry);
