@@ -199,6 +199,7 @@ def create_video_job(
         "link":            link_id,
         "override_script": clean_script,
         "no_avatar":       True,          # VOICE-ONLY rule — always enforced
+        "visual_style":    "FullScreenTemplate",  # No avatar bubble on screen
         "aspect_ratio":    ar,
         "video_length":    dur,
     }
