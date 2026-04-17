@@ -2398,7 +2398,56 @@ window.__PORTAL_PROP_PACKAGES = [];
 window.__PORTAL_CURRENT_PERF  = {};
 
 // Auto-load overview on page init (it's the default active section)
-document.addEventListener('DOMContentLoaded', function() { loadOverview(); });
+document.addEventListener('DOMContentLoaded', function() {
+  populateSidebar();  // populate property name + gauges regardless of which tab is active
+  loadOverview();
+});
+
+// Sidebar property name + gauges — populate independently of which tab is open.
+// HubL's {{ property.name }} renders blank if crm_objects can't find the
+// property (happens in templates/ path), so the JS must backfill from API.
+function populateSidebar() {
+  var cid = window.__PORTAL_COMPANY_ID__ || '';
+  if (!cid) return;
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var email    = window.__PORTAL_EMAIL__  || 'portal@rpmliving.com';
+  fetch(API_BASE + '/api/property?company_id=' + encodeURIComponent(cid),
+        { headers: { 'X-Portal-Email': email } })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var prop    = (d && d.property)  || {};
+      var leasing = (d && d.leasing)   || {};
+      var health  = (d && d.health)    || {};
+
+      var sbName = document.querySelector('.sb-prop-name');
+      if (sbName && prop.name) sbName.textContent = prop.name;
+
+      var sbSub = document.querySelector('.sb-prop-sub');
+      if (sbSub && prop.market) sbSub.textContent = prop.market + (prop.units ? ' · ' + prop.units + ' units' : '');
+
+      var sbOcc = document.getElementById('sb-occ-val');
+      if (sbOcc && leasing.occupancy != null) sbOcc.textContent = Math.round(leasing.occupancy * 10) / 10 + '%';
+
+      var sbAtr = document.getElementById('sb-atr-val');
+      if (sbAtr && leasing.atr != null) sbAtr.textContent = Math.round(leasing.atr * 10) / 10 + '%';
+
+      var sbTrend = document.getElementById('sb-trend-val');
+      if (sbTrend && leasing.lease_trend_120 != null) sbTrend.textContent = leasing.lease_trend_120;
+
+      var hs = health.overall != null ? Math.round(health.overall) : null;
+      var st = (health.status || '').toUpperCase();
+      var sbRing = document.getElementById('sb-score-ring') || document.getElementById('sb-score-badge');
+      if (sbRing && hs != null) {
+        sbRing.textContent = hs;
+        if (sbRing.parentElement) {
+          sbRing.parentElement.style.background = hs >= 75 ? '#8FA68E' : hs >= 50 ? '#D4910A' : '#C94444';
+        }
+      }
+      var sbLabel = document.getElementById('sb-score-label');
+      if (sbLabel && st) sbLabel.textContent = st.charAt(0) + st.slice(1).toLowerCase();
+    })
+    .catch(function(err){ console.warn('populateSidebar failed:', err); });
+}
 
 // ── Navigation ──
 function nav(id, el) {
