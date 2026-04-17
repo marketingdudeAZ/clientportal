@@ -204,10 +204,15 @@ def create_video_job(
     payload: dict[str, Any] = {
         "link":            link_id,
         "override_script": clean_script,
-        "visual_style":    "OverCardsTemplate",   # Cards overlay hides avatar
+        "visual_style":    "OverCardsTemplate",
         "aspect_ratio":    ar,
         "video_length":    dur,
         "no_caption":      False,
+        # Creatify's auto-generated CTA was extracting site-scraped text like
+        # "Shop Tools" with a red button. link_to_videos doesn't expose CTA
+        # text overrides, so we suppress it entirely — the ad platform (Meta,
+        # YouTube) owns the CTA button for the published ad.
+        "no_cta":          True,
     }
 
     if accent_id:
