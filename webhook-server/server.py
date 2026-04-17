@@ -2188,7 +2188,13 @@ def video_approve():
             "file_size_bytes": 0,
             "description": v.get("rationale", ""),
         }
-        rr = req.post(hubdb_url, headers=hubdb_headers, json={"values": row}, timeout=10)
+        # HubDB SELECT columns need option-object shapes — reuse helper
+        try:
+            from asset_uploader import _coerce_hubdb_values
+            row_payload = _coerce_hubdb_values(row)
+        except Exception:
+            row_payload = row
+        rr = req.post(hubdb_url, headers=hubdb_headers, json={"values": row_payload}, timeout=10)
         if rr.ok:
             hubdb_rows_created += 1
         else:
@@ -2525,25 +2531,36 @@ def property_assets():
 
     _VISUAL_TYPES = {"jpg", "jpeg", "png", "webp", "mp4", "mov"}
     assets = []
+
+    def _flatten(v):
+        """HubDB SELECT columns return {name, id, ...} objects — flatten to name."""
+        if isinstance(v, dict):
+            return v.get("name") or v.get("label") or ""
+        return v or ""
+
     try:
+        # status and category are SELECT columns — use option name for filter
         url = (
             f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_ASSET_TABLE_ID}/rows"
-            f"?property_uuid__eq={company_id}&status__eq=live&limit=100"
+            f"?property_uuid__eq={company_id}&limit=100"
         )
         resp = req.get(url, headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"}, timeout=15)
         if resp.ok:
             for row in resp.json().get("results", []):
                 vals = row.get("values", {})
+                status = _flatten(vals.get("status"))
+                if status and status != "live":
+                    continue
                 file_type = (vals.get("file_type") or "").lower().strip(".")
                 if file_type and file_type not in _VISUAL_TYPES:
                     continue
                 assets.append({
-                    "file_url":    vals.get("file_url", ""),
-                    "asset_name":  vals.get("asset_name", ""),
-                    "category":    vals.get("category", ""),
-                    "subcategory": vals.get("subcategory", ""),
+                    "file_url":    vals.get("file_url", "") or "",
+                    "asset_name":  vals.get("asset_name", "") or "",
+                    "category":    _flatten(vals.get("category")),
+                    "subcategory": vals.get("subcategory", "") or "",
                     "file_type":   file_type,
-                    "description": vals.get("description", ""),
+                    "description": vals.get("description", "") or "",
                 })
     except Exception as exc:
         logger.warning("property-assets fetch error (returning empty): %s", exc)

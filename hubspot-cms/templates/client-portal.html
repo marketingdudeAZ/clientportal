@@ -484,6 +484,11 @@ select.brief-input{height:34px;cursor:pointer}
 .asset-batch-fields input:focus,.asset-batch-fields select:focus{outline:none;border-color:var(--cu)}
 .asset-batch-remove{position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.65);color:#fff;border:none;width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center}
 .asset-batch-remove:hover{background:#991B1B}
+.asset-batch-overlay{position:absolute;top:0;left:0;right:0;height:140px;background:rgba(255,255,255,0.82);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font-size:11px;color:var(--tm);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.asset-batch-overlay.ok{background:rgba(220,252,231,0.9);color:#166534}
+.asset-batch-overlay.err{background:rgba(254,226,226,0.9);color:#991B1B}
+.asset-batch-ring{width:26px;height:26px;border:2.5px solid rgba(200,150,78,0.25);border-top-color:var(--cu);border-radius:50%;animation:rpm-spin 0.9s linear infinite}
+@keyframes rpm-spin{to{transform:rotate(360deg)}}
 .asset-batch-spinner{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.8);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--tm);font-weight:600}
 .asset-batch-status{font-size:10px;color:var(--tm);text-transform:uppercase;letter-spacing:.04em;font-weight:700}
 .asset-batch-status.ok{color:#166534}
@@ -5788,10 +5793,10 @@ function assetRenderBatch() {
   }
   grid.innerHTML = _assetBatch.map(function(e) {
     var overlay = '';
-    if (e.status === 'analyzing') overlay = '<div class="asset-batch-spinner">Analyzing…</div>';
-    if (e.status === 'uploading') overlay = '<div class="asset-batch-spinner">Uploading…</div>';
-    if (e.status === 'done')      overlay = '<div class="asset-batch-spinner" style="background:rgba(220,252,231,0.85);color:#166534">✓ Uploaded</div>';
-    if (e.status === 'failed')    overlay = '<div class="asset-batch-spinner" style="background:rgba(254,226,226,0.85);color:#991B1B">× Failed</div>';
+    if (e.status === 'analyzing') overlay = '<div class="asset-batch-overlay"><div class="asset-batch-ring"></div><div>AI labeling…</div></div>';
+    if (e.status === 'uploading') overlay = '<div class="asset-batch-overlay"><div class="asset-batch-ring"></div><div>Uploading…</div></div>';
+    if (e.status === 'done')      overlay = '<div class="asset-batch-overlay ok"><div>✓ Uploaded</div></div>';
+    if (e.status === 'failed')    overlay = '<div class="asset-batch-overlay err"><div>× Failed</div></div>';
     var isImage = /^image\//i.test(e.file.type);
     var thumb = isImage
       ? '<img src="' + e.previewUrl + '" class="asset-batch-thumb" alt="preview">'

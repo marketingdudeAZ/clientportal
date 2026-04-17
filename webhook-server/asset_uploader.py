@@ -244,17 +244,70 @@ def generate_and_upload_thumbnail(
         return None
 
 
+# HubDB SELECT columns require a full option object, not a plain string:
+#   {"id": "<option_id>", "name": "<option_name>", "type": "option", "order": 0}
+# The table's category/status/source are SELECT — we map string values to their
+# configured option objects before submission.
+#
+# These IDs come from the property_assets HubDB table in the RPM portal
+# (inspected via GET /cms/v3/hubdb/tables/{table_id}).
+_SELECT_OPTIONS: dict[str, dict[str, dict]] = {
+    "category": {
+        "Photography":           {"id": "1", "name": "Photography",           "type": "option", "order": 0},
+        "Video":                 {"id": "2", "name": "Video",                 "type": "option", "order": 1},
+        "Brand & Creative":      {"id": "3", "name": "Brand & Creative",      "type": "option", "order": 2},
+        "Marketing Collateral":  {"id": "4", "name": "Marketing Collateral",  "type": "option", "order": 3},
+    },
+    "status": {
+        "live":     {"id": "1", "name": "live",     "type": "option", "order": 0},
+        "archived": {"id": "2", "name": "archived", "type": "option", "order": 1},
+    },
+    "source": {
+        "video_pipeline":    {"id": "1", "name": "video_pipeline",    "type": "option", "order": 0},
+        "creative_package":  {"id": "2", "name": "creative_package",  "type": "option", "order": 1},
+        "photography":       {"id": "3", "name": "photography",       "type": "option", "order": 2},
+        "graphic_design":    {"id": "4", "name": "graphic_design",    "type": "option", "order": 3},
+        "client_upload":     {"id": "5", "name": "client_upload",     "type": "option", "order": 4},
+        "manual":            {"id": "6", "name": "manual",            "type": "option", "order": 5},
+    },
+}
+
+
+def _coerce_hubdb_values(values: dict) -> dict:
+    """Convert string values for SELECT columns into HubDB option objects,
+    strip empty values that HubDB rejects.
+    """
+    out = {}
+    for k, v in values.items():
+        if k in _SELECT_OPTIONS:
+            if isinstance(v, dict):
+                out[k] = v
+            elif isinstance(v, str) and v:
+                mapped = _SELECT_OPTIONS[k].get(v)
+                if mapped:
+                    out[k] = mapped
+                else:
+                    logger.warning("HubDB: unknown %s option %r — skipping", k, v)
+            # empty/missing SELECT → skip (HubDB rejects empty strings)
+        elif v is None or v == "":
+            # Skip empty strings for all columns to avoid URL validation errors
+            continue
+        else:
+            out[k] = v
+    return out
+
+
 def create_hubdb_row(values: dict):
     """Create a row in the HubDB asset table."""
     url = f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_ASSET_TABLE_ID}/rows"
     resp = requests.post(
         url,
         headers={**HEADERS, "Content-Type": "application/json"},
-        json={"values": values},
+        json={"values": _coerce_hubdb_values(values)},
     )
     if resp.status_code in (200, 201):
         return resp.json().get("id")
-    logger.error("HubDB row creation failed (%d): %s", resp.status_code, resp.text)
+    logger.error("HubDB row creation failed (%d): %s", resp.status_code, resp.text[:500])
     return None
 
 
