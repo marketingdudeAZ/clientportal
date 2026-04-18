@@ -289,6 +289,9 @@ def get_property_metrics():
         "redlight_flag_count",
         # Timestamps
         "red_light_run_date",
+        # Budget channels (drives Performance Forecast simulator)
+        "seo_budget", "paid_search_monthly_spend", "paid_social_monthly_spend",
+        "video_pipeline_tier",
     ]
 
     try:
@@ -321,6 +324,24 @@ def get_property_metrics():
         display_overall = rl_overall if rl_overall is not None else (ls["score"] if ls else None)
         display_status  = rl_status  if rl_status  else (ls["status"] if ls else "Not Scored")
 
+        # Build channel package list for the Performance Forecast simulator.
+        # Each entry: {channel, label, budget}
+        VIDEO_TIER_BUDGETS = {"Starter": 1000, "Standard": 1500, "Premium": 3000}
+        _packages = []
+        _seo = _f("seo_budget", 0) or 0
+        if _seo:
+            _packages.append({"channel": "seo_organic", "label": "SEO", "budget": int(_seo)})
+        _gads = _f("paid_search_monthly_spend", 0) or 0
+        if _gads:
+            _packages.append({"channel": "google_ads", "label": "Google Ads", "budget": int(_gads)})
+        _meta = _f("paid_social_monthly_spend", 0) or 0
+        if _meta:
+            _packages.append({"channel": "meta", "label": "Meta Ads", "budget": int(_meta)})
+        _vtier = props.get("video_pipeline_tier") or ""
+        if _vtier and _vtier in VIDEO_TIER_BUDGETS:
+            _packages.append({"channel": "video_creative", "label": "Video Creative",
+                              "budget": VIDEO_TIER_BUDGETS[_vtier]})
+
         return jsonify({
             "property": {
                 "name": props.get("name", ""),
@@ -330,6 +351,7 @@ def get_property_metrics():
                 "hubspot_company_id": company_id,
                 "occupancy_status": props.get("occupancy_status", ""),
             },
+            "packages": _packages,
             "leasing": {
                 "occupancy": _f("occupancy__"),
                 "atr": _f("atr__"),

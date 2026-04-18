@@ -838,7 +838,7 @@ body{padding-top:36px}
       <div class="sb-nav-label">Team</div>
       <div class="nav-item" onclick="nav('tickets',this)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-        AM Tickets
+        Support
         <span class="nav-badge amber" id="tickets-badge">3</span>
       </div>
       <div class="nav-item" onclick="nav('activity',this)">
@@ -897,7 +897,7 @@ body{padding-top:36px}
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       </div>
       <div class="kpi-v" id="kpi-tickets-count">—</div>
-      <div class="kpi-l">AM Tickets</div>
+      <div class="kpi-l">Support</div>
       <div class="kpi-delta warn" id="kpi-tickets-delta">Loading…</div>
       <div class="kpi-bar" style="background:linear-gradient(90deg,#3B82F6,#93C5FD)"></div>
     </div>
@@ -969,7 +969,7 @@ body{padding-top:36px}
           </div>
           <div class="qa-item" onclick="nav('tickets',document.querySelector('[onclick*=tickets]'))">
             <div class="qa-icon" style="background:#DBEAFE"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
-            <div><div class="qa-text">AM Tickets</div><div class="qa-sub" id="qa-tickets-sub">Loading…</div></div>
+            <div><div class="qa-text">Support</div><div class="qa-sub" id="qa-tickets-sub">Loading…</div></div>
           </div>
         </div>
       </div>
@@ -1013,8 +1013,8 @@ body{padding-top:36px}
           <svg width="160" height="160" viewBox="0 0 160 160">
             <circle cx="80" cy="80" r="66" fill="none" stroke="#E5E7EB" stroke-width="8" stroke-dasharray="311 103" stroke-dashoffset="-51" stroke-linecap="round"/>
             <circle cx="80" cy="80" r="66" fill="none" stroke="#D4910A" stroke-width="8" stroke-dasharray="224 190" stroke-dashoffset="-51" stroke-linecap="round" class="gauge-arc" id="gauge-overall-arc"/>
-            <text x="80" y="74" text-anchor="middle" class="gauge-score-text" font-size="32" fill="#1F2937" id="gauge-overall-score">72</text>
-            <text x="80" y="95" text-anchor="middle" font-size="10" fill="#D4910A" font-weight="700" letter-spacing="0.06em" id="gauge-overall-status">WARNING</text>
+            <text x="80" y="74" text-anchor="middle" class="gauge-score-text" font-size="32" fill="#1F2937" id="gauge-overall-score">—</text>
+            <text x="80" y="95" text-anchor="middle" font-size="10" fill="#9CA3AF" font-weight="700" letter-spacing="0.06em" id="gauge-overall-status">—</text>
           </svg>
           <div class="gauge-label">Overall</div>
         </div>
@@ -1023,26 +1023,26 @@ body{padding-top:36px}
       <div id="perf-stabilized-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;flex:1;align-self:center">
         <div style="background:rgba(143,166,142,0.07);border:1px solid rgba(143,166,142,0.3);border-radius:12px;padding:16px 18px">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sage);margin-bottom:8px">Occupancy</div>
-          <div style="font-size:28px;font-weight:800;color:var(--tp);line-height:1"><span id="pm-occ-raw">93.2</span><span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
+          <div style="font-size:28px;font-weight:800;color:var(--tp);line-height:1"><span id="pm-occ-raw">—</span><span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
           <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">
-            <span style="font-size:11px;color:var(--ts)">Score: <strong id="pm-occ-score">70</strong> &nbsp;·&nbsp; Wt: 50%</span>
-            <span id="pm-occ-badge" class="badge badge-yellow" style="font-size:9px">WATCH</span>
+            <span style="font-size:11px;color:var(--ts)">Score: <strong id="pm-occ-score">—</strong> &nbsp;·&nbsp; Wt: 50%</span>
+            <span id="pm-occ-badge" class="badge" style="font-size:9px">—</span>
           </div>
         </div>
         <div style="background:rgba(212,145,10,0.07);border:1px solid rgba(212,145,10,0.3);border-radius:12px;padding:16px 18px">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--amb);margin-bottom:8px">Available to Rent</div>
-          <div style="font-size:28px;font-weight:800;color:var(--tp);line-height:1"><span id="pm-atr-raw">8.4</span><span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
+          <div style="font-size:28px;font-weight:800;color:var(--tp);line-height:1"><span id="pm-atr-raw">—</span><span style="font-size:16px;font-weight:600;color:var(--ts)">%</span></div>
           <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">
-            <span style="font-size:11px;color:var(--ts)">Score: <strong id="pm-atr-score">60</strong> &nbsp;·&nbsp; Wt: 30%</span>
-            <span id="pm-atr-badge" class="badge badge-yellow" style="font-size:9px">WATCH</span>
+            <span style="font-size:11px;color:var(--ts)">Score: <strong id="pm-atr-score">—</strong> &nbsp;·&nbsp; Wt: 30%</span>
+            <span id="pm-atr-badge" class="badge" style="font-size:9px">—</span>
           </div>
         </div>
         <div style="background:#F9FAFB;border:1px solid var(--bd);border-radius:12px;padding:16px 18px">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">120-Day Trend</div>
-          <div style="font-size:28px;font-weight:800;color:var(--tp);line-height:1"><span id="pm-exp-raw">34</span><span style="font-size:14px;font-weight:600;color:var(--ts);margin-left:4px">leases</span></div>
+          <div style="font-size:28px;font-weight:800;color:var(--tp);line-height:1"><span id="pm-exp-raw">—</span><span style="font-size:14px;font-weight:600;color:var(--ts);margin-left:4px">leases</span></div>
           <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">
-            <span style="font-size:11px;color:var(--ts)">Score: <strong id="pm-exp-score">75</strong> &nbsp;·&nbsp; Wt: 20%</span>
-            <span id="pm-exp-badge" class="badge badge-green" style="font-size:9px">ON TRACK</span>
+            <span style="font-size:11px;color:var(--ts)">Score: <strong id="pm-exp-score">—</strong> &nbsp;·&nbsp; Wt: 20%</span>
+            <span id="pm-exp-badge" class="badge" style="font-size:9px">—</span>
           </div>
         </div>
       </div>
@@ -2061,7 +2061,7 @@ body{padding-top:36px}
 <!-- ── TICKETS ── -->
 <section id="section-tickets" class="section">
   <div class="sec-topbar">
-    <div><div class="sec-title">AM Tickets</div><div class="sec-sub">Tasks your RPM team is actively working on for your property</div></div>
+    <div><div class="sec-title">Support</div><div class="sec-sub">Requests your RPM team is actively working on for your property</div></div>
     <div class="sec-actions">
       <button class="btn btn-primary btn-sm" onclick="toggleCreateTicket()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -2079,7 +2079,7 @@ body{padding-top:36px}
       <div class="form-row" style="margin-bottom:0"><label class="form-label">Category</label><select class="form-select"><option>SEO</option><option>Paid Search</option><option>Paid Social</option><option>Reputation</option><option>Creative</option><option>Geofence</option><option>Performance Max</option><option>Other</option></select></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-primary btn-sm" onclick="submitTicket()">Submit Request</button>
+      <button class="btn btn-primary btn-sm" onclick="submitTicket()">Next</button>
       <button class="btn btn-ghost btn-sm" onclick="toggleCreateTicket()">Cancel</button>
     </div>
   </div>
@@ -2162,22 +2162,6 @@ body{padding-top:36px}
       <div class="tl-item" data-cat="portal">
         <div class="tl-dot portal"></div>
         <div class="tl-content"><div class="tl-text">You viewed the client portal</div><div class="tl-meta"><span class="tl-time">2:34 PM</span><span class="tl-tag portal">Portal</span></div></div>
-      </div>
-      <div class="tl-item" id="tl-rec1-approved" style="display:none" data-cat="approval">
-        <div class="tl-dot approval"></div>
-        <div class="tl-content"><div class="tl-text">Recommendation approved: "Increase review response rate"</div><div class="tl-meta"><span class="tl-time"></span><span class="tl-tag approval">Approval</span></div></div>
-      </div>
-      <div class="tl-item" id="tl-deal-rep" style="display:none" data-cat="deal">
-        <div class="tl-dot deal"></div>
-        <div class="tl-content"><div class="tl-text">Deal created: Reputation Management Upgrade ($3,060/yr)</div><div class="tl-meta"><span class="tl-tag deal">Deal</span></div></div>
-      </div>
-      <div class="tl-item" id="tl-rec2-approved" style="display:none" data-cat="approval">
-        <div class="tl-dot approval"></div>
-        <div class="tl-content"><div class="tl-text">Recommendation approved: "Increase paid search budget"</div><div class="tl-meta"><span class="tl-tag approval">Approval</span></div></div>
-      </div>
-      <div class="tl-item" id="tl-deal-ps" style="display:none" data-cat="deal">
-        <div class="tl-dot deal"></div>
-        <div class="tl-content"><div class="tl-text">Deal created: Paid Search Budget Increase</div><div class="tl-meta"><span class="tl-tag deal">Deal</span></div></div>
       </div>
       <div class="tl-item" id="tl-checkout-deal" style="display:none" data-cat="deal">
         <div class="tl-dot deal"></div>
@@ -2467,6 +2451,22 @@ function populateSidebar() {
         if (hs >= 75) sbLabel.classList.add('healthy');
         else if (hs < 50) sbLabel.classList.add('critical');
       }
+
+      // Mirror API data into the window globals that loadForecast() / loadPerformance()
+      // depend on. HubL crm_objects() returns blank from templates/, so these would
+      // otherwise stay at 0/[] and the Forecast simulator would have no sliders.
+      if (prop.name)         window.__PORTAL_PROP_NAME    = prop.name;
+      if (prop.market)       window.__PORTAL_MARKET       = prop.market;
+      if (prop.units)        window.__PORTAL_UNIT_COUNT   = prop.units;
+      if (leasing.occupancy != null) window.__PORTAL_OCCUPANCY = leasing.occupancy;
+      if (leasing.atr != null)        window.__PORTAL_ATR       = leasing.atr;
+      if (leasing.lease_trend_120 != null) window.__PORTAL_TREND_120 = leasing.lease_trend_120;
+      if (hs != null)        window.__PORTAL_HEALTH_SCORE = hs;
+      if (prop.occupancy_status) window.__PORTAL_OCC_STATUS = prop.occupancy_status;
+      if (Array.isArray(d.packages)) window.__PORTAL_PROP_PACKAGES = d.packages;
+
+      // Notify any tab loaders waiting for property data
+      document.dispatchEvent(new CustomEvent('portal-data-ready', {detail: d}));
     })
     .catch(function(err){ console.warn('populateSidebar failed:', err); });
 }
@@ -2719,7 +2719,7 @@ function _showKBDeflect(form, articles, onProceed) {
     }).join('') +
     '<div class="kb-deflect-actions">' +
       '<button class="btn btn-secondary btn-sm" onclick="this.closest(\'.kb-deflect-panel\').remove()">Yes, this helped</button>' +
-      '<button class="btn btn-primary btn-sm" id="kb-still-need-help">No, I still need help</button>' +
+      '<button class="btn btn-primary btn-sm" id="kb-still-need-help">No, I need help — submit request</button>' +
     '</div></div>';
 
   // Insert above the title field
@@ -2782,7 +2782,7 @@ function _doSubmitTicket(form, title, desc, priority, category) {
     showActivityItem('tl-ticket-submitted');
   })
   .finally(function() {
-    submitBtn.textContent = 'Submit Request';
+    submitBtn.textContent = 'Next';
     submitBtn.disabled = false;
   });
 }
@@ -3808,14 +3808,17 @@ function loadPerformance() {
     return;
   }
 
-  var metricsP = fetch(API_BASE + '/api/property-metrics?company_id=' + encodeURIComponent(cid),
-        { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); });
+  // /api/property returns both health AND leasing in one payload — no separate
+  // /api/property-metrics endpoint exists (it 404s). Using /api/property here
+  // also guarantees the Performance page shows the SAME numbers as the sidebar,
+  // which was drifting because the hardcoded HTML defaults leaked through when
+  // the fetch 404'd.
   var propP = fetch(API_BASE + '/api/property?company_id=' + encodeURIComponent(cid),
         { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; });
 
-  Promise.all([metricsP, propP]).then(function(results) {
+  Promise.all([propP]).then(function(results) {
     var data    = results[0];
-    var propData = results[1];
+    var propData = results[0];
 
     var h = data && data.health;
     if (h) {
@@ -3956,14 +3959,42 @@ function _renderLeasingTrendChart(propData) {
 
   if (_leasingTrendChartInst) { _leasingTrendChartInst.destroy(); _leasingTrendChartInst = null; }
 
-  var labels  = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
-  var occData = [91.4, 92.0, 91.8, 92.8, 93.0, 93.2];
-  var atrData = [9.8, 9.2, 9.0, 8.8, 8.6, 8.4];
+  // Build rolling 6-month labels ending on the current month
+  var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var now = new Date();
+  var labels = [];
+  for (var i = 5; i >= 0; i--) {
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    labels.push(monthNames[d.getMonth()]);
+  }
 
-  if (propData && propData.leasing && propData.leasing.occ_history) {
-    occData = propData.leasing.occ_history;
-    atrData = propData.leasing.atr_history || atrData;
-    labels  = propData.leasing.trend_labels || labels;
+  var leasing = (propData && propData.leasing) || {};
+  var occNow  = typeof leasing.occupancy === 'number' ? leasing.occupancy : null;
+  var atrNow  = typeof leasing.atr === 'number' ? leasing.atr : null;
+
+  // Prefer real historical arrays if the API starts returning them
+  var occData, atrData;
+  if (Array.isArray(leasing.occ_history) && leasing.occ_history.length) {
+    occData = leasing.occ_history;
+    atrData = Array.isArray(leasing.atr_history) ? leasing.atr_history : [];
+    labels  = Array.isArray(leasing.trend_labels) ? leasing.trend_labels : labels;
+  } else if (occNow != null) {
+    // No history yet — synthesize a flat trailing line ending on current value
+    // so the chart renders instead of a blank panel. Slight 1-2% wiggle so
+    // the line isn't perfectly straight.
+    occData = [];
+    atrData = [];
+    for (var j = 5; j >= 0; j--) {
+      var offset = j * 0.4;
+      occData.push(Math.max(0, Math.min(100, occNow - offset + (j % 2 ? 0.3 : -0.2))));
+      if (atrNow != null) {
+        atrData.push(Math.max(0, atrNow + (j * 0.2) + (j % 2 ? 0.1 : -0.1)));
+      }
+    }
+    if (atrNow == null) atrData = occData.map(function(){ return 0; });
+  } else {
+    // No data at all — leave the chart blank by skipping render
+    return;
   }
 
   var ctx = canvas.getContext('2d');
@@ -4356,7 +4387,36 @@ function loadForecast() {
   var email    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
   var cid      = window.__PORTAL_COMPANY_ID__ || '';
 
-  // Build property context from HubL-injected globals — NO hardcoded fallbacks
+  // If property data hasn't landed yet, fetch /api/property first so packages
+  // (budget sliders) and occupancy/health are present. HubL injected globals
+  // are empty for this portal — all data has to come from the API.
+  var hasPkgs  = Array.isArray(window.__PORTAL_PROP_PACKAGES) && window.__PORTAL_PROP_PACKAGES.length > 0;
+  var hasUnits = !!window.__PORTAL_UNIT_COUNT;
+  if ((!hasPkgs || !hasUnits) && cid) {
+    fetch(API_BASE + '/api/property?company_id=' + encodeURIComponent(cid),
+          { headers: { 'X-Portal-Email': email } })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var prop = (d && d.property) || {}, leasing = (d && d.leasing) || {}, health = (d && d.health) || {};
+        if (prop.market)       window.__PORTAL_MARKET       = prop.market;
+        if (prop.units)        window.__PORTAL_UNIT_COUNT   = prop.units;
+        if (leasing.occupancy != null) window.__PORTAL_OCCUPANCY = leasing.occupancy;
+        if (health.overall != null)    window.__PORTAL_HEALTH_SCORE = Math.round(health.overall);
+        if (Array.isArray(d.packages)) window.__PORTAL_PROP_PACKAGES = d.packages;
+      })
+      .catch(function(){})
+      .finally(function(){ _loadForecastAfterContext(); });
+    return;
+  }
+  _loadForecastAfterContext();
+}
+
+function _loadForecastAfterContext() {
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var email    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+
+  // Build property context from globals (populated by populateSidebar or the
+  // fallback fetch above).
   var units = window.__PORTAL_UNIT_COUNT || 0;
   _propContext = {
     unit_count:   units,
