@@ -182,6 +182,162 @@ def write_report_insights(property_uuid, ninjacat_system_id, report_month,
         logger.info("Wrote %d report_insights for %s %s", len(rows), property_uuid, report_month)
 
 
+# ── NinjaCat Metrics ───────────────────────────────────────────────────────
+# Schema (see BIGQUERY_SETUP.md for the CREATE TABLE DDL):
+#   date DATE, property_uuid STRING, ninjacat_system_id STRING,
+#   property_name STRING, market STRING, unit_count INT64,
+#   channel STRING, spend FLOAT64, impressions INT64, clicks INT64,
+#   leads INT64, conversions INT64, ingested_at TIMESTAMP
+# Partitioned by date, clustered on (property_uuid, channel).
+#
+# Channel values are normalized on ingest to the portal's vocabulary:
+#   google_ads | meta | seo_organic | video_creative | other
+
+
+def is_bigquery_configured():
+    """Return True if BQ env vars look set up. Used for graceful fallback."""
+    if not BIGQUERY_PROJECT_ID:
+        return False
+    sa = BIGQUERY_SERVICE_ACCOUNT_JSON
+    if not sa or sa == "path/to/service_account.json":
+        return False
+    if not os.path.exists(sa):
+        return False
+    return True
+
+
+def get_ninjacat_current_perf(property_uuid):
+    """Return current-month perf for one property from ninjacat_metrics.
+
+    Aggregates the most recent complete month of daily rows, grouped by channel.
+    Returns dict shaped for the portal's `current_perf` contract:
+
+        {
+            "leads":    <int total>,
+            "cpl":      <float, blended>,
+            "spend":    <float total>,
+            "month":    "YYYY-MM",
+            "channels": {"google_ads": {"spend", "leads", "cpl"}, ...}
+        }
+
+    Returns None if no data or BQ not configured.
+    """
+    from google.cloud import bigquery
+    dataset = _dataset()
+    sql = f"""
+        SELECT
+            FORMAT_DATE('%Y-%m', date) AS report_month,
+            channel,
+            SUM(spend)      AS spend,
+            SUM(leads)      AS leads
+        FROM `{BIGQUERY_PROJECT_ID}.{dataset}.ninjacat_metrics`
+        WHERE property_uuid = @uuid
+          AND date >= DATE_TRUNC(DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH), MONTH)
+          AND date <  DATE_TRUNC(CURRENT_DATE(), MONTH)
+        GROUP BY report_month, channel
+    """
+    params = [bigquery.ScalarQueryParameter("uuid", "STRING", property_uuid)]
+    rows = query(sql, params)
+    if not rows:
+        return None
+
+    month = rows[0]["report_month"]
+    total_spend = sum((r.get("spend") or 0) for r in rows)
+    total_leads = sum((r.get("leads") or 0) for r in rows)
+    blended_cpl = round(total_spend / total_leads, 2) if total_leads > 0 else None
+    channels = {}
+    for r in rows:
+        ch = r.get("channel") or "other"
+        s = r.get("spend") or 0
+        l = r.get("leads") or 0
+        channels[ch] = {
+            "spend": round(s, 2),
+            "leads": int(l),
+            "cpl":   round(s / l, 2) if l > 0 else None,
+        }
+    return {
+        "leads":    int(total_leads),
+        "cpl":      blended_cpl,
+        "spend":    round(total_spend, 2),
+        "month":    month,
+        "channels": channels,
+    }
+
+
+def get_ninjacat_benchmarks(market, size_band):
+    """Return channel × month benchmark rows for a market + size_band segment.
+
+    Uses the last 12 months of data. Rolls up daily rows to monthly per-property
+    aggregates, then computes quartiles across properties. Returns list of dicts
+    shaped identically to the seeded /api/benchmarks response:
+
+        [{channel, month, market, size_band, median_cpl,
+          median_leads_per_1k_spend, p25_cpl, p75_cpl, sample_size,
+          data_source: "bigquery"}]
+
+    Returns empty list if no data. Caller decides whether to fall back to seeded.
+    """
+    from google.cloud import bigquery
+    dataset = _dataset()
+    # Map size_band -> unit range. Matches the portal's frontend convention
+    # (see loadForecast: units < 200 -> small, <= 400 -> mid, else large).
+    if size_band == "small":
+        size_filter = "unit_count < 200"
+    elif size_band == "large":
+        size_filter = "unit_count > 400"
+    else:
+        size_filter = "unit_count >= 200 AND unit_count <= 400"
+
+    sql = f"""
+        WITH monthly_per_prop AS (
+            SELECT
+                property_uuid,
+                channel,
+                EXTRACT(MONTH FROM date) AS month,
+                SUM(spend) AS spend,
+                SUM(leads) AS leads
+            FROM `{BIGQUERY_PROJECT_ID}.{dataset}.ninjacat_metrics`
+            WHERE market = @market
+              AND {size_filter}
+              AND date >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH)
+            GROUP BY property_uuid, channel, month
+            HAVING spend > 0 AND leads > 0
+        )
+        SELECT
+            channel,
+            month,
+            APPROX_QUANTILES(SAFE_DIVIDE(spend, leads), 4) AS cpl_q,
+            APPROX_QUANTILES(SAFE_DIVIDE(leads * 1000.0, spend), 4) AS lpk_q,
+            COUNT(DISTINCT property_uuid) AS sample_size
+        FROM monthly_per_prop
+        GROUP BY channel, month
+        HAVING sample_size >= 3
+    """
+    params = [bigquery.ScalarQueryParameter("market", "STRING", market or "")]
+    rows = query(sql, params)
+
+    out = []
+    for r in rows:
+        cpl_q = r.get("cpl_q") or []
+        lpk_q = r.get("lpk_q") or []
+        # APPROX_QUANTILES with 4 returns 5 values: [min, q25, q50, q75, max]
+        if len(cpl_q) < 5:
+            continue
+        out.append({
+            "channel":    r.get("channel"),
+            "month":      int(r.get("month")),
+            "market":     market or "portfolio",
+            "size_band":  size_band,
+            "median_cpl": round(float(cpl_q[2]), 2),
+            "p25_cpl":    round(float(cpl_q[1]), 2),
+            "p75_cpl":    round(float(cpl_q[3]), 2),
+            "median_leads_per_1k_spend": round(float(lpk_q[2]), 3),
+            "sample_size": int(r.get("sample_size") or 0),
+            "data_source": "bigquery",
+        })
+    return out
+
+
 def get_top_insights(property_uuid, report_month=None, limit=5):
     """Fetch top insights for a property for digest generation.
 

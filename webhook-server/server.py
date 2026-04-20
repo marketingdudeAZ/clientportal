@@ -342,6 +342,19 @@ def get_property_metrics():
             _packages.append({"channel": "video_creative", "label": "Video Creative",
                               "budget": VIDEO_TIER_BUDGETS[_vtier]})
 
+        # Current performance from NinjaCat → BigQuery pipeline. Returns None
+        # if BQ isn't configured (env vars missing) or the property has no data
+        # yet — frontend renders "—" in both cases.
+        current_perf = None
+        try:
+            from bigquery_client import is_bigquery_configured, get_ninjacat_current_perf
+            if is_bigquery_configured():
+                uuid = props.get("uuid", "")
+                if uuid:
+                    current_perf = get_ninjacat_current_perf(uuid)
+        except Exception as _e:
+            logger.warning("current_perf lookup failed for %s: %s", company_id, _e)
+
         return jsonify({
             "property": {
                 "name": props.get("name", ""),
@@ -352,9 +365,7 @@ def get_property_metrics():
                 "occupancy_status": props.get("occupancy_status", ""),
             },
             "packages": _packages,
-            # Current performance placeholder — populate once NinjaCat metrics pipeline
-            # lands or spend_tracker gains lead columns. Frontend shows "—" when null.
-            "current_perf": None,
+            "current_perf": current_perf,
             "leasing": {
                 "occupancy": _f("occupancy__"),
                 "atr": _f("atr__"),
@@ -1755,7 +1766,18 @@ def get_benchmarks():
     market   = request.args.get("market", "").strip()
     size_band = request.args.get("size_band", "mid").strip()
 
-    # ── Seeded benchmark data (replace BigQuery query here later) ──────────
+    # ── Try BigQuery first (real NinjaCat data) ─────────────────────────────
+    # Falls back to seeded if BQ isn't configured or has <3 comps per segment.
+    bq_benchmarks = []
+    try:
+        from bigquery_client import is_bigquery_configured, get_ninjacat_benchmarks
+        if is_bigquery_configured() and market:
+            bq_benchmarks = get_ninjacat_benchmarks(market, size_band) or []
+    except Exception as _e:
+        logger.warning("BQ benchmarks lookup failed: %s", _e)
+        bq_benchmarks = []
+
+    # ── Seeded benchmark data (fallback when BQ absent or thin) ─────────────
     # Seasonal indices by month — apartment leasing patterns
     SEASONAL = {1:0.80, 2:0.82, 3:1.15, 4:1.25, 5:1.30, 6:1.28,
                 7:1.20, 8:1.10, 9:0.95, 10:0.90, 11:0.78, 12:0.75}
@@ -1831,12 +1853,27 @@ def get_benchmarks():
         "Premium":  {"leads_per_1k": 7.0, "median_cpl": 145},
     }
 
+    # Merge BQ results with seeded fallback:
+    # - For each (channel, month) segment we have from BQ, use it (data_source=bigquery).
+    # - Fill the gaps with seeded rows so the frontend always sees 12 months × 4 channels.
+    if bq_benchmarks:
+        have = {(b["channel"], b["month"]) for b in bq_benchmarks}
+        merged = list(bq_benchmarks)
+        for row in benchmarks:
+            if (row["channel"], row["month"]) not in have:
+                merged.append(row)
+        final_rows   = merged
+        final_source = "bigquery" if len(bq_benchmarks) >= len(benchmarks) else "mixed"
+    else:
+        final_rows   = benchmarks
+        final_source = "seeded"
+
     return jsonify({
-        "benchmarks":      benchmarks,
+        "benchmarks":      final_rows,
         "occupancy_curves": occ_curves,
         "video_defaults":  video_defaults,
         "segment":         {"market": market, "size_band": size_band},
-        "data_source":     "seeded",  # changes to 'bigquery' once connected
+        "data_source":     final_source,  # 'bigquery' | 'mixed' | 'seeded'
     })
 
 
