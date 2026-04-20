@@ -868,7 +868,7 @@ body{padding-top:36px}
         Activity Log
       </button>
       <button class="btn btn-primary btn-sm" id="btn-pending-recs" onclick="nav('recommendations',document.querySelector('[onclick*=recommendations]'))">
-        2 Pending Recs
+        <span id="pending-recs-count">—</span> Pending Recs
       </button>
     </div>
   </div>
@@ -1091,35 +1091,8 @@ body{padding-top:36px}
     </div>
   </div>
 
-  <div class="two-col">
-    <div class="card card-p">
-      <div style="font-size:14px;font-weight:700;color:var(--jd);margin-bottom:16px">Marketing Performance Dashboard</div>
-      <div style="background:var(--bg);border-radius:10px;padding:28px;text-align:center;border:1px dashed var(--bd)">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="1.5" style="margin:0 auto 12px;display:block"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-        <div style="font-size:13px;font-weight:600;color:var(--ts);margin-bottom:12px">NinjaCat Marketing Dashboard</div>
-        <div style="font-size:12px;color:var(--tm);margin-bottom:16px">Live analytics: impressions, clicks, leads, cost per lead across all channels</div>
-        <a href="#" class="btn btn-primary btn-sm">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          Open Live Dashboard
-        </a>
-      </div>
-    </div>
-    <div class="card card-p">
-      <div style="font-size:14px;font-weight:700;color:var(--jd);margin-bottom:16px">SEO Deliverables</div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <a href="#" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--bd);border-radius:9px;text-decoration:none;color:var(--tp);transition:all .15s" onmouseover="this.style.borderColor='var(--cu)'" onmouseout="this.style.borderColor='var(--bd)'">
-          <div style="width:36px;height:36px;border-radius:8px;background:var(--cug);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C8964E" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-          <div><div style="font-size:13px;font-weight:700">Local Pin Report</div><div style="font-size:11px;color:var(--tm);margin-top:2px">Google Maps ranking analysis · March 2026</div></div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" style="margin-left:auto"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-        </a>
-        <a href="#" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--bd);border-radius:9px;text-decoration:none;color:var(--tp);transition:all .15s" onmouseover="this.style.borderColor='var(--cu)'" onmouseout="this.style.borderColor='var(--bd)'">
-          <div style="width:36px;height:36px;border-radius:8px;background:var(--ml);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#53606C" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-          <div><div style="font-size:13px;font-weight:700">Competitor Gap Analysis</div><div style="font-size:11px;color:var(--tm);margin-top:2px">Market positioning report · March 2026</div></div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" style="margin-left:auto"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-        </a>
-      </div>
-    </div>
-  </div>
+  <!-- NinjaCat + SEO Deliverables cards hidden until real integrations land.
+       Previous static cards linked to href="#" with hardcoded "March 2026" report names. -->
 </section>
 
 <!-- ── SERVICES ── -->
@@ -1157,12 +1130,24 @@ body{padding-top:36px}
     </table>
   </div>
 
-  <!-- Configurator -->
-  <div class="card card-p">
+  <!-- Configurator — empty state until /api/budget-tiers is wired to HUBDB_BUDGET_TIERS_TABLE_ID.
+       The previous static tier cards / prices / "320 unit" included-services table were demo-only and
+       have been removed to avoid showing fake pricing to clients. -->
+  <div class="card card-p" id="budget-configurator-empty">
     <div style="font-size:16px;font-weight:700;color:var(--jd);margin-bottom:4px">Budget Configurator</div>
-    <div style="font-size:12px;color:var(--tm);margin-bottom:24px">Select your preferred tiers · changes submitted for AM review</div>
+    <div style="font-size:12px;color:var(--tm);margin-bottom:24px">Preview and request changes to your marketing program</div>
+    <div style="padding:32px 20px;background:var(--bg);border-radius:8px;text-align:center">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="1.5" style="margin-bottom:10px"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
+      <div style="font-size:13px;color:var(--ts);font-weight:600;margin-bottom:4px">Configurator coming online soon</div>
+      <div style="font-size:12px;color:var(--tm);max-width:460px;margin:0 auto">
+        Your active services and ad spend are shown above from your current HubSpot deal. To change tiers or request a budget adjustment, talk to your Account Manager.
+      </div>
+    </div>
+  </div>
 
-    <!-- SEO -->
+  <!-- Legacy static configurator removed 2026-04 (was ~180 lines of hardcoded tiers + demo pricing).
+       When /api/budget-tiers lands, restore a dynamic version keyed on HUBDB_BUDGET_TIERS_TABLE_ID. -->
+  <div style="display:none" id="budget-configurator-legacy">
     <div class="channel-row" id="channel-seo">
       <div class="channel-hdr">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#53606C" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -1319,27 +1304,7 @@ body{padding-top:36px}
       ✓ Your selections have been submitted. Your AM has been notified and a deal has been created.
     </div>
 
-    <!-- Included Services (collapsible) -->
-    <div class="config-divider"><div class="config-divider-line"></div><div class="config-divider-text">Included Services</div><div class="config-divider-line"></div></div>
-    <div class="included-toggle" onclick="toggleIncluded(this)">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-      <span style="font-size:13px;font-weight:600;color:var(--ts)">View included marketing services (base program)</span>
-    </div>
-    <div class="included-content" id="included-content">
-      <table class="services-table" style="margin-top:0">
-        <thead><tr><th>Service</th><th>Basis</th><th class="text-right">Monthly</th></tr></thead>
-        <tbody>
-          <tr><td style="color:var(--ts)">CRM Lead Management</td><td style="color:var(--tm);font-size:12px">$1.50/unit × 320</td><td style="text-align:right;color:var(--ts)">$480.00</td></tr>
-          <tr><td style="color:var(--ts)">Customer Experience</td><td style="color:var(--tm);font-size:12px">$0.55/unit × 320</td><td style="text-align:right;color:var(--ts)">$176.00</td></tr>
-          <tr><td style="color:var(--ts)">Website Hosting</td><td style="color:var(--tm);font-size:12px">Semi-Custom</td><td style="text-align:right;color:var(--ts)">$205.00</td></tr>
-          <tr><td style="color:var(--ts)">SOCi</td><td style="color:var(--tm);font-size:12px">Flat</td><td style="text-align:right;color:var(--ts)">$60.00</td></tr>
-          <tr><td style="color:var(--ts)">Marketing Self-Service</td><td style="color:var(--tm);font-size:12px">Flat</td><td style="text-align:right;color:var(--ts)">$65.00</td></tr>
-          <tr><td style="color:var(--ts)">Training</td><td style="color:var(--tm);font-size:12px">300–499 units</td><td style="text-align:right;color:var(--ts)">$200.00</td></tr>
-        </tbody>
-        <tfoot><tr style="background:var(--bg)"><td style="padding:12px 16px;font-weight:700;font-size:13px">Total Included</td><td></td><td style="padding:12px 16px;text-align:right;font-weight:800;color:var(--cu)">$1,186.00/mo</td></tr></tfoot>
-      </table>
-    </div>
-  </div>
+  </div><!-- end #budget-configurator-legacy (hidden) -->
 </section>
 
 <!-- ── CALL PREP ── -->
@@ -1349,12 +1314,7 @@ body{padding-top:36px}
       <div class="sec-title">Call Prep</div>
       <div class="sec-sub">Everything your AM needs for your next client call · updated after each Red Light run</div>
     </div>
-    <div class="sec-actions">
-      <button class="btn btn-secondary btn-sm" onclick="window.print ? alert('Print/export coming soon') : null">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        Export for Call
-      </button>
-    </div>
+    <!-- Export for Call button hidden until a real PDF/print endpoint exists. -->
   </div>
 
   <!-- What Changed / Working / Handling -->
@@ -1760,11 +1720,11 @@ body{padding-top:36px}
           Edit
         </button>
       </div>
-      <div class="brief-row"><div class="brief-key">Voice &amp; Tone</div><div class="brief-val" id="b-voice" data-field="voice_and_tone" data-edittype="input">Luxurious</div></div>
-      <div class="brief-row"><div class="brief-key">PMS</div><div class="brief-val" id="b-pms" data-field="pms" data-edittype="input">Yardi</div></div>
-      <div class="brief-row"><div class="brief-key">Website CMS</div><div class="brief-val" id="b-cms" data-field="website_cms" data-edittype="input">Jonah</div></div>
-      <div class="brief-row"><div class="brief-key">Bot on Site</div><div class="brief-val" id="b-bot" data-field="bot_on_website" data-edittype="input">Knock Bot</div></div>
-      <div class="brief-row" style="border-bottom:none"><div class="brief-key">Budget Finalized</div><div class="brief-val" id="b-budget-fin" data-field="budget_finalized" data-edittype="boolean"><span style="color:var(--sage);font-weight:700">Yes</span></div></div>
+      <div class="brief-row"><div class="brief-key">Voice &amp; Tone</div><div class="brief-val" id="b-voice" data-field="voice_and_tone" data-edittype="input">—</div></div>
+      <div class="brief-row"><div class="brief-key">PMS</div><div class="brief-val" id="b-pms" data-field="pms" data-edittype="input">—</div></div>
+      <div class="brief-row"><div class="brief-key">Website CMS</div><div class="brief-val" id="b-cms" data-field="website_cms" data-edittype="input">—</div></div>
+      <div class="brief-row"><div class="brief-key">Bot on Site</div><div class="brief-val" id="b-bot" data-field="bot_on_website" data-edittype="input">—</div></div>
+      <div class="brief-row" style="border-bottom:none"><div class="brief-key">Budget Finalized</div><div class="brief-val" id="b-budget-fin" data-field="budget_finalized" data-edittype="boolean"><span style="color:var(--tm);font-weight:600">—</span></div></div>
       <div class="brief-save-row">
         <button class="btn btn-secondary btn-sm" onclick="cancelBriefEdit(this.closest('.brief-card'))">Cancel</button>
         <button class="btn btn-primary btn-sm brief-save-btn" onclick="saveBriefCard(this.closest('.brief-card'))">Save Changes</button>
@@ -1884,23 +1844,23 @@ body{padding-top:36px}
       </div>
       <div class="brief-tracking-grid">
         <div class="brief-tracking-card">
-          <div class="brief-tracking-num" id="b-track-search" data-field="tracking_search" data-edittype="input">1234567899</div>
+          <div class="brief-tracking-num" id="b-track-search" data-field="tracking_search" data-edittype="input">—</div>
           <div class="brief-tracking-lbl">Search</div>
         </div>
         <div class="brief-tracking-card">
-          <div class="brief-tracking-num" id="b-track-social" data-field="tracking_social" data-edittype="input">2345678910</div>
+          <div class="brief-tracking-num" id="b-track-social" data-field="tracking_social" data-edittype="input">—</div>
           <div class="brief-tracking-lbl">Social Ads</div>
         </div>
         <div class="brief-tracking-card">
-          <div class="brief-tracking-num" id="b-track-fb" data-field="tracking_facebook" data-edittype="input">6789123456</div>
+          <div class="brief-tracking-num" id="b-track-fb" data-field="tracking_facebook" data-edittype="input">—</div>
           <div class="brief-tracking-lbl">Facebook</div>
         </div>
         <div class="brief-tracking-card">
-          <div class="brief-tracking-num" id="b-track-display" data-field="tracking_display" data-edittype="input">3456789101</div>
+          <div class="brief-tracking-num" id="b-track-display" data-field="tracking_display" data-edittype="input">—</div>
           <div class="brief-tracking-lbl">Display Ads</div>
         </div>
         <div class="brief-tracking-card">
-          <div class="brief-tracking-num" id="b-track-apple" data-field="tracking_apple" data-edittype="input">5678912310</div>
+          <div class="brief-tracking-num" id="b-track-apple" data-field="tracking_apple" data-edittype="input">—</div>
           <div class="brief-tracking-lbl">Apple</div>
         </div>
       </div>
@@ -1933,12 +1893,18 @@ body{padding-top:36px}
     <div class="budget-deal-badge">Latest Deal · Closed Won</div>
     <div style="flex:1">
       <div class="budget-deal-name" id="budget-deal-name"></div>
-      <div class="budget-deal-meta">Deal closed <span id="budget-deal-date"></span> · <span id="budget-deal-count"></span> · assigned to Logan McOien</div>
+      <div class="budget-deal-meta">Deal closed <span id="budget-deal-date"></span> · <span id="budget-deal-count"></span><span id="budget-deal-owner"></span></div>
     </div>
     <div class="budget-deal-total">
-      <div class="budget-deal-amount" id="budget-deal-total">$8,080</div>
+      <div class="budget-deal-amount" id="budget-deal-total">—</div>
       <div class="budget-deal-sub">per month</div>
     </div>
+  </div>
+
+  <!-- Empty/error state — shown when no deal or loadBudget fails -->
+  <div id="budget-empty-state" style="display:none;padding:28px 20px;background:var(--bg);border-radius:9px;text-align:center;margin-bottom:20px">
+    <div style="font-size:13px;color:var(--ts);font-weight:600;margin-bottom:4px">No active deal on file</div>
+    <div style="font-size:12px;color:var(--tm)">Your closed-won deal and line items will appear here once HubSpot is synced.</div>
   </div>
 
   <!-- SKU table -->
@@ -1959,43 +1925,7 @@ body{padding-top:36px}
         </tr>
       </thead>
       <tbody id="sku-tbody">
-        <!-- Active -->
-        <tr>
-          <td><span class="sku-code">SEO_Package</span></td>
-          <td><div class="sku-name">SEO Package</div></td>
-          <td><span class="sku-type-mgmt">Mgmt Fee</span></td>
-          <td><span class="sku-amount">$1,300</span></td>
-        </tr>
-        <tr>
-          <td><span class="sku-code">Paid_Search_Ads</span></td>
-          <td><div class="sku-name">Paid Search Ads</div><div style="font-size:11px;color:var(--tm)">Includes management fee</div></td>
-          <td><span class="sku-type-spend">Ad Spend</span></td>
-          <td><span class="sku-amount spend">$3,500</span></td>
-        </tr>
-        <tr>
-          <td><span class="sku-code">Google_Ads_Performance_Max</span></td>
-          <td><div class="sku-name">Google Ads Performance Max</div><div style="font-size:11px;color:var(--tm)">Includes management fee</div></td>
-          <td><span class="sku-type-spend">Ad Spend</span></td>
-          <td><span class="sku-amount spend">$1,500</span></td>
-        </tr>
-        <tr>
-          <td><span class="sku-code">Paid_Social_Ads</span></td>
-          <td><div class="sku-name">Paid Meta Ads</div><div style="font-size:11px;color:var(--tm)">Includes management fee</div></td>
-          <td><span class="sku-type-spend">Ad Spend</span></td>
-          <td><span class="sku-amount spend">$650</span></td>
-        </tr>
-        <tr>
-          <td><span class="sku-code">Management_Fee</span></td>
-          <td><div class="sku-name">Management Fee</div></td>
-          <td><span class="sku-type-mgmt">Mgmt Fee</span></td>
-          <td><span class="sku-amount">$1,130</span></td>
-        </tr>
-        <!-- Inactive (hidden by default) -->
-        <tr class="sku-inactive" style="display:none"><td><span class="sku-code">Eblast</span></td><td><div class="sku-name">Eblast</div></td><td><span class="sku-type-mgmt">Add-On</span></td><td><span class="sku-amount">$0</span></td></tr>
-        <tr class="sku-inactive" style="display:none"><td><span class="sku-code">Paid_TikTok_Ads</span></td><td><div class="sku-name">Paid TikTok Ads</div></td><td><span class="sku-type-spend">Ad Spend</span></td><td><span class="sku-amount">$0</span></td></tr>
-        <tr class="sku-inactive" style="display:none"><td><span class="sku-code">Geofence</span></td><td><div class="sku-name">Geofence</div></td><td><span class="sku-type-spend">Ad Spend</span></td><td><span class="sku-amount">$0</span></td></tr>
-        <tr class="sku-inactive" style="display:none"><td><span class="sku-code">Google_Display_Ads</span></td><td><div class="sku-name">Google Display Ads</div></td><td><span class="sku-type-spend">Ad Spend</span></td><td><span class="sku-amount">$0</span></td></tr>
-        <tr class="sku-inactive" style="display:none"><td><span class="sku-code">YouTube_Reach_Campaign</span></td><td><div class="sku-name">YouTube Reach Campaign</div></td><td><span class="sku-type-spend">Ad Spend</span></td><td><span class="sku-amount">$0</span></td></tr>
+        <tr id="sku-loading-row"><td colspan="4" style="padding:20px;text-align:center;color:var(--tm);font-size:12px;font-style:italic">Loading line items…</td></tr>
       </tbody>
     </table>
   </div>
@@ -2003,15 +1933,15 @@ body{padding-top:36px}
   <!-- Totals bar -->
   <div class="budget-totals">
     <div class="budget-total-cell">
-      <div class="budget-total-val" id="budget-tot-mgmt">$2,430</div>
+      <div class="budget-total-val" id="budget-tot-mgmt">—</div>
       <div class="budget-total-lbl">Management Fees</div>
     </div>
     <div class="budget-total-cell">
-      <div class="budget-total-val copper" id="budget-tot-spend">$5,650</div>
+      <div class="budget-total-val copper" id="budget-tot-spend">—</div>
       <div class="budget-total-lbl">Ad Spend</div>
     </div>
     <div class="budget-total-cell">
-      <div class="budget-total-val" id="budget-tot-total">$8,080</div>
+      <div class="budget-total-val" id="budget-tot-total">—</div>
       <div class="budget-total-lbl">Total Program / Mo</div>
     </div>
   </div>
@@ -2021,11 +1951,11 @@ body{padding-top:36px}
     <div style="font-size:12px;font-weight:700;color:var(--jd);margin-bottom:12px;text-transform:uppercase;letter-spacing:.06em">Spend Tracker — Extended Data</div>
     <div class="budget-sheet-grid">
       <div class="budget-sheet-cell">
-        <div class="budget-sheet-val" id="bse-zillow-mo">$0</div>
+        <div class="budget-sheet-val" id="bse-zillow-mo">—</div>
         <div class="budget-sheet-lbl">Zillow / Month</div>
       </div>
       <div class="budget-sheet-cell">
-        <div class="budget-sheet-val" id="bse-zillow-lease">$0</div>
+        <div class="budget-sheet-val" id="bse-zillow-lease">—</div>
         <div class="budget-sheet-lbl">Zillow / Lease</div>
       </div>
       <div class="budget-sheet-cell">
@@ -2033,13 +1963,11 @@ body{padding-top:36px}
         <div class="budget-sheet-lbl">CoStar Package</div>
       </div>
       <div class="budget-sheet-cell">
-        <div class="budget-sheet-val" id="bse-cx">
-          <span style="color:var(--sage);font-weight:800">✓</span>
-        </div>
+        <div class="budget-sheet-val" id="bse-cx">—</div>
         <div class="budget-sheet-lbl">CX Bundle</div>
       </div>
       <div class="budget-sheet-cell">
-        <div class="budget-sheet-val" id="bse-total-with-mgmt">$8,080</div>
+        <div class="budget-sheet-val" id="bse-total-with-mgmt">—</div>
         <div class="budget-sheet-lbl">Total w/ Mgmt Fee</div>
       </div>
       <div class="budget-sheet-cell">
@@ -2047,11 +1975,11 @@ body{padding-top:36px}
         <div class="budget-sheet-lbl">Social Media Pkg</div>
       </div>
       <div class="budget-sheet-cell">
-        <div class="budget-sheet-val" id="bse-portfolio">RPM Direct</div>
+        <div class="budget-sheet-val" id="bse-portfolio">—</div>
         <div class="budget-sheet-lbl">Portfolio / Client</div>
       </div>
       <div class="budget-sheet-cell">
-        <div class="budget-sheet-val" id="bse-market">Phoenix</div>
+        <div class="budget-sheet-val" id="bse-market">—</div>
         <div class="budget-sheet-lbl">RPM Market</div>
       </div>
     </div>
@@ -2085,56 +2013,7 @@ body{padding-top:36px}
   </div>
 
   <div class="tickets-list" id="tickets-list">
-    <div class="ticket-card" id="ticket-1">
-      <div class="ticket-head" onclick="toggleTicket('ticket-1')">
-        <div class="ticket-priority high"></div>
-        <div class="ticket-title" id="ticket-1-title">Loading…</div>
-        <div class="ticket-owner">Sarah M.</div>
-        <span class="ticket-status open">Open</span>
-        <svg class="ticket-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      <div class="ticket-body">
-        <div class="ticket-desc">Client experience subscore has dropped to 67 due to unresponded review backlog. AM to triage and respond to all 23 outstanding reviews within 48h. If volume persists, recommend escalating to reputation specialist team.</div>
-        <div class="ticket-foot">
-          <div class="ticket-date">Opened Mar 15, 2026 · Sarah M.</div>
-          <button class="btn btn-secondary btn-sm" onclick="escalateTicket('ticket-1', this)">Escalate to ClickUp</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="ticket-card" id="ticket-2">
-      <div class="ticket-head" onclick="toggleTicket('ticket-2')">
-        <div class="ticket-priority med"></div>
-        <div class="ticket-title">Spring leasing campaign creative refresh — April–June</div>
-        <div class="ticket-owner">Tom K.</div>
-        <span class="ticket-status in-progress">In Progress</span>
-        <svg class="ticket-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      <div class="ticket-body">
-        <div class="ticket-desc">Coordinating new creative assets for peak leasing season. Working with design team on photography and ad creative. Target completion: Mar 31.</div>
-        <div class="ticket-foot">
-          <div class="ticket-date">Opened Mar 10, 2026 · Tom K.</div>
-          <button class="btn btn-secondary btn-sm" onclick="escalateTicket('ticket-2', this)">Escalate to ClickUp</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="ticket-card" id="ticket-3">
-      <div class="ticket-head" onclick="toggleTicket('ticket-3')">
-        <div class="ticket-priority low"></div>
-        <div class="ticket-title">Verify ILS listing accuracy — Apartments.com, Zillow, Rent.com</div>
-        <div class="ticket-owner">Sarah M.</div>
-        <span class="ticket-status open">Open</span>
-        <svg class="ticket-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      <div class="ticket-body">
-        <div class="ticket-desc">Audit all ILS listings for accuracy. Verify pricing, availability, amenity descriptions, and photo coverage. Update as needed.</div>
-        <div class="ticket-foot">
-          <div class="ticket-date">Opened Mar 5, 2026 · Sarah M.</div>
-          <button class="btn btn-secondary btn-sm" onclick="escalateTicket('ticket-3', this)">Escalate to ClickUp</button>
-        </div>
-      </div>
-    </div>
+    <div id="tickets-loading" style="padding:24px;text-align:center;color:var(--tm);font-size:13px;font-style:italic">Loading requests…</div>
     <div id="submitted-ticket-placeholder"></div>
   </div>
 </section>
@@ -2161,7 +2040,7 @@ body{padding-top:36px}
       <div class="tl-date">Today</div>
       <div class="tl-item" data-cat="portal">
         <div class="tl-dot portal"></div>
-        <div class="tl-content"><div class="tl-text">You viewed the client portal</div><div class="tl-meta"><span class="tl-time">2:34 PM</span><span class="tl-tag portal">Portal</span></div></div>
+        <div class="tl-content"><div class="tl-text">You viewed the client portal</div><div class="tl-meta"><span class="tl-time" id="tl-session-time"></span><span class="tl-tag portal">Portal</span></div></div>
       </div>
       <div class="tl-item" id="tl-checkout-deal" style="display:none" data-cat="deal">
         <div class="tl-dot deal"></div>
@@ -2177,12 +2056,13 @@ body{padding-top:36px}
       </div>
     </div>
 
-    <!-- Static history placeholder — hidden by loadActivity() once real data arrives -->
+    <!-- Static history placeholder — hidden by loadActivity() once real data arrives.
+         Property name is injected by JS (HubL crm_objects() returns blank from templates/). -->
     <div id="tl-static-history">
       <div class="tl-group" data-cat="portal">
         <div class="tl-item" data-cat="portal">
           <div class="tl-dot portal"></div>
-          <div class="tl-content"><div class="tl-text">{{ property.name }} joined the RPM Living client portal</div><div class="tl-meta"><span class="tl-tag portal">Portal</span></div></div>
+          <div class="tl-content"><div class="tl-text"><span id="tl-joined-name">This property</span> joined the RPM Living client portal</div><div class="tl-meta"><span class="tl-tag portal">Portal</span></div></div>
         </div>
       </div>
     </div>
@@ -2259,18 +2139,18 @@ body{padding-top:36px}
             <th style="text-align:right">Open Flags</th>
           </tr>
         </thead>
-        <tbody>
-          <!-- populated by loadPortfolio() -->
+        <tbody id="port-markets-tbody">
+          <tr><td colspan="7" style="padding:32px;text-align:center;color:var(--tm);font-style:italic">Loading market data…</td></tr>
         </tbody>
         <tfoot>
-          <tr style="background:var(--bg)">
+          <tr id="port-markets-tfoot" style="background:var(--bg);display:none">
             <td style="padding:12px 20px;font-weight:700;font-size:13px">Portfolio Total</td>
-            <td style="text-align:right;padding:12px 20px;font-weight:700">7</td>
-            <td style="text-align:right;padding:12px 20px;font-weight:700">1,822</td>
-            <td style="padding:12px 20px"><span style="font-weight:800;font-size:15px;color:var(--amb)">74</span> <span style="font-size:11px;color:var(--tm)">avg</span></td>
-            <td style="padding:12px 20px"><div class="market-flags"><span class="mflag r">2 RED</span><span class="mflag y">2 YLW</span><span class="mflag g">3 GRN</span></div></td>
-            <td style="text-align:right;padding:12px 20px;font-weight:800;color:var(--cu)">$31,585</td>
-            <td style="text-align:right;padding:12px 20px;font-weight:700;color:var(--red)">12</td>
+            <td style="text-align:right;padding:12px 20px;font-weight:700" id="pmt-props">—</td>
+            <td style="text-align:right;padding:12px 20px;font-weight:700" id="pmt-units">—</td>
+            <td style="padding:12px 20px" id="pmt-avg-health">—</td>
+            <td style="padding:12px 20px" id="pmt-mix">—</td>
+            <td style="text-align:right;padding:12px 20px;font-weight:800;color:var(--cu)" id="pmt-spend">—</td>
+            <td style="text-align:right;padding:12px 20px;font-weight:700;color:var(--red)" id="pmt-flags">—</td>
           </tr>
         </tfoot>
       </table>
@@ -2393,6 +2273,13 @@ document.addEventListener('DOMContentLoaded', function() {
   populateSidebar();  // populate property name + gauges regardless of which tab is active
   prefetchCallPrep(); // pre-warm monthly call prep data so Call Prep tab loads instantly
   loadOverview();
+
+  // Stamp the "You viewed the client portal" activity row with real time (not hardcoded 2:34 PM)
+  var tlTime = document.getElementById('tl-session-time');
+  if (tlTime) {
+    try { tlTime.textContent = new Date().toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'}); }
+    catch(e){}
+  }
 });
 
 // Sidebar property name + gauges — populate independently of which tab is open.
@@ -2455,7 +2342,11 @@ function populateSidebar() {
       // Mirror API data into the window globals that loadForecast() / loadPerformance()
       // depend on. HubL crm_objects() returns blank from templates/, so these would
       // otherwise stay at 0/[] and the Forecast simulator would have no sliders.
-      if (prop.name)         window.__PORTAL_PROP_NAME    = prop.name;
+      if (prop.name) {
+        window.__PORTAL_PROP_NAME = prop.name;
+        var tlJoined = document.getElementById('tl-joined-name');
+        if (tlJoined) tlJoined.textContent = prop.name;
+      }
       if (prop.market)       window.__PORTAL_MARKET       = prop.market;
       if (prop.units)        window.__PORTAL_UNIT_COUNT   = prop.units;
       if (leasing.occupancy != null) window.__PORTAL_OCCUPANCY = leasing.occupancy;
@@ -2464,6 +2355,12 @@ function populateSidebar() {
       if (hs != null)        window.__PORTAL_HEALTH_SCORE = hs;
       if (prop.occupancy_status) window.__PORTAL_OCC_STATUS = prop.occupancy_status;
       if (Array.isArray(d.packages)) window.__PORTAL_PROP_PACKAGES = d.packages;
+      // Mirror current performance (leads / blended CPL) if the server returns it.
+      // Server source is TBD (spend_tracker sheet has no leads column yet; NinjaCat
+      // pipeline pending). Forecast falls back to "—" when absent.
+      if (d.current_perf && typeof d.current_perf === 'object') {
+        window.__PORTAL_CURRENT_PERF = d.current_perf;
+      }
 
       // Notify any tab loaders waiting for property data
       document.dispatchEvent(new CustomEvent('portal-data-ready', {detail: d}));
@@ -2799,7 +2696,7 @@ function loadTickets() {
     var list = document.getElementById('tickets-list');
     if (!list) return;
     if (!data.tickets || !data.tickets.length) {
-      list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tm);font-size:13px">No open requests</div>';
+      list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tm);font-size:13px">No open requests</div><div id="submitted-ticket-placeholder"></div>';
       return;
     }
     list.innerHTML = data.tickets.map(_renderTicketCard).join('') +
@@ -2809,7 +2706,13 @@ function loadTickets() {
     var badge = document.getElementById('tickets-badge');
     if (badge) badge.textContent = open;
   })
-  .catch(function(err){ console.warn('loadTickets failed:', err); });
+  .catch(function(err){
+    console.warn('loadTickets failed:', err);
+    var list = document.getElementById('tickets-list');
+    if (list) {
+      list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tm);font-size:13px">Could not load requests \u2014 refresh to retry.</div><div id="submitted-ticket-placeholder"></div>';
+    }
+  });
 }
 
 function _renderTicketCard(t) {
@@ -2963,13 +2866,17 @@ function loadClientBrief() {
     if (d.error) return;
     _briefLoaded = true;
 
+    // Always write to the element. If the API returned empty, explicitly render an em-dash
+    // (vs leaving whatever was in the HTML) so clients never see stale placeholder text.
     function set(id, val) {
       var el = document.getElementById(id);
-      if (el && val != null && val !== '') el.textContent = val;
+      if (!el) return;
+      el.textContent = (val != null && val !== '') ? val : '—';
     }
     function setHtml(id, val) {
       var el = document.getElementById(id);
-      if (el && val != null && val !== '') el.innerHTML = val;
+      if (!el) return;
+      el.innerHTML = (val != null && val !== '') ? val : '—';
     }
     function pills(str) {
       return (str || '').split(/[;,\n]/).map(function(s){ return s.trim(); }).filter(Boolean)
@@ -2981,10 +2888,12 @@ function loadClientBrief() {
     set('b-cms', d.website_cms);
     set('b-bot', d.bot_on_website);
 
-    if (d.budget_finalized != null) {
-      setHtml('b-budget-fin', d.budget_finalized
-        ? '<span style="color:var(--sage);font-weight:700">Yes</span>'
-        : '<span style="color:var(--amb);font-weight:700">No</span>');
+    if (d.budget_finalized === true || d.budget_finalized === 'true' || d.budget_finalized === 1) {
+      setHtml('b-budget-fin', '<span style="color:var(--sage);font-weight:700">Yes</span>');
+    } else if (d.budget_finalized === false || d.budget_finalized === 'false' || d.budget_finalized === 0) {
+      setHtml('b-budget-fin', '<span style="color:var(--amb);font-weight:700">No</span>');
+    } else {
+      setHtml('b-budget-fin', '<span style="color:var(--tm);font-weight:600">—</span>');
     }
 
     if (d.units_offered) setHtml('b-units', pills(d.units_offered));
@@ -3033,8 +2942,20 @@ function loadBudget() {
   })
   .then(function(r){ return r.json(); })
   .then(function(d) {
-    if (d.error || !d.deal) return;
     _budgetLoaded = true;
+    var tbody    = document.getElementById('sku-tbody');
+    var emptyEl  = document.getElementById('budget-empty-state');
+    var dealCard = document.getElementById('budget-deal-card');
+
+    if (d.error || !d.deal) {
+      // No deal yet — hide header + totals, show empty state, clear the loading row
+      if (dealCard) dealCard.style.display = 'none';
+      if (emptyEl)  emptyEl.style.display = 'block';
+      if (tbody)    tbody.innerHTML = '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--tm);font-size:12px">No active line items</td></tr>';
+      return;
+    }
+
+    if (emptyEl)  emptyEl.style.display = 'none';
 
     var deal = d.deal;
     var lineItems = d.line_items || [];
@@ -3047,7 +2968,6 @@ function loadBudget() {
     }
 
     // Deal header — show card now that we have data
-    var dealCard = document.getElementById('budget-deal-card');
     if (dealCard) dealCard.style.display = '';
     set('budget-deal-name', deal.name);
     if (deal.close_date) {
@@ -3058,6 +2978,8 @@ function loadBudget() {
     }
     var activeCount = lineItems.filter(function(li){ return li.active; }).length;
     set('budget-deal-count', activeCount + ' active service' + (activeCount !== 1 ? 's' : ''));
+    // Owner: show "assigned to <name>" only if API returns it; leave blank otherwise
+    set('budget-deal-owner', deal.owner_name ? ' · assigned to ' + deal.owner_name : '');
     set('budget-deal-total', fmt$(deal.amount));
 
     // Build SKU table rows
@@ -3106,8 +3028,26 @@ function loadBudget() {
     if (sheet.social_media_pkg) set('bse-social-pkg', sheet.social_media_pkg);
     if (sheet.portfolio_client) set('bse-portfolio', sheet.portfolio_client);
     if (sheet.market)           set('bse-market', sheet.market);
+
+    // CX bundle — blank the loader placeholder (—) with a real ✓ or ✗ when known
+    if (sheet.cx_bundle === true || sheet.cx_bundle === 'true') {
+      setHtml('bse-cx', '<span style="color:var(--sage);font-weight:800">✓</span>');
+    } else if (sheet.cx_bundle === false || sheet.cx_bundle === 'false') {
+      setHtml('bse-cx', '<span style="color:var(--tm)">—</span>');
+    }
   })
-  .catch(function(err){ console.warn('loadBudget failed:', err); });
+  .catch(function(err){
+    console.warn('loadBudget failed:', err);
+    var tbody   = document.getElementById('sku-tbody');
+    var emptyEl = document.getElementById('budget-empty-state');
+    var dealCard= document.getElementById('budget-deal-card');
+    if (dealCard) dealCard.style.display = 'none';
+    if (emptyEl) {
+      emptyEl.style.display = 'block';
+      emptyEl.innerHTML = '<div style="font-size:13px;color:var(--ts);font-weight:600;margin-bottom:4px">Could not load budget data</div><div style="font-size:12px;color:var(--tm)">Refresh to retry \u2014 if the problem persists, contact your AM.</div>';
+    }
+    if (tbody) tbody.innerHTML = '';
+  });
 }
 
 function toggleInactive(btn) {
@@ -3768,28 +3708,99 @@ function loadPortfolio() {
         '<span class="mflag g">' + (hb.healthy  || 0) + ' GRN</span>';
     }
 
-    // Table rows
+    // Table rows (By Property)
     var tbody = document.getElementById('port-properties-tbody');
-    if (!tbody || props.length === 0) return;
     var hdotClass = function(s) { return s >= 75 ? 'h' : s >= 50 ? 'w' : 'c'; };
-    var rows = props.map(function(p) {
-      var score = p.health_score != null ? Math.round(p.health_score) : null;
-      var flags = p.flag_count || 0;
-      var mgmt  = p.mgmt_spend ? '$' + Math.round(p.mgmt_spend).toLocaleString() : '—';
-      var spend = p.ad_spend   ? '$' + Math.round(p.ad_spend).toLocaleString()   : '—';
-      return '<tr>' +
-        '<td><div class="p-name">' + (p.name || '') + '</div><div class="p-loc">' + (p.city_state || p.market || '') + '</div></td>' +
-        '<td>' + (p.market || '') + '</td>' +
-        '<td style="text-align:right">' + (p.units || '—') + '</td>' +
-        '<td style="text-align:right">' + (score != null ? '<span class="hdot ' + hdotClass(score) + '"></span>' + score : '—') + '</td>' +
-        '<td style="text-align:right">' + mgmt + '</td>' +
-        '<td style="text-align:right;color:var(--cu);font-weight:700">' + spend + '</td>' +
-        '<td style="text-align:right"><span class="fcount ' + (flags > 0 ? 'has' : 'none') + '">' + flags + '</span></td>' +
-      '</tr>';
-    });
-    tbody.innerHTML = rows.join('');
+    if (tbody && props.length > 0) {
+      var rows = props.map(function(p) {
+        var score = p.health_score != null ? Math.round(p.health_score) : null;
+        var flags = p.flag_count || 0;
+        var mgmt  = p.mgmt_spend ? '$' + Math.round(p.mgmt_spend).toLocaleString() : '—';
+        var spend = p.ad_spend   ? '$' + Math.round(p.ad_spend).toLocaleString()   : '—';
+        return '<tr>' +
+          '<td><div class="p-name">' + (p.name || '') + '</div><div class="p-loc">' + (p.city_state || p.market || '') + '</div></td>' +
+          '<td>' + (p.market || '') + '</td>' +
+          '<td style="text-align:right">' + (p.units || '—') + '</td>' +
+          '<td style="text-align:right">' + (score != null ? '<span class="hdot ' + hdotClass(score) + '"></span>' + score : '—') + '</td>' +
+          '<td style="text-align:right">' + mgmt + '</td>' +
+          '<td style="text-align:right;color:var(--cu);font-weight:700">' + spend + '</td>' +
+          '<td style="text-align:right"><span class="fcount ' + (flags > 0 ? 'has' : 'none') + '">' + flags + '</span></td>' +
+        '</tr>';
+      });
+      tbody.innerHTML = rows.join('');
+    } else if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="7" style="padding:32px;text-align:center;color:var(--tm)">No properties found.</td></tr>';
+    }
+
+    // Table rows (By Market) — aggregate from props
+    var mTbody = document.getElementById('port-markets-tbody');
+    var mTfoot = document.getElementById('port-markets-tfoot');
+    if (mTbody) {
+      if (!props.length) {
+        mTbody.innerHTML = '<tr><td colspan="7" style="padding:32px;text-align:center;color:var(--tm)">No market data available.</td></tr>';
+      } else {
+        var mm = {};
+        props.forEach(function(p) {
+          var m = p.market || 'Unknown';
+          if (!mm[m]) mm[m] = {props:0, units:0, scores:[], spend:0, flags:0};
+          mm[m].props++;
+          mm[m].units  += (parseInt(p.units) || 0);
+          mm[m].spend  += (p.ad_spend || 0) + (p.mgmt_spend || 0);
+          mm[m].flags  += (p.flag_count || 0);
+          if (p.health_score != null) mm[m].scores.push(p.health_score);
+        });
+        var markets = Object.keys(mm).sort();
+        mTbody.innerHTML = markets.map(function(m) {
+          var md = mm[m];
+          var avg = md.scores.length ? Math.round(md.scores.reduce(function(a,b){return a+b;},0)/md.scores.length) : null;
+          var color = avg == null ? 'var(--tm)' : avg >= 75 ? 'var(--sage)' : avg >= 50 ? 'var(--amb)' : 'var(--red)';
+          var red = md.scores.filter(function(s){return s<50;}).length;
+          var ylw = md.scores.filter(function(s){return s>=50&&s<75;}).length;
+          var grn = md.scores.filter(function(s){return s>=75;}).length;
+          var spStr = md.spend > 0 ? '$' + Math.round(md.spend).toLocaleString() : '—';
+          return '<tr>' +
+            '<td style="font-weight:600">' + m + '</td>' +
+            '<td style="text-align:right">' + md.props + '</td>' +
+            '<td style="text-align:right">' + md.units.toLocaleString() + '</td>' +
+            '<td><span style="font-weight:800;font-size:15px;color:' + color + '">' + (avg!=null?avg:'—') + '</span> <span style="font-size:11px;color:var(--tm)">avg</span></td>' +
+            '<td><div class="market-flags"><span class="mflag r">' + red + ' RED</span><span class="mflag y">' + ylw + ' YLW</span><span class="mflag g">' + grn + ' GRN</span></div></td>' +
+            '<td style="text-align:right;font-weight:700;color:var(--cu)">' + spStr + '</td>' +
+            '<td style="text-align:right;font-weight:700;color:var(--red)">' + md.flags + '</td>' +
+          '</tr>';
+        }).join('');
+
+        // Compute + show tfoot totals dynamically
+        if (mTfoot) {
+          var totProps = props.length;
+          var totUnits = props.reduce(function(a,p){ return a + (parseInt(p.units)||0); }, 0);
+          var allScores = props.filter(function(p){ return p.health_score != null; }).map(function(p){ return p.health_score; });
+          var totAvg   = allScores.length ? Math.round(allScores.reduce(function(a,b){return a+b;},0)/allScores.length) : null;
+          var totColor = totAvg == null ? 'var(--tm)' : totAvg >= 75 ? 'var(--sage)' : totAvg >= 50 ? 'var(--amb)' : 'var(--red)';
+          var totRed   = allScores.filter(function(s){return s<50;}).length;
+          var totYlw   = allScores.filter(function(s){return s>=50&&s<75;}).length;
+          var totGrn   = allScores.filter(function(s){return s>=75;}).length;
+          var totSpend = props.reduce(function(a,p){ return a + (p.ad_spend||0) + (p.mgmt_spend||0); }, 0);
+          var totFlags = props.reduce(function(a,p){ return a + (p.flag_count||0); }, 0);
+          setEl('pmt-props', totProps);
+          setEl('pmt-units', totUnits.toLocaleString());
+          var avgCell = document.getElementById('pmt-avg-health');
+          if (avgCell) avgCell.innerHTML = '<span style="font-weight:800;font-size:15px;color:' + totColor + '">' + (totAvg!=null?totAvg:'—') + '</span> <span style="font-size:11px;color:var(--tm)">avg</span>';
+          var mixCell = document.getElementById('pmt-mix');
+          if (mixCell) mixCell.innerHTML = '<div class="market-flags"><span class="mflag r">' + totRed + ' RED</span><span class="mflag y">' + totYlw + ' YLW</span><span class="mflag g">' + totGrn + ' GRN</span></div>';
+          setEl('pmt-spend', totSpend > 0 ? '$' + Math.round(totSpend).toLocaleString() : '—');
+          setEl('pmt-flags', totFlags);
+          mTfoot.style.display = '';
+        }
+      }
+    }
   })
-  .catch(function(err){ console.warn('loadPortfolio failed:', err); });
+  .catch(function(err){
+    console.warn('loadPortfolio failed:', err);
+    var tbody  = document.getElementById('port-properties-tbody');
+    var mTbody = document.getElementById('port-markets-tbody');
+    if (tbody)  tbody.innerHTML  = '<tr><td colspan="7" style="padding:32px;text-align:center;color:var(--tm)">Could not load portfolio data.</td></tr>';
+    if (mTbody) mTbody.innerHTML = '<tr><td colspan="7" style="padding:32px;text-align:center;color:var(--tm)">Could not load market data.</td></tr>';
+  });
 }
 
 // ── Performance gauges ──────────────────────────────────────────────────────
@@ -4977,13 +4988,27 @@ function forecastUpsellClick() {
 
 function forecastTalkToAM() {
   var btn = document.getElementById('forecast-am-btn');
-  if (btn) btn.disabled = true;
-  // In a real portal this would POST to the webhook
-  setTimeout(function(){
-    var conf = document.getElementById('forecast-am-confirm');
-    if (conf) conf.style.display = '';
-    if (btn) { btn.textContent = 'Request Sent ✓'; btn.style.background = '#10b981'; }
-  }, 800);
+  var propName = window.__PORTAL_PROP_NAME || 'property';
+  // Build a scenario summary from current sim budgets so the AM has context
+  var lines = [];
+  try {
+    Object.keys(_simBudgets || {}).forEach(function(ch){
+      if (_simBudgets[ch]) lines.push('  ' + ch + ': $' + Number(_simBudgets[ch]).toLocaleString() + '/mo');
+    });
+  } catch(e){}
+  var subj = encodeURIComponent('Forecast scenario request — ' + propName);
+  var body = encodeURIComponent(
+    'Hi team,\n\nI\'d like to talk about this budget scenario for ' + propName + ':\n\n' +
+    (lines.length ? lines.join('\n') : '(no budget changes — general discussion)') +
+    '\n\n— Sent from the RPM Client Portal'
+  );
+  // Open the default mail client. Fallback endpoint /api/notify-am can be added later.
+  window.location.href = 'mailto:portal@rpmliving.com?subject=' + subj + '&body=' + body;
+
+  // Confirm UI
+  if (btn) { btn.disabled = true; btn.textContent = 'Email opened ✓'; btn.style.background = '#10b981'; }
+  var conf = document.getElementById('forecast-am-confirm');
+  if (conf) { conf.textContent = '✓ Email opened in your mail client.'; conf.style.display = ''; }
 }
 
 // ── Video Creative ──────────────────────────────────────────────────────────
@@ -6072,9 +6097,21 @@ function prefetchCallPrep() {
         { headers: { 'X-Portal-Email': email } })
     .then(function(r){ return r.json(); })
     .then(function(d) {
-      if (d && !d.error) window._callPrepData = d;
+      if (d && !d.error) {
+        window._callPrepData = d;
+        // Update Overview "Pending Recs" badge with live count (rec statuses: 'pending' | 'approved' | 'dismissed')
+        var pendingCount = (d.recommendations || []).filter(function(r){
+          return !r.status || r.status === 'pending';
+        }).length;
+        var badge = document.getElementById('pending-recs-count');
+        if (badge) badge.textContent = pendingCount;
+      }
     })
-    .catch(function(err) { console.warn('prefetchCallPrep failed:', err); });
+    .catch(function(err) {
+      console.warn('prefetchCallPrep failed:', err);
+      var badge = document.getElementById('pending-recs-count');
+      if (badge) badge.textContent = '0';
+    });
 }
 
 function _cpFormatCycle(cycle_month) {

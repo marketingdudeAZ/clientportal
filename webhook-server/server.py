@@ -352,6 +352,9 @@ def get_property_metrics():
                 "occupancy_status": props.get("occupancy_status", ""),
             },
             "packages": _packages,
+            # Current performance placeholder — populate once NinjaCat metrics pipeline
+            # lands or spend_tracker gains lead columns. Frontend shows "—" when null.
+            "current_perf": None,
             "leasing": {
                 "occupancy": _f("occupancy__"),
                 "atr": _f("atr__"),
