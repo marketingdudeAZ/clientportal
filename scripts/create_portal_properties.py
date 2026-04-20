@@ -42,6 +42,30 @@ COMPANY_PROPERTIES = [
         "groupName": "companyinformation",
         "description": "Email of the assigned Marketing RVP (for portal access).",
     },
+    {
+        "name": "seo_last_audit_score",
+        "label": "SEO Last Audit Score",
+        "type": "number",
+        "fieldType": "number",
+        "groupName": "companyinformation",
+        "description": "Latest on-page audit score (0-100) from DataForSEO weekly refresh.",
+    },
+    {
+        "name": "seo_last_crawl_at",
+        "label": "SEO Last Crawl At",
+        "type": "datetime",
+        "fieldType": "date",
+        "groupName": "companyinformation",
+        "description": "ISO timestamp of the last DataForSEO on-page crawl.",
+    },
+    {
+        "name": "ai_visibility_index",
+        "label": "AI Visibility Index",
+        "type": "number",
+        "fieldType": "number",
+        "groupName": "companyinformation",
+        "description": "Composite 0-100 index of property citations across ChatGPT, Perplexity, Gemini, and Google AI Overviews.",
+    },
 ]
 
 CONTACT_PROPERTIES = [

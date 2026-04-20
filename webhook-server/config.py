@@ -12,6 +12,20 @@ HUBDB_ASSET_TABLE_ID = os.getenv("HUBDB_ASSET_TABLE_ID")
 HUBDB_RECOMMENDATIONS_TABLE_ID = os.getenv("HUBDB_RECOMMENDATIONS_TABLE_ID")
 HUBDB_BUDGET_TIERS_TABLE_ID = os.getenv("HUBDB_BUDGET_TIERS_TABLE_ID")
 HUBDB_AM_PRIORITY_TABLE_ID = os.getenv("HUBDB_AM_PRIORITY_TABLE_ID")
+HUBDB_SEO_KEYWORDS_TABLE_ID = os.getenv("HUBDB_SEO_KEYWORDS_TABLE_ID")
+HUBDB_SEO_COMPETITORS_TABLE_ID = os.getenv("HUBDB_SEO_COMPETITORS_TABLE_ID")
+HUBDB_AI_MENTIONS_TABLE_ID = os.getenv("HUBDB_AI_MENTIONS_TABLE_ID")
+
+# --- DataForSEO ---
+DATAFORSEO_LOGIN = os.getenv("DATAFORSEO_LOGIN", "")
+DATAFORSEO_PASSWORD = os.getenv("DATAFORSEO_PASSWORD", "")
+DATAFORSEO_BASE_URL = os.getenv("DATAFORSEO_BASE_URL", "https://api.dataforseo.com")
+DATAFORSEO_DEFAULT_LOCATION = int(os.getenv("DATAFORSEO_DEFAULT_LOCATION", "2840"))  # USA
+DATAFORSEO_DEFAULT_LANGUAGE = os.getenv("DATAFORSEO_DEFAULT_LANGUAGE", "en")
+
+# BigQuery table for daily rank snapshots (time-series scale exceeds HubDB)
+BIGQUERY_SEO_RANKS_TABLE = os.getenv("BIGQUERY_SEO_RANKS_TABLE", "seo_ranks_daily")
+BIGQUERY_SEO_AUDIT_TABLE = os.getenv("BIGQUERY_SEO_AUDIT_TABLE", "seo_onpage_audit")
 
 # --- Google Sheets ---
 GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID", "1jRqmEzhOIe72zgwIOcDZTyvde_Y0_jvayaLTZhva9mk")
@@ -72,6 +86,20 @@ SEO_TIERS = {
     "Basic": 500,
     "Standard": 800,
     "Premium": 1300,
+}
+SEO_TIER_ORDER = ["Local", "Lite", "Basic", "Standard", "Premium"]
+
+# Feature gates for portal SEO Insights — tier a property must be on to see the feature.
+SEO_FEATURE_MIN_TIER = {
+    "dashboard":        "Local",     # everyone with any SEO package
+    "keywords_read":    "Local",
+    "keywords_write":   "Basic",
+    "ai_mentions":      "Basic",
+    "content_clusters": "Standard",  # Phase 2
+    "content_briefs":   "Standard",  # Phase 2
+    "content_decay":    "Premium",   # Phase 2
+    "keyword_research": "Basic",     # Phase 3
+    "trend_explorer":   "Standard",  # Phase 3
 }
 
 SOCIAL_POSTING_TIERS = {

@@ -66,6 +66,50 @@ BUDGET_TIERS_TABLE = {
     ],
 }
 
+SEO_KEYWORDS_TABLE = {
+    "name": "rpm_seo_keywords",
+    "label": "RPM SEO Keywords",
+    "useForPages": False,
+    "columns": [
+        {"name": "property_uuid",    "label": "Property UUID",   "type": "TEXT"},
+        {"name": "keyword",          "label": "Keyword",         "type": "TEXT"},
+        {"name": "priority",         "label": "Priority",        "type": "TEXT"},  # high | medium | low
+        {"name": "tag",              "label": "Tag",             "type": "TEXT"},  # e.g. "location", "amenity", "brand"
+        {"name": "intent",           "label": "Intent",          "type": "TEXT"},  # informational | transactional | navigational | commercial
+        {"name": "branded",          "label": "Branded",         "type": "BOOLEAN"},
+        {"name": "target_position",  "label": "Target Position", "type": "NUMBER"},
+        {"name": "volume",           "label": "Search Volume",   "type": "NUMBER"},
+        {"name": "difficulty",       "label": "Difficulty",      "type": "NUMBER"},
+    ],
+}
+
+SEO_COMPETITORS_TABLE = {
+    "name": "rpm_seo_competitors",
+    "label": "RPM SEO Competitors",
+    "useForPages": False,
+    "columns": [
+        {"name": "property_uuid",     "label": "Property UUID",    "type": "TEXT"},
+        {"name": "competitor_domain", "label": "Competitor Domain","type": "TEXT"},
+        {"name": "label",             "label": "Label",            "type": "TEXT"},
+    ],
+}
+
+AI_MENTIONS_TABLE = {
+    "name": "rpm_ai_mentions",
+    "label": "RPM AI Mentions Snapshots",
+    "useForPages": False,
+    "columns": [
+        {"name": "property_uuid",   "label": "Property UUID",  "type": "TEXT"},
+        {"name": "scanned_at",      "label": "Scanned At",     "type": "DATETIME"},
+        {"name": "composite_index", "label": "Composite Index","type": "NUMBER"},
+        {"name": "chatgpt_rate",    "label": "ChatGPT Rate",   "type": "NUMBER"},
+        {"name": "perplexity_rate", "label": "Perplexity Rate","type": "NUMBER"},
+        {"name": "gemini_rate",     "label": "Gemini Rate",    "type": "NUMBER"},
+        {"name": "aio_rate",        "label": "AI Overview Rate","type": "NUMBER"},
+        {"name": "detail_json",     "label": "Detail JSON",    "type": "RICHTEXT"},
+    ],
+}
+
 AM_PRIORITY_TABLE = {
     "name": "rpm_am_priority",
     "label": "RPM AM Priority",
@@ -147,6 +191,24 @@ def run(force_assets=False):
     if am_id:
         publish_table(am_id)
         results["HUBDB_AM_PRIORITY_TABLE_ID"] = am_id
+
+    # rpm_seo_keywords
+    kw_id = create_table(SEO_KEYWORDS_TABLE)
+    if kw_id:
+        publish_table(kw_id)
+        results["HUBDB_SEO_KEYWORDS_TABLE_ID"] = kw_id
+
+    # rpm_seo_competitors
+    comp_id = create_table(SEO_COMPETITORS_TABLE)
+    if comp_id:
+        publish_table(comp_id)
+        results["HUBDB_SEO_COMPETITORS_TABLE_ID"] = comp_id
+
+    # rpm_ai_mentions
+    aim_id = create_table(AI_MENTIONS_TABLE)
+    if aim_id:
+        publish_table(aim_id)
+        results["HUBDB_AI_MENTIONS_TABLE_ID"] = aim_id
 
     # rpm_assets already exists (210402637) — skip unless forced
     if force_assets:
