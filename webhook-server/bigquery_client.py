@@ -182,6 +182,40 @@ def write_report_insights(property_uuid, ninjacat_system_id, report_month,
         logger.info("Wrote %d report_insights for %s %s", len(rows), property_uuid, report_month)
 
 
+# ── RPM Properties reference table ─────────────────────────────────────────
+# This is the "dimension" table that keeps market / unit_count / name for every
+# active RPM property, synced nightly from HubSpot. NinjaCat's export doesn't
+# need to carry these fields — BQ joins metrics -> properties on property_uuid.
+#
+# Schema (see BIGQUERY_SETUP.md for the CREATE TABLE DDL):
+#   property_uuid STRING NOT NULL, hubspot_company_id STRING,
+#   ninjacat_system_id STRING, name STRING, market STRING,
+#   unit_count INT64, occupancy_status STRING, plestatus STRING,
+#   updated_at TIMESTAMP
+# Clustered on property_uuid for fast joins.
+
+
+def upsert_rpm_properties(rows):
+    """Replace the rpm_properties table contents with `rows`.
+
+    Uses a DELETE + INSERT inside a BQ transaction (MERGE would be nicer but
+    requires a staging table). Safe to run nightly. `rows` is a list of dicts
+    shaped like the schema above.
+    """
+    from google.cloud import bigquery
+    client  = _get_client()
+    dataset = _dataset()
+    table   = f"{BIGQUERY_PROJECT_ID}.{dataset}.rpm_properties"
+
+    # Truncate then insert — simplest pattern, table is tiny (<1000 rows).
+    client.query(f"TRUNCATE TABLE `{table}`").result()
+    if rows:
+        errors = client.insert_rows_json(table, rows)
+        if errors:
+            raise RuntimeError(f"BigQuery rpm_properties insert errors: {errors}")
+    logger.info("rpm_properties refreshed with %d rows", len(rows))
+
+
 # ── NinjaCat Metrics ───────────────────────────────────────────────────────
 # Schema (see BIGQUERY_SETUP.md for the CREATE TABLE DDL):
 #   date DATE, property_uuid STRING, ninjacat_system_id STRING,
@@ -267,6 +301,11 @@ def get_ninjacat_current_perf(property_uuid):
 def get_ninjacat_benchmarks(market, size_band):
     """Return channel × month benchmark rows for a market + size_band segment.
 
+    Joins ninjacat_metrics (daily perf) against rpm_properties (uuid → market,
+    unit_count) so NinjaCat only needs to emit property_uuid — market and
+    unit_count live in HubSpot and are synced to rpm_properties by the nightly
+    sync job (POST /api/internal/sync-properties-to-bq).
+
     Uses the last 12 months of data. Rolls up daily rows to monthly per-property
     aggregates, then computes quartiles across properties. Returns list of dicts
     shaped identically to the seeded /api/benchmarks response:
@@ -282,25 +321,27 @@ def get_ninjacat_benchmarks(market, size_band):
     # Map size_band -> unit range. Matches the portal's frontend convention
     # (see loadForecast: units < 200 -> small, <= 400 -> mid, else large).
     if size_band == "small":
-        size_filter = "unit_count < 200"
+        size_filter = "p.unit_count < 200"
     elif size_band == "large":
-        size_filter = "unit_count > 400"
+        size_filter = "p.unit_count > 400"
     else:
-        size_filter = "unit_count >= 200 AND unit_count <= 400"
+        size_filter = "p.unit_count >= 200 AND p.unit_count <= 400"
 
     sql = f"""
         WITH monthly_per_prop AS (
             SELECT
-                property_uuid,
-                channel,
-                EXTRACT(MONTH FROM date) AS month,
-                SUM(spend) AS spend,
-                SUM(leads) AS leads
-            FROM `{BIGQUERY_PROJECT_ID}.{dataset}.ninjacat_metrics`
-            WHERE market = @market
+                m.property_uuid,
+                m.channel,
+                EXTRACT(MONTH FROM m.date) AS month,
+                SUM(m.spend) AS spend,
+                SUM(m.leads) AS leads
+            FROM `{BIGQUERY_PROJECT_ID}.{dataset}.ninjacat_metrics` AS m
+            JOIN `{BIGQUERY_PROJECT_ID}.{dataset}.rpm_properties`  AS p
+              ON m.property_uuid = p.property_uuid
+            WHERE p.market = @market
               AND {size_filter}
-              AND date >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH)
-            GROUP BY property_uuid, channel, month
+              AND m.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH)
+            GROUP BY m.property_uuid, m.channel, month
             HAVING spend > 0 AND leads > 0
         )
         SELECT

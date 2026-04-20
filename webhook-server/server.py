@@ -789,6 +789,92 @@ def red_light_ingest_csv():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+@app.route("/api/internal/sync-properties-to-bq", methods=["POST", "OPTIONS"])
+def sync_properties_to_bq():
+    """Nightly sync of HubSpot company records into BigQuery rpm_properties.
+
+    Writes the "dimension" table that ninjacat_metrics joins against for
+    benchmark queries. NinjaCat's BQ export only needs to emit property_uuid
+    (via its External ID custom field) — market, unit_count, and name come
+    from HubSpot through this sync.
+
+    Trigger: Render Cron Job or similar, ~once per day. Auth: X-Internal-Key
+    header set to INTERNAL_API_KEY env var.
+
+    Returns summary: {rows_written, runtime_seconds, data_source}.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    internal_key = request.headers.get("X-Internal-Key", "")
+    expected_key = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected_key and internal_key == expected_key):
+        return jsonify({"error": "Authentication required"}), 401
+
+    try:
+        from bigquery_client import is_bigquery_configured, upsert_rpm_properties
+    except Exception as e:
+        return jsonify({"error": f"BigQuery client import failed: {e}"}), 500
+
+    if not is_bigquery_configured():
+        return jsonify({"error": "BigQuery env vars not set"}), 503
+
+    import time as _time
+    from datetime import datetime as _dt
+    from portfolio import _search_companies, _build_filter_groups
+
+    t0 = _time.time()
+
+    try:
+        # Paginate through all active RPM properties (same filter as the
+        # portfolio view: plestatus IN RPM Managed / Onboarding / Dispositioning).
+        filter_groups = _build_filter_groups(None, None)
+        all_companies = []
+        after = None
+        while True:
+            results, after = _search_companies(filter_groups, after=after)
+            all_companies.extend(results)
+            if not after:
+                break
+
+        now_iso = _dt.utcnow().isoformat() + "Z"
+        rows = []
+        for c in all_companies:
+            props = c.get("properties", {})
+            uuid  = (props.get("uuid") or "").strip()
+            if not uuid:
+                continue  # skip rows without a UUID — they can't join to NC metrics
+            try:
+                units = int(props.get("totalunits") or 0)
+            except (ValueError, TypeError):
+                units = 0
+            rows.append({
+                "property_uuid":      uuid,
+                "hubspot_company_id": str(c.get("id") or ""),
+                "ninjacat_system_id": (props.get("ninjacat_system_id") or "").strip(),
+                "name":               props.get("name", ""),
+                "market":             props.get("rpmmarket", ""),
+                "unit_count":         units,
+                "occupancy_status":   props.get("occupancy_status", ""),
+                "plestatus":          props.get("plestatus", ""),
+                "updated_at":         now_iso,
+            })
+
+        upsert_rpm_properties(rows)
+
+        runtime = round(_time.time() - t0, 2)
+        logger.info("sync-properties-to-bq: %d rows in %.2fs", len(rows), runtime)
+        return jsonify({
+            "status":            "ok",
+            "rows_written":      len(rows),
+            "companies_scanned": len(all_companies),
+            "runtime_seconds":   runtime,
+        })
+    except Exception as e:
+        logger.error("sync-properties-to-bq failed: %s", e, exc_info=True)
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
 @app.route("/api/ticket", methods=["POST", "OPTIONS"])
 def submit_ticket():
     """Create a HubSpot Service Hub ticket from the client portal.
