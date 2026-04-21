@@ -195,6 +195,72 @@ def run_daily():
         refresh_ranks(uuid, domain)
 
 
+def _meets_tier(tier: str, min_tier: str) -> bool:
+    """True if `tier` meets or exceeds `min_tier` in SEO_TIER_ORDER."""
+    from config import SEO_TIER_ORDER
+    if not tier or tier not in SEO_TIER_ORDER:
+        return False
+    try:
+        return SEO_TIER_ORDER.index(tier) >= SEO_TIER_ORDER.index(min_tier)
+    except ValueError:
+        return False
+
+
+def _refresh_content_planning(uuid: str, domain: str) -> None:
+    """Phase 2 — rebuild cluster cache + populate decay queue for one property.
+
+    Called from run_weekly for Standard+ properties. Errors are logged and
+    swallowed so one bad property doesn't stop the rest of the cron.
+    """
+    from datetime import datetime as _dt
+
+    try:
+        from content_planner import cluster_keywords
+        clusters = cluster_keywords(uuid)
+        logger.info("cluster rebuild for %s: %d clusters", uuid, len(clusters))
+    except Exception as e:
+        logger.error("cluster rebuild failed for %s: %s", uuid, e)
+
+    try:
+        from content_planner import detect_decay
+        from config import (
+            HUBDB_CONTENT_DECAY_TABLE_ID,
+            CONTENT_DECAY_RANK_THRESHOLD,
+            CONTENT_DECAY_MIN_KEYWORDS,
+            CONTENT_REFRESH_LOOKBACK_DAYS,
+        )
+        decay_rows = detect_decay(
+            uuid,
+            threshold=CONTENT_DECAY_RANK_THRESHOLD,
+            min_affected=CONTENT_DECAY_MIN_KEYWORDS,
+            lookback_days=CONTENT_REFRESH_LOOKBACK_DAYS,
+        )
+        logger.info("decay detection for %s: %d URLs flagged", uuid, len(decay_rows))
+
+        # Persist to HubDB so the /api/content/decay endpoint can read it instantly.
+        if HUBDB_CONTENT_DECAY_TABLE_ID and decay_rows:
+            import json as _json
+            from hubdb_helpers import insert_row, publish
+            now_iso = _dt.utcnow().isoformat() + "Z"
+            for row in decay_rows:
+                try:
+                    insert_row(HUBDB_CONTENT_DECAY_TABLE_ID, {
+                        "property_uuid":           uuid,
+                        "url":                     row["url"],
+                        "avg_rank_drop":           row["avg_drop"],
+                        "affected_keywords_count": row["affected_keywords_count"],
+                        "affected_keywords_json":  _json.dumps(row["affected_keywords"]),
+                        "priority":                row["priority"],
+                        "detected_at":             now_iso,
+                        "status":                  "open",
+                    })
+                except Exception as e:
+                    logger.warning("decay row insert failed for %s: %s", row["url"], e)
+            publish(HUBDB_CONTENT_DECAY_TABLE_ID)
+    except Exception as e:
+        logger.error("decay detection failed for %s: %s", uuid, e)
+
+
 def run_weekly():
     if not is_configured():
         logger.error("DataForSEO not configured — aborting weekly refresh")
@@ -220,6 +286,9 @@ def run_weekly():
             refresh_onpage(c["id"], domain)
         except Exception as e:
             logger.error("On-page refresh failed for %s: %s", uuid, e)
+        # Phase 2 — Standard+ gets cluster rebuild + decay detection
+        if _meets_tier(tier, "Standard"):
+            _refresh_content_planning(uuid, domain)
 
 
 if __name__ == "__main__":
