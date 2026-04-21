@@ -186,6 +186,24 @@ def bulk_keyword_difficulty(keywords: list[str], location_code: int | None = Non
     return result.get("items", [])
 
 
+def keyword_suggestions(seed: str, location_code: int | None = None, limit: int = 200) -> list[dict]:
+    """Long-tail variations of a single seed keyword (modifiers prefixed/suffixed).
+
+    Distinct from keyword_ideas which returns semantically-related terms — this
+    returns n-gram variations (e.g. seed='apartments winter garden' yields
+    'apartments winter garden fl', 'luxury apartments winter garden', etc.).
+    """
+    payload = {
+        "keyword": seed,
+        "location_code": location_code or DATAFORSEO_DEFAULT_LOCATION,
+        "language_code": DATAFORSEO_DEFAULT_LANGUAGE,
+        "limit": limit,
+        "include_serp_info": True,
+    }
+    result = _first_result(_post("/v3/dataforseo_labs/google/keyword_suggestions/live", payload))
+    return result.get("items", [])
+
+
 def domain_intersection(target1: str, target2: str, exclude_top_domain: bool = True, limit: int = 200) -> list[dict]:
     """Keywords target2 ranks for but target1 doesn't (competitor gap)."""
     payload = {
