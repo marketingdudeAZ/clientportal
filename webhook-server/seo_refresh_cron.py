@@ -33,7 +33,13 @@ _HS_HDRS = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "appli
 
 
 def _list_seo_companies() -> list[dict]:
-    """Companies with plestatus RPM Managed + an seo_budget > 0 or SEO_Package line item."""
+    """Companies with plestatus RPM Managed + an seo_budget > 0 or SEO_Package line item.
+
+    If SEO_PROPERTY_UUID_ALLOWLIST env var is set (comma-separated list of UUIDs),
+    only companies whose uuid matches are returned. Used during testing to cap
+    DataForSEO spend — e.g. SEO_PROPERTY_UUID_ALLOWLIST=10559996814 scopes to
+    only Muse at Winter Garden.
+    """
     url = "https://api.hubapi.com/crm/v3/objects/companies/search"
     body = {
         "filterGroups": [{
@@ -42,7 +48,8 @@ def _list_seo_companies() -> list[dict]:
                 {"propertyName": "seo_budget", "operator": "HAS_PROPERTY"},
             ],
         }],
-        "properties": ["name", "domain", "city", "state", "seo_budget", "property_uuid"],
+        # Pull `uuid` (the HubSpot property name) — the RPM property UUID is stored there.
+        "properties": ["name", "domain", "city", "state", "seo_budget", "uuid"],
         "limit": 100,
     }
     out: list[dict] = []
@@ -60,11 +67,24 @@ def _list_seo_companies() -> list[dict]:
         if not paging:
             break
         after = paging
+
+    # Optional allowlist — only run the cron against these property UUIDs.
+    # Useful for staged rollout / cost control during testing.
+    allowlist_raw = os.getenv("SEO_PROPERTY_UUID_ALLOWLIST", "").strip()
+    if allowlist_raw:
+        allowed = {u.strip() for u in allowlist_raw.split(",") if u.strip()}
+        before = len(out)
+        out = [c for c in out if _find_property_uuid(c) in allowed]
+        logger.info("SEO_PROPERTY_UUID_ALLOWLIST active: %d -> %d companies", before, len(out))
+
     return out
 
 
 def _find_property_uuid(company: dict) -> str | None:
-    return company.get("properties", {}).get("property_uuid")
+    # HubSpot stores the RPM UUID in the `uuid` company property. Fall back to
+    # the older `property_uuid` name in case any environments still use it.
+    props = company.get("properties", {})
+    return props.get("uuid") or props.get("property_uuid")
 
 
 def refresh_ranks(property_uuid: str, domain: str, location_code: int | None = None) -> int:
