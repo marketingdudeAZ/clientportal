@@ -805,6 +805,14 @@ body{padding-top:36px}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         SEO &amp; AI
       </div>
+      <div class="nav-item" id="nav-content" onclick="nav('content',this)" style="display:none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+        Content
+      </div>
+      <div class="nav-item" id="nav-research" onclick="nav('research',this)" style="display:none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-4.35-4.35"/><circle cx="11" cy="11" r="8"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        Research
+      </div>
       <div class="nav-item" onclick="nav('services',this)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
         Services
@@ -1207,6 +1215,173 @@ body{padding-top:36px}
           <button class="btn btn-secondary" id="seo-comp-add-btn" onclick="seoOpenAddCompetitor()" style="display:none">+ Add competitor</button>
         </div>
         <div id="seo-comp-list" style="font-size:13px;color:var(--tm)">Loading…</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── CONTENT PLANNER (Phase 2 — iPullRank / GEO) ── -->
+<section id="section-content" class="section">
+  <div class="sec-topbar">
+    <div>
+      <div class="sec-title">Content Planner</div>
+      <div class="sec-sub">Topic clusters · AI-generated briefs · refresh queue · iPullRank + GEO methodology</div>
+    </div>
+    <div id="content-tier-badge" style="display:none;padding:6px 12px;border-radius:999px;background:#F0F9FF;color:#075985;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em"></div>
+  </div>
+
+  <div id="content-locked" class="card" style="padding:32px;text-align:center;display:none">
+    <div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:6px">Standard SEO tier required</div>
+    <div style="font-size:13px;color:var(--tm);margin-bottom:16px">Topic clustering, AI-generated briefs, and content refresh queue unlock at the Standard SEO package.</div>
+    <button class="btn btn-primary" onclick="nav('budget', document.querySelector(\"[onclick*='budget']\"))">View SEO tiers</button>
+  </div>
+
+  <div id="content-body" style="display:none">
+
+    <!-- Sub-tabs -->
+    <div class="seo-tabs" style="display:flex;gap:8px;border-bottom:1px solid var(--bd);margin-bottom:16px">
+      <div class="seo-tab active" data-content-tab="clusters"  onclick="contentTab('clusters',this)"  style="padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--tp);border-bottom:2px solid var(--cu)">Topic Clusters</div>
+      <div class="seo-tab"        data-content-tab="briefs"    onclick="contentTab('briefs',this)"    style="padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--ts);border-bottom:2px solid transparent">Briefs</div>
+      <div class="seo-tab"        data-content-tab="decay"     onclick="contentTab('decay',this)"     style="padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--ts);border-bottom:2px solid transparent">Refresh Queue</div>
+    </div>
+
+    <!-- Tab: Topic Clusters -->
+    <div class="seo-panel" data-content-panel="clusters">
+      <div class="card" style="padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--jd)">Hub &amp; Spoke Clusters</div>
+          <div style="font-size:11px;color:var(--tm);margin-top:2px" id="clusters-meta">Tracked keywords grouped by top-10 SERP overlap</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="contentRebuildClusters()">Rebuild</button>
+      </div>
+      <div id="clusters-list" style="display:flex;flex-direction:column;gap:10px">
+        <div style="padding:16px;color:var(--tm);text-align:center">Loading clusters…</div>
+      </div>
+    </div>
+
+    <!-- Tab: Briefs -->
+    <div class="seo-panel" data-content-panel="briefs" style="display:none">
+      <div class="card" style="padding:16px 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:700;color:var(--jd)">Generated Briefs</div>
+          <div style="font-size:11px;color:var(--tm)">Click a cluster above to generate a new brief.</div>
+        </div>
+        <div id="briefs-list" style="font-size:13px;color:var(--tm)">Loading briefs…</div>
+      </div>
+      <!-- Brief detail modal (hidden until used) -->
+      <div id="brief-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:2000">
+        <div style="position:absolute;top:5vh;left:50%;transform:translateX(-50%);width:min(780px,92vw);max-height:90vh;overflow:auto;background:#fff;border-radius:12px;padding:24px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div id="brief-modal-title" style="font-size:16px;font-weight:800;color:var(--jd)"></div>
+            <button onclick="document.getElementById('brief-modal').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tm)">×</button>
+          </div>
+          <div id="brief-modal-body"></div>
+          <div style="margin-top:20px;display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('brief-modal').style.display='none'">Close</button>
+            <button class="btn btn-primary btn-sm"   id="brief-approve-btn" onclick="contentApproveBrief()">Approve &amp; Send to Content Team</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Refresh Queue -->
+    <div class="seo-panel" data-content-panel="decay" style="display:none">
+      <div class="card" style="padding:16px 20px">
+        <div style="font-size:14px;font-weight:700;color:var(--jd);margin-bottom:12px">Pages Losing Rank (last 30 days)</div>
+        <div id="decay-teaser" style="display:none;padding:12px 16px;background:#FEF3C7;border-radius:8px;margin-bottom:12px;font-size:12px;color:#92400E">
+          Showing top 3 of <span id="decay-total">—</span> — upgrade to Premium SEO for the full list.
+        </div>
+        <div id="decay-list" style="font-size:13px;color:var(--tm)">Loading refresh queue…</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── KEYWORD RESEARCH + TRENDS (Phase 3) ── -->
+<section id="section-research" class="section">
+  <div class="sec-topbar">
+    <div>
+      <div class="sec-title">Keyword Research</div>
+      <div class="sec-sub">Ideas · difficulty · competitor gap · seasonal trends</div>
+    </div>
+    <div id="research-tier-badge" style="display:none;padding:6px 12px;border-radius:999px;background:#EEF2FF;color:#3730A3;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em"></div>
+  </div>
+
+  <div id="research-locked" class="card" style="padding:32px;text-align:center;display:none">
+    <div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:6px">Basic SEO tier required</div>
+    <div style="font-size:13px;color:var(--tm);margin-bottom:16px">Keyword research and competitor gap tools unlock at the Basic SEO package.</div>
+    <button class="btn btn-primary" onclick="nav('budget', document.querySelector(\"[onclick*='budget']\"))">View SEO tiers</button>
+  </div>
+
+  <div id="research-body" style="display:none">
+
+    <!-- Sub-tabs -->
+    <div class="seo-tabs" style="display:flex;gap:8px;border-bottom:1px solid var(--bd);margin-bottom:16px">
+      <div class="seo-tab active" data-research-tab="ideas"      onclick="researchTab('ideas',this)"      style="padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--tp);border-bottom:2px solid var(--cu)">Ideas</div>
+      <div class="seo-tab"        data-research-tab="difficulty" onclick="researchTab('difficulty',this)" style="padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--ts);border-bottom:2px solid transparent">Difficulty</div>
+      <div class="seo-tab"        data-research-tab="gap"        onclick="researchTab('gap',this)"        style="padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--ts);border-bottom:2px solid transparent">Competitor Gap</div>
+      <div class="seo-tab"        id="research-tab-trends" data-research-tab="trends" onclick="researchTab('trends',this)" style="padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--ts);border-bottom:2px solid transparent;display:none">Trends</div>
+    </div>
+
+    <!-- Tab: Ideas -->
+    <div class="seo-panel" data-research-panel="ideas">
+      <div class="card" style="padding:16px 20px">
+        <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px">
+          <div style="flex:1">
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);display:block;margin-bottom:4px">Seed keywords (comma-separated)</label>
+            <input type="text" id="ideas-seed" placeholder="e.g. apartments winter garden fl, luxury apartments orlando" style="width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:6px;font-size:13px">
+          </div>
+          <button class="btn btn-primary" onclick="researchFindIdeas()">Find keywords</button>
+        </div>
+        <div id="ideas-results" style="font-size:13px;color:var(--tm);margin-top:12px">Enter a seed keyword above to see ideas.</div>
+      </div>
+    </div>
+
+    <!-- Tab: Difficulty -->
+    <div class="seo-panel" data-research-panel="difficulty" style="display:none">
+      <div class="card" style="padding:16px 20px">
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);display:block;margin-bottom:4px">Paste keywords (one per line, max 1000)</label>
+        <textarea id="kd-input" rows="6" style="width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:6px;font-size:13px;font-family:monospace" placeholder="apartments winter garden&#10;luxury apartments orlando&#10;pet friendly apartments"></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px">
+          <button class="btn btn-primary" onclick="researchCheckDifficulty()">Check difficulty</button>
+        </div>
+        <div id="kd-results" style="margin-top:16px;font-size:13px;color:var(--tm)"></div>
+      </div>
+    </div>
+
+    <!-- Tab: Competitor Gap -->
+    <div class="seo-panel" data-research-panel="gap" style="display:none">
+      <div class="card" style="padding:16px 20px">
+        <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px">
+          <div style="flex:1">
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);display:block;margin-bottom:4px">Competitor domain</label>
+            <input type="text" id="gap-competitor" placeholder="e.g. watermarkwintergarden.com" style="width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:6px;font-size:13px">
+          </div>
+          <button class="btn btn-primary" onclick="researchCompetitorGap()">Find gaps</button>
+        </div>
+        <div id="gap-results" style="font-size:13px;color:var(--tm);margin-top:12px">Enter a competitor domain to see keywords they rank for that you don't.</div>
+      </div>
+    </div>
+
+    <!-- Tab: Trends (Standard+ only) -->
+    <div class="seo-panel" data-research-panel="trends" style="display:none">
+      <div class="card" style="padding:16px 20px">
+        <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px">
+          <div style="flex:1">
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);display:block;margin-bottom:4px">Keywords (up to 5, comma-separated)</label>
+            <input type="text" id="trends-input" placeholder="e.g. apartments winter garden fl, luxury rentals" style="width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:6px;font-size:13px">
+          </div>
+          <select id="trends-timeframe" style="padding:8px 10px;border:1px solid var(--bd);border-radius:6px;font-size:13px">
+            <option value="past_3_months">3 mo</option>
+            <option value="past_12_months" selected>12 mo</option>
+            <option value="past_5_years">5 yr</option>
+          </select>
+          <button class="btn btn-primary" onclick="researchExploreTrends()">Explore</button>
+        </div>
+        <svg id="trends-chart" viewBox="0 0 600 200" preserveAspectRatio="none" style="width:100%;height:200px;background:var(--bg);border-radius:6px"></svg>
+        <div id="trends-peaks" style="margin-top:12px;font-size:12px;color:var(--tm)"></div>
       </div>
     </div>
 
@@ -2503,6 +2678,8 @@ function nav(id, el) {
   if (id === 'activity')         { loadActivity(); }
   if (id === 'recommendations')  { loadCallPrep(); }
   if (id === 'seo')              { if (typeof loadSeoInsights === 'function') loadSeoInsights(); }
+  if (id === 'content')          { if (typeof loadContentPlanner === 'function') loadContentPlanner(); }
+  if (id === 'research')         { if (typeof loadKeywordResearch === 'function') loadKeywordResearch(); }
   if (id === 'services')         { loadServices(); }
   if (id === 'assets')           { assetInitDropzone(); loadAssets(); }
 }
@@ -7499,6 +7676,391 @@ loadPropList();
   };
 
   document.addEventListener('DOMContentLoaded', seoCheckEntitlement);
+})();
+
+// ── Content Planner (Phase 2) ──────────────────────────────────────────────
+(function(){
+  var _cpLoaded = false;
+  var _cpClusters = [];
+  var _cpBriefs = [];
+  var _cpActiveBriefId = null;
+
+  function _cpApi()   { return window.__WEBHOOK_URL__ || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com'; }
+  function _cpCid()   { return window.__PORTAL_COMPANY_ID__ || ''; }
+  function _cpUuid()  { return window.__PORTAL_UUID__ || _cpCid(); }
+  function _cpHdrs()  { return { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }; }
+  function _cpQS()    { return 'company_id=' + encodeURIComponent(_cpCid()) + '&property_uuid=' + encodeURIComponent(_cpUuid()); }
+  function _escHtmlCp(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+  function contentCheckEntitlement() {
+    // Entitlement endpoint returns features map — only show Content nav if features.content_clusters is true
+    var cid = _cpCid();
+    if (!cid) return;
+    fetch(_cpApi() + '/api/seo/entitlement?company_id=' + encodeURIComponent(cid), { headers: _cpHdrs() })
+      .then(function(r){ return r.ok ? r.json() : {features:{}}; })
+      .then(function(data){
+        var f = data.features || {};
+        if (f.content_clusters) {
+          var nav = document.getElementById('nav-content'); if (nav) nav.style.display = '';
+          var badge = document.getElementById('content-tier-badge');
+          if (badge && data.tier) { badge.textContent = data.tier + ' tier'; badge.style.display = ''; }
+        }
+        // Phase 3 nav visibility: show if keywords_read is unlocked (Basic+)
+        if (f.keywords_read || f.keyword_research) {
+          var rnav = document.getElementById('nav-research'); if (rnav) rnav.style.display = '';
+          var rbadge = document.getElementById('research-tier-badge');
+          if (rbadge && data.tier) { rbadge.textContent = data.tier + ' tier'; rbadge.style.display = ''; }
+        }
+        // Trends tab visible only at Standard+
+        if (f.trend_explorer) {
+          var tt = document.getElementById('research-tab-trends'); if (tt) tt.style.display = '';
+        }
+      })
+      .catch(function(){});
+  }
+
+  window.loadContentPlanner = function() {
+    if (_cpLoaded) return;
+    _cpLoaded = true;
+    var body = document.getElementById('content-body');
+    if (body) body.style.display = '';
+
+    // Clusters
+    fetch(_cpApi() + '/api/content/clusters?' + _cpQS(), { headers: _cpHdrs() })
+      .then(function(r){
+        if (r.status === 403) { _cpShowLocked(); return null; }
+        return r.ok ? r.json() : null;
+      })
+      .then(function(d){ if (d) { _cpClusters = d.clusters || []; _cpRenderClusters(); } })
+      .catch(function(){});
+
+    // Briefs
+    fetch(_cpApi() + '/api/content/briefs?' + _cpQS(), { headers: _cpHdrs() })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){ if (d) { _cpBriefs = d.briefs || []; _cpRenderBriefs(); } })
+      .catch(function(){});
+
+    // Decay
+    fetch(_cpApi() + '/api/content/decay?' + _cpQS(), { headers: _cpHdrs() })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){ if (d) _cpRenderDecay(d); })
+      .catch(function(){});
+  };
+
+  function _cpShowLocked() {
+    var l = document.getElementById('content-locked'); if (l) l.style.display = '';
+    var b = document.getElementById('content-body');   if (b) b.style.display = 'none';
+  }
+
+  window.contentTab = function(name, el) {
+    document.querySelectorAll('[data-content-tab]').forEach(function(t){ t.style.color = 'var(--ts)'; t.style.borderBottomColor = 'transparent'; });
+    if (el) { el.style.color = 'var(--tp)'; el.style.borderBottomColor = 'var(--cu)'; }
+    document.querySelectorAll('[data-content-panel]').forEach(function(p){
+      p.style.display = (p.getAttribute('data-content-panel') === name) ? '' : 'none';
+    });
+  };
+
+  function _cpRenderClusters() {
+    var el = document.getElementById('clusters-list');
+    if (!el) return;
+    if (!_cpClusters.length) {
+      el.innerHTML = '<div style="padding:16px 0;color:var(--tm);text-align:center">No clusters yet — add tracked keywords first, or hit Rebuild.</div>';
+      return;
+    }
+    el.innerHTML = _cpClusters.map(function(c, idx){
+      var spokesHtml = (c.spokes || []).map(function(s){ return '<span style="display:inline-block;padding:2px 8px;background:var(--bg);border-radius:4px;font-size:11px;margin:2px">' + _escHtmlCp(s) + '</span>'; }).join('');
+      return '<div class="card" style="padding:14px 16px">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+        +   '<div style="font-weight:700;color:var(--jd);font-size:14px">' + _escHtmlCp(c.hub_keyword) + '</div>'
+        +   '<button class="btn btn-primary btn-sm" onclick="contentGenerateBrief(' + idx + ')">Generate Brief</button>'
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--tm);margin-bottom:8px">'
+        +   (c.spokes.length ? c.spokes.length + ' spokes' : 'standalone') + ' · '
+        +   'vol ' + (c.total_volume || 0).toLocaleString() + ' · '
+        +   'coverage ' + Math.round((c.current_coverage_pct || 0) * 100) + '% · '
+        +   'KD ' + (c.avg_difficulty || 0)
+        + '</div>'
+        + (spokesHtml ? '<div>' + spokesHtml + '</div>' : '')
+        + '</div>';
+    }).join('');
+  }
+
+  window.contentRebuildClusters = function() {
+    var el = document.getElementById('clusters-list');
+    if (el) el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--tm)">Rebuilding…</div>';
+    fetch(_cpApi() + '/api/content/clusters/rebuild?' + _cpQS(), {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, _cpHdrs()),
+      body: JSON.stringify({ company_id: _cpCid(), property_uuid: _cpUuid() }),
+    }).then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){ if (d) { _cpClusters = d.clusters || []; _cpRenderClusters(); }});
+  };
+
+  window.contentGenerateBrief = function(idx) {
+    var cluster = _cpClusters[idx];
+    if (!cluster) return;
+    var body = { company_id: _cpCid(), property_uuid: _cpUuid(), cluster_hub_keyword: cluster.hub_keyword, spokes: cluster.spokes };
+    fetch(_cpApi() + '/api/content/briefs', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, _cpHdrs()),
+      body: JSON.stringify(body),
+    }).then(function(r){ return r.json(); })
+      .then(function(d){
+        alert('Brief generation started. It will appear in the Briefs tab in ~30 seconds.');
+        // Refresh briefs list after a delay
+        setTimeout(function(){
+          fetch(_cpApi() + '/api/content/briefs?' + _cpQS(), { headers: _cpHdrs() })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(d){ if (d) { _cpBriefs = d.briefs || []; _cpRenderBriefs(); }});
+        }, 30000);
+      });
+  };
+
+  function _cpRenderBriefs() {
+    var el = document.getElementById('briefs-list');
+    if (!el) return;
+    if (!_cpBriefs.length) {
+      el.innerHTML = '<div style="padding:16px 0;color:var(--tm);text-align:center">No briefs yet. Generate one from the Topic Clusters tab.</div>';
+      return;
+    }
+    el.innerHTML = _cpBriefs.map(function(b){
+      return '<div style="padding:12px 0;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between">'
+        + '<div>'
+        +   '<div style="font-weight:600;color:var(--jd);font-size:13px">' + _escHtmlCp(b.h1 || b.hub_keyword || '(untitled)') + '</div>'
+        +   '<div style="font-size:11px;color:var(--tm)">Hub: ' + _escHtmlCp(b.hub_keyword || '') + ' · ' + _escHtmlCp(b.status || 'generated') + ' · ' + _escHtmlCp((b.generated_at || '').slice(0, 10)) + '</div>'
+        + '</div>'
+        + '<button class="btn btn-secondary btn-sm" onclick="contentOpenBrief(\'' + _escHtmlCp(b.brief_id) + '\')">View</button>'
+        + '</div>';
+    }).join('');
+  }
+
+  window.contentOpenBrief = function(brief_id) {
+    _cpActiveBriefId = brief_id;
+    fetch(_cpApi() + '/api/content/briefs/' + encodeURIComponent(brief_id) + '?' + _cpQS(), { headers: _cpHdrs() })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(b){
+        if (!b) return;
+        var titleEl = document.getElementById('brief-modal-title');
+        if (titleEl) titleEl.textContent = b.h1 || b.hub_keyword || 'Brief';
+        var bodyEl = document.getElementById('brief-modal-body');
+        var outline = [];
+        try { outline = JSON.parse(b.outline_json || '[]'); } catch(e){}
+        var outlineHtml = outline.map(function(s){
+          var h3s = (s.h3_list || []).map(function(h){ return '<li style="font-size:12px;color:var(--ts)">' + _escHtmlCp(h) + '</li>'; }).join('');
+          var ents = (s.target_entities || []).map(function(e){ return '<span style="display:inline-block;padding:1px 6px;background:#EEF2FF;color:#3730A3;font-size:10px;border-radius:4px;margin-right:4px">' + _escHtmlCp(e) + '</span>'; }).join('');
+          var paa = (s.paa_answered || []).map(function(q){ return '<div style="font-size:11px;color:var(--tm);font-style:italic">PAA: ' + _escHtmlCp(q) + '</div>'; }).join('');
+          return '<div style="padding:10px 0;border-bottom:1px solid var(--bd)">'
+            + '<div style="font-weight:700;color:var(--jd);font-size:14px;margin-bottom:4px">' + _escHtmlCp(s.h2) + '</div>'
+            + (h3s ? '<ul style="margin:6px 0 6px 20px;padding:0">' + h3s + '</ul>' : '')
+            + (ents ? '<div style="margin:6px 0">Entities: ' + ents + '</div>' : '')
+            + paa
+            + '</div>';
+        }).join('');
+        if (bodyEl) {
+          bodyEl.innerHTML = ''
+            + '<div style="font-size:12px;color:var(--tm);margin-bottom:12px">' + _escHtmlCp(b.meta_description || '') + '</div>'
+            + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);margin-bottom:4px">Outline · target ' + (b.target_word_count || '?') + ' words</div>'
+            + outlineHtml
+            + (b.schema_types ? '<div style="margin-top:12px;font-size:12px"><strong>Schema types:</strong> ' + _escHtmlCp(b.schema_types) + '</div>' : '');
+        }
+        var m = document.getElementById('brief-modal'); if (m) m.style.display = '';
+      });
+  };
+
+  window.contentApproveBrief = function() {
+    if (!_cpActiveBriefId) return;
+    var body = { company_id: _cpCid(), property_uuid: _cpUuid(), brief_id: _cpActiveBriefId, property_name: window.__PORTAL_PROP_NAME || '' };
+    fetch(_cpApi() + '/api/content/approve', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, _cpHdrs()),
+      body: JSON.stringify(body),
+    }).then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        alert('Brief approved — routed to Content team via ClickUp.');
+        var m = document.getElementById('brief-modal'); if (m) m.style.display = 'none';
+      });
+  };
+
+  function _cpRenderDecay(d) {
+    var el = document.getElementById('decay-list');
+    var teaserEl = document.getElementById('decay-teaser');
+    var totalEl = document.getElementById('decay-total');
+    if (!el) return;
+    var rows = d.rows || [];
+    if (d.teaser) {
+      if (teaserEl) teaserEl.style.display = '';
+      if (totalEl) totalEl.textContent = d.total || rows.length;
+    } else if (teaserEl) { teaserEl.style.display = 'none'; }
+
+    if (!rows.length) {
+      el.innerHTML = '<div style="padding:16px 0;color:var(--tm);text-align:center">No declining pages detected. Good news.</div>';
+      return;
+    }
+    var pri = {high:'#B91C1C', medium:'#D4910A', low:'#6B7280'};
+    el.innerHTML = rows.map(function(r){
+      return '<div style="padding:12px 0;border-bottom:1px solid var(--bd)">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between">'
+        +   '<a href="' + _escHtmlCp(r.url) + '" target="_blank" style="color:var(--cu);font-size:12px;text-decoration:none">' + _escHtmlCp(r.url) + '</a>'
+        +   '<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:' + pri[r.priority] + '22;color:' + pri[r.priority] + '">' + _escHtmlCp((r.priority || '').toUpperCase()) + '</span>'
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--tm);margin-top:4px">avg drop ' + r.avg_drop + ' positions · ' + r.affected_keywords_count + ' keywords affected</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  document.addEventListener('DOMContentLoaded', contentCheckEntitlement);
+})();
+
+// ── Keyword Research + Trends (Phase 3) ───────────────────────────────────
+(function(){
+  function _krApi()   { return window.__WEBHOOK_URL__ || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com'; }
+  function _krCid()   { return window.__PORTAL_COMPANY_ID__ || ''; }
+  function _krUuid()  { return window.__PORTAL_UUID__ || _krCid(); }
+  function _krHdrs()  { return { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }; }
+  function _krQS()    { return 'company_id=' + encodeURIComponent(_krCid()) + '&property_uuid=' + encodeURIComponent(_krUuid()); }
+  function _escHtmlKr(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+  window.loadKeywordResearch = function() {
+    var body = document.getElementById('research-body');
+    if (body) body.style.display = '';
+  };
+
+  window.researchTab = function(name, el) {
+    document.querySelectorAll('[data-research-tab]').forEach(function(t){ t.style.color = 'var(--ts)'; t.style.borderBottomColor = 'transparent'; });
+    if (el) { el.style.color = 'var(--tp)'; el.style.borderBottomColor = 'var(--cu)'; }
+    document.querySelectorAll('[data-research-panel]').forEach(function(p){
+      p.style.display = (p.getAttribute('data-research-panel') === name) ? '' : 'none';
+    });
+  };
+
+  window.researchFindIdeas = function() {
+    var seed = (document.getElementById('ideas-seed').value || '').trim();
+    if (!seed) return;
+    var el = document.getElementById('ideas-results');
+    el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--tm)">Searching…</div>';
+    fetch(_krApi() + '/api/keywords/ideas?' + _krQS() + '&seed=' + encodeURIComponent(seed) + '&limit=100', { headers: _krHdrs() })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        if (!d) { el.innerHTML = '<div style="color:var(--tm)">No results.</div>'; return; }
+        var rows = d.keywords || [];
+        if (!rows.length) { el.innerHTML = '<div>No ideas returned.</div>'; return; }
+        var body = rows.slice(0, 50).map(function(r){
+          return '<tr>'
+            + '<td style="padding:6px 10px;font-size:12px"><input type="checkbox" class="kr-idea-cb" value="' + _escHtmlKr(r.keyword) + '"> ' + _escHtmlKr(r.keyword) + '</td>'
+            + '<td style="text-align:right;padding:6px 10px;font-size:12px">' + (r.volume || 0).toLocaleString() + '</td>'
+            + '<td style="text-align:right;padding:6px 10px;font-size:12px">' + (r.difficulty != null ? r.difficulty : '—') + '</td>'
+            + '<td style="padding:6px 10px;font-size:11px;color:var(--tm)">' + _escHtmlKr(r.intent || '—') + '</td>'
+            + '<td style="text-align:right;padding:6px 10px;font-size:12px">$' + (r.cpc || 0).toFixed(2) + '</td>'
+            + '</tr>';
+        }).join('');
+        el.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+          + '<div style="font-size:11px;color:var(--tm)">' + rows.length + ' ideas (showing top 50)</div>'
+          + '<button class="btn btn-primary btn-sm" onclick="researchSaveSelected()">Add selected to tracking</button>'
+          + '</div>'
+          + '<table style="width:100%;border-collapse:collapse">'
+          + '<thead><tr>'
+          + '<th style="text-align:left;padding:6px 10px;font-size:10px;text-transform:uppercase;color:var(--tm)">Keyword</th>'
+          + '<th style="text-align:right;padding:6px 10px;font-size:10px;text-transform:uppercase;color:var(--tm)">Volume</th>'
+          + '<th style="text-align:right;padding:6px 10px;font-size:10px;text-transform:uppercase;color:var(--tm)">KD</th>'
+          + '<th style="text-align:left;padding:6px 10px;font-size:10px;text-transform:uppercase;color:var(--tm)">Intent</th>'
+          + '<th style="text-align:right;padding:6px 10px;font-size:10px;text-transform:uppercase;color:var(--tm)">CPC</th>'
+          + '</tr></thead><tbody>' + body + '</tbody></table>';
+      });
+  };
+
+  window.researchSaveSelected = function() {
+    var checked = Array.from(document.querySelectorAll('.kr-idea-cb:checked')).map(function(c){ return c.value; });
+    if (!checked.length) { alert('Select at least one keyword.'); return; }
+    var payload = { company_id: _krCid(), property_uuid: _krUuid(),
+      keywords: checked.map(function(k){ return {keyword: k, priority: 'medium'}; }) };
+    fetch(_krApi() + '/api/keywords/save', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, _krHdrs()),
+      body: JSON.stringify(payload),
+    }).then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){ alert('Saved ' + (d && d.saved || 0) + ' keywords to tracking.'); });
+  };
+
+  window.researchCheckDifficulty = function() {
+    var raw = (document.getElementById('kd-input').value || '').trim();
+    var kws = raw.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+    if (!kws.length) return;
+    var el = document.getElementById('kd-results');
+    el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--tm)">Checking ' + kws.length + ' keywords…</div>';
+    fetch(_krApi() + '/api/keywords/difficulty', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, _krHdrs()),
+      body: JSON.stringify({ company_id: _krCid(), property_uuid: _krUuid(), keywords: kws }),
+    }).then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        if (!d) { el.innerHTML = '<div style="color:var(--tm)">No results.</div>'; return; }
+        var rows = d.results || [];
+        el.innerHTML = '<table style="width:100%;border-collapse:collapse">'
+          + '<thead><tr><th style="text-align:left;padding:6px 10px;font-size:10px;text-transform:uppercase;color:var(--tm)">Keyword</th><th style="text-align:right;padding:6px 10px;font-size:10px;text-transform:uppercase;color:var(--tm)">Difficulty</th></tr></thead>'
+          + '<tbody>' + rows.map(function(r){
+            var kd = r.difficulty != null ? r.difficulty : 0;
+            var color = kd < 30 ? '#047857' : kd < 60 ? '#92400E' : '#B91C1C';
+            return '<tr><td style="padding:6px 10px;font-size:12px">' + _escHtmlKr(r.keyword) + '</td>'
+              + '<td style="text-align:right;padding:6px 10px;font-size:13px;font-weight:700;color:' + color + '">' + kd + '</td></tr>';
+          }).join('') + '</tbody></table>';
+      });
+  };
+
+  window.researchCompetitorGap = function() {
+    var comp = (document.getElementById('gap-competitor').value || '').trim();
+    if (!comp) return;
+    var el = document.getElementById('gap-results');
+    el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--tm)">Analyzing gap vs ' + _escHtmlKr(comp) + '…</div>';
+    fetch(_krApi() + '/api/keywords/gap?' + _krQS() + '&competitor=' + encodeURIComponent(comp), { headers: _krHdrs() })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        if (!d) { el.innerHTML = '<div>No results.</div>'; return; }
+        var rows = d.gaps || [];
+        if (!rows.length) { el.innerHTML = '<div style="padding:16px">No gap opportunities found with current filters.</div>'; return; }
+        el.innerHTML = '<table style="width:100%;border-collapse:collapse">'
+          + '<thead><tr><th style="text-align:left;padding:6px 10px;font-size:10px;text-transform:uppercase;color:var(--tm)">Keyword</th><th style="text-align:right;padding:6px 10px;font-size:10px;text-transform:uppercase;color:var(--tm)">Volume</th><th style="text-align:right;padding:6px 10px;font-size:10px;text-transform:uppercase;color:var(--tm)">KD</th></tr></thead>'
+          + '<tbody>' + rows.slice(0, 50).map(function(r){
+            return '<tr><td style="padding:6px 10px;font-size:12px">' + _escHtmlKr(r.keyword) + '</td>'
+              + '<td style="text-align:right;padding:6px 10px;font-size:12px">' + (r.volume || 0).toLocaleString() + '</td>'
+              + '<td style="text-align:right;padding:6px 10px;font-size:12px">' + (r.difficulty || '—') + '</td></tr>';
+          }).join('') + '</tbody></table>';
+      });
+  };
+
+  window.researchExploreTrends = function() {
+    var kws = (document.getElementById('trends-input').value || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean).slice(0, 5);
+    if (!kws.length) return;
+    var tf = document.getElementById('trends-timeframe').value;
+    fetch(_krApi() + '/api/trends/explore?' + _krQS() + '&keywords=' + encodeURIComponent(kws.join(',')) + '&timeframe=' + encodeURIComponent(tf), { headers: _krHdrs() })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        var svg = document.getElementById('trends-chart');
+        if (!svg) return;
+        var series = (d && d.series) || [];
+        if (!series.length) { svg.innerHTML = '<text x="50%" y="50%" text-anchor="middle" fill="#9CA3AF" font-size="12">No data</text>'; return; }
+        var colors = ['#C8964E', '#8FA68E', '#7B9EC9', '#B95C50', '#6B7280'];
+        var w = 600, h = 200, pad = 10;
+        var allVals = series.reduce(function(acc, s){ return acc.concat(s.values || []); }, []);
+        var max = Math.max.apply(null, allVals.length ? allVals : [1]);
+        svg.innerHTML = series.map(function(s, idx){
+          var pts = (s.values || []).map(function(v, i){
+            var x = pad + (i / Math.max(1, (s.values.length - 1))) * (w - 2 * pad);
+            var y = h - pad - ((v || 0) / max) * (h - 2 * pad);
+            return (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
+          }).join(' ');
+          return '<path d="' + pts + '" fill="none" stroke="' + colors[idx % colors.length] + '" stroke-width="1.5"/>';
+        }).join('');
+        // Peaks summary below chart
+        fetch(_krApi() + '/api/trends/seasonal?' + _krQS() + '&keywords=' + encodeURIComponent(kws.join(',')), { headers: _krHdrs() })
+          .then(function(r){ return r.ok ? r.json() : null; })
+          .then(function(p){
+            var el = document.getElementById('trends-peaks');
+            if (!el) return;
+            if (!p || !p.peaks) { el.textContent = ''; return; }
+            el.innerHTML = p.peaks.map(function(pk){ return '<div>' + _escHtmlKr(pk.keyword) + ': peak in ' + _escHtmlKr(pk.peak_month) + '</div>'; }).join('');
+          });
+      });
+  };
 })();
 </script>
 </body>
