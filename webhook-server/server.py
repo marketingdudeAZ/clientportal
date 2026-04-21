@@ -3830,6 +3830,227 @@ def content_decay():
     return jsonify({"rows": rows, "teaser": False, "total": len(rows)})
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Phase 3 — Keyword Research + Trends
+# Ideas/difficulty/gap → Basic+. Trends → Standard+.
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/keywords/ideas", methods=["GET", "OPTIONS"])
+def keywords_ideas():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, _, tier = ctx
+    gate = _require_feature(tier, "keyword_research")
+    if gate:
+        return gate
+    seed = (request.args.get("seed") or "").strip()
+    if not seed:
+        return jsonify({"error": "seed is required"}), 400
+    try:
+        location = int(request.args.get("location", 2840))
+    except (ValueError, TypeError):
+        location = 2840
+    try:
+        from config import KEYWORD_RESEARCH_MAX_RESULTS
+        limit = min(int(request.args.get("limit", 200)), KEYWORD_RESEARCH_MAX_RESULTS)
+    except (ValueError, TypeError):
+        limit = 200
+    try:
+        from keyword_research import expand_seed
+        seeds = [s.strip() for s in seed.split(",") if s.strip()]
+        results = expand_seed(seeds, location_code=location, limit=limit)
+        return jsonify({"keywords": results, "count": len(results)})
+    except Exception as e:
+        logger.error("keywords_ideas failed: %s", e, exc_info=True)
+        return jsonify({"error": "Idea expansion failed"}), 500
+
+
+@app.route("/api/keywords/suggestions", methods=["GET", "OPTIONS"])
+def keywords_suggestions():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, _, tier = ctx
+    gate = _require_feature(tier, "keyword_research")
+    if gate:
+        return gate
+    seed = (request.args.get("seed") or "").strip()
+    if not seed:
+        return jsonify({"error": "seed is required"}), 400
+    try:
+        from keyword_research import suggest_variations
+        results = suggest_variations(seed, limit=int(request.args.get("limit", 200)))
+        return jsonify({"keywords": results, "count": len(results)})
+    except Exception as e:
+        logger.error("keywords_suggestions failed: %s", e, exc_info=True)
+        return jsonify({"error": "Suggestion fetch failed"}), 500
+
+
+@app.route("/api/keywords/difficulty", methods=["POST", "OPTIONS"])
+def keywords_difficulty():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, _, tier = ctx
+    gate = _require_feature(tier, "keyword_research")
+    if gate:
+        return gate
+    payload = request.get_json(silent=True) or {}
+    kws = payload.get("keywords") or []
+    if not isinstance(kws, list):
+        return jsonify({"error": "keywords must be a list"}), 400
+    from config import KEYWORD_DIFFICULTY_BATCH_MAX
+    if len(kws) > KEYWORD_DIFFICULTY_BATCH_MAX * 10:
+        return jsonify({"error": f"Max {KEYWORD_DIFFICULTY_BATCH_MAX * 10} keywords per request"}), 400
+    try:
+        from keyword_research import enrich_difficulty
+        results = enrich_difficulty([k for k in kws if isinstance(k, str)], batch_max=KEYWORD_DIFFICULTY_BATCH_MAX)
+        return jsonify({"results": results, "count": len(results)})
+    except Exception as e:
+        logger.error("keywords_difficulty failed: %s", e, exc_info=True)
+        return jsonify({"error": "Difficulty check failed"}), 500
+
+
+@app.route("/api/keywords/gap", methods=["GET", "OPTIONS"])
+def keywords_gap():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, company_id, _, tier = ctx
+    gate = _require_feature(tier, "keyword_research")
+    if gate:
+        return gate
+    competitor = (request.args.get("competitor") or "").strip().lower()
+    if not competitor:
+        return jsonify({"error": "competitor is required"}), 400
+
+    # Fetch property's own domain from HubSpot
+    import requests as _req
+    from config import HUBSPOT_API_KEY as _HK
+    try:
+        r = _req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties=domain",
+            headers={"Authorization": f"Bearer {_HK}"}, timeout=10,
+        )
+        property_domain = (r.json().get("properties") or {}).get("domain") if r.status_code == 200 else ""
+    except Exception:
+        property_domain = ""
+    if not property_domain:
+        return jsonify({"error": "Property domain not set on HubSpot company — cannot compute gap"}), 400
+
+    try:
+        from keyword_research import competitor_gap
+        gaps = competitor_gap(property_domain, competitor)
+        return jsonify({"gaps": gaps, "count": len(gaps), "property_domain": property_domain, "competitor": competitor})
+    except Exception as e:
+        logger.error("keywords_gap failed: %s", e, exc_info=True)
+        return jsonify({"error": "Gap analysis failed"}), 500
+
+
+@app.route("/api/keywords/save", methods=["POST", "OPTIONS"])
+def keywords_save():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, property_uuid, tier = ctx
+    # Writing keywords = same gate as keywords_write, not keyword_research (research is read-only discovery)
+    gate = _require_feature(tier, "keywords_write")
+    if gate:
+        return gate
+    payload = request.get_json(silent=True) or {}
+    kws = payload.get("keywords") or []
+    if not isinstance(kws, list) or not kws:
+        return jsonify({"error": "keywords list required"}), 400
+    try:
+        from keyword_research import save_to_tracked
+        saved = save_to_tracked(property_uuid, kws)
+        return jsonify({"status": "ok", "saved": saved})
+    except Exception as e:
+        logger.error("keywords_save failed: %s", e, exc_info=True)
+        return jsonify({"error": "Save failed"}), 500
+
+
+@app.route("/api/trends/explore", methods=["GET", "OPTIONS"])
+def trends_explore_route():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, _, tier = ctx
+    gate = _require_feature(tier, "trend_explorer")
+    if gate:
+        return gate
+    kws_raw = (request.args.get("keywords") or "").strip()
+    kws = [k.strip() for k in kws_raw.split(",") if k.strip()]
+    if not kws:
+        return jsonify({"error": "keywords is required"}), 400
+    timeframe = request.args.get("timeframe", "past_12_months")
+    try:
+        from trend_explorer import explore
+        result = explore(kws, timeframe=timeframe)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("trends_explore_route failed: %s", e, exc_info=True)
+        return jsonify({"error": "Trend exploration failed"}), 500
+
+
+@app.route("/api/trends/seasonal", methods=["GET", "OPTIONS"])
+def trends_seasonal_route():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, _, tier = ctx
+    gate = _require_feature(tier, "trend_explorer")
+    if gate:
+        return gate
+    kws_raw = (request.args.get("keywords") or "").strip()
+    kws = [k.strip() for k in kws_raw.split(",") if k.strip()]
+    if not kws:
+        return jsonify({"error": "keywords is required"}), 400
+    try:
+        from trend_explorer import seasonal_peaks
+        return jsonify(seasonal_peaks(kws))
+    except Exception as e:
+        logger.error("trends_seasonal_route failed: %s", e, exc_info=True)
+        return jsonify({"error": "Seasonal analysis failed"}), 500
+
+
+@app.route("/api/trends/rising", methods=["GET", "OPTIONS"])
+def trends_rising_route():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, _, tier = ctx
+    gate = _require_feature(tier, "trend_explorer")
+    if gate:
+        return gate
+    seed = (request.args.get("seed") or "").strip()
+    if not seed:
+        return jsonify({"error": "seed is required"}), 400
+    try:
+        from trend_explorer import related_rising
+        return jsonify(related_rising(seed))
+    except Exception as e:
+        logger.error("trends_rising_route failed: %s", e, exc_info=True)
+        return jsonify({"error": "Rising query fetch failed"}), 500
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return '{"status":"ok"}', 200, {"Content-Type": "application/json"}
