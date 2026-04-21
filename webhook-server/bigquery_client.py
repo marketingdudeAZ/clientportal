@@ -379,6 +379,73 @@ def get_ninjacat_benchmarks(market, size_band):
     return out
 
 
+# ── SEO rank history (daily time series) ───────────────────────────────────
+
+def write_seo_rank_snapshot(property_uuid, rows):
+    """Append a daily rank snapshot for a property.
+
+    rows: list of dicts with keys: keyword, position (int|null),
+          url (str|null), volume, difficulty, fetched_at (ISO datetime).
+    """
+    from config import BIGQUERY_SEO_RANKS_TABLE
+    from datetime import datetime
+    now = datetime.utcnow().isoformat() + "Z"
+    records = []
+    for r in rows:
+        records.append({
+            "property_uuid": property_uuid,
+            "keyword": r["keyword"],
+            "position": r.get("position"),
+            "url": r.get("url"),
+            "volume": r.get("volume"),
+            "difficulty": r.get("difficulty"),
+            "fetched_at": r.get("fetched_at", now),
+        })
+    if records:
+        insert_rows(BIGQUERY_SEO_RANKS_TABLE, records)
+
+
+def get_seo_rank_history(property_uuid, days=90):
+    """Return time series of keyword ranks for a property.
+
+    Result: list of {keyword, position, url, fetched_at} ordered by fetched_at DESC.
+    """
+    from google.cloud import bigquery
+    from config import BIGQUERY_SEO_RANKS_TABLE
+    dataset = _dataset()
+    sql = f"""
+        SELECT keyword, position, url, volume, difficulty, fetched_at
+        FROM `{BIGQUERY_PROJECT_ID}.{dataset}.{BIGQUERY_SEO_RANKS_TABLE}`
+        WHERE property_uuid = @uuid
+          AND fetched_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)
+        ORDER BY fetched_at DESC
+    """
+    params = [
+        bigquery.ScalarQueryParameter("uuid", "STRING", property_uuid),
+        bigquery.ScalarQueryParameter("days", "INT64", days),
+    ]
+    return query(sql, params)
+
+
+def get_seo_rank_latest(property_uuid):
+    """Most recent position per keyword for a property."""
+    from google.cloud import bigquery
+    from config import BIGQUERY_SEO_RANKS_TABLE
+    dataset = _dataset()
+    sql = f"""
+        WITH ranked AS (
+          SELECT keyword, position, url, volume, difficulty, fetched_at,
+                 ROW_NUMBER() OVER (PARTITION BY keyword ORDER BY fetched_at DESC) rn
+          FROM `{BIGQUERY_PROJECT_ID}.{dataset}.{BIGQUERY_SEO_RANKS_TABLE}`
+          WHERE property_uuid = @uuid
+        )
+        SELECT keyword, position, url, volume, difficulty, fetched_at
+        FROM ranked WHERE rn = 1
+    """
+    params = [bigquery.ScalarQueryParameter("uuid", "STRING", property_uuid)]
+    return query(sql, params)
+
+
 def get_top_insights(property_uuid, report_month=None, limit=5):
     """Fetch top insights for a property for digest generation.
 
