@@ -286,6 +286,39 @@ def route_approval(rec_id, rec_type, property_uuid, company_id, property_name,
         if task_id:
             actions.append(f"HubSpot AM task created: {task_id}")
 
+    elif rec_type == "content_brief":
+        # Content brief approved by client — route to SEO / Content team ClickUp
+        # list. The rec_body holds the full brief (outline JSON + entity targets).
+        cu_list = CLICKUP_LISTS.get("seo")
+        cu_desc = (
+            f"{rec_body}\n\n"
+            f"Property UUID: {property_uuid}\n"
+            f"Brief ID: {rec_id}\n"
+            f"Action: Write/publish content per the brief above."
+        )
+        cu_task = _create_clickup_task(cu_list, f"{property_name} — Content Brief: {rec_title}", cu_desc)
+        if cu_task:
+            actions.append(f"ClickUp SEO content task created: {cu_task.get('id')}")
+        else:
+            errors.append("ClickUp task creation failed — falling back to HubSpot task")
+            fallback = _create_hubspot_task(
+                company_id,
+                f"Content Brief: {rec_title} — approved by client (ClickUp failed)",
+                f"{rec_body}\n\nNOTE: ClickUp task creation failed. Please create manually.",
+                am_owner_id,
+            )
+            if fallback:
+                actions.append(f"HubSpot fallback task created: {fallback}")
+
+        task_id = _create_hubspot_task(
+            company_id,
+            f"Content Brief: {rec_title} — approved by client",
+            f"Client approved content brief. Content team notified via ClickUp.\n\n{rec_body}",
+            am_owner_id,
+        )
+        if task_id:
+            actions.append(f"HubSpot AM task created: {task_id}")
+
     else:
         errors.append(f"Unknown rec_type: {rec_type}")
 
