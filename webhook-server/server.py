@@ -3579,6 +3579,257 @@ def seo_entitlement_probe():
     })
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Phase 2 — Content Planner (iPullRank / GEO)
+# Tier gating: Standard+ for clusters/briefs. Basic sees teaser decay (top 3).
+# ═══════════════════════════════════════════════════════════════════════════
+
+# In-memory cluster cache: {property_uuid: (timestamp_iso, clusters_list)}
+# Rebuilt by weekly cron; /api/content/clusters returns cached value if < 7 days old.
+_CONTENT_CLUSTER_CACHE: dict = {}
+_CLUSTER_CACHE_TTL_DAYS = 7
+
+
+@app.route("/api/content/clusters", methods=["GET", "OPTIONS"])
+def content_clusters():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, property_uuid, tier = ctx
+    gate = _require_feature(tier, "content_clusters")
+    if gate:
+        return gate
+
+    from datetime import datetime as _dt, timedelta as _td
+    cached = _CONTENT_CLUSTER_CACHE.get(property_uuid)
+    if cached:
+        ts, data = cached
+        if _dt.fromisoformat(ts) > _dt.utcnow() - _td(days=_CLUSTER_CACHE_TTL_DAYS):
+            return jsonify({"clusters": data, "cached_at": ts, "stale": False})
+
+    # Build on-demand (only if cache miss — cron populates proactively)
+    try:
+        from content_planner import cluster_keywords
+        clusters = cluster_keywords(property_uuid)
+        ts = _dt.utcnow().isoformat()
+        _CONTENT_CLUSTER_CACHE[property_uuid] = (ts, clusters)
+        return jsonify({"clusters": clusters, "cached_at": ts, "stale": False})
+    except Exception as e:
+        logger.error("content_clusters failed for %s: %s", property_uuid, e, exc_info=True)
+        return jsonify({"error": "Failed to build clusters"}), 500
+
+
+@app.route("/api/content/clusters/rebuild", methods=["POST", "OPTIONS"])
+def content_clusters_rebuild():
+    """Force-rebuild the cluster cache (AM-initiated)."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, property_uuid, tier = ctx
+    gate = _require_feature(tier, "content_clusters")
+    if gate:
+        return gate
+    from datetime import datetime as _dt
+    try:
+        from content_planner import cluster_keywords
+        clusters = cluster_keywords(property_uuid)
+        ts = _dt.utcnow().isoformat()
+        _CONTENT_CLUSTER_CACHE[property_uuid] = (ts, clusters)
+        return jsonify({"clusters": clusters, "cached_at": ts, "rebuilt": True})
+    except Exception as e:
+        logger.error("cluster rebuild failed: %s", e, exc_info=True)
+        return jsonify({"error": "Rebuild failed"}), 500
+
+
+@app.route("/api/content/briefs", methods=["GET", "POST", "OPTIONS"])
+def content_briefs():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, company_id, property_uuid, tier = ctx
+    gate = _require_feature(tier, "content_briefs")
+    if gate:
+        return gate
+
+    if request.method == "GET":
+        from config import HUBDB_CONTENT_BRIEFS_TABLE_ID
+        from hubdb_helpers import read_rows
+        rows = read_rows(HUBDB_CONTENT_BRIEFS_TABLE_ID, filters={"property_uuid": property_uuid}) if HUBDB_CONTENT_BRIEFS_TABLE_ID else []
+        return jsonify({"briefs": rows})
+
+    # POST: generate a new brief
+    payload = request.get_json(silent=True) or {}
+    hub_keyword = (payload.get("cluster_hub_keyword") or "").strip()
+    if not hub_keyword:
+        return jsonify({"error": "cluster_hub_keyword is required"}), 400
+
+    # Kick off generation in a background thread so the HTTP request returns fast.
+    import threading
+    def _generate():
+        try:
+            # Build the cluster_data dict the writer expects
+            from dataforseo_client import serp_organic_advanced, onpage_content_parsing
+            from content_brief_writer import generate_brief, persist_brief
+            from entity_audit import extract_entities
+
+            serp = serp_organic_advanced(hub_keyword) or {}
+            items = serp.get("items") or []
+            top_urls = [it.get("url") for it in items if it.get("type") == "organic"][:5]
+            paa = [it.get("title") for it in items if it.get("type") == "people_also_ask"][:10]
+            related = [it.get("keyword") for it in items if it.get("type") == "related_searches"][:10]
+
+            competitor_headings = []
+            for u in top_urls[:3]:
+                try:
+                    parsed = onpage_content_parsing(u) or {}
+                    it = (parsed.get("items") or [{}])[0]
+                    meta = it.get("meta") or {}
+                    htags = meta.get("htags") or {}
+                    competitor_headings.append({
+                        "url": u,
+                        "h1":  (htags.get("h1") or [""])[0] if htags.get("h1") else "",
+                        "h2s": htags.get("h2") or [],
+                    })
+                except Exception:
+                    pass
+
+            entities: list = []
+            for u in top_urls[:3]:
+                for e in extract_entities(u):
+                    entities.append(e["name"])
+            entities = list(dict.fromkeys(entities))  # dedupe preserving order
+
+            # Property context from HubSpot
+            import requests as _req
+            from config import HUBSPOT_API_KEY as _HK
+            r = _req.get(
+                f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties=name,domain,rpmmarket",
+                headers={"Authorization": f"Bearer {_HK}"}, timeout=10,
+            )
+            props = (r.json().get("properties") or {}) if r.status_code == 200 else {}
+
+            cluster_data = {
+                "hub_keyword":      hub_keyword,
+                "spokes":           payload.get("spokes") or [],
+                "property_name":    props.get("name", ""),
+                "property_domain":  props.get("domain", ""),
+                "market":           props.get("rpmmarket", ""),
+                "top_serp_urls":    top_urls,
+                "competitor_headings": competitor_headings,
+                "paa_questions":    paa,
+                "related_searches": related,
+                "competitor_entities": entities,
+                "existing_tracked_keywords": payload.get("existing_tracked_keywords") or [],
+            }
+
+            brief = generate_brief(cluster_data)
+            persist_brief(property_uuid, hub_keyword, brief)
+            logger.info("content brief persisted for %s / %s", property_uuid, hub_keyword)
+        except Exception as exc:
+            logger.error("brief generation failed: %s", exc, exc_info=True)
+
+    threading.Thread(target=_generate, daemon=True).start()
+    return jsonify({"status": "generating", "hub_keyword": hub_keyword}), 202
+
+
+@app.route("/api/content/briefs/<brief_id>", methods=["GET", "OPTIONS"])
+def content_brief_detail(brief_id):
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, property_uuid, tier = ctx
+    gate = _require_feature(tier, "content_briefs")
+    if gate:
+        return gate
+    from config import HUBDB_CONTENT_BRIEFS_TABLE_ID
+    from hubdb_helpers import read_rows
+    if not HUBDB_CONTENT_BRIEFS_TABLE_ID:
+        return jsonify({"error": "Content briefs table not configured"}), 503
+    rows = read_rows(HUBDB_CONTENT_BRIEFS_TABLE_ID, filters={"brief_id": brief_id})
+    if not rows:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(rows[0])
+
+
+@app.route("/api/content/approve", methods=["POST", "OPTIONS"])
+def content_brief_approve():
+    """Approve a brief → route to Content team via approval_agent (rec_type=content_brief)."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, company_id, property_uuid, tier = ctx
+    gate = _require_feature(tier, "content_briefs")
+    if gate:
+        return gate
+    payload = request.get_json(silent=True) or {}
+    brief_id = (payload.get("brief_id") or "").strip()
+    if not brief_id:
+        return jsonify({"error": "brief_id is required"}), 400
+
+    from config import HUBDB_CONTENT_BRIEFS_TABLE_ID
+    from hubdb_helpers import read_rows
+    rows = read_rows(HUBDB_CONTENT_BRIEFS_TABLE_ID, filters={"brief_id": brief_id}) if HUBDB_CONTENT_BRIEFS_TABLE_ID else []
+    if not rows:
+        return jsonify({"error": "Brief not found"}), 404
+    brief = rows[0]
+
+    try:
+        from approval_agent import route_approval
+        property_name = payload.get("property_name") or ""
+        result = route_approval(
+            rec_id=brief_id,
+            rec_type="content_brief",
+            property_uuid=property_uuid,
+            company_id=company_id,
+            property_name=property_name,
+            rec_title=brief.get("h1", "") or brief.get("hub_keyword", ""),
+            rec_body=brief.get("outline_json", "") + "\n\n" + (brief.get("meta_description", "") or ""),
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error("content brief approve failed: %s", e, exc_info=True)
+        return jsonify({"error": "Approval failed"}), 500
+
+
+@app.route("/api/content/decay", methods=["GET", "OPTIONS"])
+def content_decay():
+    """Return decaying-pages queue. Basic tier sees top-3 teaser; Premium sees full list."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, property_uuid, tier = ctx
+
+    # Everyone with an SEO package can see the teaser; Premium gets full list.
+    from seo_entitlement import has_feature
+    is_premium = has_feature(tier, "content_decay")
+
+    # Read from the cached HubDB table if populated by the weekly cron.
+    from config import HUBDB_CONTENT_DECAY_TABLE_ID
+    from hubdb_helpers import read_rows
+    if HUBDB_CONTENT_DECAY_TABLE_ID:
+        rows = read_rows(HUBDB_CONTENT_DECAY_TABLE_ID, filters={"property_uuid": property_uuid})
+    else:
+        # Fallback: compute live (expensive — only use for testing)
+        from content_planner import detect_decay
+        rows = detect_decay(property_uuid)
+
+    if not is_premium:
+        return jsonify({"rows": rows[:3], "teaser": True, "total": len(rows), "upgrade_required": "Premium"})
+    return jsonify({"rows": rows, "teaser": False, "total": len(rows)})
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return '{"status":"ok"}', 200, {"Content-Type": "application/json"}
