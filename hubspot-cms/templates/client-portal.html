@@ -801,6 +801,10 @@ body{padding-top:36px}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Performance
       </div>
+      <div class="nav-item" id="nav-seo" onclick="nav('seo',this)" style="display:none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        SEO &amp; AI
+      </div>
       <div class="nav-item" onclick="nav('services',this)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
         Services
@@ -1093,6 +1097,120 @@ body{padding-top:36px}
 
   <!-- NinjaCat + SEO Deliverables cards hidden until real integrations land.
        Previous static cards linked to href="#" with hardcoded "March 2026" report names. -->
+</section>
+
+<!-- ── SEO & AI INSIGHTS ── -->
+<section id="section-seo" class="section">
+  <div class="sec-topbar">
+    <div>
+      <div class="sec-title">SEO &amp; AI Insights</div>
+      <div class="sec-sub">Keyword rankings, on-page health, and AI citation tracking · refreshed daily</div>
+    </div>
+    <div id="seo-tier-badge" style="display:none;padding:6px 12px;border-radius:999px;background:#EEF2FF;color:#3730A3;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em"></div>
+  </div>
+
+  <div id="seo-locked" class="card" style="padding:32px;text-align:center;display:none">
+    <div style="font-size:15px;font-weight:700;color:var(--jd);margin-bottom:6px">SEO package required</div>
+    <div style="font-size:13px;color:var(--tm);margin-bottom:16px">Rankings, on-page audit, and AI citation tracking are available with any active SEO tier.</div>
+    <button class="btn btn-primary" onclick="nav('budget', document.querySelector(\"[onclick*='budget']\"))">View SEO tiers</button>
+  </div>
+
+  <div id="seo-body" style="display:none">
+
+    <!-- KPI row -->
+    <div class="kpi-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+      <div class="kpi">
+        <div class="kpi-lbl">Tracked Keywords</div>
+        <div class="kpi-val" id="seo-kpi-total">—</div>
+        <div class="kpi-sub" id="seo-kpi-total-sub">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Top 3 Positions</div>
+        <div class="kpi-val" id="seo-kpi-top3">—</div>
+        <div class="kpi-sub">of tracked keywords</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Improving (30d)</div>
+        <div class="kpi-val" id="seo-kpi-improving">—</div>
+        <div class="kpi-sub">positions gained</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">AI Visibility</div>
+        <div class="kpi-val" id="seo-kpi-aio">—</div>
+        <div class="kpi-sub" id="seo-kpi-aio-sub">composite index</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="seo-tabs" style="display:flex;gap:8px;border-bottom:1px solid var(--bd);margin-bottom:16px">
+      <div class="seo-tab active" data-seo-tab="rankings" onclick="seoTab('rankings',this)" style="padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--tp);border-bottom:2px solid var(--cu)">Rankings</div>
+      <div class="seo-tab" data-seo-tab="ai-mentions" onclick="seoTab('ai-mentions',this)" style="padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--ts);border-bottom:2px solid transparent">AI Mentions</div>
+      <div class="seo-tab" data-seo-tab="competitors" onclick="seoTab('competitors',this)" style="padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--ts);border-bottom:2px solid transparent">Competitors</div>
+    </div>
+
+    <!-- Tab: Rankings -->
+    <div class="seo-panel" data-seo-panel="rankings">
+      <div class="card" style="padding:16px 20px;margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:700;color:var(--jd)">Visibility Trend (90 days)</div>
+          <div style="font-size:11px;color:var(--tm)" id="seo-trend-sub">Summed rank inverse across tracked keywords</div>
+        </div>
+        <svg id="seo-trend-svg" viewBox="0 0 600 120" preserveAspectRatio="none" style="width:100%;height:120px"></svg>
+      </div>
+
+      <div class="card" style="padding:16px 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:700;color:var(--jd)">Tracked Keywords</div>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="seo-kw-filter" placeholder="Filter keywords…" oninput="seoFilterKeywords()" style="padding:6px 10px;border:1px solid var(--bd);border-radius:6px;font-size:12px;width:200px">
+            <button class="btn btn-secondary" id="seo-kw-add-btn" onclick="seoOpenAddKeyword()" style="display:none">+ Add keyword</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="services-table" id="seo-kw-table">
+            <thead>
+              <tr>
+                <th>Keyword</th>
+                <th>Intent</th>
+                <th style="text-align:center">Position</th>
+                <th style="text-align:center">7d</th>
+                <th style="text-align:center">30d</th>
+                <th>Target</th>
+                <th>URL</th>
+                <th style="width:32px"></th>
+              </tr>
+            </thead>
+            <tbody id="seo-kw-tbody"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--tm)">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: AI Mentions -->
+    <div class="seo-panel" data-seo-panel="ai-mentions" style="display:none">
+      <div class="card" style="padding:16px 20px;margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700;color:var(--jd);margin-bottom:4px">AI Citation Tracking</div>
+        <div style="font-size:12px;color:var(--tm);margin-bottom:16px" id="seo-aim-sub">How often your property is cited across ChatGPT, Perplexity, Gemini, and Google AI Overviews.</div>
+        <div id="seo-aim-engines" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px"></div>
+      </div>
+      <div class="card" style="padding:16px 20px">
+        <div style="font-size:14px;font-weight:700;color:var(--jd);margin-bottom:12px">History</div>
+        <svg id="seo-aim-history-svg" viewBox="0 0 600 140" preserveAspectRatio="none" style="width:100%;height:140px"></svg>
+      </div>
+    </div>
+
+    <!-- Tab: Competitors -->
+    <div class="seo-panel" data-seo-panel="competitors" style="display:none">
+      <div class="card" style="padding:16px 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:700;color:var(--jd)">Competitor Domains</div>
+          <button class="btn btn-secondary" id="seo-comp-add-btn" onclick="seoOpenAddCompetitor()" style="display:none">+ Add competitor</button>
+        </div>
+        <div id="seo-comp-list" style="font-size:13px;color:var(--tm)">Loading…</div>
+      </div>
+    </div>
+
+  </div>
 </section>
 
 <!-- ── SERVICES ── -->
@@ -2384,6 +2502,7 @@ function nav(id, el) {
   if (id === 'performance')      { loadPerformance(); }
   if (id === 'activity')         { loadActivity(); }
   if (id === 'recommendations')  { loadCallPrep(); }
+  if (id === 'seo')              { if (typeof loadSeoInsights === 'function') loadSeoInsights(); }
   if (id === 'services')         { loadServices(); }
   if (id === 'assets')           { assetInitDropzone(); loadAssets(); }
 }
@@ -7131,6 +7250,256 @@ function renderSpendSheet(rows) {
 
 // ── Init: load Properties list on page load ───────────────────────────────────
 loadPropList();
+
+// ── SEO & AI Insights ──────────────────────────────────────────────────────
+// Ported from Phase 1 branch. Self-contained IIFE — all state is internal.
+// Nav item only shows if the property has an SEO package (seo_organic channel).
+(function(){
+  var _seoLoaded = false;
+  var _seoFeatures = {};
+  var _seoKeywords = [];
+
+  function _seoApiBase() { return window.__WEBHOOK_URL__ || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com'; }
+  function _seoCid()   { return window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || ''; }
+  function _seoUuid()  { return window.__PORTAL_PROP_UUID__ || window.__PORTAL_UUID__ || _seoCid(); }
+  function _seoEmail() { return window.__PORTAL_EMAIL__ || 'portal@rpmliving.com'; }
+
+  function _seoHeaders() { return { 'X-Portal-Email': _seoEmail() }; }
+
+  // Show the nav item if the property has an SEO package. The server-side
+  // entitlement probe is called once per session and gates feature visibility.
+  function seoCheckEntitlement() {
+    var hasSeo = (window.__PORTAL_PROP_PACKAGES || []).some(function(p){ return p && p.channel === 'seo_organic'; });
+    if (!hasSeo) return;
+    var navEl = document.getElementById('nav-seo');
+    if (navEl) navEl.style.display = '';
+    fetch(_seoApiBase() + '/api/seo/entitlement?company_id=' + encodeURIComponent(_seoCid()), { headers: _seoHeaders() })
+      .then(function(r){ return r.ok ? r.json() : {features:{}}; })
+      .then(function(data){
+        _seoFeatures = data.features || {};
+        var badge = document.getElementById('seo-tier-badge');
+        if (badge && data.tier) { badge.textContent = data.tier + ' tier'; badge.style.display = ''; }
+        if (_seoFeatures.keywords_write) {
+          var a = document.getElementById('seo-kw-add-btn');    if (a) a.style.display = '';
+          var b = document.getElementById('seo-comp-add-btn');  if (b) b.style.display = '';
+        }
+      })
+      .catch(function(){});
+  }
+
+  window.loadSeoInsights = function() {
+    if (_seoLoaded) return;
+    _seoLoaded = true;
+
+    var uuid = _seoUuid();
+    var cid  = _seoCid();
+    var url  = _seoApiBase() + '/api/seo/dashboard?company_id=' + encodeURIComponent(cid) + '&property_uuid=' + encodeURIComponent(uuid);
+
+    fetch(url, { headers: _seoHeaders() })
+      .then(function(r){
+        if (r.status === 403) { _seoShowLocked(); return null; }
+        return r.ok ? r.json() : null;
+      })
+      .then(function(data){
+        if (!data) return;
+        var body = document.getElementById('seo-body'); if (body) body.style.display = '';
+        _seoKeywords = data.keywords || [];
+        _seoRenderKpis(data.summary || {});
+        _seoRenderKeywordTable(_seoKeywords);
+        _seoRenderTrend(data.organic_trend || []);
+        _seoRenderCompetitors(data.competitors || []);
+      })
+      .catch(function(e){ console.warn('SEO dashboard load failed', e); });
+
+    fetch(_seoApiBase() + '/api/seo/ai-mentions?company_id=' + encodeURIComponent(cid) + '&property_uuid=' + encodeURIComponent(uuid), { headers: _seoHeaders() })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(data){ if (data) _seoRenderAiMentions(data); })
+      .catch(function(){});
+  };
+
+  function _seoShowLocked() {
+    var el = document.getElementById('seo-locked'); if (el) el.style.display = '';
+    var body = document.getElementById('seo-body'); if (body) body.style.display = 'none';
+  }
+
+  function _seoRenderKpis(s) {
+    var el = function(id){ return document.getElementById(id); };
+    if (el('seo-kpi-total'))     el('seo-kpi-total').textContent      = s.total_keywords || 0;
+    if (el('seo-kpi-total-sub')) el('seo-kpi-total-sub').textContent  = 'across ' + (s.total_keywords||0) + ' tracked terms';
+    if (el('seo-kpi-top3'))      el('seo-kpi-top3').textContent       = s.ranking_top_3 || 0;
+    if (el('seo-kpi-improving')) el('seo-kpi-improving').textContent  = s.improving_30d || 0;
+  }
+
+  function _seoFmtDelta(d) {
+    if (d === null || d === undefined) return '<span style="color:var(--tm)">—</span>';
+    if (d === 0) return '<span style="color:var(--tm)">0</span>';
+    var color = d > 0 ? '#047857' : '#B91C1C';
+    var arrow = d > 0 ? '▲' : '▼';
+    return '<span style="color:'+color+';font-weight:700">'+arrow+' '+Math.abs(d)+'</span>';
+  }
+
+  function _seoFmtPos(p) {
+    if (p === null || p === undefined) return '<span style="color:var(--tm)">—</span>';
+    var weight = p <= 3 ? '800' : (p <= 10 ? '600' : '400');
+    return '<span style="font-weight:'+weight+'">'+p+'</span>';
+  }
+
+  function _escHtmlSeo(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
+
+  function _seoRenderKeywordTable(rows) {
+    var tbody = document.getElementById('seo-kw-tbody');
+    if (!tbody) return;
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--tm)">No tracked keywords yet. Your AM populates this list during onboarding.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function(r){
+      var urlCell = r.url ? '<a href="'+_escHtmlSeo(r.url)+'" target="_blank" style="color:var(--cu);font-size:11px">'+_escHtmlSeo(r.url.replace(/^https?:\/\//,''))+'</a>' : '<span style="color:var(--tm)">—</span>';
+      var brandedPill = r.branded ? '<span style="display:inline-block;padding:1px 6px;background:#EEF2FF;color:#3730A3;font-size:10px;border-radius:4px;margin-left:6px">Branded</span>' : '';
+      var delBtn = _seoFeatures.keywords_write
+        ? '<button title="Remove" onclick="seoDeleteKeyword(\''+r.id+'\')" style="background:none;border:none;color:var(--tm);cursor:pointer;font-size:16px">×</button>'
+        : '';
+      return '<tr>'
+        + '<td>'+_escHtmlSeo(r.keyword)+brandedPill+'</td>'
+        + '<td style="color:var(--ts);font-size:11px">'+_escHtmlSeo(r.intent || '—')+'</td>'
+        + '<td style="text-align:center">'+_seoFmtPos(r.position)+'</td>'
+        + '<td style="text-align:center">'+_seoFmtDelta(r.delta_7d)+'</td>'
+        + '<td style="text-align:center">'+_seoFmtDelta(r.delta_30d)+'</td>'
+        + '<td>'+(r.target_position || '—')+'</td>'
+        + '<td>'+urlCell+'</td>'
+        + '<td style="text-align:right">'+delBtn+'</td>'
+        + '</tr>';
+    }).join('');
+  }
+
+  window.seoFilterKeywords = function() {
+    var q = (document.getElementById('seo-kw-filter').value || '').toLowerCase();
+    var rows = q
+      ? _seoKeywords.filter(function(r){ return (r.keyword||'').toLowerCase().indexOf(q) >= 0; })
+      : _seoKeywords;
+    _seoRenderKeywordTable(rows);
+  };
+
+  function _seoRenderTrend(points) {
+    var svg = document.getElementById('seo-trend-svg');
+    if (!svg) return;
+    if (!points.length) { svg.innerHTML = '<text x="50%" y="50%" text-anchor="middle" fill="#9CA3AF" font-size="12">No data yet</text>'; return; }
+    var w = 600, h = 120, pad = 8;
+    var max = Math.max.apply(null, points.map(function(p){ return p.visibility; }));
+    var min = Math.min.apply(null, points.map(function(p){ return p.visibility; }));
+    if (max === min) max = min + 1;
+    var d = points.map(function(p, i){
+      var x = pad + (i / (points.length-1 || 1)) * (w - pad*2);
+      var y = h - pad - ((p.visibility - min) / (max - min)) * (h - pad*2);
+      return (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+    svg.innerHTML = '<path d="'+d+'" fill="none" stroke="#C8964E" stroke-width="2"/>';
+  }
+
+  function _seoRenderAiMentions(data) {
+    var a = document.getElementById('seo-kpi-aio');
+    var b = document.getElementById('seo-kpi-aio-sub');
+    if (a) a.textContent = (data.composite_index == null ? '—' : data.composite_index);
+    if (b) b.textContent = data.scanned_at ? 'as of ' + String(data.scanned_at).slice(0,10) : 'no scan yet';
+    var engines = data.by_engine || {};
+    var order = [['chatgpt','ChatGPT'],['perplexity','Perplexity'],['gemini','Gemini'],['google_aio','Google AIO']];
+    var box = document.getElementById('seo-aim-engines');
+    if (!box) return;
+    box.innerHTML = order.map(function(kv){
+      var rate = (engines[kv[0]] || {}).cited_rate;
+      var pct = (rate == null) ? '—' : Math.round(rate * 100) + '%';
+      var ok = rate && rate >= 0.25;
+      var color = ok ? '#047857' : (rate ? '#92400E' : '#6B7280');
+      var bg = ok ? '#ECFDF5' : (rate ? '#FFFBEB' : '#F3F4F6');
+      return '<div style="padding:16px;border-radius:10px;background:'+bg+';border:1px solid '+color+'33">'
+        + '<div style="font-size:11px;font-weight:700;color:'+color+';text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">'+kv[1]+'</div>'
+        + '<div style="font-size:22px;font-weight:800;color:var(--jd)">'+pct+'</div>'
+        + '<div style="font-size:11px;color:var(--tm);margin-top:4px">prompts cited</div>'
+        + '</div>';
+    }).join('');
+
+    var svg = document.getElementById('seo-aim-history-svg');
+    if (!svg) return;
+    var hist = (data.history || []).slice().reverse();
+    if (!hist.length) { svg.innerHTML = '<text x="50%" y="50%" text-anchor="middle" fill="#9CA3AF" font-size="12">No history yet</text>'; return; }
+    var w = 600, h = 140, pad = 8;
+    var seriesCols = { composite: '#C8964E', chatgpt: '#10A37F', perplexity: '#1FB8CD', gemini: '#4F86E8', aio: '#D4910A' };
+    svg.innerHTML = Object.keys(seriesCols).map(function(k){
+      var d = hist.map(function(r, i){
+        var v = r[k]; if (v == null) return null;
+        var x = pad + (i / (hist.length-1 || 1)) * (w - pad*2);
+        var y = h - pad - ((k === 'composite' ? v/100 : v)) * (h - pad*2);
+        return (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
+      }).filter(Boolean).join(' ');
+      return d ? '<path d="'+d+'" fill="none" stroke="'+seriesCols[k]+'" stroke-width="'+(k==='composite'?2:1)+'" opacity="'+(k==='composite'?1:0.55)+'"/>' : '';
+    }).join('');
+  }
+
+  function _seoRenderCompetitors(rows) {
+    var el = document.getElementById('seo-comp-list');
+    if (!el) return;
+    if (!rows.length) {
+      el.innerHTML = '<div style="padding:16px 0;color:var(--tm)">No competitor domains tracked yet.</div>';
+      return;
+    }
+    el.innerHTML = rows.map(function(c){
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bd)">'
+        + '<div><div style="font-weight:600;color:var(--jd);font-size:13px">'+_escHtmlSeo(c.domain||'')+'</div>'
+        + '<div style="font-size:11px;color:var(--tm)">'+_escHtmlSeo(c.label||'')+'</div></div>'
+        + '</div>';
+    }).join('');
+  }
+
+  window.seoTab = function(name, el) {
+    document.querySelectorAll('.seo-tab').forEach(function(t){ t.style.color = 'var(--ts)'; t.style.borderBottomColor = 'transparent'; });
+    if (el) { el.style.color = 'var(--tp)'; el.style.borderBottomColor = 'var(--cu)'; }
+    document.querySelectorAll('.seo-panel').forEach(function(p){
+      p.style.display = (p.getAttribute('data-seo-panel') === name) ? '' : 'none';
+    });
+  };
+
+  window.seoOpenAddKeyword = function() {
+    var k = prompt('Add a keyword to track:');
+    if (!k) return;
+    var body = { company_id: _seoCid(), property_uuid: _seoUuid(), keyword: k, priority: 'medium' };
+    fetch(_seoApiBase() + '/api/seo/keywords', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, _seoHeaders()),
+      body: JSON.stringify(body),
+    }).then(function(r){
+      if (!r.ok) throw new Error('add failed');
+      _seoLoaded = false;
+      loadSeoInsights();
+    }).catch(function(e){ alert('Failed to add keyword: ' + e.message); });
+  };
+
+  window.seoDeleteKeyword = function(id) {
+    if (!confirm('Remove this keyword from tracking?')) return;
+    var body = { company_id: _seoCid(), property_uuid: _seoUuid() };
+    fetch(_seoApiBase() + '/api/seo/keywords/' + encodeURIComponent(id) + '/delete', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, _seoHeaders()),
+      body: JSON.stringify(body),
+    }).then(function(){ _seoLoaded = false; loadSeoInsights(); });
+  };
+
+  window.seoOpenAddCompetitor = function() {
+    var d = prompt('Competitor domain (e.g. example.com):');
+    if (!d) return;
+    var body = { company_id: _seoCid(), property_uuid: _seoUuid(), competitor_domain: d, label: '' };
+    fetch(_seoApiBase() + '/api/seo/competitors', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, _seoHeaders()),
+      body: JSON.stringify(body),
+    }).then(function(){ _seoLoaded = false; loadSeoInsights(); });
+  };
+
+  document.addEventListener('DOMContentLoaded', seoCheckEntitlement);
+})();
 </script>
 </body>
 </html>
