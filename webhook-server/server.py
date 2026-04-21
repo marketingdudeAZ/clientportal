@@ -3393,6 +3393,192 @@ def video_generate():
         return jsonify({"error": f"Video generation failed: {str(exc)}"}), 500
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# SEO Insights (Phase 1) — DataForSEO + AI Mentions
+# Tier gating via seo_entitlement.get_seo_tier() + has_feature().
+# Keyword/competitor storage lives in HubDB; rank history lives in BigQuery.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _resolve_seo_context():
+    """Pull email, company_id, property_uuid, tier. Returns tuple or Flask response."""
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = request.args.get("company_id") or (request.get_json(silent=True) or {}).get("company_id")
+    property_uuid = request.args.get("property_uuid") or (request.get_json(silent=True) or {}).get("property_uuid")
+    if not (company_id and property_uuid):
+        return jsonify({"error": "company_id and property_uuid are required"}), 400
+    from seo_entitlement import get_seo_tier
+    tier = get_seo_tier(str(company_id))
+    return email, str(company_id), str(property_uuid), tier
+
+
+def _require_feature(tier, feature):
+    from seo_entitlement import has_feature
+    if not has_feature(tier, feature):
+        return jsonify({
+            "error": "Feature not available on current SEO tier",
+            "feature": feature,
+            "tier": tier,
+        }), 403
+    return None
+
+
+@app.route("/api/seo/dashboard", methods=["GET", "OPTIONS"])
+def seo_dashboard():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, company_id, property_uuid, tier = ctx
+    gate = _require_feature(tier, "dashboard")
+    if gate:
+        return gate
+    try:
+        from seo_dashboard import build_dashboard
+        payload = build_dashboard(property_uuid)
+        payload["tier"] = tier
+        return jsonify(payload)
+    except Exception as e:
+        logger.error("seo dashboard failed: %s", e, exc_info=True)
+        return jsonify({"error": "Failed to load SEO dashboard"}), 500
+
+
+@app.route("/api/seo/keywords", methods=["GET", "POST", "OPTIONS"])
+def seo_keywords():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, property_uuid, tier = ctx
+
+    if request.method == "GET":
+        gate = _require_feature(tier, "keywords_read")
+        if gate:
+            return gate
+        from config import HUBDB_SEO_KEYWORDS_TABLE_ID
+        from hubdb_helpers import read_rows
+        rows = read_rows(HUBDB_SEO_KEYWORDS_TABLE_ID, filters={"property_uuid": property_uuid})
+        return jsonify({"rows": rows})
+
+    gate = _require_feature(tier, "keywords_write")
+    if gate:
+        return gate
+    from config import HUBDB_SEO_KEYWORDS_TABLE_ID
+    from hubdb_helpers import insert_row, publish
+    payload = request.get_json(silent=True) or {}
+    keyword = (payload.get("keyword") or "").strip()
+    if not keyword:
+        return jsonify({"error": "keyword is required"}), 400
+    values = {
+        "property_uuid": property_uuid,
+        "keyword": keyword,
+        "priority": payload.get("priority", "medium"),
+        "tag": payload.get("tag"),
+        "intent": payload.get("intent"),
+        "branded": bool(payload.get("branded", False)),
+        "target_position": payload.get("target_position"),
+    }
+    row_id = insert_row(HUBDB_SEO_KEYWORDS_TABLE_ID, values)
+    publish(HUBDB_SEO_KEYWORDS_TABLE_ID)
+    from seo_dashboard import invalidate
+    invalidate(property_uuid)
+    return jsonify({"status": "created", "id": row_id})
+
+
+@app.route("/api/seo/keywords/<row_id>/delete", methods=["POST", "OPTIONS"])
+def seo_keyword_delete(row_id):
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, property_uuid, tier = ctx
+    gate = _require_feature(tier, "keywords_write")
+    if gate:
+        return gate
+    from config import HUBDB_SEO_KEYWORDS_TABLE_ID
+    from hubdb_helpers import delete_row, publish
+    ok = delete_row(HUBDB_SEO_KEYWORDS_TABLE_ID, row_id)
+    publish(HUBDB_SEO_KEYWORDS_TABLE_ID)
+    from seo_dashboard import invalidate
+    invalidate(property_uuid)
+    return jsonify({"status": "deleted" if ok else "error"})
+
+
+@app.route("/api/seo/ai-mentions", methods=["GET", "OPTIONS"])
+def seo_ai_mentions():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, property_uuid, tier = ctx
+    gate = _require_feature(tier, "ai_mentions")
+    if gate:
+        return gate
+    try:
+        from ai_mentions import get_latest_snapshot
+        return jsonify(get_latest_snapshot(property_uuid))
+    except Exception as e:
+        logger.error("ai-mentions read failed: %s", e, exc_info=True)
+        return jsonify({"error": "Failed to load AI mentions"}), 500
+
+
+@app.route("/api/seo/competitors", methods=["GET", "POST", "OPTIONS"])
+def seo_competitors():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_seo_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, _, property_uuid, tier = ctx
+    from config import HUBDB_SEO_COMPETITORS_TABLE_ID
+    from hubdb_helpers import insert_row, publish, read_rows
+
+    if request.method == "GET":
+        rows = read_rows(HUBDB_SEO_COMPETITORS_TABLE_ID, filters={"property_uuid": property_uuid})
+        return jsonify({"rows": rows})
+
+    gate = _require_feature(tier, "keywords_write")
+    if gate:
+        return gate
+    payload = request.get_json(silent=True) or {}
+    domain = (payload.get("competitor_domain") or "").strip().lower()
+    if not domain:
+        return jsonify({"error": "competitor_domain is required"}), 400
+    row_id = insert_row(HUBDB_SEO_COMPETITORS_TABLE_ID, {
+        "property_uuid": property_uuid,
+        "competitor_domain": domain,
+        "label": payload.get("label", ""),
+    })
+    publish(HUBDB_SEO_COMPETITORS_TABLE_ID)
+    return jsonify({"status": "created", "id": row_id})
+
+
+@app.route("/api/seo/entitlement", methods=["GET", "OPTIONS"])
+def seo_entitlement_probe():
+    """Tell the frontend which SEO features to render — cheap, no DataForSEO call."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = request.args.get("company_id")
+    if not company_id:
+        return jsonify({"error": "company_id is required"}), 400
+    from config import SEO_FEATURE_MIN_TIER
+    from seo_entitlement import get_seo_tier, has_feature
+    tier = get_seo_tier(str(company_id))
+    return jsonify({
+        "tier": tier,
+        "features": {f: has_feature(tier, f) for f in SEO_FEATURE_MIN_TIER},
+    })
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return '{"status":"ok"}', 200, {"Content-Type": "application/json"}
