@@ -7675,7 +7675,12 @@ loadPropList();
     }).then(function(){ _seoLoaded = false; loadSeoInsights(); });
   };
 
+  // Run on DOMContentLoaded (in case packages already loaded) AND on
+  // portal-data-ready (the async event fired by populateSidebar when
+  // /api/property resolves). Either trigger wins — internal _seoLoaded guard
+  // prevents double fetch.
   document.addEventListener('DOMContentLoaded', seoCheckEntitlement);
+  document.addEventListener('portal-data-ready', seoCheckEntitlement);
 })();
 
 // ── Content Planner (Phase 2) ──────────────────────────────────────────────
@@ -7908,7 +7913,12 @@ loadPropList();
     }).join('');
   }
 
+  // Run on DOMContentLoaded AND on portal-data-ready — the latter fires when
+  // /api/property resolves, which is what tells us the property's SEO tier.
+  // Both trigger the same function; the /api/seo/entitlement fetch inside
+  // short-circuits gracefully if called twice.
   document.addEventListener('DOMContentLoaded', contentCheckEntitlement);
+  document.addEventListener('portal-data-ready', contentCheckEntitlement);
 })();
 
 // ── Keyword Research + Trends (Phase 3) ───────────────────────────────────
