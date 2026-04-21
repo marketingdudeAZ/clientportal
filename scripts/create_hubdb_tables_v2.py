@@ -128,6 +128,44 @@ AM_PRIORITY_TABLE = {
     ],
 }
 
+CONTENT_BRIEFS_TABLE = {
+    "name": "rpm_content_briefs",
+    "label": "RPM Content Briefs",
+    "useForPages": False,
+    "columns": [
+        {"name": "property_uuid",         "label": "Property UUID",         "type": "TEXT"},
+        {"name": "brief_id",              "label": "Brief ID",              "type": "TEXT"},
+        {"name": "hub_keyword",           "label": "Hub Keyword",           "type": "TEXT"},
+        {"name": "status",                "label": "Status",                "type": "TEXT"},
+        {"name": "h1",                    "label": "H1",                    "type": "TEXT"},
+        {"name": "meta_description",      "label": "Meta Description",      "type": "TEXT"},
+        {"name": "outline_json",          "label": "Outline JSON",          "type": "RICHTEXT"},
+        {"name": "target_word_count",     "label": "Target Word Count",     "type": "NUMBER"},
+        {"name": "target_entities_json",  "label": "Target Entities JSON",  "type": "RICHTEXT"},
+        {"name": "internal_links_json",   "label": "Internal Links JSON",   "type": "RICHTEXT"},
+        {"name": "schema_types",          "label": "Schema Types",          "type": "TEXT"},
+        {"name": "generated_at",          "label": "Generated At",          "type": "DATETIME"},
+        {"name": "approved_at",           "label": "Approved At",           "type": "DATETIME"},
+        {"name": "approved_by",           "label": "Approved By",           "type": "TEXT"},
+    ],
+}
+
+CONTENT_DECAY_TABLE = {
+    "name": "rpm_content_decay",
+    "label": "RPM Content Decay Queue",
+    "useForPages": False,
+    "columns": [
+        {"name": "property_uuid",           "label": "Property UUID",           "type": "TEXT"},
+        {"name": "url",                     "label": "URL",                     "type": "TEXT"},
+        {"name": "avg_rank_drop",           "label": "Avg Rank Drop",           "type": "NUMBER"},
+        {"name": "affected_keywords_count", "label": "Affected Keywords Count", "type": "NUMBER"},
+        {"name": "affected_keywords_json",  "label": "Affected Keywords JSON",  "type": "RICHTEXT"},
+        {"name": "priority",                "label": "Priority",                "type": "TEXT"},
+        {"name": "detected_at",             "label": "Detected At",             "type": "DATETIME"},
+        {"name": "status",                  "label": "Status",                  "type": "TEXT"},
+    ],
+}
+
 
 def create_table(table_def):
     """Create a HubDB table and return its ID."""
@@ -209,6 +247,18 @@ def run(force_assets=False):
     if aim_id:
         publish_table(aim_id)
         results["HUBDB_AI_MENTIONS_TABLE_ID"] = aim_id
+
+    # rpm_content_briefs (Phase 2)
+    cb_id = create_table(CONTENT_BRIEFS_TABLE)
+    if cb_id:
+        publish_table(cb_id)
+        results["HUBDB_CONTENT_BRIEFS_TABLE_ID"] = cb_id
+
+    # rpm_content_decay (Phase 2)
+    cd_id = create_table(CONTENT_DECAY_TABLE)
+    if cd_id:
+        publish_table(cd_id)
+        results["HUBDB_CONTENT_DECAY_TABLE_ID"] = cd_id
 
     # rpm_assets already exists (210402637) — skip unless forced
     if force_assets:
