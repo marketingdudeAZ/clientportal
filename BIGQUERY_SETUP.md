@@ -101,6 +101,21 @@ CREATE TABLE IF NOT EXISTS `YOUR_PROJECT_ID.rpm_portal.rpm_properties` (
   updated_at           TIMESTAMP
 )
 CLUSTER BY property_uuid;
+
+-- Table 5: SEO rank daily snapshots — written by seo_refresh_cron.refresh_ranks()
+-- One row per (property_uuid, keyword, day). Read by /api/seo/dashboard to
+-- compute 7/30-day position deltas and the Visibility Trend chart.
+CREATE TABLE IF NOT EXISTS `YOUR_PROJECT_ID.rpm_portal.seo_ranks_daily` (
+  property_uuid  STRING NOT NULL,
+  keyword        STRING NOT NULL,
+  position       INT64,                             -- null if not in top 100
+  url            STRING,                            -- ranked URL if found
+  volume         INT64,
+  difficulty     FLOAT64,
+  fetched_at     TIMESTAMP NOT NULL
+)
+PARTITION BY DATE(fetched_at)
+CLUSTER BY property_uuid, keyword;
 ```
 
 Repeat for `rpm_portal_dev` (replace the schema name).

@@ -127,7 +127,10 @@ def refresh_ranks(property_uuid: str, domain: str, location_code: int | None = N
 
             write_seo_rank_snapshot(property_uuid, rows_to_insert)
         except Exception as e:
+            # Don't silently swallow — callers need to know the BQ write failed.
+            # Common cause: seo_ranks_daily table doesn't exist. See BIGQUERY_SETUP.md §3.
             logger.error("BigQuery rank insert failed for %s: %s", property_uuid, e)
+            raise RuntimeError(f"BigQuery write failed: {e}") from e
     return len(rows_to_insert)
 
 
