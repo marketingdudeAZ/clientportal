@@ -875,6 +875,144 @@ def sync_properties_to_bq():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+@app.route("/api/internal/seo-refresh-property", methods=["POST", "OPTIONS"])
+def seo_refresh_property():
+    """Trigger a full SEO refresh for ONE property — same functions the weekly
+    cron runs, scoped to a single company. Intended for onboarding new SEO
+    clients, re-running after keyword list changes, or testing.
+
+    Auth:  X-Internal-Key header = INTERNAL_API_KEY env var.
+
+    Body JSON (company_id required; everything else looked up from HubSpot):
+        {
+          "company_id": "10559996814",
+          "include":    ["ranks", "ai_mentions", "onpage", "content_planning"]
+        }
+
+    If `include` is omitted, all four steps run. Each step runs in try/except so
+    one failure doesn't abort the rest. Returns per-step status.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    internal_key = request.headers.get("X-Internal-Key", "")
+    if not (expected and internal_key == expected):
+        return jsonify({"error": "Authentication required"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    company_id = (payload.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    include = set(payload.get("include") or ["ranks", "ai_mentions", "onpage", "content_planning"])
+
+    import time as _time
+    t0 = _time.time()
+    results: dict = {}
+
+    # Fetch property context from HubSpot (same pattern as /api/property)
+    import requests as _req
+    from config import HUBSPOT_API_KEY as _HK
+    try:
+        r = _req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
+            "?properties=name,domain,rpmmarket,city,state,uuid,totalunits",
+            headers={"Authorization": f"Bearer {_HK}"},
+            timeout=15,
+        )
+        r.raise_for_status()
+        props = r.json().get("properties", {})
+    except Exception as e:
+        logger.error("seo-refresh-property: HubSpot fetch failed for %s: %s", company_id, e)
+        return jsonify({"error": f"HubSpot lookup failed: {e}"}), 502
+
+    uuid   = (props.get("uuid") or "").strip()
+    domain = (props.get("domain") or "").strip()
+    name   = (props.get("name") or "").strip()
+    city   = (props.get("city") or "").strip()
+    if not (uuid and domain):
+        return jsonify({
+            "error": "Property missing uuid or domain on HubSpot company record",
+            "uuid": uuid, "domain": domain,
+        }), 400
+
+    # Resolve SEO tier so we know if Standard+ content_planning should run
+    try:
+        from seo_entitlement import get_seo_tier
+        tier = get_seo_tier(company_id)
+    except Exception as e:
+        tier = None
+        logger.warning("tier lookup failed for %s: %s", company_id, e)
+    results["tier"] = tier
+
+    # Step 1: Rank refresh (Phase 1)
+    if "ranks" in include:
+        try:
+            from seo_refresh_cron import refresh_ranks
+            count = refresh_ranks(uuid, domain)
+            results["ranks"] = {"status": "ok", "keywords_refreshed": count}
+        except Exception as e:
+            logger.error("refresh_ranks failed for %s: %s", uuid, e, exc_info=True)
+            results["ranks"] = {"status": "error", "error": str(e)}
+
+    # Step 2: AI mentions scan (Phase 1)
+    if "ai_mentions" in include:
+        try:
+            from seo_refresh_cron import refresh_ai_mentions
+            scan = refresh_ai_mentions(uuid, name, domain, city)
+            results["ai_mentions"] = {
+                "status":          "ok",
+                "composite_index": (scan or {}).get("composite_index"),
+                "scanned_at":      (scan or {}).get("scanned_at"),
+            }
+        except Exception as e:
+            logger.error("refresh_ai_mentions failed for %s: %s", uuid, e, exc_info=True)
+            results["ai_mentions"] = {"status": "error", "error": str(e)}
+
+    # Step 3: On-page audit (Phase 1) — writes audit score + timestamp to HubSpot
+    if "onpage" in include:
+        try:
+            from seo_refresh_cron import refresh_onpage
+            score = refresh_onpage(company_id, domain)
+            results["onpage"] = {"status": "ok", "audit_score": score}
+        except Exception as e:
+            logger.error("refresh_onpage failed for %s: %s", uuid, e, exc_info=True)
+            results["onpage"] = {"status": "error", "error": str(e)}
+
+    # Step 4: Content planning (Phase 2, Standard+ only)
+    if "content_planning" in include:
+        try:
+            from seo_refresh_cron import _meets_tier, _refresh_content_planning
+            if tier and _meets_tier(tier, "Standard"):
+                _refresh_content_planning(uuid, domain)
+                results["content_planning"] = {"status": "ok"}
+            else:
+                results["content_planning"] = {"status": "skipped", "reason": f"tier={tier} below Standard"}
+        except Exception as e:
+            logger.error("content_planning failed for %s: %s", uuid, e, exc_info=True)
+            results["content_planning"] = {"status": "error", "error": str(e)}
+
+    # Bust the dashboard cache so the next portal load sees fresh data
+    try:
+        from seo_dashboard import invalidate as _invalidate_dashboard
+        _invalidate_dashboard(uuid)
+    except Exception:
+        pass
+
+    runtime = round(_time.time() - t0, 1)
+    logger.info("seo-refresh-property done for %s in %.1fs: %s", uuid, runtime, results)
+    return jsonify({
+        "status":          "ok",
+        "company_id":      company_id,
+        "property_uuid":   uuid,
+        "property_name":   name,
+        "tier":            tier,
+        "runtime_seconds": runtime,
+        "results":         results,
+    })
+
+
 @app.route("/api/ticket", methods=["POST", "OPTIONS"])
 def submit_ticket():
     """Create a HubSpot Service Hub ticket from the client portal.
