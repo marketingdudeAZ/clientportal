@@ -6863,570 +6863,6 @@ function renderSwitcherList(props) {
 
 // Pre-load switcher data 1.5s after page ready (non-blocking — dropdown opens instantly)
 setTimeout(loadPropertySwitcher, 1500);
-</script>
-</body>
-</html>
-{% else %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>RPM Living | Client Portal — Properties</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --j:#53606C;--jd:#3D474F;--j1:#1A2530;--j2:#151F2B;
-  --cu:#C8964E;--cul:#D4A86A;--cug:rgba(200,150,78,0.12);
-  --sage:#8FA68E;--mint:#CDE3E0;--ml:#E8F4F2;
-  --red:#C94444;--amb:#D4910A;
-  --white:#fff;--bg:#F0F2F5;
-  --tp:#1F2937;--ts:#6B7280;--tm:#9CA3AF;
-  --bd:#E5E7EB;--bdl:#F3F4F6;
-  --sh:0 1px 3px rgba(0,0,0,0.07),0 1px 2px rgba(0,0,0,0.04);
-  --shm:0 4px 16px rgba(0,0,0,0.08);
-  --r:12px;
-}
-html{scroll-behavior:smooth}
-body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(--tp);background:var(--bg);-webkit-font-smoothing:antialiased}
-
-/* ── Top header + tabs ── */
-.portal-top-hdr{display:flex;align-items:center;background:#fff;border-bottom:1px solid var(--bd);padding:0 32px;height:60px;position:sticky;top:0;z-index:100;gap:0}
-.ptop-logo{height:26px;margin-right:32px;flex-shrink:0}
-.portal-top-tabs{display:flex;gap:4px;flex:1}
-.ptab{padding:8px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;color:var(--ts);border-radius:8px;transition:all .15s;letter-spacing:.01em}
-.ptab:hover{background:var(--bdl);color:var(--tp)}
-.ptab.active{background:var(--cug);color:var(--cu)}
-.ptop-user{font-size:11px;color:var(--tm);display:flex;align-items:center;gap:8px;white-space:nowrap}
-.ptop-user-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--cug);color:var(--cu);padding:3px 10px;border-radius:100px}
-
-/* ── Panels ── */
-.ptab-panel{min-height:calc(100vh - 60px);background:var(--bg);padding:36px 44px}
-
-/* ── Properties list table ── */
-.prop-list-search-bar{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
-.prop-list-table-card{background:#fff;border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
-.pl-table{width:100%;border-collapse:collapse}
-.pl-table th{padding:11px 20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--tm);background:var(--bg);border-bottom:1px solid var(--bd);text-align:left}
-.pl-table td{padding:14px 20px;border-bottom:1px solid var(--bdl);font-size:13px;vertical-align:middle}
-.pl-table tbody tr{cursor:pointer;transition:background .15s}
-.pl-table tbody tr:hover{background:var(--ml)}
-.pl-table tbody tr:last-child td{border-bottom:none}
-.pl-chip{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--cu);color:#fff;font-size:11px;font-weight:800;flex-shrink:0;letter-spacing:.02em}
-.pl-prop-cell{display:flex;align-items:center;gap:12px}
-.pl-name{font-weight:700;color:var(--jd);line-height:1.3}
-.pl-sub{font-size:11px;color:var(--tm);margin-top:2px}
-
-/* ── Health badges ── */
-.h-badge{padding:3px 9px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.04em;white-space:nowrap}
-.h-badge.on-track{background:rgba(143,166,142,.15);color:var(--sage)}
-.h-badge.watch{background:rgba(212,145,10,.15);color:var(--amb)}
-.h-badge.needs-attention{background:rgba(201,68,68,.12);color:var(--red)}
-.h-badge.no-data{background:var(--bdl);color:var(--tm)}
-
-/* ── Status chip ── */
-.ple-pill{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--bdl);color:var(--ts)}
-.ple-pill.active{background:#DCFCE7;color:#166534}
-
-/* ── Portfolio KPIs (reused from existing dash-* classes) ── */
-.dash-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:28px}
-.dash-kpi{background:#fff;border:1px solid var(--bd);border-radius:var(--r);padding:24px 20px;text-align:center;box-shadow:var(--sh)}
-.dash-kpi-v{font-size:28px;font-weight:800;color:var(--jd);line-height:1.2;margin-bottom:4px}
-.dash-kpi-l{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tm)}
-.mflag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px}
-.mflag.r{background:#FEE2E2;color:#991B1B}
-.mflag.y{background:#FEF9C3;color:#854D0E}
-.mflag.g{background:#DCFCE7;color:#166534}
-.market-table{width:100%;border-collapse:collapse}
-.market-table th{padding:10px 20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--tm);background:var(--bg);border-bottom:1px solid var(--bd);text-align:left}
-.market-table td{padding:14px 20px;border-bottom:1px solid var(--bdl);font-size:13px;vertical-align:middle}
-.market-table tbody tr:last-child td{border-bottom:none}
-.market-name{font-weight:700;color:var(--jd)}
-.market-sub{font-size:11px;color:var(--tm);margin-top:2px}
-.market-flags{display:flex;gap:5px}
-.health-bar-wrap{width:90px;background:var(--bdl);border-radius:100px;height:7px;overflow:hidden;display:inline-block;vertical-align:middle;margin-left:8px}
-.health-bar-fill{height:100%;border-radius:100px}
-.dash-table-card{background:#fff;border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
-.dash-table-hdr{display:flex;align-items:center;justify-content:space-between;padding:20px 28px;border-bottom:1px solid var(--bd);gap:12px}
-.hdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
-.hdot.h{background:var(--sage)}.hdot.w{background:var(--amb)}.hdot.c{background:var(--red)}
-.fcount{font-weight:700}.fcount.has{color:var(--red)}.fcount.none{color:var(--tm)}
-
-/* ── Spend Sheet ── */
-.spend-wrap{flex:1;padding:0;overflow-x:auto;min-width:0}
-.spend-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
-.spend-table th{background:#F8FAFC;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ts);padding:10px 14px;border-bottom:2px solid var(--bd);text-align:left;position:sticky;top:0;z-index:2}
-.spend-table td{padding:9px 14px;border-bottom:1px solid var(--bdl);color:var(--tp);vertical-align:middle}
-.spend-table tbody tr:hover td{background:#FAFBFC}
-.spend-table th.s-num,.spend-table td.s-num{text-align:right}
-.spend-table th.s-cx,.spend-table td.s-cx{text-align:center}
-.spend-table td.s-total{font-weight:700}
-.spend-tfoot td{background:var(--bdl)!important;font-weight:700;border-top:2px solid var(--bd)}
-.spend-filter-bar{display:flex;align-items:flex-end;gap:12px;margin-bottom:20px;flex-wrap:wrap}
-.spend-filter-group{display:flex;flex-direction:column;gap:4px}
-.spend-filter-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tm)}
-.sf-count-badge{background:var(--cu);color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap;align-self:flex-end;margin-bottom:2px}
-.form-input{display:block;width:100%;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:#fff;transition:border-color .15s}
-.form-input:focus{border-color:var(--cu)}
-.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:inherit;transition:all .15s}
-.btn-secondary{background:#fff;border:1px solid var(--bd);color:var(--tp)}
-.btn-secondary:hover{background:var(--bg);border-color:var(--j)}
-.btn-sm{padding:6px 12px;font-size:12px}
-
-@media(max-width:900px){.dash-kpi-row{grid-template-columns:repeat(3,1fr)}.portal-top-tabs{gap:2px}.ptab{padding:8px 12px;font-size:12px}}
-</style>
-</head>
-<body>
-
-<!-- ════════════ PORTFOLIO TOP HEADER ════════════ -->
-<header class="portal-top-hdr">
-  <img src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/images/rpm-logo.png" class="ptop-logo" alt="RPM Living">
-  <nav class="portal-top-tabs">
-    <button class="ptab active" id="ptab-list"      onclick="topView('list',this)">Properties</button>
-    <button class="ptab"        id="ptab-portfolio" onclick="topView('portfolio',this)">Portfolio Dashboard</button>
-    <button class="ptab"        id="ptab-spend"     onclick="topView('spend',this)">Spend Sheet</button>
-  </nav>
-  <div class="ptop-user" id="ptop-user-label">
-    <span id="ptop-email" style="display:none"></span>
-    <span class="ptop-user-badge" id="ptop-role" style="display:none"></span>
-  </div>
-</header>
-
-<!-- ════════════ PANEL 1: PROPERTIES LIST ════════════ -->
-<div id="ptab-panel-list" class="ptab-panel">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
-    <div>
-      <div style="font-size:22px;font-weight:800;color:var(--tp)">Properties</div>
-      <div style="font-size:12px;color:var(--tm);margin-top:3px" id="pl-subtitle">Loading your portfolio…</div>
-    </div>
-  </div>
-  <!-- Search + filter bar -->
-  <div class="prop-list-search-bar">
-    <input id="pl-search" class="form-input" style="width:260px" placeholder="Search properties…" oninput="filterPropList()">
-    <select id="pl-market" class="form-input" style="width:180px" onchange="filterPropList()">
-      <option value="">All Markets</option>
-    </select>
-    <select id="pl-health" class="form-input" style="width:180px" onchange="filterPropList()">
-      <option value="">All Health Status</option>
-      <option value="on-track">On Track (≥75)</option>
-      <option value="watch">Watch (50–74)</option>
-      <option value="needs-attention">Needs Attention (&lt;50)</option>
-    </select>
-  </div>
-  <!-- Properties table -->
-  <div class="prop-list-table-card">
-    <table class="pl-table">
-      <thead>
-        <tr>
-          <th>Property</th>
-          <th>Market</th>
-          <th>Health</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="pl-tbody">
-        <tr><td colspan="4" style="padding:40px;text-align:center;color:var(--tm);font-style:italic">Loading properties…</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- ════════════ PANEL 2: PORTFOLIO DASHBOARD ════════════ -->
-<div id="ptab-panel-portfolio" class="ptab-panel" style="display:none">
-  <!-- KPI row -->
-  <div class="dash-kpi-row">
-    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-count">—</div><div class="dash-kpi-l">Properties</div></div>
-    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-units">—</div><div class="dash-kpi-l">Total Units</div></div>
-    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-health" style="color:var(--amb)">—</div><div class="dash-kpi-l">Avg Health</div></div>
-    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-spend" style="font-size:20px">—</div><div class="dash-kpi-l">Monthly Spend</div></div>
-    <div class="dash-kpi">
-      <div style="display:flex;justify-content:center;gap:8px;margin-bottom:4px" id="port-kpi-flags">
-        <span class="mflag r">— RED</span><span class="mflag y">— YLW</span><span class="mflag g">— GRN</span>
-      </div>
-      <div class="dash-kpi-l">Health Breakdown</div>
-    </div>
-  </div>
-  <!-- Market breakdown table -->
-  <div class="dash-table-card">
-    <div class="dash-table-hdr">
-      <div style="font-size:15px;font-weight:700;color:var(--jd)">By Market</div>
-      <div style="font-size:12px;color:var(--tm)">Portfolio overview</div>
-    </div>
-    <table class="market-table" id="port-market-table">
-      <thead>
-        <tr>
-          <th>Market</th>
-          <th style="text-align:right">Properties</th>
-          <th style="text-align:right">Units</th>
-          <th>Avg Health</th>
-          <th>Health Mix</th>
-          <th style="text-align:right">Monthly Spend</th>
-        </tr>
-      </thead>
-      <tbody id="port-market-tbody">
-        <tr><td colspan="6" style="padding:32px;text-align:center;color:var(--tm);font-style:italic">Loading market data…</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- ════════════ PANEL 3: SPEND SHEET ════════════ -->
-<div id="ptab-panel-spend" class="ptab-panel" style="display:none">
-  <!-- Header -->
-  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:16px">
-    <div>
-      <div style="font-size:21px;font-weight:800;color:var(--tp)">Spend Tracker</div>
-      <div style="font-size:12px;color:var(--tm);margin-top:3px">Live deal data from HubSpot · RPM Managed, Onboarding &amp; Dispositioning properties</div>
-    </div>
-    <button class="btn btn-secondary btn-sm" style="flex-shrink:0;align-self:flex-start;margin-top:4px" onclick="loadSpendSheet(true)">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-      Refresh
-    </button>
-  </div>
-  <!-- Filter bar -->
-  <div class="spend-filter-bar">
-    <div class="spend-filter-group">
-      <label class="spend-filter-label">Property Name</label>
-      <input id="sf-name" class="form-input" style="width:220px" placeholder="Search…" oninput="filterSpendSheet()">
-    </div>
-    <div class="spend-filter-group">
-      <label class="spend-filter-label">RPM Market</label>
-      <select id="sf-market" class="form-input" style="width:180px" onchange="filterSpendSheet()">
-        <option value="">All Markets</option>
-      </select>
-    </div>
-    <div class="spend-filter-group">
-      <label class="spend-filter-label">Marketing Manager</label>
-      <select id="sf-manager" class="form-input" style="width:200px" onchange="filterSpendSheet()">
-        <option value="">All Managers</option>
-      </select>
-    </div>
-    <span class="sf-count-badge" id="sf-count" style="display:none"></span>
-  </div>
-  <!-- Table -->
-  <div style="background:#fff;border:1px solid var(--bd);border-radius:var(--r);overflow:auto;max-height:calc(100vh - 280px)">
-    <table class="spend-table">
-      <thead>
-        <tr>
-          <th style="min-width:200px">Property</th>
-          <th style="min-width:80px">Status</th>
-          <th style="min-width:110px">Market</th>
-          <th style="min-width:130px">Manager</th>
-          <th class="s-num" style="min-width:85px">Search</th>
-          <th class="s-num" style="min-width:75px">PMax</th>
-          <th class="s-num" style="min-width:90px">Paid Social</th>
-          <th class="s-num" style="min-width:75px">Geofence</th>
-          <th class="s-num" style="min-width:75px">Display</th>
-          <th class="s-num" style="min-width:90px">Retargeting</th>
-          <th class="s-num" style="min-width:65px">CTV</th>
-          <th class="s-num" style="min-width:65px">SEO</th>
-          <th class="s-num" style="min-width:105px">Social Content</th>
-          <th class="s-num" style="min-width:75px">Eblasts</th>
-          <th class="s-num" style="min-width:95px">Email Drips</th>
-          <th class="s-num" style="min-width:100px;color:var(--cu)">Total</th>
-        </tr>
-      </thead>
-      <tbody id="spend-tbody">
-        <tr><td colspan="16" style="text-align:center;padding:48px;color:var(--tm);font-size:12px">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px;display:block;margin-left:auto;margin-right:auto"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Loading spend data…
-        </td></tr>
-      </tbody>
-      <tfoot id="spend-tfoot" style="display:none">
-        <tr class="spend-tfoot">
-          <td colspan="4" style="padding:10px 14px">Portfolio Total (filtered)</td>
-          <td class="s-num" id="sf-search">—</td>
-          <td class="s-num" id="sf-pmax">—</td>
-          <td class="s-num" id="sf-social">—</td>
-          <td class="s-num" id="sf-geofence">—</td>
-          <td class="s-num" id="sf-display">—</td>
-          <td class="s-num" id="sf-retargeting">—</td>
-          <td class="s-num" id="sf-ctv">—</td>
-          <td class="s-num" id="sf-seo">—</td>
-          <td class="s-num" id="sf-social-content">—</td>
-          <td class="s-num" id="sf-eblast">—</td>
-          <td class="s-num" id="sf-email-drip">—</td>
-          <td class="s-num" id="sf-total">—</td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-</div>
-
-<script>
-// ── Globals ────────────────────────────────────────────────────────────────────
-window.__PORTAL_EMAIL__   = '{{ request.contact.email | escape_html }}';
-window.__PORTAL_API_BASE  = 'https://rpm-portal-server.onrender.com';
-var PORTAL_BASE_URL       = 'https://digital.rpmliving.com/client-portal';
-var _email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
-var _apiBase = window.__PORTAL_API_BASE;
-
-// ── Tab switching ──────────────────────────────────────────────────────────────
-var _propListLoaded  = false;
-var _portfolioLoaded = false;
-var _spendLoaded     = false;
-
-function topView(tab, btn) {
-  ['list','portfolio','spend'].forEach(function(t) {
-    var p = document.getElementById('ptab-panel-' + t);
-    if (p) p.style.display = (t === tab) ? 'block' : 'none';
-    var b = document.getElementById('ptab-' + t);
-    if (b) b.classList.toggle('active', t === tab);
-  });
-  if (tab === 'list'      && !_propListLoaded)  loadPropList();
-  if (tab === 'portfolio' && !_portfolioLoaded) loadPortfolio();
-  if (tab === 'spend'     && !_spendLoaded)     loadSpendSheet();
-}
-
-// ── Properties List ───────────────────────────────────────────────────────────
-var _propListData = [];
-
-function loadPropList() {
-  if (_propListLoaded) return;
-  fetch(_apiBase + '/api/portfolio', { headers: { 'X-Portal-Email': _email } })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      _propListLoaded = true;
-      _propListData = (d.properties || []).sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
-
-      // User label
-      var u = d.user || {};
-      var emailEl = document.getElementById('ptop-email');
-      var roleEl  = document.getElementById('ptop-role');
-      if (emailEl && u.email) { emailEl.textContent = u.email; emailEl.style.display = ''; }
-      if (roleEl && u.role)   { roleEl.textContent  = u.role.replace(/_/g,' '); roleEl.style.display = ''; }
-
-      // Subtitle
-      var sub = document.getElementById('pl-subtitle');
-      if (sub) sub.textContent = _propListData.length + ' propert' + (_propListData.length===1?'y':'ies') + ' in your portfolio';
-
-      // Market filter options
-      var markets = [...new Set(_propListData.map(function(p){return p.market||'';}).filter(Boolean))].sort();
-      var sel = document.getElementById('pl-market');
-      if (sel) markets.forEach(function(m){ var o=document.createElement('option'); o.value=m; o.textContent=m; sel.appendChild(o); });
-
-      renderPropList(_propListData);
-    })
-    .catch(function(err) {
-      console.warn('loadPropList failed:', err);
-      var el = document.getElementById('pl-tbody');
-      if (el) el.innerHTML = '<tr><td colspan="4" style="padding:32px;text-align:center;color:var(--tm)">Could not load properties. Please try refreshing.</td></tr>';
-    });
-}
-
-function filterPropList() {
-  var q      = (document.getElementById('pl-search')  ? document.getElementById('pl-search').value  : '').toLowerCase();
-  var market = document.getElementById('pl-market')  ? document.getElementById('pl-market').value  : '';
-  var health = document.getElementById('pl-health')  ? document.getElementById('pl-health').value  : '';
-  var filtered = _propListData.filter(function(p) {
-    if (q && !(p.name||'').toLowerCase().includes(q) && !(p.market||'').toLowerCase().includes(q)) return false;
-    if (market && (p.market||'') !== market) return false;
-    if (health) {
-      var sc = p.health_score != null ? Math.round(p.health_score) : null;
-      if (health === 'on-track'    && (sc == null || sc < 75))  return false;
-      if (health === 'watch'       && (sc == null || sc < 50 || sc >= 75)) return false;
-      if (health === 'needs-attention' && (sc == null || sc >= 50)) return false;
-    }
-    return true;
-  });
-  renderPropList(filtered);
-}
-
-function renderPropList(props) {
-  var tbody = document.getElementById('pl-tbody');
-  if (!tbody) return;
-  if (!props.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--tm)">No properties match your filters.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = props.map(function(p) {
-    var initials = (p.name||'').split(' ').filter(function(w){return w.length>0;}).slice(0,2)
-      .map(function(w){return w[0].toUpperCase();}).join('');
-    var score = p.health_score != null ? Math.round(p.health_score) : null;
-    var badgeClass = score == null ? 'no-data' : score >= 75 ? 'on-track' : score >= 50 ? 'watch' : 'needs-attention';
-    var badgeLabel = score == null ? 'No Data' : score >= 75 ? score + ' ON TRACK' : score >= 50 ? score + ' WATCH' : score + ' NEEDS ATTENTION';
-    var ple = p.status || p.plestatus || 'RPM Managed';
-    var isActive = (ple === 'RPM Managed' || ple === 'Onboarding');
-    var url = PORTAL_BASE_URL + '?uuid=' + encodeURIComponent(p.uuid);
-    return '<tr onclick="window.location.href=\'' + url + '\'">' +
-      '<td><div class="pl-prop-cell">' +
-        '<div class="pl-chip">' + initials + '</div>' +
-        '<div><div class="pl-name">' + (p.name||'') + '</div>' +
-        '<div class="pl-sub">' + (p.market||'') + '</div></div>' +
-      '</div></td>' +
-      '<td>' + (p.market||'—') + '</td>' +
-      '<td><span class="h-badge ' + badgeClass + '">' + badgeLabel + '</span></td>' +
-      '<td><span class="ple-pill' + (isActive?' active':'') + '">' + ple + '</span></td>' +
-      '</tr>';
-  }).join('');
-}
-
-// ── Portfolio Dashboard ───────────────────────────────────────────────────────
-function loadPortfolio() {
-  if (_portfolioLoaded) return;
-  fetch(_apiBase + '/api/portfolio', { headers: { 'X-Portal-Email': _email } })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      _portfolioLoaded = true;
-      var props   = d.properties || [];
-      var summary = d.summary    || d.rollups || {};
-
-      // KPI row
-      function setEl(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
-      setEl('port-kpi-count',  props.length || summary.total_properties || '—');
-      setEl('port-kpi-units',  summary.total_units ? summary.total_units.toLocaleString() : '—');
-      var avgH = summary.avg_health_score != null ? Math.round(summary.avg_health_score)
-               : summary.avg_health      != null ? Math.round(summary.avg_health) : null;
-      var hEl = document.getElementById('port-kpi-health');
-      if (hEl && avgH != null) {
-        hEl.textContent = avgH;
-        hEl.style.color = avgH >= 75 ? 'var(--sage)' : avgH >= 50 ? 'var(--amb)' : '#C94444';
-      }
-      if (summary.total_monthly_spend != null || summary.total_spend != null) {
-        setEl('port-kpi-spend', '$' + Math.round(summary.total_monthly_spend || summary.total_spend || 0).toLocaleString());
-      }
-      var flagsEl = document.getElementById('port-kpi-flags');
-      var hb = summary.health_distribution || summary.health_breakdown || {};
-      if (flagsEl && (hb.critical != null || hb.healthy != null)) {
-        flagsEl.innerHTML =
-          '<span class="mflag r">' + (hb.critical||0) + ' RED</span>' +
-          '<span class="mflag y">' + (hb.warning||0)  + ' YLW</span>' +
-          '<span class="mflag g">' + (hb.healthy||0)  + ' GRN</span>';
-      }
-
-      // Market table — build from properties
-      var marketMap = {};
-      props.forEach(function(p) {
-        var m = p.market || 'Unknown';
-        if (!marketMap[m]) marketMap[m] = {props:0, units:0, scores:[], spend:0};
-        marketMap[m].props++;
-        marketMap[m].units += (parseInt(p.units) || 0);
-        if (p.health_score != null) marketMap[m].scores.push(p.health_score);
-        marketMap[m].spend += (p.ad_spend || p.monthly_spend || 0);
-      });
-      var tbody = document.getElementById('port-market-tbody');
-      if (tbody) {
-        var markets = Object.keys(marketMap).sort();
-        if (!markets.length) { tbody.innerHTML = '<tr><td colspan="6" style="padding:32px;text-align:center;color:var(--tm)">No market data available.</td></tr>'; return; }
-        tbody.innerHTML = markets.map(function(m) {
-          var md = marketMap[m];
-          var avg = md.scores.length ? Math.round(md.scores.reduce(function(a,b){return a+b;},0)/md.scores.length) : null;
-          var color = avg == null ? 'var(--tm)' : avg >= 75 ? 'var(--sage)' : avg >= 50 ? 'var(--amb)' : 'var(--red)';
-          var barColor = avg == null ? 'var(--bd)' : avg >= 75 ? '#8FA68E' : avg >= 50 ? '#D4910A' : '#C94444';
-          var barW = avg != null ? avg : 0;
-          var spStr = md.spend > 0 ? '$' + Math.round(md.spend).toLocaleString() : '—';
-          return '<tr><td><div class="market-name">' + m + '</div><div class="market-sub">' + md.props + ' propert' + (md.props===1?'y':'ies') + '</div></td>' +
-            '<td style="text-align:right">' + md.props + '</td>' +
-            '<td style="text-align:right">' + md.units.toLocaleString() + '</td>' +
-            '<td><span style="font-weight:700;color:' + color + '">' + (avg!=null?avg:'—') + '</span>' +
-              '<div class="health-bar-wrap"><div class="health-bar-fill" style="width:' + barW + '%;background:' + barColor + '"></div></div></td>' +
-            '<td><div class="market-flags">' +
-              '<span class="mflag r">' + md.scores.filter(function(s){return s<50;}).length + ' RED</span> ' +
-              '<span class="mflag y">' + md.scores.filter(function(s){return s>=50&&s<75;}).length + ' YLW</span> ' +
-              '<span class="mflag g">' + md.scores.filter(function(s){return s>=75;}).length + ' GRN</span></div></td>' +
-            '<td style="text-align:right">' + spStr + '</td>' +
-            '</tr>';
-        }).join('');
-      }
-    })
-    .catch(function(err) { console.warn('loadPortfolio failed:', err); });
-}
-
-// ── Spend Sheet ───────────────────────────────────────────────────────────────
-var _spendRows = [];
-
-function loadSpendSheet(force) {
-  if (_spendLoaded && !force) return;
-  if (force) _spendLoaded = false;
-  var email  = _email;
-  var apiBase = _apiBase;
-  fetch(apiBase + '/api/spend-sheet', { headers: { 'X-Portal-Email': email } })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      _spendLoaded = true;
-      _spendRows = d.rows || d || [];
-      // Populate market + manager dropdowns
-      var markets  = [...new Set(_spendRows.map(function(r){return r.market||'';}).filter(Boolean))].sort();
-      var managers = [...new Set(_spendRows.map(function(r){return r.marketing_manager||r.manager||'';}).filter(Boolean))].sort();
-      var mSel = document.getElementById('sf-market');
-      var mgSel = document.getElementById('sf-manager');
-      markets.forEach(function(m)  { if(mSel) { var o=document.createElement('option');o.value=m;o.textContent=m;mSel.appendChild(o); }});
-      managers.forEach(function(m) { if(mgSel){ var o=document.createElement('option');o.value=m;o.textContent=m;mgSel.appendChild(o); }});
-      renderSpendSheet(_spendRows);
-    })
-    .catch(function(err) {
-      console.warn('loadSpendSheet failed:', err);
-      var el = document.getElementById('spend-tbody');
-      if (el) el.innerHTML = '<tr><td colspan="16" style="padding:32px;text-align:center;color:var(--tm)">Could not load spend data.</td></tr>';
-    });
-}
-
-function filterSpendSheet() {
-  var q   = document.getElementById('sf-name')    ? document.getElementById('sf-name').value.toLowerCase()    : '';
-  var mkt = document.getElementById('sf-market')  ? document.getElementById('sf-market').value   : '';
-  var mgr = document.getElementById('sf-manager') ? document.getElementById('sf-manager').value  : '';
-  var rows = _spendRows.filter(function(r) {
-    if (q   && !(r.property_name||r.name||'').toLowerCase().includes(q)) return false;
-    if (mkt && (r.market||'') !== mkt) return false;
-    if (mgr && (r.marketing_manager||r.manager||'') !== mgr) return false;
-    return true;
-  });
-  renderSpendSheet(rows);
-  var badge = document.getElementById('sf-count');
-  if (badge) { badge.textContent = rows.length + ' of ' + _spendRows.length; badge.style.display = rows.length < _spendRows.length ? '' : 'none'; }
-}
-
-function renderSpendSheet(rows) {
-  var tbody = document.getElementById('spend-tbody');
-  if (!tbody) return;
-  function fmt(v) { return v ? '$' + Math.round(v).toLocaleString() : '—'; }
-  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="16" style="padding:32px;text-align:center;color:var(--tm)">No results.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(function(r) {
-    var pname = r.property_name || r.name || '';
-    var rowTotal = (r.search||0) + (r.pmax||0) + (r.paid_social||0) +
-                   (r.geofence||0) + (r.display||0) + (r.retargeting||0) +
-                   (r.ctv||0) + (r.seo||0) + (r.social_posting||r.social_content||0) +
-                   (r.eblast||r.eblasts||0) + (r.email_drip||r.email_drips||0);
-    return '<tr>' +
-      '<td><span class="s-prop-name" title="'+pname+'">'+pname+'</span></td>' +
-      '<td>' + (r.ple_status||r.plestatus||r.status||'') + '</td>' +
-      '<td>' + (r.market||'') + '</td>' +
-      '<td>' + (r.marketing_manager||r.manager||'') + '</td>' +
-      '<td class="s-num">' + fmt(r.search) + '</td>' +
-      '<td class="s-num">' + fmt(r.pmax) + '</td>' +
-      '<td class="s-num">' + fmt(r.paid_social) + '</td>' +
-      '<td class="s-num">' + fmt(r.geofence) + '</td>' +
-      '<td class="s-num">' + fmt(r.display) + '</td>' +
-      '<td class="s-num">' + fmt(r.retargeting) + '</td>' +
-      '<td class="s-num">' + fmt(r.ctv) + '</td>' +
-      '<td class="s-num">' + fmt(r.seo) + '</td>' +
-      '<td class="s-num">' + fmt(r.social_posting||r.social_content) + '</td>' +
-      '<td class="s-num">' + fmt(r.eblast||r.eblasts) + '</td>' +
-      '<td class="s-num">' + fmt(r.email_drip||r.email_drips) + '</td>' +
-      '<td class="s-num s-total" style="color:var(--cu);font-weight:700">' + fmt(rowTotal) + '</td>' +
-      '</tr>';
-  }).join('');
-  // Footer totals
-  var sum = function(k) { return rows.reduce(function(a,r){return a+(r[k]||0);},0); };
-  var tfoot = document.getElementById('spend-tfoot');
-  if (tfoot) {
-    function setTf(id, v) { var el=document.getElementById(id); if(el) el.textContent = v > 0 ? '$'+Math.round(v).toLocaleString() : '—'; }
-    setTf('sf-search', sum('search')); setTf('sf-pmax', sum('pmax'));
-    setTf('sf-social', sum('paid_social')); setTf('sf-geofence', sum('geofence'));
-    setTf('sf-display', sum('display')); setTf('sf-retargeting', sum('retargeting'));
-    setTf('sf-ctv', sum('ctv')); setTf('sf-seo', sum('seo'));
-    setTf('sf-social-content', sum('social_content')||sum('social_posting'));
-    setTf('sf-eblast', sum('eblast')||sum('eblasts'));
-    setTf('sf-email-drip', sum('email_drip')||sum('email_drips'));
-    setTf('sf-total', sum('total')||sum('total_spend'));
-    tfoot.style.display = '';
-  }
-}
-
-// ── Init: load Properties list on page load ───────────────────────────────────
-loadPropList();
 
 // ── SEO & AI Insights ──────────────────────────────────────────────────────
 // Ported from Phase 1 branch. Self-contained IIFE — all state is internal.
@@ -8072,6 +7508,572 @@ loadPropList();
       });
   };
 })();
+
+</script>
+</body>
+</html>
+{% else %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>RPM Living | Client Portal — Properties</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --j:#53606C;--jd:#3D474F;--j1:#1A2530;--j2:#151F2B;
+  --cu:#C8964E;--cul:#D4A86A;--cug:rgba(200,150,78,0.12);
+  --sage:#8FA68E;--mint:#CDE3E0;--ml:#E8F4F2;
+  --red:#C94444;--amb:#D4910A;
+  --white:#fff;--bg:#F0F2F5;
+  --tp:#1F2937;--ts:#6B7280;--tm:#9CA3AF;
+  --bd:#E5E7EB;--bdl:#F3F4F6;
+  --sh:0 1px 3px rgba(0,0,0,0.07),0 1px 2px rgba(0,0,0,0.04);
+  --shm:0 4px 16px rgba(0,0,0,0.08);
+  --r:12px;
+}
+html{scroll-behavior:smooth}
+body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(--tp);background:var(--bg);-webkit-font-smoothing:antialiased}
+
+/* ── Top header + tabs ── */
+.portal-top-hdr{display:flex;align-items:center;background:#fff;border-bottom:1px solid var(--bd);padding:0 32px;height:60px;position:sticky;top:0;z-index:100;gap:0}
+.ptop-logo{height:26px;margin-right:32px;flex-shrink:0}
+.portal-top-tabs{display:flex;gap:4px;flex:1}
+.ptab{padding:8px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;color:var(--ts);border-radius:8px;transition:all .15s;letter-spacing:.01em}
+.ptab:hover{background:var(--bdl);color:var(--tp)}
+.ptab.active{background:var(--cug);color:var(--cu)}
+.ptop-user{font-size:11px;color:var(--tm);display:flex;align-items:center;gap:8px;white-space:nowrap}
+.ptop-user-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--cug);color:var(--cu);padding:3px 10px;border-radius:100px}
+
+/* ── Panels ── */
+.ptab-panel{min-height:calc(100vh - 60px);background:var(--bg);padding:36px 44px}
+
+/* ── Properties list table ── */
+.prop-list-search-bar{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.prop-list-table-card{background:#fff;border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
+.pl-table{width:100%;border-collapse:collapse}
+.pl-table th{padding:11px 20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--tm);background:var(--bg);border-bottom:1px solid var(--bd);text-align:left}
+.pl-table td{padding:14px 20px;border-bottom:1px solid var(--bdl);font-size:13px;vertical-align:middle}
+.pl-table tbody tr{cursor:pointer;transition:background .15s}
+.pl-table tbody tr:hover{background:var(--ml)}
+.pl-table tbody tr:last-child td{border-bottom:none}
+.pl-chip{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--cu);color:#fff;font-size:11px;font-weight:800;flex-shrink:0;letter-spacing:.02em}
+.pl-prop-cell{display:flex;align-items:center;gap:12px}
+.pl-name{font-weight:700;color:var(--jd);line-height:1.3}
+.pl-sub{font-size:11px;color:var(--tm);margin-top:2px}
+
+/* ── Health badges ── */
+.h-badge{padding:3px 9px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.04em;white-space:nowrap}
+.h-badge.on-track{background:rgba(143,166,142,.15);color:var(--sage)}
+.h-badge.watch{background:rgba(212,145,10,.15);color:var(--amb)}
+.h-badge.needs-attention{background:rgba(201,68,68,.12);color:var(--red)}
+.h-badge.no-data{background:var(--bdl);color:var(--tm)}
+
+/* ── Status chip ── */
+.ple-pill{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--bdl);color:var(--ts)}
+.ple-pill.active{background:#DCFCE7;color:#166534}
+
+/* ── Portfolio KPIs (reused from existing dash-* classes) ── */
+.dash-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:28px}
+.dash-kpi{background:#fff;border:1px solid var(--bd);border-radius:var(--r);padding:24px 20px;text-align:center;box-shadow:var(--sh)}
+.dash-kpi-v{font-size:28px;font-weight:800;color:var(--jd);line-height:1.2;margin-bottom:4px}
+.dash-kpi-l{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tm)}
+.mflag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px}
+.mflag.r{background:#FEE2E2;color:#991B1B}
+.mflag.y{background:#FEF9C3;color:#854D0E}
+.mflag.g{background:#DCFCE7;color:#166534}
+.market-table{width:100%;border-collapse:collapse}
+.market-table th{padding:10px 20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--tm);background:var(--bg);border-bottom:1px solid var(--bd);text-align:left}
+.market-table td{padding:14px 20px;border-bottom:1px solid var(--bdl);font-size:13px;vertical-align:middle}
+.market-table tbody tr:last-child td{border-bottom:none}
+.market-name{font-weight:700;color:var(--jd)}
+.market-sub{font-size:11px;color:var(--tm);margin-top:2px}
+.market-flags{display:flex;gap:5px}
+.health-bar-wrap{width:90px;background:var(--bdl);border-radius:100px;height:7px;overflow:hidden;display:inline-block;vertical-align:middle;margin-left:8px}
+.health-bar-fill{height:100%;border-radius:100px}
+.dash-table-card{background:#fff;border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
+.dash-table-hdr{display:flex;align-items:center;justify-content:space-between;padding:20px 28px;border-bottom:1px solid var(--bd);gap:12px}
+.hdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.hdot.h{background:var(--sage)}.hdot.w{background:var(--amb)}.hdot.c{background:var(--red)}
+.fcount{font-weight:700}.fcount.has{color:var(--red)}.fcount.none{color:var(--tm)}
+
+/* ── Spend Sheet ── */
+.spend-wrap{flex:1;padding:0;overflow-x:auto;min-width:0}
+.spend-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+.spend-table th{background:#F8FAFC;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ts);padding:10px 14px;border-bottom:2px solid var(--bd);text-align:left;position:sticky;top:0;z-index:2}
+.spend-table td{padding:9px 14px;border-bottom:1px solid var(--bdl);color:var(--tp);vertical-align:middle}
+.spend-table tbody tr:hover td{background:#FAFBFC}
+.spend-table th.s-num,.spend-table td.s-num{text-align:right}
+.spend-table th.s-cx,.spend-table td.s-cx{text-align:center}
+.spend-table td.s-total{font-weight:700}
+.spend-tfoot td{background:var(--bdl)!important;font-weight:700;border-top:2px solid var(--bd)}
+.spend-filter-bar{display:flex;align-items:flex-end;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.spend-filter-group{display:flex;flex-direction:column;gap:4px}
+.spend-filter-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tm)}
+.sf-count-badge{background:var(--cu);color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap;align-self:flex-end;margin-bottom:2px}
+.form-input{display:block;width:100%;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:#fff;transition:border-color .15s}
+.form-input:focus{border-color:var(--cu)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:inherit;transition:all .15s}
+.btn-secondary{background:#fff;border:1px solid var(--bd);color:var(--tp)}
+.btn-secondary:hover{background:var(--bg);border-color:var(--j)}
+.btn-sm{padding:6px 12px;font-size:12px}
+
+@media(max-width:900px){.dash-kpi-row{grid-template-columns:repeat(3,1fr)}.portal-top-tabs{gap:2px}.ptab{padding:8px 12px;font-size:12px}}
+</style>
+</head>
+<body>
+
+<!-- ════════════ PORTFOLIO TOP HEADER ════════════ -->
+<header class="portal-top-hdr">
+  <img src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/images/rpm-logo.png" class="ptop-logo" alt="RPM Living">
+  <nav class="portal-top-tabs">
+    <button class="ptab active" id="ptab-list"      onclick="topView('list',this)">Properties</button>
+    <button class="ptab"        id="ptab-portfolio" onclick="topView('portfolio',this)">Portfolio Dashboard</button>
+    <button class="ptab"        id="ptab-spend"     onclick="topView('spend',this)">Spend Sheet</button>
+  </nav>
+  <div class="ptop-user" id="ptop-user-label">
+    <span id="ptop-email" style="display:none"></span>
+    <span class="ptop-user-badge" id="ptop-role" style="display:none"></span>
+  </div>
+</header>
+
+<!-- ════════════ PANEL 1: PROPERTIES LIST ════════════ -->
+<div id="ptab-panel-list" class="ptab-panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+    <div>
+      <div style="font-size:22px;font-weight:800;color:var(--tp)">Properties</div>
+      <div style="font-size:12px;color:var(--tm);margin-top:3px" id="pl-subtitle">Loading your portfolio…</div>
+    </div>
+  </div>
+  <!-- Search + filter bar -->
+  <div class="prop-list-search-bar">
+    <input id="pl-search" class="form-input" style="width:260px" placeholder="Search properties…" oninput="filterPropList()">
+    <select id="pl-market" class="form-input" style="width:180px" onchange="filterPropList()">
+      <option value="">All Markets</option>
+    </select>
+    <select id="pl-health" class="form-input" style="width:180px" onchange="filterPropList()">
+      <option value="">All Health Status</option>
+      <option value="on-track">On Track (≥75)</option>
+      <option value="watch">Watch (50–74)</option>
+      <option value="needs-attention">Needs Attention (&lt;50)</option>
+    </select>
+  </div>
+  <!-- Properties table -->
+  <div class="prop-list-table-card">
+    <table class="pl-table">
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Market</th>
+          <th>Health</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="pl-tbody">
+        <tr><td colspan="4" style="padding:40px;text-align:center;color:var(--tm);font-style:italic">Loading properties…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════ PANEL 2: PORTFOLIO DASHBOARD ════════════ -->
+<div id="ptab-panel-portfolio" class="ptab-panel" style="display:none">
+  <!-- KPI row -->
+  <div class="dash-kpi-row">
+    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-count">—</div><div class="dash-kpi-l">Properties</div></div>
+    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-units">—</div><div class="dash-kpi-l">Total Units</div></div>
+    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-health" style="color:var(--amb)">—</div><div class="dash-kpi-l">Avg Health</div></div>
+    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-spend" style="font-size:20px">—</div><div class="dash-kpi-l">Monthly Spend</div></div>
+    <div class="dash-kpi">
+      <div style="display:flex;justify-content:center;gap:8px;margin-bottom:4px" id="port-kpi-flags">
+        <span class="mflag r">— RED</span><span class="mflag y">— YLW</span><span class="mflag g">— GRN</span>
+      </div>
+      <div class="dash-kpi-l">Health Breakdown</div>
+    </div>
+  </div>
+  <!-- Market breakdown table -->
+  <div class="dash-table-card">
+    <div class="dash-table-hdr">
+      <div style="font-size:15px;font-weight:700;color:var(--jd)">By Market</div>
+      <div style="font-size:12px;color:var(--tm)">Portfolio overview</div>
+    </div>
+    <table class="market-table" id="port-market-table">
+      <thead>
+        <tr>
+          <th>Market</th>
+          <th style="text-align:right">Properties</th>
+          <th style="text-align:right">Units</th>
+          <th>Avg Health</th>
+          <th>Health Mix</th>
+          <th style="text-align:right">Monthly Spend</th>
+        </tr>
+      </thead>
+      <tbody id="port-market-tbody">
+        <tr><td colspan="6" style="padding:32px;text-align:center;color:var(--tm);font-style:italic">Loading market data…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════ PANEL 3: SPEND SHEET ════════════ -->
+<div id="ptab-panel-spend" class="ptab-panel" style="display:none">
+  <!-- Header -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:16px">
+    <div>
+      <div style="font-size:21px;font-weight:800;color:var(--tp)">Spend Tracker</div>
+      <div style="font-size:12px;color:var(--tm);margin-top:3px">Live deal data from HubSpot · RPM Managed, Onboarding &amp; Dispositioning properties</div>
+    </div>
+    <button class="btn btn-secondary btn-sm" style="flex-shrink:0;align-self:flex-start;margin-top:4px" onclick="loadSpendSheet(true)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+  </div>
+  <!-- Filter bar -->
+  <div class="spend-filter-bar">
+    <div class="spend-filter-group">
+      <label class="spend-filter-label">Property Name</label>
+      <input id="sf-name" class="form-input" style="width:220px" placeholder="Search…" oninput="filterSpendSheet()">
+    </div>
+    <div class="spend-filter-group">
+      <label class="spend-filter-label">RPM Market</label>
+      <select id="sf-market" class="form-input" style="width:180px" onchange="filterSpendSheet()">
+        <option value="">All Markets</option>
+      </select>
+    </div>
+    <div class="spend-filter-group">
+      <label class="spend-filter-label">Marketing Manager</label>
+      <select id="sf-manager" class="form-input" style="width:200px" onchange="filterSpendSheet()">
+        <option value="">All Managers</option>
+      </select>
+    </div>
+    <span class="sf-count-badge" id="sf-count" style="display:none"></span>
+  </div>
+  <!-- Table -->
+  <div style="background:#fff;border:1px solid var(--bd);border-radius:var(--r);overflow:auto;max-height:calc(100vh - 280px)">
+    <table class="spend-table">
+      <thead>
+        <tr>
+          <th style="min-width:200px">Property</th>
+          <th style="min-width:80px">Status</th>
+          <th style="min-width:110px">Market</th>
+          <th style="min-width:130px">Manager</th>
+          <th class="s-num" style="min-width:85px">Search</th>
+          <th class="s-num" style="min-width:75px">PMax</th>
+          <th class="s-num" style="min-width:90px">Paid Social</th>
+          <th class="s-num" style="min-width:75px">Geofence</th>
+          <th class="s-num" style="min-width:75px">Display</th>
+          <th class="s-num" style="min-width:90px">Retargeting</th>
+          <th class="s-num" style="min-width:65px">CTV</th>
+          <th class="s-num" style="min-width:65px">SEO</th>
+          <th class="s-num" style="min-width:105px">Social Content</th>
+          <th class="s-num" style="min-width:75px">Eblasts</th>
+          <th class="s-num" style="min-width:95px">Email Drips</th>
+          <th class="s-num" style="min-width:100px;color:var(--cu)">Total</th>
+        </tr>
+      </thead>
+      <tbody id="spend-tbody">
+        <tr><td colspan="16" style="text-align:center;padding:48px;color:var(--tm);font-size:12px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px;display:block;margin-left:auto;margin-right:auto"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Loading spend data…
+        </td></tr>
+      </tbody>
+      <tfoot id="spend-tfoot" style="display:none">
+        <tr class="spend-tfoot">
+          <td colspan="4" style="padding:10px 14px">Portfolio Total (filtered)</td>
+          <td class="s-num" id="sf-search">—</td>
+          <td class="s-num" id="sf-pmax">—</td>
+          <td class="s-num" id="sf-social">—</td>
+          <td class="s-num" id="sf-geofence">—</td>
+          <td class="s-num" id="sf-display">—</td>
+          <td class="s-num" id="sf-retargeting">—</td>
+          <td class="s-num" id="sf-ctv">—</td>
+          <td class="s-num" id="sf-seo">—</td>
+          <td class="s-num" id="sf-social-content">—</td>
+          <td class="s-num" id="sf-eblast">—</td>
+          <td class="s-num" id="sf-email-drip">—</td>
+          <td class="s-num" id="sf-total">—</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+<script>
+// ── Globals ────────────────────────────────────────────────────────────────────
+window.__PORTAL_EMAIL__   = '{{ request.contact.email | escape_html }}';
+window.__PORTAL_API_BASE  = 'https://rpm-portal-server.onrender.com';
+var PORTAL_BASE_URL       = 'https://digital.rpmliving.com/client-portal';
+var _email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+var _apiBase = window.__PORTAL_API_BASE;
+
+// ── Tab switching ──────────────────────────────────────────────────────────────
+var _propListLoaded  = false;
+var _portfolioLoaded = false;
+var _spendLoaded     = false;
+
+function topView(tab, btn) {
+  ['list','portfolio','spend'].forEach(function(t) {
+    var p = document.getElementById('ptab-panel-' + t);
+    if (p) p.style.display = (t === tab) ? 'block' : 'none';
+    var b = document.getElementById('ptab-' + t);
+    if (b) b.classList.toggle('active', t === tab);
+  });
+  if (tab === 'list'      && !_propListLoaded)  loadPropList();
+  if (tab === 'portfolio' && !_portfolioLoaded) loadPortfolio();
+  if (tab === 'spend'     && !_spendLoaded)     loadSpendSheet();
+}
+
+// ── Properties List ───────────────────────────────────────────────────────────
+var _propListData = [];
+
+function loadPropList() {
+  if (_propListLoaded) return;
+  fetch(_apiBase + '/api/portfolio', { headers: { 'X-Portal-Email': _email } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      _propListLoaded = true;
+      _propListData = (d.properties || []).sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+
+      // User label
+      var u = d.user || {};
+      var emailEl = document.getElementById('ptop-email');
+      var roleEl  = document.getElementById('ptop-role');
+      if (emailEl && u.email) { emailEl.textContent = u.email; emailEl.style.display = ''; }
+      if (roleEl && u.role)   { roleEl.textContent  = u.role.replace(/_/g,' '); roleEl.style.display = ''; }
+
+      // Subtitle
+      var sub = document.getElementById('pl-subtitle');
+      if (sub) sub.textContent = _propListData.length + ' propert' + (_propListData.length===1?'y':'ies') + ' in your portfolio';
+
+      // Market filter options
+      var markets = [...new Set(_propListData.map(function(p){return p.market||'';}).filter(Boolean))].sort();
+      var sel = document.getElementById('pl-market');
+      if (sel) markets.forEach(function(m){ var o=document.createElement('option'); o.value=m; o.textContent=m; sel.appendChild(o); });
+
+      renderPropList(_propListData);
+    })
+    .catch(function(err) {
+      console.warn('loadPropList failed:', err);
+      var el = document.getElementById('pl-tbody');
+      if (el) el.innerHTML = '<tr><td colspan="4" style="padding:32px;text-align:center;color:var(--tm)">Could not load properties. Please try refreshing.</td></tr>';
+    });
+}
+
+function filterPropList() {
+  var q      = (document.getElementById('pl-search')  ? document.getElementById('pl-search').value  : '').toLowerCase();
+  var market = document.getElementById('pl-market')  ? document.getElementById('pl-market').value  : '';
+  var health = document.getElementById('pl-health')  ? document.getElementById('pl-health').value  : '';
+  var filtered = _propListData.filter(function(p) {
+    if (q && !(p.name||'').toLowerCase().includes(q) && !(p.market||'').toLowerCase().includes(q)) return false;
+    if (market && (p.market||'') !== market) return false;
+    if (health) {
+      var sc = p.health_score != null ? Math.round(p.health_score) : null;
+      if (health === 'on-track'    && (sc == null || sc < 75))  return false;
+      if (health === 'watch'       && (sc == null || sc < 50 || sc >= 75)) return false;
+      if (health === 'needs-attention' && (sc == null || sc >= 50)) return false;
+    }
+    return true;
+  });
+  renderPropList(filtered);
+}
+
+function renderPropList(props) {
+  var tbody = document.getElementById('pl-tbody');
+  if (!tbody) return;
+  if (!props.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--tm)">No properties match your filters.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = props.map(function(p) {
+    var initials = (p.name||'').split(' ').filter(function(w){return w.length>0;}).slice(0,2)
+      .map(function(w){return w[0].toUpperCase();}).join('');
+    var score = p.health_score != null ? Math.round(p.health_score) : null;
+    var badgeClass = score == null ? 'no-data' : score >= 75 ? 'on-track' : score >= 50 ? 'watch' : 'needs-attention';
+    var badgeLabel = score == null ? 'No Data' : score >= 75 ? score + ' ON TRACK' : score >= 50 ? score + ' WATCH' : score + ' NEEDS ATTENTION';
+    var ple = p.status || p.plestatus || 'RPM Managed';
+    var isActive = (ple === 'RPM Managed' || ple === 'Onboarding');
+    var url = PORTAL_BASE_URL + '?uuid=' + encodeURIComponent(p.uuid);
+    return '<tr onclick="window.location.href=\'' + url + '\'">' +
+      '<td><div class="pl-prop-cell">' +
+        '<div class="pl-chip">' + initials + '</div>' +
+        '<div><div class="pl-name">' + (p.name||'') + '</div>' +
+        '<div class="pl-sub">' + (p.market||'') + '</div></div>' +
+      '</div></td>' +
+      '<td>' + (p.market||'—') + '</td>' +
+      '<td><span class="h-badge ' + badgeClass + '">' + badgeLabel + '</span></td>' +
+      '<td><span class="ple-pill' + (isActive?' active':'') + '">' + ple + '</span></td>' +
+      '</tr>';
+  }).join('');
+}
+
+// ── Portfolio Dashboard ───────────────────────────────────────────────────────
+function loadPortfolio() {
+  if (_portfolioLoaded) return;
+  fetch(_apiBase + '/api/portfolio', { headers: { 'X-Portal-Email': _email } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      _portfolioLoaded = true;
+      var props   = d.properties || [];
+      var summary = d.summary    || d.rollups || {};
+
+      // KPI row
+      function setEl(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+      setEl('port-kpi-count',  props.length || summary.total_properties || '—');
+      setEl('port-kpi-units',  summary.total_units ? summary.total_units.toLocaleString() : '—');
+      var avgH = summary.avg_health_score != null ? Math.round(summary.avg_health_score)
+               : summary.avg_health      != null ? Math.round(summary.avg_health) : null;
+      var hEl = document.getElementById('port-kpi-health');
+      if (hEl && avgH != null) {
+        hEl.textContent = avgH;
+        hEl.style.color = avgH >= 75 ? 'var(--sage)' : avgH >= 50 ? 'var(--amb)' : '#C94444';
+      }
+      if (summary.total_monthly_spend != null || summary.total_spend != null) {
+        setEl('port-kpi-spend', '$' + Math.round(summary.total_monthly_spend || summary.total_spend || 0).toLocaleString());
+      }
+      var flagsEl = document.getElementById('port-kpi-flags');
+      var hb = summary.health_distribution || summary.health_breakdown || {};
+      if (flagsEl && (hb.critical != null || hb.healthy != null)) {
+        flagsEl.innerHTML =
+          '<span class="mflag r">' + (hb.critical||0) + ' RED</span>' +
+          '<span class="mflag y">' + (hb.warning||0)  + ' YLW</span>' +
+          '<span class="mflag g">' + (hb.healthy||0)  + ' GRN</span>';
+      }
+
+      // Market table — build from properties
+      var marketMap = {};
+      props.forEach(function(p) {
+        var m = p.market || 'Unknown';
+        if (!marketMap[m]) marketMap[m] = {props:0, units:0, scores:[], spend:0};
+        marketMap[m].props++;
+        marketMap[m].units += (parseInt(p.units) || 0);
+        if (p.health_score != null) marketMap[m].scores.push(p.health_score);
+        marketMap[m].spend += (p.ad_spend || p.monthly_spend || 0);
+      });
+      var tbody = document.getElementById('port-market-tbody');
+      if (tbody) {
+        var markets = Object.keys(marketMap).sort();
+        if (!markets.length) { tbody.innerHTML = '<tr><td colspan="6" style="padding:32px;text-align:center;color:var(--tm)">No market data available.</td></tr>'; return; }
+        tbody.innerHTML = markets.map(function(m) {
+          var md = marketMap[m];
+          var avg = md.scores.length ? Math.round(md.scores.reduce(function(a,b){return a+b;},0)/md.scores.length) : null;
+          var color = avg == null ? 'var(--tm)' : avg >= 75 ? 'var(--sage)' : avg >= 50 ? 'var(--amb)' : 'var(--red)';
+          var barColor = avg == null ? 'var(--bd)' : avg >= 75 ? '#8FA68E' : avg >= 50 ? '#D4910A' : '#C94444';
+          var barW = avg != null ? avg : 0;
+          var spStr = md.spend > 0 ? '$' + Math.round(md.spend).toLocaleString() : '—';
+          return '<tr><td><div class="market-name">' + m + '</div><div class="market-sub">' + md.props + ' propert' + (md.props===1?'y':'ies') + '</div></td>' +
+            '<td style="text-align:right">' + md.props + '</td>' +
+            '<td style="text-align:right">' + md.units.toLocaleString() + '</td>' +
+            '<td><span style="font-weight:700;color:' + color + '">' + (avg!=null?avg:'—') + '</span>' +
+              '<div class="health-bar-wrap"><div class="health-bar-fill" style="width:' + barW + '%;background:' + barColor + '"></div></div></td>' +
+            '<td><div class="market-flags">' +
+              '<span class="mflag r">' + md.scores.filter(function(s){return s<50;}).length + ' RED</span> ' +
+              '<span class="mflag y">' + md.scores.filter(function(s){return s>=50&&s<75;}).length + ' YLW</span> ' +
+              '<span class="mflag g">' + md.scores.filter(function(s){return s>=75;}).length + ' GRN</span></div></td>' +
+            '<td style="text-align:right">' + spStr + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+    })
+    .catch(function(err) { console.warn('loadPortfolio failed:', err); });
+}
+
+// ── Spend Sheet ───────────────────────────────────────────────────────────────
+var _spendRows = [];
+
+function loadSpendSheet(force) {
+  if (_spendLoaded && !force) return;
+  if (force) _spendLoaded = false;
+  var email  = _email;
+  var apiBase = _apiBase;
+  fetch(apiBase + '/api/spend-sheet', { headers: { 'X-Portal-Email': email } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      _spendLoaded = true;
+      _spendRows = d.rows || d || [];
+      // Populate market + manager dropdowns
+      var markets  = [...new Set(_spendRows.map(function(r){return r.market||'';}).filter(Boolean))].sort();
+      var managers = [...new Set(_spendRows.map(function(r){return r.marketing_manager||r.manager||'';}).filter(Boolean))].sort();
+      var mSel = document.getElementById('sf-market');
+      var mgSel = document.getElementById('sf-manager');
+      markets.forEach(function(m)  { if(mSel) { var o=document.createElement('option');o.value=m;o.textContent=m;mSel.appendChild(o); }});
+      managers.forEach(function(m) { if(mgSel){ var o=document.createElement('option');o.value=m;o.textContent=m;mgSel.appendChild(o); }});
+      renderSpendSheet(_spendRows);
+    })
+    .catch(function(err) {
+      console.warn('loadSpendSheet failed:', err);
+      var el = document.getElementById('spend-tbody');
+      if (el) el.innerHTML = '<tr><td colspan="16" style="padding:32px;text-align:center;color:var(--tm)">Could not load spend data.</td></tr>';
+    });
+}
+
+function filterSpendSheet() {
+  var q   = document.getElementById('sf-name')    ? document.getElementById('sf-name').value.toLowerCase()    : '';
+  var mkt = document.getElementById('sf-market')  ? document.getElementById('sf-market').value   : '';
+  var mgr = document.getElementById('sf-manager') ? document.getElementById('sf-manager').value  : '';
+  var rows = _spendRows.filter(function(r) {
+    if (q   && !(r.property_name||r.name||'').toLowerCase().includes(q)) return false;
+    if (mkt && (r.market||'') !== mkt) return false;
+    if (mgr && (r.marketing_manager||r.manager||'') !== mgr) return false;
+    return true;
+  });
+  renderSpendSheet(rows);
+  var badge = document.getElementById('sf-count');
+  if (badge) { badge.textContent = rows.length + ' of ' + _spendRows.length; badge.style.display = rows.length < _spendRows.length ? '' : 'none'; }
+}
+
+function renderSpendSheet(rows) {
+  var tbody = document.getElementById('spend-tbody');
+  if (!tbody) return;
+  function fmt(v) { return v ? '$' + Math.round(v).toLocaleString() : '—'; }
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="16" style="padding:32px;text-align:center;color:var(--tm)">No results.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(function(r) {
+    var pname = r.property_name || r.name || '';
+    var rowTotal = (r.search||0) + (r.pmax||0) + (r.paid_social||0) +
+                   (r.geofence||0) + (r.display||0) + (r.retargeting||0) +
+                   (r.ctv||0) + (r.seo||0) + (r.social_posting||r.social_content||0) +
+                   (r.eblast||r.eblasts||0) + (r.email_drip||r.email_drips||0);
+    return '<tr>' +
+      '<td><span class="s-prop-name" title="'+pname+'">'+pname+'</span></td>' +
+      '<td>' + (r.ple_status||r.plestatus||r.status||'') + '</td>' +
+      '<td>' + (r.market||'') + '</td>' +
+      '<td>' + (r.marketing_manager||r.manager||'') + '</td>' +
+      '<td class="s-num">' + fmt(r.search) + '</td>' +
+      '<td class="s-num">' + fmt(r.pmax) + '</td>' +
+      '<td class="s-num">' + fmt(r.paid_social) + '</td>' +
+      '<td class="s-num">' + fmt(r.geofence) + '</td>' +
+      '<td class="s-num">' + fmt(r.display) + '</td>' +
+      '<td class="s-num">' + fmt(r.retargeting) + '</td>' +
+      '<td class="s-num">' + fmt(r.ctv) + '</td>' +
+      '<td class="s-num">' + fmt(r.seo) + '</td>' +
+      '<td class="s-num">' + fmt(r.social_posting||r.social_content) + '</td>' +
+      '<td class="s-num">' + fmt(r.eblast||r.eblasts) + '</td>' +
+      '<td class="s-num">' + fmt(r.email_drip||r.email_drips) + '</td>' +
+      '<td class="s-num s-total" style="color:var(--cu);font-weight:700">' + fmt(rowTotal) + '</td>' +
+      '</tr>';
+  }).join('');
+  // Footer totals
+  var sum = function(k) { return rows.reduce(function(a,r){return a+(r[k]||0);},0); };
+  var tfoot = document.getElementById('spend-tfoot');
+  if (tfoot) {
+    function setTf(id, v) { var el=document.getElementById(id); if(el) el.textContent = v > 0 ? '$'+Math.round(v).toLocaleString() : '—'; }
+    setTf('sf-search', sum('search')); setTf('sf-pmax', sum('pmax'));
+    setTf('sf-social', sum('paid_social')); setTf('sf-geofence', sum('geofence'));
+    setTf('sf-display', sum('display')); setTf('sf-retargeting', sum('retargeting'));
+    setTf('sf-ctv', sum('ctv')); setTf('sf-seo', sum('seo'));
+    setTf('sf-social-content', sum('social_content')||sum('social_posting'));
+    setTf('sf-eblast', sum('eblast')||sum('eblasts'));
+    setTf('sf-email-drip', sum('email_drip')||sum('email_drips'));
+    setTf('sf-total', sum('total')||sum('total_spend'));
+    tfoot.style.display = '';
+  }
+}
+
+// ── Init: load Properties list on page load ───────────────────────────────────
+loadPropList();
+
 </script>
 </body>
 </html>
