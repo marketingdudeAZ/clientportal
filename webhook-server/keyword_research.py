@@ -111,6 +111,59 @@ def competitor_gap(
     return out
 
 
+def seeds_from_brief(
+    neighborhoods: list[str],
+    landmarks: list[str],
+    units: list[str],
+    competitors: list[str],
+    city: str = "",
+) -> list[str]:
+    """Compose local-intent keyword seeds from confirmed brief fields.
+
+    Produces combinations like "midtown 1 bedroom apartments", "studio
+    apartments near central park", "property name alternative". Caller
+    feeds these into expand_seed() for volume/KD enrichment and
+    keyword_planner_lookup() for Paid metrics.
+    """
+    seeds: list[str] = []
+    units_clean = [u.strip().lower() for u in units if u and u.strip()]
+    neighborhoods_clean = [n.strip() for n in neighborhoods if n and n.strip()]
+    landmarks_clean = [l.strip() for l in landmarks if l and l.strip()]
+    competitors_clean = [c.strip() for c in competitors if c and c.strip()]
+
+    # Neighborhood × unit
+    for n in neighborhoods_clean:
+        seeds.append(f"{n} apartments")
+        for u in units_clean:
+            seeds.append(f"{n} {u} apartments")
+            seeds.append(f"{u} in {n}")
+
+    # Landmark-adjacent searches
+    for l in landmarks_clean:
+        seeds.append(f"apartments near {l}")
+
+    # City-level fallback if we have a city but no neighborhoods
+    if city and not neighborhoods_clean:
+        seeds.append(f"{city} apartments")
+        for u in units_clean:
+            seeds.append(f"{city} {u} apartments")
+
+    # Competitor-branded seeds (classified as paid_only downstream)
+    for c in competitors_clean:
+        seeds.append(f"{c} alternative")
+        seeds.append(f"{c} reviews")
+
+    # Dedupe preserving order
+    seen: set[str] = set()
+    out: list[str] = []
+    for s in seeds:
+        s = " ".join(s.split()).lower()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
 def save_to_tracked(property_uuid: str, keywords: list[dict]) -> int:
     """Bulk-save picked keywords into rpm_seo_keywords HubDB.
 

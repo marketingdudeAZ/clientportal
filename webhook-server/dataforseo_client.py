@@ -236,6 +236,51 @@ def llm_response_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict:
     return _first_result(_post("/v3/ai_optimization/gemini/llm_responses/live", payload))
 
 
+# ─── Google Ads Keyword Planner (Paid metrics) ──────────────────────────────
+
+def keyword_planner_lookup(
+    keywords: list[str],
+    location_code: int | None = None,
+    language_code: str | None = None,
+) -> list[dict]:
+    """Fetch Google Ads Keyword Planner metrics for Paid Media.
+
+    Hits DataForSEO's `keywords_data/google_ads/search_volume` endpoint — same
+    data source that Keyword Planner shows inside a Google Ads account (search
+    volume, competition index, low/high top-of-page bids). Used by the Paid
+    keyword classifier to decide which terms belong on the Paid side vs SEO.
+
+    Args:
+        keywords: keyword strings (max 1000 per call per DataForSEO limits).
+        location_code: Google Ads geo target (defaults to USA).
+        language_code: defaults to 'en'.
+
+    Returns list of {keyword, volume, competition, competition_index,
+    cpc_low, cpc_high} dicts. Missing fields default to 0 so callers can
+    treat every row uniformly.
+    """
+    if not keywords:
+        return []
+    payload = {
+        "keywords": [k for k in keywords if k][:1000],
+        "location_code": location_code or DATAFORSEO_DEFAULT_LOCATION,
+        "language_code": language_code or DATAFORSEO_DEFAULT_LANGUAGE,
+        "search_partners": False,
+    }
+    raw = _all_results(_post("/v3/keywords_data/google_ads/search_volume/live", payload))
+    out: list[dict] = []
+    for row in raw:
+        out.append({
+            "keyword":            row.get("keyword") or "",
+            "volume":             int(row.get("search_volume") or 0),
+            "competition":        row.get("competition") or "",
+            "competition_index":  int(row.get("competition_index") or 0),
+            "cpc_low":            round(float(row.get("low_top_of_page_bid") or 0), 2),
+            "cpc_high":           round(float(row.get("high_top_of_page_bid") or 0), 2),
+        })
+    return out
+
+
 # ─── Trends (Phase 3) ───────────────────────────────────────────────────────
 
 def trends_explore(keywords: list[str], timeframe: str = "past_12_months") -> dict:

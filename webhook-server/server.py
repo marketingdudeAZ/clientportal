@@ -4220,6 +4220,318 @@ def health():
     return '{"status":"ok"}', 200, {"Content-Type": "application/json"}
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Onboarding + Keywords (Phase 4) — AI brief drafter, local keyword generator,
+# Paid Media surface with fair-housing enforcement, trust-signal log.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# In-memory draft store: {draft_id: {status, company_id, property_uuid, draft, error, created_at}}
+# Ephemeral on purpose — drafts are client-interactive; if the server restarts
+# mid-draft the client just kicks off a new one. For durability across restarts,
+# persist to HUBDB_BRIEF_DRAFTS_TABLE_ID.
+_BRIEF_DRAFTS: dict[str, dict] = {}
+
+
+@app.route("/api/client-brief/draft", methods=["POST", "OPTIONS"])
+def client_brief_draft_start():
+    """Kick off an AI-drafted client brief.
+
+    Accepts multipart/form-data (deck + rfp file parts) OR application/json.
+    Identifies the company by `domain` (URL or bare host — normalized server-
+    side); falls back to `company_id` if the caller already knows it.
+
+    Returns {draft_id, company_id, property_uuid, status: "pending"} immediately;
+    the draft runs in a background thread. Poll GET /api/client-brief/draft/:id.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    # Parse inputs from either form or JSON.
+    deck_bytes = None
+    rfp_bytes = None
+    domain = ""
+    company_id = ""
+    if request.content_type and request.content_type.startswith("multipart/"):
+        domain = (request.form.get("domain") or "").strip()
+        company_id = (request.form.get("company_id") or "").strip()
+        if "deck" in request.files:
+            deck_bytes = request.files["deck"].read()
+        if "rfp" in request.files:
+            rfp_bytes = request.files["rfp"].read()
+    else:
+        payload = request.get_json(silent=True) or {}
+        domain = (payload.get("domain") or "").strip()
+        company_id = str(payload.get("company_id") or "").strip()
+
+    if not domain and not company_id:
+        return jsonify({"error": "Provide `domain` (URL or bare host) or `company_id`"}), 400
+
+    # Resolve company — prefer explicit company_id, else look up by domain.
+    from brief_ai_drafter import normalize_domain, resolve_company_by_domain
+
+    if company_id:
+        # Minimal lookup by id to grab domain + uuid for the draft run.
+        import requests as _req
+        from config import HUBSPOT_API_KEY as _HK
+        try:
+            r = _req.get(
+                f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
+                "?properties=name,domain,uuid",
+                headers={"Authorization": f"Bearer {_HK}"}, timeout=10,
+            )
+            r.raise_for_status()
+            p = r.json().get("properties") or {}
+            company = {
+                "id":     company_id,
+                "name":   p.get("name"),
+                "domain": p.get("domain"),
+                "uuid":   p.get("uuid"),
+            }
+        except Exception as e:
+            logger.warning("brief draft: company_id lookup failed: %s", e)
+            return jsonify({"error": "Could not load company by id"}), 404
+    else:
+        normalized = normalize_domain(domain)
+        try:
+            company = resolve_company_by_domain(normalized)
+        except Exception as e:
+            logger.error("brief draft: domain lookup failed: %s", e, exc_info=True)
+            return jsonify({"error": "Domain lookup failed"}), 502
+        if not company:
+            return jsonify({"error": f"No company found for domain '{normalized}'"}), 404
+
+    company_id = company["id"]
+    resolved_domain = normalize_domain(company.get("domain") or domain)
+    property_uuid = company.get("uuid") or ""
+
+    # Register the draft and kick off the Sonnet call in a background thread.
+    import threading
+    import uuid as _uuid
+    from datetime import datetime as _dt
+
+    draft_id = _uuid.uuid4().hex[:16]
+    _BRIEF_DRAFTS[draft_id] = {
+        "status":        "pending",
+        "company_id":    company_id,
+        "property_uuid": property_uuid,
+        "domain":        resolved_domain,
+        "draft":         None,
+        "error":         None,
+        "created_at":    _dt.utcnow().isoformat() + "Z",
+    }
+
+    def _run():
+        try:
+            from brief_ai_drafter import draft_brief
+            result = draft_brief(
+                domain=resolved_domain,
+                deck_pdf_bytes=deck_bytes,
+                rfp_pdf_bytes=rfp_bytes,
+            )
+            _BRIEF_DRAFTS[draft_id].update(status="ready", draft=result)
+            logger.info("brief draft %s ready for company %s", draft_id, company_id)
+        except Exception as exc:
+            logger.error("brief draft %s failed: %s", draft_id, exc, exc_info=True)
+            _BRIEF_DRAFTS[draft_id].update(status="error", error=str(exc))
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    return jsonify({
+        "draft_id":      draft_id,
+        "company_id":    company_id,
+        "property_uuid": property_uuid,
+        "domain":        resolved_domain,
+        "status":        "pending",
+    }), 202
+
+
+@app.route("/api/client-brief/draft/<draft_id>", methods=["GET", "OPTIONS"])
+def client_brief_draft_status(draft_id):
+    """Poll the draft. Returns status + draft JSON when ready."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    state = _BRIEF_DRAFTS.get(draft_id)
+    if not state:
+        return jsonify({"error": "Draft not found"}), 404
+    return jsonify({"draft_id": draft_id, **state})
+
+
+@app.route("/api/client-brief/accept", methods=["POST", "OPTIONS"])
+def client_brief_accept():
+    """Accept a subset of drafted fields — delegates to the existing PATCH.
+
+    Body JSON: {company_id, fields: {clean_key: value}}. Field keys use the
+    clean API keys already mapped by BRIEF_FIELD_MAP in update_client_brief
+    (e.g. "neighborhoods", not "neighborhoods_to_target"). This route exists
+    as an explicit alias so the Draft-with-AI UI flow is distinguishable in
+    logs from manual edits.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    return update_client_brief()
+
+
+# ─── Onboarding keyword generator ───────────────────────────────────────────
+
+@app.route("/api/onboarding/keywords/generate", methods=["POST", "OPTIONS"])
+def onboarding_generate_keywords():
+    """Seed → expand → classify → route into SEO + Paid HubDBs.
+
+    Body JSON: {company_id, refine_with_claude?} OR {domain, refine_with_claude?}
+    Returns a summary dict (see onboarding_keywords.generate_for_property).
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    company_id = str(payload.get("company_id") or "").strip()
+    domain = (payload.get("domain") or "").strip()
+    refine = bool(payload.get("refine_with_claude", False))
+
+    if not company_id and domain:
+        from brief_ai_drafter import normalize_domain, resolve_company_by_domain
+        company = resolve_company_by_domain(normalize_domain(domain))
+        if not company:
+            return jsonify({"error": f"No company found for domain '{domain}'"}), 404
+        company_id = company["id"]
+    if not company_id:
+        return jsonify({"error": "Provide `company_id` or `domain`"}), 400
+
+    # Tier-gate. Use a cheap helper that tolerates GET-style args by stuffing
+    # company_id into the request context.
+    from seo_entitlement import get_seo_tier, has_feature
+    tier = get_seo_tier(company_id)
+    if not has_feature(tier, "onboarding_keywords"):
+        return jsonify({
+            "error": "Feature not available on current SEO tier",
+            "feature": "onboarding_keywords",
+            "tier": tier,
+        }), 403
+
+    try:
+        from onboarding_keywords import generate_for_property
+        summary = generate_for_property(company_id, refine_with_claude=refine)
+    except Exception as e:
+        logger.error("onboarding keyword generate failed for %s: %s", company_id, e, exc_info=True)
+        return jsonify({"error": "Keyword generation failed"}), 500
+
+    if summary.get("error"):
+        return jsonify(summary), 400
+    return jsonify(summary)
+
+
+# ─── Paid Media surface ─────────────────────────────────────────────────────
+
+def _resolve_paid_context():
+    """Same shape as _resolve_seo_context but uses paid_* feature keys."""
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = request.args.get("company_id") or (request.get_json(silent=True) or {}).get("company_id")
+    if not company_id:
+        return jsonify({"error": "company_id is required"}), 400
+    from seo_entitlement import get_seo_tier
+    tier = get_seo_tier(str(company_id))
+    return email, str(company_id), tier
+
+
+@app.route("/api/paid/targeting", methods=["GET", "OPTIONS"])
+def paid_targeting():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_paid_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, company_id, tier = ctx
+    gate = _require_feature(tier, "paid_targeting")
+    if gate:
+        return gate
+    platform = request.args.get("platform", "meta").lower()
+    try:
+        from paid_media import targeting_coverage
+        return jsonify({"tier": tier, **targeting_coverage(company_id, platform=platform)})
+    except Exception as e:
+        logger.error("paid targeting failed: %s", e, exc_info=True)
+        return jsonify({"error": "Failed to load targeting"}), 500
+
+
+@app.route("/api/paid/audiences", methods=["GET", "OPTIONS"])
+def paid_audiences():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_paid_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, company_id, tier = ctx
+    gate = _require_feature(tier, "paid_audiences")
+    if gate:
+        return gate
+    try:
+        from paid_media import audience_narrative
+        return jsonify({"tier": tier, **audience_narrative(company_id)})
+    except Exception as e:
+        logger.error("paid audiences failed: %s", e, exc_info=True)
+        return jsonify({"error": "Failed to load audiences"}), 500
+
+
+@app.route("/api/paid/creative", methods=["GET", "OPTIONS"])
+def paid_creative():
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    ctx = _resolve_paid_context()
+    if not isinstance(ctx, tuple):
+        return ctx
+    _, company_id, tier = ctx
+    gate = _require_feature(tier, "paid_creative")
+    if gate:
+        return gate
+    try:
+        from paid_media import creative_and_offers
+        return jsonify({"tier": tier, **creative_and_offers(company_id)})
+    except Exception as e:
+        logger.error("paid creative failed: %s", e, exc_info=True)
+        return jsonify({"error": "Failed to load creative"}), 500
+
+
+@app.route("/api/paid/trust-signal", methods=["POST", "OPTIONS"])
+def paid_trust_signal():
+    """Silent log when a client tries to drill into keyword-level detail in Paid.
+
+    v1: log-only, no notifications — we want to see volume before deciding on
+    routing (per plan). Paid JS fires this on keyword-like searches/filters
+    inside the Paid surface.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    payload = request.get_json(silent=True) or {}
+    company_id = str(payload.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id is required"}), 400
+    signal_type = (payload.get("signal_type") or "paid_keyword_drilldown").strip()
+    detail = (payload.get("detail") or "").strip()
+    try:
+        from paid_media import log_trust_signal
+        log_trust_signal(company_id, email, signal_type, detail)
+    except Exception as e:
+        logger.warning("paid trust signal log failed: %s", e)
+    # Always 204 — we don't want the client to retry or learn whether logging
+    # succeeded; this is a best-effort observation channel.
+    return ("", 204)
+
+
 def _prewarm_spend_cache():
     """Build the spend sheet cache in the background on startup."""
     import threading, time
