@@ -143,19 +143,24 @@ class HeyGenProvider(VideoProvider):
             )
 
         duration = int(brief.get("duration") or VIDEO_DEFAULTS["duration"])
+        property_uuid = (brief.get("property_uuid") or "").strip()
         max_variants = TIER_VARIANT_LIMITS.get(tier, 2)
         combos = self._pick_combos(tier, max_variants)
 
         variants: list[dict] = []
         for i, (voice, aspect_ratio) in enumerate(combos):
             variant_id = str(_uuid.uuid4())
+            # Encode property_uuid into callback_id so the webhook can route
+            # updates without scanning every company. HeyGen echoes this value
+            # back verbatim in the webhook payload.
+            callback_id = f"{variant_id}|{property_uuid}" if property_uuid else variant_id
             try:
                 body = self._build_generate_payload(
                     scenes=plan,
                     voice_id=voice["id"],
                     aspect_ratio=aspect_ratio,
                     webhook_url=webhook_url,
-                    callback_id=variant_id,
+                    callback_id=callback_id,
                     script_fallback=clean_script,
                 )
                 resp = self._post("/v2/video/generate", body)
@@ -246,12 +251,25 @@ class HeyGenProvider(VideoProvider):
         elif event in ("avatar_video.fail", "video.fail") or data.get("status") == "failed":
             status = "failed"
 
+        # Pull the original callback_id back out and split it into variant_id
+        # + property_uuid. build_variants_for_brief encoded both as
+        # "variant_id|property_uuid" to make webhook routing O(1).
+        raw_callback = (data.get("callback_id")
+                        or (payload or {}).get("callback_id")
+                        or "")
+        variant_id = raw_callback
+        property_uuid = ""
+        if "|" in raw_callback:
+            variant_id, property_uuid = raw_callback.split("|", 1)
+
         return {
             "job_id":        data.get("video_id") or (payload or {}).get("video_id"),
             "status":        status,
             "video_url":     data.get("video_url") or data.get("url"),
             "thumbnail_url": data.get("thumbnail_url") or data.get("gif_url"),
             "failed_reason": data.get("msg") or data.get("error"),
+            "variant_id":    variant_id,
+            "property_uuid": property_uuid,
             "raw":           payload,
         }
 

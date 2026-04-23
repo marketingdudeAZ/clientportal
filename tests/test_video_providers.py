@@ -195,6 +195,23 @@ class TestHeyGenProvider(unittest.TestCase):
         self.assertEqual(result["status"], "done")
         self.assertEqual(result["video_url"], "https://cdn.heygen.com/video.mp4")
         self.assertEqual(result["thumbnail_url"], "https://cdn.heygen.com/thumb.gif")
+        self.assertEqual(result["variant_id"], "var-1")
+        self.assertEqual(result["property_uuid"], "")
+
+    def test_webhook_decodes_property_uuid_from_callback(self):
+        """Verify callback_id "variant_id|property_uuid" round-trips back out."""
+        payload = {
+            "event_type": "avatar_video.success",
+            "event_data": {
+                "video_id": "vid-1",
+                "callback_id": "var-abc|uuid-xyz-123",
+                "url": "https://cdn.heygen.com/video.mp4",
+            },
+        }
+        with patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
+            result = self.provider.normalize_webhook(payload)
+        self.assertEqual(result["variant_id"], "var-abc")
+        self.assertEqual(result["property_uuid"], "uuid-xyz-123")
 
     def test_webhook_signature_mismatch_raises(self):
         import hashlib

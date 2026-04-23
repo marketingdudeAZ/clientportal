@@ -2154,6 +2154,7 @@ def video_enroll():
 
     body = request.get_json(force=True) or {}
     company_id    = body.get("company_id", "").strip()
+    property_uuid = (body.get("property_uuid") or "").strip()
     property_name = body.get("property_name", "this property")
     contact_email = body.get("contact_email", email)
     tier          = body.get("tier", "Starter")
@@ -2186,9 +2187,13 @@ def video_enroll():
 
     hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
 
-    # 1. Write HubSpot company properties — immediately mark as active
+    # 1. Write HubSpot company properties — immediately mark as active.
+    # Also fetch back the company's `uuid` custom property so we have a stable
+    # RPM-side identifier to key HubDB asset rows and variant records by;
+    # property_uuid is what everything downstream should use — company_id (the
+    # HubSpot hs_object_id) is only for CRM writes.
     hs_r = req.patch(
-        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+        f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties=uuid",
         headers=hs_headers,
         json={"properties": {
             "video_pipeline_enrolled":   "true",
@@ -2201,6 +2206,19 @@ def video_enroll():
     if not hs_r.ok:
         logger.error("HubSpot enrollment update failed (%d): %s", hs_r.status_code, hs_r.text[:200])
         return jsonify({"error": "Failed to update HubSpot record"}), 500
+
+    # If the caller didn't pass property_uuid, fall back to the company's uuid
+    # custom property — this is the UUID used everywhere else in the portal
+    # (SEO, assets, etc.). Last-resort fallback is the company_id itself so
+    # enrollments on legacy records without a uuid still work.
+    if not property_uuid:
+        try:
+            hs_uuid = (hs_r.json().get("properties", {}) or {}).get("uuid")
+            property_uuid = (hs_uuid or "").strip()
+        except Exception:
+            property_uuid = ""
+    if not property_uuid:
+        property_uuid = company_id
 
     # 1b. Trigger immediate video generation (foundation batch)
     generation_triggered = False
@@ -2219,7 +2237,8 @@ def video_enroll():
         def _bg_generate():
             try:
                 generate_videos(
-                    company_id=company_id,
+                    property_uuid=property_uuid,
+                    hs_object_id=company_id,
                     property_name=property_name,
                     tier=tier,
                     brief=brief,
@@ -2276,8 +2295,8 @@ def video_enroll():
             next_first = datetime.date(today.year, today.month + 1, 1)
     next_first_str = next_first.strftime("%B 1, %Y")
 
-    logger.info("Video enrollment submitted: company=%s tier=%s provider=%s by=%s generation=%s",
-                company_id, tier, provider_name, email, generation_triggered)
+    logger.info("Video enrollment submitted: company=%s uuid=%s tier=%s provider=%s by=%s generation=%s",
+                company_id, property_uuid, tier, provider_name, email, generation_triggered)
     if generation_triggered:
         message = (f"You are enrolled in the {tier} plan — your foundation video batch is being generated now. "
                    f"Variants will appear in the Current Cycle tab within a few minutes.")
@@ -2287,6 +2306,7 @@ def video_enroll():
         "status": "active",
         "tier": tier,
         "provider": provider_name,
+        "property_uuid": property_uuid,
         "next_batch_date": next_first_str,
         "generating": generation_triggered,
         "message": message,
@@ -2298,7 +2318,11 @@ def get_video_creative():
     """Return video creative data for a property from HubSpot company record.
 
     Query params:
-        company_id  — HubSpot company ID
+        property_uuid — RPM property UUID (preferred)
+        company_id    — HubSpot hs_object_id (accepted for back-compat)
+
+    At least one must be supplied. When only property_uuid is given we look up
+    the HubSpot company via the `uuid` custom property search.
     """
     if request.method == "OPTIONS":
         return _preflight_response()
@@ -2307,9 +2331,10 @@ def get_video_creative():
     if not email:
         return jsonify({"error": "Authentication required"}), 401
 
-    company_id = request.args.get("company_id", "").strip()
-    if not company_id:
-        return jsonify({"error": "company_id required"}), 400
+    company_id    = request.args.get("company_id", "").strip()
+    property_uuid = request.args.get("property_uuid", "").strip()
+    if not company_id and not property_uuid:
+        return jsonify({"error": "property_uuid or company_id required"}), 400
 
     import requests as req, json as _json
     from config import HUBSPOT_API_KEY
@@ -2320,7 +2345,33 @@ def get_video_creative():
         "video_cycle_status", "video_cycle_month",
         "video_variants_json", "video_cycle_history_json",
         "video_perf_snapshot_json",
+        "uuid",
     ])
+
+    # Resolve company_id from property_uuid when the caller only has the UUID.
+    if not company_id and property_uuid:
+        try:
+            search = req.post(
+                "https://api.hubapi.com/crm/v3/objects/companies/search",
+                headers={**hs_headers, "Content-Type": "application/json"},
+                json={
+                    "filterGroups": [{"filters": [
+                        {"propertyName": "uuid", "operator": "EQ", "value": property_uuid},
+                    ]}],
+                    "properties": [props],
+                    "limit": 1,
+                },
+                timeout=10,
+            )
+            results = (search.json().get("results", []) if search.ok else [])
+            if not results:
+                return jsonify({"error": "No company found for property_uuid"}), 404
+            company_id = results[0].get("id") or ""
+        except Exception as exc:
+            logger.error("property_uuid lookup failed: %s", exc)
+            return jsonify({"error": "Lookup failed"}), 500
+        if not company_id:
+            return jsonify({"error": "No company found for property_uuid"}), 404
 
     r = req.get(
         f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props}",
@@ -2428,6 +2479,8 @@ def get_video_creative():
         "tier":          p.get("video_pipeline_tier", "Starter"),
         "cycle_status":  p.get("video_cycle_status", ""),
         "cycle_month":   p.get("video_cycle_month", ""),
+        "property_uuid": p.get("uuid") or property_uuid,
+        "company_id":    company_id,
         "variants":      variants,
         "history":       _parse_json(p.get("video_cycle_history_json")),
         "perf_snapshot": _parse_json(p.get("video_perf_snapshot_json")) if isinstance(p.get("video_perf_snapshot_json"), str) and p["video_perf_snapshot_json"].startswith("[") else (
@@ -2991,15 +3044,23 @@ def heygen_webhook():
         return jsonify({"error": str(exc)}), 401
 
     job_id = event.get("job_id")
-    callback_id = (payload.get("event_data") or {}).get("callback_id") or payload.get("callback_id")
+    # HeyGenProvider.normalize_webhook decodes "variant_id|property_uuid" from
+    # the original callback_id into separate fields for us.
+    callback_id = event.get("variant_id") or (
+        payload.get("event_data") or {}
+    ).get("callback_id") or payload.get("callback_id")
     if not job_id and not callback_id:
         return jsonify({"ignored": True}), 200
 
-    # Find the company + variant this event belongs to. The variant record has
-    # heygen_video_id (which equals job_id) and variant_id (which equals our
-    # original callback_id). Search by the company_id hint when provided;
-    # otherwise fall back to a HubSpot search.
-    company_id = (payload.get("event_data") or {}).get("company_id") or payload.get("company_id")
+    # Find the company + variant this event belongs to. Variants are tagged
+    # with property_uuid at creation, so we first search HubSpot companies
+    # filtered by `uuid` (the property_uuid custom property). Fall back to a
+    # broader search when property_uuid wasn't passed through.
+    event_data = (payload.get("event_data") or {})
+    property_uuid = (event.get("property_uuid")
+                     or event_data.get("property_uuid")
+                     or payload.get("property_uuid")
+                     or "")
     hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
 
     def _match_variant(variants: list[dict]) -> dict | None:
@@ -3013,27 +3074,40 @@ def heygen_webhook():
         return None
 
     target_variant = None
-    target_company_id = None
-    if company_id:
-        r = req.get(
-            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
-            "?properties=video_variants_json",
-            headers=hs_headers, timeout=10,
-        )
-        if r.ok:
-            p = r.json().get("properties", {})
-            try:
-                variants_cache = _json.loads(p.get("video_variants_json") or "[]")
-            except Exception:
-                variants_cache = []
-            target_variant = _match_variant(variants_cache)
-            if target_variant:
-                target_company_id = company_id
+    target_hs_object_id = None
 
+    # 1. Preferred lookup: filter companies by the property_uuid custom field.
+    if property_uuid:
+        try:
+            search = req.post(
+                "https://api.hubapi.com/crm/v3/objects/companies/search",
+                headers=hs_headers,
+                json={
+                    "filterGroups": [{"filters": [
+                        {"propertyName": "uuid", "operator": "EQ", "value": property_uuid},
+                    ]}],
+                    "properties": ["video_variants_json", "uuid"],
+                    "limit": 1,
+                },
+                timeout=10,
+            )
+            for res in (search.json().get("results", []) if search.ok else []):
+                try:
+                    variants_cache = _json.loads(res.get("properties", {}).get("video_variants_json") or "[]")
+                except Exception:
+                    continue
+                hit = _match_variant(variants_cache)
+                if hit:
+                    target_variant = hit
+                    target_hs_object_id = res.get("id")
+                    break
+        except Exception as exc:
+            logger.warning("HeyGen webhook: property_uuid search failed: %s", exc)
+
+    # 2. Fallback: broader text search by the vendor identifiers. Only used
+    #    when property_uuid wasn't forwarded; HeyGen doesn't include it in
+    #    the default webhook, so we embed it in callback_id (see below).
     if not target_variant:
-        # Fallback: HubSpot CRM search for the variant by vendor id. Only runs
-        # when the payload didn't include company_id; HeyGen doesn't supply it
-        # by default so callers should pass it through callback_id.
         search_q = job_id or callback_id or ""
         try:
             search = req.post(
@@ -3041,7 +3115,7 @@ def heygen_webhook():
                 headers=hs_headers,
                 json={
                     "query": search_q,
-                    "properties": ["video_variants_json"],
+                    "properties": ["video_variants_json", "uuid"],
                     "limit": 10,
                 },
                 timeout=10,
@@ -3054,13 +3128,14 @@ def heygen_webhook():
                 hit = _match_variant(variants_cache)
                 if hit:
                     target_variant = hit
-                    target_company_id = res.get("id")
+                    target_hs_object_id = res.get("id")
                     break
         except Exception as exc:
-            logger.warning("HeyGen webhook HubSpot search failed: %s", exc)
+            logger.warning("HeyGen webhook HubSpot fallback search failed: %s", exc)
 
-    if not target_variant or not target_company_id:
-        logger.info("HeyGen webhook: no matching variant for job=%s callback=%s", job_id, callback_id)
+    if not target_variant or not target_hs_object_id:
+        logger.info("HeyGen webhook: no matching variant for job=%s callback=%s uuid=%s",
+                    job_id, callback_id, property_uuid)
         return jsonify({"matched": False}), 200
 
     # Update the variant in place and write back.
@@ -3080,7 +3155,7 @@ def heygen_webhook():
     # Re-fetch the latest variants list to avoid stomping other concurrent
     # changes, then patch just the touched variant.
     r = req.get(
-        f"https://api.hubapi.com/crm/v3/objects/companies/{target_company_id}"
+        f"https://api.hubapi.com/crm/v3/objects/companies/{target_hs_object_id}"
         "?properties=video_variants_json",
         headers=hs_headers, timeout=10,
     )
@@ -3097,7 +3172,7 @@ def heygen_webhook():
             break
 
     req.patch(
-        f"https://api.hubapi.com/crm/v3/objects/companies/{target_company_id}",
+        f"https://api.hubapi.com/crm/v3/objects/companies/{target_hs_object_id}",
         headers=hs_headers,
         json={"properties": {
             "video_variants_json": _json.dumps(variants_now),
@@ -3106,8 +3181,8 @@ def heygen_webhook():
         timeout=10,
     )
 
-    logger.info("HeyGen webhook applied: company=%s status=%s job=%s",
-                target_company_id, status, job_id)
+    logger.info("HeyGen webhook applied: company=%s uuid=%s status=%s job=%s",
+                target_hs_object_id, property_uuid, status, job_id)
     return jsonify({"matched": True, "status": status}), 200
 
 

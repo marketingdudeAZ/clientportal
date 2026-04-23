@@ -5330,14 +5330,21 @@ function loadVideoCreative() {
   if (_videoData) { _renderVideoCreative(_videoData); return; }
   var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
   var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
-  var cid = window.__PORTAL_COMPANY_ID__ || '';
+  var cid  = window.__PORTAL_COMPANY_ID__ || '';
+  // property_uuid is the RPM-side identifier; backend uses it for asset
+  // lookups + webhook routing. Falls back to company_id when the property
+  // has no uuid custom property set (pre-UUID legacy records).
+  var uuid = window.__PORTAL_UUID__ || '';
 
-  if (!cid) {
-    console.error('loadVideoCreative: company ID not set');
+  if (!cid && !uuid) {
+    console.error('loadVideoCreative: company ID and property UUID both missing');
     return;
   }
 
-  fetch(API_BASE + '/api/video-creative?company_id=' + encodeURIComponent(cid), {
+  var qs = [];
+  if (cid)  qs.push('company_id='    + encodeURIComponent(cid));
+  if (uuid) qs.push('property_uuid=' + encodeURIComponent(uuid));
+  fetch(API_BASE + '/api/video-creative?' + qs.join('&'), {
     headers: {'X-Portal-Email': email}
   })
   .then(function(r){ return r.json(); })
@@ -5654,6 +5661,7 @@ function submitEnrollment() {
   var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   var email    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
   var cid      = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '') || window.__PORTAL_COMPANY_ID__ || '';
+  var uuid     = window.__PORTAL_UUID__ || '';
   var propName = window.__PORTAL_PROP_NAME || '';
 
   if (!cid) {
@@ -5691,7 +5699,7 @@ function submitEnrollment() {
     return fetch(API_BASE + '/api/video-enroll', {
       method: 'POST',
       headers: {'Content-Type':'application/json','X-Portal-Email':email},
-      body: JSON.stringify({company_id:cid, property_name:propName, contact_email:email, tier:tier.value, provider:provider, brief:brief})
+      body: JSON.stringify({company_id:cid, property_uuid:uuid, property_name:propName, contact_email:email, tier:tier.value, provider:provider, brief:brief})
     });
   })
   .then(function(r){ return r.json(); })
