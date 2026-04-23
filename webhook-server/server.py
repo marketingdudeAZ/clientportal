@@ -2158,6 +2158,23 @@ def video_enroll():
     contact_email = body.get("contact_email", email)
     tier          = body.get("tier", "Starter")
     brief         = body.get("brief", {})
+    provider_raw  = (body.get("provider") or "").strip().lower()
+
+    # Resolve the provider early so we can reject bad values before we do any
+    # HubSpot writes; get_provider() falls back to VIDEO_PROVIDER_DEFAULT.
+    from video_providers import get_provider, normalize_provider_name, PROVIDERS
+    provider_name = normalize_provider_name(provider_raw)
+    if provider_raw and provider_raw not in PROVIDERS:
+        return jsonify({
+            "error": f"provider must be one of: {', '.join(PROVIDERS.keys())}"
+        }), 400
+    try:
+        if not get_provider(provider_name).is_configured():
+            return jsonify({
+                "error": f"Video provider '{provider_name}' is not configured on this server.",
+            }), 400
+    except Exception as exc:
+        return jsonify({"error": f"Provider init failed: {exc}"}), 500
 
     if not company_id:
         return jsonify({"error": "company_id required"}), 400
@@ -2210,8 +2227,9 @@ def video_enroll():
                     units=units,
                     aptiq_property_id=dom_props.get("aptiq_property_id") or "",
                     aptiq_market_id=dom_props.get("aptiq_market_id") or "",
+                    provider=provider_name,
                 )
-                logger.info("Foundation batch generated for %s", company_id)
+                logger.info("Foundation batch generated for %s (provider=%s)", company_id, provider_name)
             except Exception as exc:
                 logger.error("Foundation generation failed for %s: %s", company_id, exc, exc_info=True)
         threading.Thread(target=_bg_generate, daemon=True).start()
@@ -2258,8 +2276,8 @@ def video_enroll():
             next_first = datetime.date(today.year, today.month + 1, 1)
     next_first_str = next_first.strftime("%B 1, %Y")
 
-    logger.info("Video enrollment submitted: company=%s tier=%s by=%s generation=%s",
-                company_id, tier, email, generation_triggered)
+    logger.info("Video enrollment submitted: company=%s tier=%s provider=%s by=%s generation=%s",
+                company_id, tier, provider_name, email, generation_triggered)
     if generation_triggered:
         message = (f"You are enrolled in the {tier} plan — your foundation video batch is being generated now. "
                    f"Variants will appear in the Current Cycle tab within a few minutes.")
@@ -2268,6 +2286,7 @@ def video_enroll():
     return jsonify({
         "status": "active",
         "tier": tier,
+        "provider": provider_name,
         "next_batch_date": next_first_str,
         "generating": generation_triggered,
         "message": message,
@@ -2323,43 +2342,58 @@ def get_video_creative():
 
     variants = _parse_json(p.get("video_variants_json"))
 
-    # Auto-poll Creatify for variants still in 'pending' or 'running' states and
-    # promote them to 'pending_review' when the render completes. This removes
-    # the need for manual status syncing every time Kyle loads the portal.
+    # Auto-poll each variant's provider for renders still in flight. Dispatch by
+    # `provider` so Creatify and HeyGen variants can coexist on the same
+    # company record (older Creatify-only variants default to "creatify").
     dirty = False
     try:
-        from creatify_client import _SESSION as CREATIFY_SESSION, CREATIFY_BASE_URL
+        from video_providers import get_provider, normalize_provider_name
+
+        # Cache provider instances per request so we don't reinit the session
+        # for every variant.
+        _provider_cache: dict[str, object] = {}
+
+        def _poll_key(variant: dict) -> str | None:
+            """Return the right vendor job id field for this variant."""
+            p = normalize_provider_name(variant.get("provider"))
+            if p == "heygen":
+                return variant.get("heygen_video_id")
+            return variant.get("creatify_job_id")
+
         for v in variants:
             if not isinstance(v, dict):
                 continue
             if v.get("video_url") or v.get("video_output"):
-                continue  # already resolved
-            job_id = v.get("creatify_job_id")
-            status = v.get("status")
-            if not job_id or status in ("done", "error", "failed", "approved"):
                 continue
+            status = v.get("status")
+            if status in ("done", "error", "failed", "approved"):
+                continue
+            job_id = _poll_key(v)
+            if not job_id:
+                continue
+
+            provider_key = normalize_provider_name(v.get("provider"))
             try:
-                jr = CREATIFY_SESSION.get(f"{CREATIFY_BASE_URL}/api/link_to_videos/{job_id}/", timeout=8)
-                if not jr.ok:
-                    continue
-                jd = jr.json()
-                c_status = jd.get("status")
-                video_out = jd.get("video_output")
-                thumb = jd.get("video_thumbnail")
-                if c_status == "done" and video_out:
-                    v["status"] = "pending_review"
-                    v["video_url"] = video_out
-                    v["video_output"] = video_out
-                    v["thumbnail_url"] = thumb
-                    v["poster_url"] = thumb
-                    v["duration_seconds"] = int(jd.get("duration") or v.get("duration_seconds") or 15)
-                    dirty = True
-                elif c_status == "failed":
-                    v["status"] = "failed"
-                    v["error"] = jd.get("failed_reason") or "Creatify render failed"
-                    dirty = True
+                vp = _provider_cache.get(provider_key) or get_provider(provider_key)
+                _provider_cache[provider_key] = vp
+                st = vp.get_job_status(job_id)
             except Exception as exc:
-                logger.debug("Polling job %s failed: %s", job_id, exc)
+                logger.debug("Polling %s job %s failed: %s", provider_key, job_id, exc)
+                continue
+
+            s = st.get("status")
+            if s == "done" and st.get("video_url"):
+                v["status"] = "pending_review"
+                v["video_url"] = st["video_url"]
+                v["video_output"] = st["video_url"]
+                v["thumbnail_url"] = st.get("thumbnail_url")
+                v["poster_url"] = st.get("thumbnail_url")
+                v["duration_seconds"] = int(st.get("duration_s") or v.get("duration_seconds") or 15)
+                dirty = True
+            elif s == "failed":
+                v["status"] = "failed"
+                v["error"] = st.get("failed_reason") or f"{provider_key} render failed"
+                dirty = True
     except Exception as exc:
         logger.warning("Auto-poll pass failed: %s", exc)
 
@@ -2898,6 +2932,183 @@ def video_voices():
     except Exception as exc:
         logger.error("video-voices fetch failed: %s", exc)
         return jsonify({"error": "Failed to load voices"}), 500
+
+
+@app.route("/api/video-providers", methods=["GET", "OPTIONS"])
+def video_providers_list():
+    """Return the list of video providers available on this server.
+
+    The frontend uses this to populate the provider dropdown in the enrollment
+    modal and to hide providers that have no credentials configured.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    try:
+        from video_providers import PROVIDERS
+        from config import VIDEO_PROVIDER_DEFAULT
+        items = []
+        for key, cls in PROVIDERS.items():
+            try:
+                items.append(cls().describe())
+            except Exception as exc:
+                logger.warning("describe() failed for provider %s: %s", key, exc)
+        return jsonify({
+            "providers": items,
+            "default":   VIDEO_PROVIDER_DEFAULT,
+        })
+    except Exception as exc:
+        logger.error("video-providers fetch failed: %s", exc)
+        return jsonify({"error": "Failed to load providers"}), 500
+
+
+@app.route("/api/heygen-webhook", methods=["POST"])
+def heygen_webhook():
+    """Inbound HeyGen webhook — flips a variant from pending to pending_review.
+
+    HeyGen POSTs a JSON body when a video render succeeds or fails. We verify
+    the signature (when HEYGEN_WEBHOOK_SECRET is set), look up the variant by
+    heygen_video_id (or callback_id == variant_id), and write back to HubSpot.
+    """
+    import json as _json
+    import requests as req
+    from config import HUBSPOT_API_KEY
+    from video_providers import HeyGenProvider, ProviderError
+
+    raw_body = request.get_data(as_text=True) or ""
+    try:
+        payload = _json.loads(raw_body) if raw_body else {}
+    except Exception:
+        return jsonify({"error": "invalid JSON"}), 400
+
+    headers = {k: v for k, v in request.headers.items()}
+    headers["_raw_body"] = raw_body
+
+    try:
+        event = HeyGenProvider().normalize_webhook(payload, headers=headers)
+    except ProviderError as exc:
+        logger.warning("HeyGen webhook rejected: %s", exc)
+        return jsonify({"error": str(exc)}), 401
+
+    job_id = event.get("job_id")
+    callback_id = (payload.get("event_data") or {}).get("callback_id") or payload.get("callback_id")
+    if not job_id and not callback_id:
+        return jsonify({"ignored": True}), 200
+
+    # Find the company + variant this event belongs to. The variant record has
+    # heygen_video_id (which equals job_id) and variant_id (which equals our
+    # original callback_id). Search by the company_id hint when provided;
+    # otherwise fall back to a HubSpot search.
+    company_id = (payload.get("event_data") or {}).get("company_id") or payload.get("company_id")
+    hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+
+    def _match_variant(variants: list[dict]) -> dict | None:
+        for v in variants:
+            if not isinstance(v, dict):
+                continue
+            if job_id and v.get("heygen_video_id") == job_id:
+                return v
+            if callback_id and v.get("variant_id") == callback_id:
+                return v
+        return None
+
+    target_variant = None
+    target_company_id = None
+    if company_id:
+        r = req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
+            "?properties=video_variants_json",
+            headers=hs_headers, timeout=10,
+        )
+        if r.ok:
+            p = r.json().get("properties", {})
+            try:
+                variants_cache = _json.loads(p.get("video_variants_json") or "[]")
+            except Exception:
+                variants_cache = []
+            target_variant = _match_variant(variants_cache)
+            if target_variant:
+                target_company_id = company_id
+
+    if not target_variant:
+        # Fallback: HubSpot CRM search for the variant by vendor id. Only runs
+        # when the payload didn't include company_id; HeyGen doesn't supply it
+        # by default so callers should pass it through callback_id.
+        search_q = job_id or callback_id or ""
+        try:
+            search = req.post(
+                "https://api.hubapi.com/crm/v3/objects/companies/search",
+                headers=hs_headers,
+                json={
+                    "query": search_q,
+                    "properties": ["video_variants_json"],
+                    "limit": 10,
+                },
+                timeout=10,
+            )
+            for res in (search.json().get("results", []) if search.ok else []):
+                try:
+                    variants_cache = _json.loads(res.get("properties", {}).get("video_variants_json") or "[]")
+                except Exception:
+                    continue
+                hit = _match_variant(variants_cache)
+                if hit:
+                    target_variant = hit
+                    target_company_id = res.get("id")
+                    break
+        except Exception as exc:
+            logger.warning("HeyGen webhook HubSpot search failed: %s", exc)
+
+    if not target_variant or not target_company_id:
+        logger.info("HeyGen webhook: no matching variant for job=%s callback=%s", job_id, callback_id)
+        return jsonify({"matched": False}), 200
+
+    # Update the variant in place and write back.
+    status = event.get("status")
+    if status == "done" and event.get("video_url"):
+        target_variant["status"] = "pending_review"
+        target_variant["video_url"] = event["video_url"]
+        target_variant["video_output"] = event["video_url"]
+        target_variant["thumbnail_url"] = event.get("thumbnail_url")
+        target_variant["poster_url"] = event.get("thumbnail_url")
+    elif status == "failed":
+        target_variant["status"] = "failed"
+        target_variant["error"] = event.get("failed_reason") or "HeyGen render failed"
+    else:
+        return jsonify({"matched": True, "no_change": True}), 200
+
+    # Re-fetch the latest variants list to avoid stomping other concurrent
+    # changes, then patch just the touched variant.
+    r = req.get(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{target_company_id}"
+        "?properties=video_variants_json",
+        headers=hs_headers, timeout=10,
+    )
+    try:
+        variants_now = _json.loads(r.json().get("properties", {}).get("video_variants_json") or "[]")
+    except Exception:
+        variants_now = []
+    for idx, v in enumerate(variants_now):
+        if isinstance(v, dict) and (
+            (job_id and v.get("heygen_video_id") == job_id)
+            or (callback_id and v.get("variant_id") == callback_id)
+        ):
+            variants_now[idx] = {**v, **target_variant}
+            break
+
+    req.patch(
+        f"https://api.hubapi.com/crm/v3/objects/companies/{target_company_id}",
+        headers=hs_headers,
+        json={"properties": {
+            "video_variants_json": _json.dumps(variants_now),
+            "video_cycle_status":  "Pending Review" if status == "done" else "Processing",
+        }},
+        timeout=10,
+    )
+
+    logger.info("HeyGen webhook applied: company=%s status=%s job=%s",
+                target_company_id, status, job_id)
+    return jsonify({"matched": True, "status": status}), 200
 
 
 # ─── Call Prep: monthly AI-generated recommendations + questions ───────────

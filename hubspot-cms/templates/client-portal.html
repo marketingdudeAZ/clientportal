@@ -1820,6 +1820,12 @@ body{padding-top:36px}
       </div>
     </div>
 
+    <label class="modal-label" style="margin-top:4px">Video Provider</label>
+    <select class="modal-select" id="enroll-provider" style="margin-bottom:16px">
+      <option value="creatify">Creatify — current provider (always renders avatar under cards)</option>
+      <option value="heygen">HeyGen — avatar-free property footage with AI scene planning</option>
+    </select>
+
     <div style="background:var(--bg);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:12px;color:var(--ts)">
       <strong style="color:var(--jd)">Brief data auto-filled from Client Brief tab:</strong><br>
       Voice &amp; tone, target audience, unit mix, differentiators, taglines, competitors, and marketing goals will all be pulled from your existing client brief. Edit them there before enrolling if needed.
@@ -5511,6 +5517,13 @@ function _renderVideoCard(v, actionable) {
     ? '<div style="font-size:11px;color:var(--ts);margin-bottom:8px"><span style="font-weight:700;color:var(--tp)">Voice:</span> ' + _escHtml(v.voice_name) + '</div>'
     : '';
 
+  // Provider badge — older Creatify-only variants have no `provider` field.
+  var providerKey   = (v.provider || 'creatify').toLowerCase();
+  var providerLabel = providerKey === 'heygen' ? 'via HeyGen' : 'via Creatify';
+  var providerTag   = '<span class="video-meta-tag" style="background:' +
+    (providerKey === 'heygen' ? '#ede9fe;color:#5b21b6' : '#ecfeff;color:#0e7490') +
+    '">' + _escHtml(providerLabel) + '</span>';
+
   return '<div class="video-card" id="vcard-' + v.variant_id + '">' +
     playerHtml +
     '<div class="video-card-body">' +
@@ -5519,6 +5532,7 @@ function _renderVideoCard(v, actionable) {
     '<span class="video-meta-tag ' + platformCls + '">' + _escHtml(v.platform||'') + '</span>' +
     '<span class="video-meta-tag">' + (v.duration_seconds||'?') + 's</span>' +
     '<span class="video-meta-tag">' + _escHtml(v.aspect_ratio||'') + '</span>' +
+    providerTag +
     '</div>' +
     voiceHtml +
     (v.script ? '<button class="video-expand-btn" onclick="toggleVideoExpand(this,\'script-' + v.variant_id + '\')">' +
@@ -5634,6 +5648,9 @@ function submitEnrollment() {
   var tier = document.querySelector('input[name=enroll-tier]:checked');
   if (!tier) { alert('Please select a tier.'); return; }
 
+  var providerEl = document.getElementById('enroll-provider');
+  var provider   = providerEl ? providerEl.value : 'creatify';
+
   var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
   var email    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
   var cid      = COMPANY_ID_VIDEO || (typeof COMPANY_ID !== 'undefined' ? COMPANY_ID : '') || window.__PORTAL_COMPANY_ID__ || '';
@@ -5674,7 +5691,7 @@ function submitEnrollment() {
     return fetch(API_BASE + '/api/video-enroll', {
       method: 'POST',
       headers: {'Content-Type':'application/json','X-Portal-Email':email},
-      body: JSON.stringify({company_id:cid, property_name:propName, contact_email:email, tier:tier.value, brief:brief})
+      body: JSON.stringify({company_id:cid, property_name:propName, contact_email:email, tier:tier.value, provider:provider, brief:brief})
     });
   })
   .then(function(r){ return r.json(); })

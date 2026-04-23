@@ -28,7 +28,7 @@ from video_pipeline_config import (
     build_script_prompt,
     validate_script,
 )
-from creatify_client import build_variants_for_brief
+from video_providers import get_provider, normalize_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -207,11 +207,18 @@ def generate_videos(
     units: int = 0,
     aptiq_property_id: str = "",
     aptiq_market_id: str = "",
+    provider: str | None = None,
 ) -> list[dict]:
-    """End-to-end: brief → AptIQ context → script → asset matching → Creatify.
+    """End-to-end: brief → AptIQ context → script → asset matching → provider submit.
+
+    The `provider` arg routes to the chosen video backend (creatify or heygen).
+    When omitted it falls back to VIDEO_PROVIDER_DEFAULT in config.
 
     Returns list of variant dicts ready to store on HubSpot.
     """
+    provider_name = normalize_provider_name(provider)
+    vp = get_provider(provider_name)
+
     # 1. Fetch property-specific assets (isolated by property UUID)
     assets = fetch_property_assets(company_id)
 
@@ -236,33 +243,57 @@ def generate_videos(
         comp_context=comp_context_str,
     )
 
-    # 3. Prepare brief for Creatify variant builder
-    creatify_brief = {
+    # 4. Build provider brief (shared contract between Creatify and HeyGen)
+    provider_brief = {
         "script":   script_result["script"],
         "duration": brief.get("duration", 15),
+        # Keep the original creative brief fields around — HeyGen's scene
+        # planner uses audience/tone/goals.
+        "voice_tone":      brief.get("voice_tone"),
+        "target_audience": brief.get("target_audience"),
+        "marketing_goals": brief.get("marketing_goals"),
+        "differentiators": brief.get("differentiators"),
     }
 
-    # 4. Submit to Creatify. Always filter to real http/https URLs — Claude's
-    # media_plan may include placeholders like "property_website_imagery" which
-    # Creatify rejects with 400. If no real URLs are available, fall back to
-    # raw asset file_urls from HubDB so the video uses property photos instead
-    # of Creatify's website-scrape fallback.
+    # 5. Always filter to real http/https URLs — Claude's media_plan may include
+    # placeholders like "property_website_imagery" which providers reject.
+    # If no real URLs are available, fall back to raw asset file_urls from HubDB
+    # so the video uses property photos instead of any website-scrape fallback.
     plan_urls = [u for u in (script_result.get("media_urls") or []) if isinstance(u, str) and u.startswith(("http://", "https://"))]
     if not plan_urls and assets:
         plan_urls = [a.get("file_url") for a in assets if a.get("file_url", "").startswith(("http://", "https://"))][:10]
     media_urls = plan_urls or None
 
-    variants = build_variants_for_brief(
-        brief=creatify_brief,
+    # 6. For HeyGen, ask Claude to design a scene plan so the AI drives shot
+    # order + on-screen text. Creatify ignores this field.
+    scene_plan: list[dict] = []
+    if provider_name == "heygen":
+        try:
+            from heygen_scene_planner import plan_scenes
+            scene_plan = plan_scenes(
+                script=script_result["script"],
+                assets=assets or [],
+                property_name=property_name,
+                brief=brief,
+            )
+        except Exception as exc:
+            logger.warning("HeyGen scene planner failed (falling back): %s", exc)
+
+    # 7. Submit to provider
+    variants = vp.build_variants_for_brief(
+        brief=provider_brief,
         property_url=property_url,
         tier=tier,
+        assets=assets,
         media_urls=media_urls,
+        scene_plan=scene_plan or None,
     )
 
-    # Attach the media plan to each variant for transparency
+    # Attach the media plan + script to each variant for transparency
     for v in variants:
         v["media_plan"] = script_result["media_plan"]
         v["script"] = script_result["script"]
+        v.setdefault("provider", provider_name)
 
     # 5. Store on HubSpot
     import datetime

@@ -82,6 +82,16 @@ CREATIFY_WEBHOOK_SECRET = os.getenv("CREATIFY_WEBHOOK_SECRET", "")
 # Expects a single text variable named 'script'. Media passed via media_urls.
 CREATIFY_TEMPLATE_ID = os.getenv("CREATIFY_TEMPLATE_ID", "")
 
+# --- HeyGen (alternative video provider) ---
+# Creatify always renders an avatar under its OverCards overlay; HeyGen v2 lets
+# us build scenes with character.type = "none" for true avatar-free output.
+HEYGEN_API_KEY = os.getenv("HEYGEN_API_KEY", "")
+HEYGEN_BASE_URL = os.getenv("HEYGEN_BASE_URL", "https://api.heygen.com")
+HEYGEN_WEBHOOK_SECRET = os.getenv("HEYGEN_WEBHOOK_SECRET", "")
+
+# Which provider to use when the enrollment request omits `provider`.
+VIDEO_PROVIDER_DEFAULT = os.getenv("VIDEO_PROVIDER_DEFAULT", "creatify")
+
 # --- NinjaCat ---
 NINJACAT_EXPORT_BUCKET = os.getenv("NINJACAT_EXPORT_BUCKET")
 
