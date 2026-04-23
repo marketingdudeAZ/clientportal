@@ -303,6 +303,11 @@ def generate_videos(
             logger.warning("HeyGen scene planner failed (falling back): %s", exc)
 
     # 7. Submit to provider
+    # HeyGen needs a callback URL or its render webhook never fires — variants
+    # stay stuck at 'pending' forever. Use WEBHOOK_SERVER_URL from config, falling
+    # back to the production Render URL so this works out of the box.
+    _webhook_base = os.getenv("WEBHOOK_SERVER_URL", "").strip() or "https://rpm-portal-server.onrender.com"
+    heygen_webhook = _webhook_base.rstrip("/") + "/api/heygen-webhook"
     variants = vp.build_variants_for_brief(
         brief=provider_brief,
         property_url=property_url,
@@ -310,6 +315,7 @@ def generate_videos(
         assets=assets,
         media_urls=media_urls,
         scene_plan=scene_plan or None,
+        webhook_url=heygen_webhook if provider_name == "heygen" else None,
     )
 
     # Attach the media plan + script + property_uuid to each variant.
