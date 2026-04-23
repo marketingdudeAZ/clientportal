@@ -17,6 +17,8 @@ HUBDB_SEO_COMPETITORS_TABLE_ID = os.getenv("HUBDB_SEO_COMPETITORS_TABLE_ID")
 HUBDB_AI_MENTIONS_TABLE_ID = os.getenv("HUBDB_AI_MENTIONS_TABLE_ID")
 HUBDB_CONTENT_BRIEFS_TABLE_ID = os.getenv("HUBDB_CONTENT_BRIEFS_TABLE_ID")
 HUBDB_CONTENT_DECAY_TABLE_ID = os.getenv("HUBDB_CONTENT_DECAY_TABLE_ID")
+HUBDB_PAID_KEYWORDS_TABLE_ID = os.getenv("HUBDB_PAID_KEYWORDS_TABLE_ID")
+HUBDB_BRIEF_DRAFTS_TABLE_ID = os.getenv("HUBDB_BRIEF_DRAFTS_TABLE_ID")
 
 # --- Phase 3: Keyword Research + Trends ---
 KEYWORD_RESEARCH_MAX_RESULTS = 500
@@ -114,6 +116,12 @@ SEO_FEATURE_MIN_TIER = {
     "content_decay":    "Premium",   # Phase 2
     "keyword_research": "Basic",     # Phase 3
     "trend_explorer":   "Standard",  # Phase 3
+    # Onboarding + Paid Media (Phase 4)
+    "brief_ai_draft":   "Local",     # all tiers can use AI draft
+    "onboarding_keywords": "Basic",  # seed + classify + route
+    "paid_targeting":   "Local",
+    "paid_audiences":   "Local",
+    "paid_creative":    "Local",
 }
 
 SOCIAL_POSTING_TIERS = {

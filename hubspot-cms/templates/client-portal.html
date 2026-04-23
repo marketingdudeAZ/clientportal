@@ -826,6 +826,10 @@ body{padding-top:36px}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         Client Brief
       </div>
+      <div class="nav-item" id="nav-paid" onclick="nav('paid',this)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+        Paid Media
+      </div>
       <div class="nav-item" onclick="nav('budget',this)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
         Budget & SKUs
@@ -1994,12 +1998,40 @@ body{padding-top:36px}
       <div class="sec-sub">Property profile · brand voice · goals · tracking numbers</div>
     </div>
     <div class="sec-actions">
+      <button type="button" class="brief-open-btn" id="brief-ai-draft-btn" onclick="openBriefAIDraft()" style="background:#5B3FFF;color:#fff;border:none;cursor:pointer">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
+        Draft with AI
+      </button>
       <a href="https://docs.google.com/document/d/example" target="_blank" class="brief-open-btn" id="brief-doc-link">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         Open Full Brief
       </a>
     </div>
   </div>
+
+  <!-- AI draft status strip (hidden until a draft is in-flight or ready) -->
+  <div id="brief-ai-status" style="display:none;margin:12px 0;padding:10px 14px;border-radius:8px;background:#F2EEFF;border:1px solid #C7B8FF;font-size:13px;color:#3B2A99"></div>
+
+  <!-- AI draft upload modal -->
+  <div id="brief-ai-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center">
+    <div style="background:#fff;max-width:520px;width:90%;border-radius:12px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+      <div style="font-size:18px;font-weight:700;margin-bottom:4px">Draft the Brief with AI</div>
+      <div style="font-size:13px;color:#666;margin-bottom:16px">Give us your website and any pitch deck or RFP and we'll pre-fill as much as we can. You'll confirm each field before it saves.</div>
+      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Website URL or domain *</label>
+      <input type="text" id="brief-ai-domain" placeholder="https://example.com" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;margin-bottom:12px">
+      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Pitch deck (PDF, optional)</label>
+      <input type="file" id="brief-ai-deck" accept="application/pdf" style="margin-bottom:12px">
+      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">RFP (PDF, optional)</label>
+      <input type="file" id="brief-ai-rfp" accept="application/pdf" style="margin-bottom:20px">
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="closeBriefAIDraft()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="submitBriefAIDraft()">Start Draft</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI diff review (populated when draft is ready) -->
+  <div id="brief-ai-diff" style="display:none;margin:12px 0"></div>
 
   <div class="brief-grid">
 
@@ -2163,6 +2195,70 @@ body{padding-top:36px}
       </div>
     </div>
 
+  </div>
+</section>
+
+<!-- ── PAID MEDIA (Phase 4) ── -->
+<!-- Intentionally NO keyword-level UI. Clients who want to talk keywords in Paid
+     are a trust-signal event (logged silently via /api/paid/trust-signal). -->
+<section id="section-paid" class="section">
+  <div class="sec-topbar">
+    <div>
+      <div class="sec-title">Paid Media</div>
+      <div class="sec-sub">Targeting &amp; coverage · audiences · creative angles</div>
+    </div>
+  </div>
+
+  <!-- Compliance banner (populated from /api/paid/targeting) -->
+  <div id="paid-compliance-banner" style="margin-bottom:16px;padding:12px 16px;border-radius:8px;background:#FFF7E6;border:1px solid #FFD591;font-size:13px;color:#8C5A00;display:none"></div>
+
+  <!-- Tab switcher -->
+  <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--bdl)">
+    <button class="paid-tab-btn active" data-tab="targeting" onclick="showPaidTab('targeting',this)">Targeting &amp; Coverage</button>
+    <button class="paid-tab-btn" data-tab="audiences" onclick="showPaidTab('audiences',this)">Audiences</button>
+    <button class="paid-tab-btn" data-tab="creative" onclick="showPaidTab('creative',this)">Creative &amp; Offers</button>
+  </div>
+
+  <!-- Search box — fires a silent trust-signal event if the user types
+       keyword-like terms. Deliberately no results panel. -->
+  <input type="text" id="paid-search" placeholder="Search this section…"
+         oninput="maybeLogPaidTrustSignal(this.value)"
+         style="width:100%;max-width:360px;padding:8px 12px;border:1px solid var(--bdl);border-radius:6px;margin-bottom:16px">
+
+  <div id="paid-tab-targeting" class="paid-tab-panel">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Neighborhoods</div>
+        <div id="paid-neighborhoods" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Landmarks</div>
+        <div id="paid-landmarks" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Radius (miles)</div>
+        <div id="paid-radius" style="font-size:18px;font-weight:600"></div>
+        <div id="paid-radius-msg" style="font-size:12px;color:#C73A3A;margin-top:4px"></div>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Market</div>
+        <div id="paid-market" style="font-size:14px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="paid-tab-audiences" class="paid-tab-panel" style="display:none">
+    <div id="paid-audience-bullets"></div>
+    <div id="paid-audience-note" style="margin-top:16px;font-size:12px;color:var(--ts);font-style:italic"></div>
+  </div>
+
+  <div id="paid-tab-creative" class="paid-tab-panel" style="display:none">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Active Taglines</div>
+    <div id="paid-taglines" style="margin-bottom:16px"></div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Seasonal Angles / Upcoming</div>
+    <div id="paid-seasonal" style="margin-bottom:16px"></div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:8px">Selling Points</div>
+    <div id="paid-selling-points"></div>
   </div>
 </section>
 
@@ -2682,6 +2778,7 @@ function nav(id, el) {
   if (id === 'research')         { if (typeof loadKeywordResearch === 'function') loadKeywordResearch(); }
   if (id === 'services')         { loadServices(); }
   if (id === 'assets')           { assetInitDropzone(); loadAssets(); }
+  if (id === 'paid')             { loadPaidMedia(); }
 }
 
 function switchDemo(view, btn) {
@@ -3145,6 +3242,242 @@ function replyToTicket(ticketId, threadId) {
     input.disabled = false;
     alert('Could not send reply. Please try again.');
   });
+}
+
+// ── AI-drafted Client Brief (Phase 4) ──
+function openBriefAIDraft() {
+  document.getElementById('brief-ai-modal').style.display = 'flex';
+}
+function closeBriefAIDraft() {
+  document.getElementById('brief-ai-modal').style.display = 'none';
+}
+function _setBriefAIStatus(msg, kind) {
+  var el = document.getElementById('brief-ai-status');
+  if (!el) return;
+  el.style.display = msg ? 'block' : 'none';
+  el.textContent = msg || '';
+  if (kind === 'error') { el.style.background = '#FEE'; el.style.borderColor = '#FAA'; el.style.color = '#A00'; }
+  else { el.style.background = '#F2EEFF'; el.style.borderColor = '#C7B8FF'; el.style.color = '#3B2A99'; }
+}
+function submitBriefAIDraft() {
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var EMAIL    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  var domain = document.getElementById('brief-ai-domain').value.trim();
+  if (!domain) { alert('Please enter a website URL or domain.'); return; }
+  var fd = new FormData();
+  fd.append('domain', domain);
+  var deck = document.getElementById('brief-ai-deck').files[0];
+  var rfp  = document.getElementById('brief-ai-rfp').files[0];
+  if (deck) fd.append('deck', deck);
+  if (rfp)  fd.append('rfp', rfp);
+
+  closeBriefAIDraft();
+  _setBriefAIStatus('Kicking off AI draft…');
+
+  fetch(API_BASE + '/api/client-brief/draft', {
+    method: 'POST', headers: { 'X-Portal-Email': EMAIL }, body: fd,
+  })
+  .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, body: j }; }); })
+  .then(function(res){
+    if (!res.ok) throw new Error(res.body.error || 'Draft start failed');
+    _setBriefAIStatus('AI is reading the materials — this takes ~30s…');
+    _pollBriefAIDraft(res.body.draft_id, res.body.company_id);
+  })
+  .catch(function(err){ _setBriefAIStatus('Draft failed: ' + err.message, 'error'); });
+}
+function _pollBriefAIDraft(draftId, companyId) {
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var EMAIL    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  var tries = 0;
+  (function tick(){
+    tries++;
+    if (tries > 40) { _setBriefAIStatus('Draft timed out. Try again or contact your AM.', 'error'); return; }
+    fetch(API_BASE + '/api/client-brief/draft/' + draftId, { headers: { 'X-Portal-Email': EMAIL } })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.status === 'ready') {
+          _setBriefAIStatus('AI draft ready — review each suggestion below.');
+          renderBriefAIDiff(d.draft, companyId);
+        } else if (d.status === 'error') {
+          _setBriefAIStatus('Draft failed: ' + (d.error || 'unknown error'), 'error');
+        } else {
+          setTimeout(tick, 3000);
+        }
+      })
+      .catch(function(err){ _setBriefAIStatus('Draft poll error: ' + err.message, 'error'); });
+  })();
+}
+function renderBriefAIDiff(draft, companyId) {
+  // Map HubSpot property names → clean API keys expected by PATCH /api/client-brief
+  var KEY_MAP = {
+    'property_voice_and_tone':         'voice_and_tone',
+    'neighborhoods_to_target':         'neighborhoods',
+    'landmarks_near_the_property':     'landmarks',
+    'property_tag_lines':              'taglines',
+    'what_makes_this_property_unique_':'unique_solutions',
+    'brand_adjectives':                'adjectives',
+    'additional_selling_points':       'additional_selling_points',
+    'overarching_goals':               'goals',
+    'primary_competitors':             'competitors',
+    'units_offered':                   'units_offered',
+  };
+  var LABELS = {
+    'property_voice_and_tone':         'Voice & Tone',
+    'neighborhoods_to_target':         'Neighborhoods',
+    'landmarks_near_the_property':     'Landmarks',
+    'property_tag_lines':              'Taglines',
+    'what_makes_this_property_unique_':'Unique Solutions',
+    'brand_adjectives':                'Brand Adjectives',
+    'additional_selling_points':       'Selling Points',
+    'overarching_goals':               'Goals',
+    'primary_competitors':             'Competitors',
+    'units_offered':                   'Units Offered',
+  };
+  var wrap = document.getElementById('brief-ai-diff');
+  if (!wrap) return;
+  var html = '<div style="background:#fff;border:1px solid var(--bdl);border-radius:10px;padding:16px">';
+  html += '<div style="font-weight:600;margin-bottom:12px">Review AI suggestions</div>';
+  Object.keys(LABELS).forEach(function(hsKey){
+    var entry = draft[hsKey] || {};
+    var val = entry.value;
+    var conf = entry.confidence || 0;
+    if (val === null || val === undefined || val === '') return;
+    var color = conf >= 0.7 ? '#2A7A3A' : (conf >= 0.4 ? '#B87A00' : '#A33');
+    html += '<div style="display:grid;grid-template-columns:140px 1fr auto;gap:12px;align-items:start;padding:8px 0;border-bottom:1px solid var(--bdl)">';
+    html += '<div style="font-size:12px;font-weight:600">'+LABELS[hsKey]+'</div>';
+    html += '<div style="font-size:13px"><div style="color:#333">'+escapeHtml(String(val))+'</div>';
+    html += '<div style="font-size:11px;color:'+color+';margin-top:2px">confidence '+Math.round(conf*100)+'%</div></div>';
+    html += '<label style="font-size:12px;display:flex;gap:4px;align-items:center"><input type="checkbox" class="brief-ai-accept" data-api-key="'+KEY_MAP[hsKey]+'" data-value="'+escapeAttr(String(val))+'" '+(conf>=0.7?'checked':'')+'> Accept</label>';
+    html += '</div>';
+  });
+  html += '<div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px">';
+  html += '<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'brief-ai-diff\').style.display=\'none\'">Dismiss</button>';
+  html += '<button class="btn btn-primary btn-sm" onclick="acceptBriefAIDraft(\''+companyId+'\')">Save accepted fields</button>';
+  html += '</div></div>';
+  wrap.innerHTML = html;
+  wrap.style.display = 'block';
+}
+function escapeHtml(s) { return s.replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function escapeAttr(s) { return escapeHtml(s); }
+function acceptBriefAIDraft(companyId) {
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var EMAIL    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  var checks = document.querySelectorAll('.brief-ai-accept:checked');
+  var fields = {};
+  checks.forEach(function(c){
+    fields[c.getAttribute('data-api-key')] = c.getAttribute('data-value');
+  });
+  if (!Object.keys(fields).length) { alert('Select at least one field to accept.'); return; }
+  fetch(API_BASE + '/api/client-brief/accept', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Email': EMAIL },
+    body: JSON.stringify({ company_id: companyId, fields: fields }),
+  })
+  .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, body: j }; }); })
+  .then(function(res){
+    if (!res.ok) throw new Error(res.body.error || 'Save failed');
+    _setBriefAIStatus('Saved — your AM has been notified.');
+    document.getElementById('brief-ai-diff').style.display = 'none';
+    _briefLoaded = false; // force a reload next time brief section is opened
+  })
+  .catch(function(err){ _setBriefAIStatus('Save failed: ' + err.message, 'error'); });
+}
+
+// ── Paid Media (Phase 4) — NO keyword-level UI ──
+var _paidLoaded = false;
+function loadPaidMedia() {
+  if (_paidLoaded) return;
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var EMAIL    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  var CID      = window.__PORTAL_COMPANY_ID__ || '';
+  var hdrs     = { 'X-Portal-Email': EMAIL };
+
+  // Targeting + compliance banner
+  fetch(API_BASE + '/api/paid/targeting?company_id=' + CID, { headers: hdrs })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.error) return;
+      var banner = document.getElementById('paid-compliance-banner');
+      if (banner && d.compliance) {
+        banner.innerHTML = '<strong>'+d.compliance.title+'</strong> — '+d.compliance.body;
+        banner.style.display = 'block';
+      }
+      function pills(el, arr) {
+        if (!el) return;
+        el.innerHTML = (arr && arr.length)
+          ? arr.map(function(x){ return '<span class="brief-pill">'+escapeHtml(x)+'</span>'; }).join('')
+          : '<span style="color:var(--ts);font-size:12px">—</span>';
+      }
+      pills(document.getElementById('paid-neighborhoods'), d.neighborhoods);
+      pills(document.getElementById('paid-landmarks'),     d.landmarks);
+      document.getElementById('paid-radius').textContent = d.radius_miles ? (d.radius_miles + ' mi') : 'Not set';
+      document.getElementById('paid-radius-msg').textContent = d.radius_ok ? '' : (d.radius_message || '');
+      document.getElementById('paid-market').textContent = [d.city, d.state].filter(Boolean).join(', ') || '—';
+    });
+
+  // Audiences
+  fetch(API_BASE + '/api/paid/audiences?company_id=' + CID, { headers: hdrs })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.error) return;
+      var wrap = document.getElementById('paid-audience-bullets');
+      if (!wrap) return;
+      wrap.innerHTML = (d.bullets || []).map(function(b){
+        return '<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ts);margin-bottom:4px">'+escapeHtml(b.label)+'</div><div style="font-size:14px">'+escapeHtml(b.body)+'</div></div>';
+      }).join('') || '<div style="color:var(--ts);font-size:13px">Audiences not yet defined — complete the client brief to populate.</div>';
+      document.getElementById('paid-audience-note').textContent = d.compliance_note || '';
+    });
+
+  // Creative
+  fetch(API_BASE + '/api/paid/creative?company_id=' + CID, { headers: hdrs })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.error) return;
+      function lines(el, arr) {
+        if (!el) return;
+        el.innerHTML = (arr && arr.length)
+          ? arr.map(function(x){ return '<div style="padding:6px 0;border-bottom:1px solid var(--bdl);font-size:13px">'+escapeHtml(x)+'</div>'; }).join('')
+          : '<div style="color:var(--ts);font-size:13px">—</div>';
+      }
+      lines(document.getElementById('paid-taglines'), d.active_taglines);
+      lines(document.getElementById('paid-seasonal'), d.seasonal_angles);
+      document.getElementById('paid-selling-points').textContent = d.selling_points || '—';
+    });
+
+  _paidLoaded = true;
+}
+function showPaidTab(name, btn) {
+  ['targeting','audiences','creative'].forEach(function(t){
+    var p = document.getElementById('paid-tab-'+t);
+    if (p) p.style.display = (t === name) ? 'block' : 'none';
+  });
+  document.querySelectorAll('.paid-tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+}
+// Trust-signal silent log: fires when the client types keyword-like words in the Paid search.
+// Debounced so one log per "sentence" rather than per keystroke.
+var _paidSignalTimer = null;
+var _paidSignalSent = {};
+function maybeLogPaidTrustSignal(value) {
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var EMAIL    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  var CID      = window.__PORTAL_COMPANY_ID__ || '';
+  var v = (value || '').toLowerCase().trim();
+  // Trigger words that imply the client is trying to discuss keyword-level detail.
+  var triggers = ['keyword','keywords','kw ','bid ','cpc','match type','exact match','broad match','negative'];
+  var hit = triggers.find(function(t){ return v.indexOf(t) !== -1; });
+  if (!hit || v.length < 3) return;
+  if (_paidSignalSent[hit]) return; // one signal per trigger per page load
+  clearTimeout(_paidSignalTimer);
+  _paidSignalTimer = setTimeout(function(){
+    _paidSignalSent[hit] = true;
+    fetch(API_BASE + '/api/paid/trust-signal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Portal-Email': EMAIL },
+      body: JSON.stringify({ company_id: CID, signal_type: 'paid_keyword_drilldown', detail: v.slice(0,200) }),
+      keepalive: true,
+    }).catch(function(){ /* silent */ });
+  }, 600);
 }
 
 // ── Client Brief ──
