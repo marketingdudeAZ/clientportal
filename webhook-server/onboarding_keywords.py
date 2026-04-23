@@ -107,7 +107,9 @@ def _persist_paid(property_uuid: str, rows: list[dict]) -> int:
         logger.warning("onboarding_keywords: HUBDB_PAID_KEYWORDS_TABLE_ID not set; skipping Paid persist")
         return 0
 
-    now = datetime.utcnow().isoformat() + "Z"
+    # HubDB DATETIME columns expect epoch milliseconds, not ISO strings —
+    # sending ISO silently 400s every row (same bug we fixed in ai_mentions.py).
+    now_ms = int(datetime.utcnow().timestamp() * 1000)
     inserted = 0
     for r in rows:
         kw = (r.get("keyword") or "").strip()
@@ -124,7 +126,7 @@ def _persist_paid(property_uuid: str, rows: list[dict]) -> int:
             "cpc_low":           r.get("cpc_low", 0),
             "cpc_high":          r.get("cpc_high", 0),
             "competition_index": r.get("competition_index", 0),
-            "generated_at":      now,
+            "generated_at":      now_ms,
             "approved":          False,
         }
         if insert_row(HUBDB_PAID_KEYWORDS_TABLE_ID, values):
