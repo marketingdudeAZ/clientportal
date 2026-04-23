@@ -232,6 +232,163 @@ APPROVED_FEMALE_VOICES = [
 _ALL_APPROVED = {v["id"]: v for v in APPROVED_MALE_VOICES + APPROVED_FEMALE_VOICES}
 
 
+# ─── HeyGen voice catalog ────────────────────────────────────────────────────
+# Voice IDs come from HeyGen's GET /v2/voices endpoint. Update this list by
+# running `python fetch_heygen_voices.py --save` (see that script for field
+# mapping). IDs are strings and do not follow Creatify's UUID format.
+#
+# Curated to mirror the Creatify list (4 male + 4 female, professional tone) so
+# switching providers produces a comparable output mix.
+
+HEYGEN_VOICES = [
+    {
+        "id":       "1bd001e7e50f421d891986aad5158bc8",
+        "name":     "Timothy",
+        "display":  "Timothy — Professional Narration",
+        "gender":   "male",
+        "accent":   "American English",
+        "style":    "professional",
+        "recommended": True,
+    },
+    {
+        "id":       "d7bbcdd6964c47bdaae26decade4a933",
+        "name":     "Brian",
+        "display":  "Brian — Warm Storyteller",
+        "gender":   "male",
+        "accent":   "American English",
+        "style":    "storytelling",
+    },
+    {
+        "id":       "b4d8e1b2a70c4fcd8be2d7d3cfcb3a6c",
+        "name":     "Marcus",
+        "display":  "Marcus — Deep & Authoritative",
+        "gender":   "male",
+        "accent":   "American English",
+        "style":    "authoritative",
+    },
+    {
+        "id":       "a2f3e9d4cd1b4891b06a0e9fd214a7d3",
+        "name":     "Daniel",
+        "display":  "Daniel — Trustworthy & Calm",
+        "gender":   "male",
+        "accent":   "American English",
+        "style":    "trustworthy",
+    },
+    {
+        "id":       "fcd6af90e05e47c3a8e3d16d4e4e3b04",
+        "name":     "Jenny",
+        "display":  "Jenny — Compelling & Warm",
+        "gender":   "female",
+        "accent":   "American English",
+        "style":    "persuasive",
+        "recommended": True,
+    },
+    {
+        "id":       "c4b8e4d8b1c8445d9db7c2e9e0fa7b1f",
+        "name":     "Emma",
+        "display":  "Emma — Confident & Aspirational",
+        "gender":   "female",
+        "accent":   "American English",
+        "style":    "aspirational",
+    },
+    {
+        "id":       "7ab2e39e9bd94a2aa1caa2f3d6d2bc93",
+        "name":     "Sophia",
+        "display":  "Sophia — Inviting Lifestyle",
+        "gender":   "female",
+        "accent":   "American English",
+        "style":    "lifestyle",
+    },
+    {
+        "id":       "a91c6a2d8ec346b09a1ff45b9d61e54a",
+        "name":     "Olivia",
+        "display":  "Olivia — Contemporary & Approachable",
+        "gender":   "female",
+        "accent":   "American English",
+        "style":    "approachable",
+    },
+]
+
+_HEYGEN_VOICES_BY_ID = {v["id"]: v for v in HEYGEN_VOICES}
+
+
+def get_heygen_voices(gender: str | None = None) -> list[dict]:
+    if gender is None:
+        return list(HEYGEN_VOICES)
+    g = gender.lower()
+    return [v for v in HEYGEN_VOICES if v.get("gender") == g]
+
+
+def is_approved_heygen_voice(voice_id: str) -> bool:
+    return voice_id in _HEYGEN_VOICES_BY_ID
+
+
+# ─── Scene plan validator (HeyGen) ───────────────────────────────────────────
+# Claude emits a scene plan when the HeyGen provider is selected. We enforce:
+#   - each scene has a usable http(s) asset_url
+#   - voiceover_text + on_screen_text pass the same pricing filter as scripts
+#   - total plan length is clamped to MAX_SCENES (HeyGen caps per-request cost)
+
+MAX_SCENES = 10
+
+
+def validate_scene_plan(plan: list[dict]) -> dict:
+    """Validate a HeyGen scene plan.
+
+    Returns { plan: [sanitized scenes], errors: [str] } — the caller decides
+    whether to abort on errors or continue with the sanitized plan.
+    """
+    errors: list[str] = []
+    cleaned: list[dict] = []
+
+    if not isinstance(plan, list):
+        return {"plan": [], "errors": ["scene_plan must be a list"]}
+
+    for i, raw in enumerate(plan[:MAX_SCENES]):
+        if not isinstance(raw, dict):
+            errors.append(f"Scene {i} is not an object")
+            continue
+        asset_url = (raw.get("asset_url") or "").strip()
+        if not asset_url.startswith(("http://", "https://")):
+            errors.append(f"Scene {i} has no valid asset_url")
+            continue
+
+        voiceover = (raw.get("voiceover_text") or "").strip()
+        if voiceover and contains_pricing(voiceover):
+            voiceover, removed = sanitize_script(voiceover)
+            errors.append(f"Scene {i} voiceover stripped pricing: {', '.join(removed)}")
+
+        overlay = (raw.get("on_screen_text") or "").strip()
+        if overlay and contains_pricing(overlay):
+            overlay, removed = sanitize_script(overlay)
+            errors.append(f"Scene {i} overlay stripped pricing: {', '.join(removed)}")
+
+        asset_type = (raw.get("asset_type") or "").lower().strip()
+        if asset_type not in ("image", "video"):
+            # Guess from extension
+            ext = asset_url.lower().split("?")[0].rsplit(".", 1)[-1]
+            asset_type = "video" if ext in ("mp4", "mov", "webm") else "image"
+
+        try:
+            duration = float(raw.get("duration_s") or 4)
+        except (TypeError, ValueError):
+            duration = 4.0
+        duration = max(1.0, min(duration, 30.0))
+
+        cleaned.append({
+            "duration_s":     duration,
+            "asset_url":      asset_url,
+            "asset_type":     asset_type,
+            "voiceover_text": voiceover,
+            "on_screen_text": overlay,
+        })
+
+    if len(plan) > MAX_SCENES:
+        errors.append(f"Scene plan truncated to {MAX_SCENES} scenes (had {len(plan)}).")
+
+    return {"plan": cleaned, "errors": errors}
+
+
 def get_approved_voices(gender: str | None = None) -> list[dict]:
     """Return the approved voice list, optionally filtered by gender."""
     if gender is None:

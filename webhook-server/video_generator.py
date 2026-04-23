@@ -28,7 +28,7 @@ from video_pipeline_config import (
     build_script_prompt,
     validate_script,
 )
-from creatify_client import build_variants_for_brief
+from video_providers import get_provider, normalize_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -40,26 +40,31 @@ HS_HEADERS = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
 
 # ─── 1. Fetch property assets from HubDB ────────────────────────────────────
 
-def fetch_property_assets(company_id: str) -> list[dict]:
+def fetch_property_assets(property_uuid: str) -> list[dict]:
     """Return all live visual assets for a property from HubDB.
 
     Each asset dict has: file_url, asset_name, category, subcategory,
     file_type, description.  Only images and videos are returned.
-    Results are isolated to the given company_id (property_uuid).
+    Results are isolated to the property via its RPM UUID — NOT the HubSpot
+    company hs_object_id. Callers that only have the HubSpot ID should resolve
+    the UUID first (see /api/video-enroll for the fallback path).
     """
     if not HUBDB_ASSET_TABLE_ID:
         logger.warning("HUBDB_ASSET_TABLE_ID not configured — no assets available")
         return []
+    if not property_uuid:
+        logger.warning("fetch_property_assets called with empty property_uuid")
+        return []
 
     url = (
         f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_ASSET_TABLE_ID}/rows"
-        f"?property_uuid__eq={company_id}&status__eq=live&limit=100"
+        f"?property_uuid__eq={property_uuid}&status__eq=live&limit=100"
     )
     try:
         resp = requests.get(url, headers=HS_HEADERS, timeout=15)
         resp.raise_for_status()
     except Exception as exc:
-        logger.error("Failed to fetch assets for %s: %s", company_id, exc)
+        logger.error("Failed to fetch assets for %s: %s", property_uuid, exc)
         return []
 
     assets = []
@@ -77,7 +82,7 @@ def fetch_property_assets(company_id: str) -> list[dict]:
             "description": vals.get("description", ""),
         })
 
-    logger.info("Fetched %d visual assets for property %s", len(assets), company_id)
+    logger.info("Fetched %d visual assets for property %s", len(assets), property_uuid)
     return assets
 
 
@@ -199,7 +204,8 @@ def generate_script_with_assets(
 # ─── 4. Orchestrator: full generation pipeline ──────────────────────────────
 
 def generate_videos(
-    company_id: str,
+    property_uuid: str,
+    hs_object_id: str,
     property_name: str,
     tier: str,
     brief: dict,
@@ -207,13 +213,34 @@ def generate_videos(
     units: int = 0,
     aptiq_property_id: str = "",
     aptiq_market_id: str = "",
+    provider: str | None = None,
+    # Back-compat alias so older callers that still pass company_id keep working.
+    company_id: str | None = None,
 ) -> list[dict]:
-    """End-to-end: brief → AptIQ context → script → asset matching → Creatify.
+    """End-to-end: brief → AptIQ context → script → asset matching → provider submit.
+
+    Identifiers:
+      - property_uuid: the stable RPM property identifier. Used for asset
+        lookups, variant tagging, and webhook routing.
+      - hs_object_id: the HubSpot company object id. Used for CRM writes
+        (/crm/v3/objects/companies/{hs_object_id}) and nothing else.
+
+    The `provider` arg routes to the chosen video backend (creatify or heygen).
+    When omitted it falls back to VIDEO_PROVIDER_DEFAULT in config.
 
     Returns list of variant dicts ready to store on HubSpot.
     """
+    # Back-compat: accept the old single-identifier call style.
+    if not hs_object_id and company_id:
+        hs_object_id = company_id
+    if not property_uuid and company_id:
+        property_uuid = company_id
+
+    provider_name = normalize_provider_name(provider)
+    vp = get_provider(provider_name)
+
     # 1. Fetch property-specific assets (isolated by property UUID)
-    assets = fetch_property_assets(company_id)
+    assets = fetch_property_assets(property_uuid)
 
     # 2. Fetch ApartmentIQ market intelligence
     comp_context_str = ""
@@ -236,33 +263,65 @@ def generate_videos(
         comp_context=comp_context_str,
     )
 
-    # 3. Prepare brief for Creatify variant builder
-    creatify_brief = {
+    # 4. Build provider brief (shared contract between Creatify and HeyGen).
+    # property_uuid rides along so HeyGen can echo it back in the webhook
+    # callback_id and we can route updates without scanning every company.
+    provider_brief = {
         "script":   script_result["script"],
         "duration": brief.get("duration", 15),
+        "property_uuid": property_uuid,
+        # Keep the original creative brief fields around — HeyGen's scene
+        # planner uses audience/tone/goals.
+        "voice_tone":      brief.get("voice_tone"),
+        "target_audience": brief.get("target_audience"),
+        "marketing_goals": brief.get("marketing_goals"),
+        "differentiators": brief.get("differentiators"),
     }
 
-    # 4. Submit to Creatify. Always filter to real http/https URLs — Claude's
-    # media_plan may include placeholders like "property_website_imagery" which
-    # Creatify rejects with 400. If no real URLs are available, fall back to
-    # raw asset file_urls from HubDB so the video uses property photos instead
-    # of Creatify's website-scrape fallback.
+    # 5. Always filter to real http/https URLs — Claude's media_plan may include
+    # placeholders like "property_website_imagery" which providers reject.
+    # If no real URLs are available, fall back to raw asset file_urls from HubDB
+    # so the video uses property photos instead of any website-scrape fallback.
     plan_urls = [u for u in (script_result.get("media_urls") or []) if isinstance(u, str) and u.startswith(("http://", "https://"))]
     if not plan_urls and assets:
         plan_urls = [a.get("file_url") for a in assets if a.get("file_url", "").startswith(("http://", "https://"))][:10]
     media_urls = plan_urls or None
 
-    variants = build_variants_for_brief(
-        brief=creatify_brief,
+    # 6. For HeyGen, ask Claude to design a scene plan so the AI drives shot
+    # order + on-screen text. Creatify ignores this field.
+    scene_plan: list[dict] = []
+    if provider_name == "heygen":
+        try:
+            from heygen_scene_planner import plan_scenes
+            scene_plan = plan_scenes(
+                script=script_result["script"],
+                assets=assets or [],
+                property_name=property_name,
+                brief=brief,
+            )
+        except Exception as exc:
+            logger.warning("HeyGen scene planner failed (falling back): %s", exc)
+
+    # 7. Submit to provider
+    variants = vp.build_variants_for_brief(
+        brief=provider_brief,
         property_url=property_url,
         tier=tier,
+        assets=assets,
         media_urls=media_urls,
+        scene_plan=scene_plan or None,
     )
 
-    # Attach the media plan to each variant for transparency
+    # Attach the media plan + script + property_uuid to each variant.
+    # property_uuid is what the webhook handler and the auto-poller use to
+    # look up a variant's company record on HubSpot without round-tripping
+    # the CRM; variants generated before this tag field will fall back to
+    # searching by hs_object_id.
     for v in variants:
         v["media_plan"] = script_result["media_plan"]
         v["script"] = script_result["script"]
+        v.setdefault("provider", provider_name)
+        v["property_uuid"] = property_uuid
 
     # 5. Store on HubSpot
     import datetime
@@ -270,7 +329,7 @@ def generate_videos(
 
     try:
         requests.patch(
-            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+            f"https://api.hubapi.com/crm/v3/objects/companies/{hs_object_id}",
             headers={**HS_HEADERS, "Content-Type": "application/json"},
             json={"properties": {
                 "video_variants_json":     json.dumps(variants),
@@ -280,7 +339,7 @@ def generate_videos(
             }},
             timeout=10,
         )
-        logger.info("Stored %d variants on company %s", len(variants), company_id)
+        logger.info("Stored %d variants on company %s (uuid=%s)", len(variants), hs_object_id, property_uuid)
     except Exception as exc:
         logger.error("Failed to store variants on HubSpot: %s", exc)
 
