@@ -142,15 +142,19 @@ def refresh_onpage(company_id: str, domain: str) -> int | None:
         logger.warning("on_page task_post failed for %s: %s", domain, e)
         return None
 
+    # Poll up to 5 min. DataForSEO on-page crawls typically finish in 2-4 min
+    # for a 50-page site; hosting provider quirks can occasionally push past 3 min.
+    # Previous ceiling was 120s which returned None mid-crawl for most properties.
     summary = {}
-    for _ in range(12):
-        import time as _t
+    import time as _t
+    for attempt in range(30):  # 30 * 10s = 300s
         _t.sleep(10)
         try:
             summary = onpage_summary(task_id)
         except Exception:
             continue
         if summary and summary.get("crawl_progress") == "finished":
+            logger.info("on_page crawl finished for %s on attempt %d", domain, attempt + 1)
             break
 
     score = None
