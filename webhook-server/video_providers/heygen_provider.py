@@ -438,9 +438,11 @@ class HeyGenProvider(VideoProvider):
             if not asset_url:
                 continue
 
+            # HeyGen v2's `character` field ONLY accepts type='avatar' or
+            # 'talking_photo' — there is no 'none' value. For avatar-free
+            # video we simply omit `character` entirely; HeyGen renders the
+            # voice as voiceover over the background asset.
             scene_input: dict[str, Any] = {
-                # character.type = "none" → no avatar, no talking head.
-                "character": {"type": "none"},
                 "voice": {
                     "type":       "text",
                     "voice_id":   voice_id,
