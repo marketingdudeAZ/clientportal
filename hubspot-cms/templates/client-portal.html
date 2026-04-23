@@ -1226,7 +1226,7 @@ body{padding-top:36px}
   <div class="sec-topbar">
     <div>
       <div class="sec-title">Content Planner</div>
-      <div class="sec-sub">Topic clusters · AI-generated briefs · refresh queue · iPullRank + GEO methodology</div>
+      <div class="sec-sub">Topic clusters · AI-generated briefs · refresh queue</div>
     </div>
     <div id="content-tier-badge" style="display:none;padding:6px 12px;border-radius:999px;background:#F0F9FF;color:#075985;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em"></div>
   </div>
@@ -7000,13 +7000,30 @@ setTimeout(loadPropertySwitcher, 1500);
   function _seoRenderTrend(points) {
     var svg = document.getElementById('seo-trend-svg');
     if (!svg) return;
-    if (!points.length) { svg.innerHTML = '<text x="50%" y="50%" text-anchor="middle" fill="#9CA3AF" font-size="12">No data yet</text>'; return; }
     var w = 600, h = 120, pad = 8;
+    if (!points.length) {
+      svg.innerHTML = '<text x="50%" y="50%" text-anchor="middle" fill="#9CA3AF" font-size="12">Trend builds after 7 days of daily rank data</text>';
+      return;
+    }
+    // One-point case — line needs at least two points, so draw a dot centered
+    // with the current visibility score as a label.
+    if (points.length === 1) {
+      var p = points[0];
+      var cx = w / 2, cy = h / 2;
+      svg.innerHTML =
+        '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="#C8964E"/>' +
+        '<text x="' + cx + '" y="' + (cy - 12) + '" text-anchor="middle" fill="#53606C" font-size="11" font-weight="600">' +
+        'Visibility ' + Math.round(p.visibility) + '</text>' +
+        '<text x="' + cx + '" y="' + (cy + 22) + '" text-anchor="middle" fill="#9CA3AF" font-size="10">' +
+        'Trendline appears after 7 days' + '</text>';
+      return;
+    }
+    // Multi-point case — draw the actual trend path
     var max = Math.max.apply(null, points.map(function(p){ return p.visibility; }));
     var min = Math.min.apply(null, points.map(function(p){ return p.visibility; }));
     if (max === min) max = min + 1;
     var d = points.map(function(p, i){
-      var x = pad + (i / (points.length-1 || 1)) * (w - pad*2);
+      var x = pad + (i / (points.length-1)) * (w - pad*2);
       var y = h - pad - ((p.visibility - min) / (max - min)) * (h - pad*2);
       return (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
     }).join(' ');
@@ -7017,7 +7034,22 @@ setTimeout(loadPropertySwitcher, 1500);
     var a = document.getElementById('seo-kpi-aio');
     var b = document.getElementById('seo-kpi-aio-sub');
     if (a) a.textContent = (data.composite_index == null ? '—' : data.composite_index);
-    if (b) b.textContent = data.scanned_at ? 'as of ' + String(data.scanned_at).slice(0,10) : 'no scan yet';
+    if (b) {
+      // scanned_at comes from HubDB DATETIME (epoch millis, number) OR legacy
+      // ISO-string format. Format both into "Mon DD, YYYY" for display.
+      if (!data.scanned_at) {
+        b.textContent = 'no scan yet';
+      } else {
+        try {
+          var dt = typeof data.scanned_at === 'number'
+            ? new Date(data.scanned_at)
+            : new Date(String(data.scanned_at));
+          b.textContent = 'as of ' + dt.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+        } catch (e) {
+          b.textContent = 'as of ' + String(data.scanned_at).slice(0, 10);
+        }
+      }
+    }
     var engines = data.by_engine || {};
     var order = [['chatgpt','ChatGPT'],['perplexity','Perplexity'],['gemini','Gemini'],['google_aio','Google AIO']];
     var box = document.getElementById('seo-aim-engines');
