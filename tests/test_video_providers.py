@@ -123,6 +123,9 @@ class TestHeyGenProvider(unittest.TestCase):
         self.assertEqual(payload["callback_url"], "https://hooks.example/heygen")
         self.assertEqual(payload["callback_id"], "var-1")
         self.assertFalse(payload["test"])
+        # Auto-captions must be on so the VO renders as burned-in subtitles
+        # (silent-autoplay social feeds are the default viewing context).
+        self.assertTrue(payload["caption"])
 
         # Every scene must be avatar-free with a voice + background
         self.assertEqual(len(payload["video_inputs"]), 2)

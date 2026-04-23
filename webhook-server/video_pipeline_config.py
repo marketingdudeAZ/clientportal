@@ -241,71 +241,73 @@ _ALL_APPROVED = {v["id"]: v for v in APPROVED_MALE_VOICES + APPROVED_FEMALE_VOIC
 # switching providers produces a comparable output mix.
 
 HEYGEN_VOICES = [
+    # Energetic social-ad voices — selected for hook-first delivery, pace, and
+    # scroll-stopping energy rather than traditional narration polish.
     {
-        "id":       "f6d92a5cacc2425ea1fabfe3b79df31a",
-        "name":     "Timothy",
-        "display":  "Timothy — Lifelike Narration",
+        "id":       "d84493795278413d8d7a2dc6c9026318",
+        "name":     "Dynamic Derek",
+        "display":  "Dynamic Derek — Energetic Host",
         "gender":   "male",
         "accent":   "American English",
-        "style":    "narration",
+        "style":    "energetic",
         "recommended": True,
     },
     {
-        "id":       "9cfe3785136147ea967c7632f52c8788",
-        "name":     "Benjamin",
-        "display":  "Benjamin — Professional",
+        "id":       "22f835c528f74085ab6fee25f455b0c5",
+        "name":     "Epic Eli",
+        "display":  "Epic Eli — Bold & Upbeat",
         "gender":   "male",
         "accent":   "American English",
-        "style":    "professional",
+        "style":    "upbeat",
     },
     {
-        "id":       "6e51a203c3e74398ae8046f3c320abf6",
-        "name":     "Samuel",
-        "display":  "Samuel — Narration",
+        "id":       "6638ffaf65b64703bbeb985630487ef9",
+        "name":     "Expressive Evan",
+        "display":  "Expressive Evan — Animated",
         "gender":   "male",
         "accent":   "American English",
-        "style":    "narration",
+        "style":    "expressive",
     },
     {
-        "id":       "6648fd92bcba41df809a01712faf9a4a",
-        "name":     "Harry",
-        "display":  "Harry — Narration",
+        "id":       "21454737ca584945ae544e2cffb9186e",
+        "name":     "Zesty Zeke",
+        "display":  "Zesty Zeke — Punchy Social",
         "gender":   "male",
         "accent":   "American English",
-        "style":    "narration",
+        "style":    "punchy",
     },
     {
-        "id":       "2f72ee82b83d4b00af16c4771d611752",
-        "name":     "Jenny",
-        "display":  "Jenny — Professional",
+        "id":       "8552d4c72f6448009910edf84b93b0f6",
+        "name":     "Energetic Ella",
+        "display":  "Energetic Ella — Bright & Hooky",
         "gender":   "female",
         "accent":   "American English",
-        "style":    "professional",
+        "style":    "energetic",
         "recommended": True,
     },
     {
-        "id":       "c8f228e9ead44542829eb87d51420fbf",
-        "name":     "Charlotte",
-        "display":  "Charlotte — Narration",
+        "id":       "4bc7940bbb4c4227adb46bb28a019bff",
+        "name":     "Peppy Priya",
+        "display":  "Peppy Priya — Fun & Fast",
         "gender":   "female",
         "accent":   "American English",
-        "style":    "narration",
+        "style":    "peppy",
     },
     {
-        "id":       "232e3bb29f3b45d695f873503af7068c",
-        "name":     "Scarlett",
-        "display":  "Scarlett — Professional",
+        "id":       "6189d551d44b4a2d92f31e3822e310c0",
+        "name":     "Bouncy Bailey",
+        "display":  "Bouncy Bailey — Reel-Ready",
         "gender":   "female",
         "accent":   "American English",
-        "style":    "professional",
+        "style":    "bouncy",
     },
     {
-        "id":       "707375bffbb6443ca99ec8f81459738f",
-        "name":     "Grace",
-        "display":  "Grace — Natural",
+        "id":       "c7c398ea067c4f43a9d2e15dd7c59cf4",
+        "name":     "Spirited Sophie",
+        "display":  "Spirited Sophie — Confident Hype",
         "gender":   "female",
         "accent":   "American English",
-        "style":    "natural",
+        "style":    "spirited",
     },
 ]
 
@@ -521,37 +523,51 @@ def build_script_prompt(brief: dict, property_name: str, units: int = 0) -> str:
 # Used when Claude generates a script AND selects property assets to illustrate it.
 
 SCRIPT_WITH_ASSETS_SYSTEM_PROMPT = """\
-You are a video ad creative director for RPM Living, a premium multifamily property management company.
-Your job is to:
-1. Write a short voiceover script (15–30 seconds) for an apartment community video ad.
-2. Select and order property-specific media assets to visually illustrate each part of the script.
+You are a short-form social-ad copywriter for RPM Living, a premium multifamily property
+management company. These videos run on Meta Reels, TikTok, and YouTube Shorts — platforms
+where scroll-stopping energy beats polish, and the first 2 seconds decide whether anyone
+watches the rest.
 
-STRICT RULES — never violate these:
-1. NEVER mention pricing, rent amounts, specials, concessions, application fees, or any dollar figures.
-2. NEVER use phrases like "starting at", "as low as", "first month free", "no deposit", or similar.
-3. DO NOT include an avatar or presenter — this is voiceover only over property footage.
-4. Write in English only.
-5. Keep the script between 50–100 words (fits comfortably in 15–30 seconds at conversational pace).
-6. End with a lifestyle-forward CTA — "Schedule your tour today.", "Your next home is waiting.", etc.
-7. Focus on lifestyle, community, location, and amenities — never price.
+Your job:
+1. Write a voiceover script (45–80 words, ~15 seconds) that grabs attention fast, builds
+   desire, and ends with a clear CTA. Format it for an energetic, upbeat VO read — short
+   sentences, strong verbs, conversational punch.
+2. Select and order property-specific media assets to visually illustrate the story.
+
+COPY PRINCIPLES — bake these into every script:
+- HOOK FIRST: open with a question, bold claim, or pattern interrupt. First line must stop
+  the scroll. Examples: "POV: you just found your dream apartment." / "Three reasons this
+  is about to be your new home." / "If you work from home, read this."
+- SHORT SENTENCES: 4–12 words each. No run-ons. Punchy. Rhythmic.
+- SPECIFIC > GENERIC: "a quartz kitchen you'll actually cook in" beats "modern kitchen".
+  Name the neighborhood, the amenity, the feeling — not vague "luxury living" filler.
+- SENSORY + EMOTIONAL: how it feels to live there, not a list of features.
+- END WITH CTA: one line. "Book a tour." / "Your next home is waiting." / "Link in bio."
+
+STRICT RULES — never violate:
+1. NEVER mention pricing, rent amounts, specials, concessions, application fees, or any
+   dollar figures. NEVER use "starting at", "as low as", "first month free", "no deposit".
+2. DO NOT include an avatar or presenter — this is voiceover only over property footage.
+3. English only. No clichés ("luxury living at its finest", "home sweet home", etc).
+4. No corporate voice. Write like a confident friend, not a brochure.
 
 ASSET MATCHING RULES:
-1. ONLY use assets from the provided inventory — never invent or reference assets that are not listed.
-2. Select 5–8 assets that best illustrate the script narrative.
-3. Order assets to tell a visual story: typically exterior → lobby/common → unit interior → amenities → neighborhood.
-4. Match content to visuals: if the script says "spacious floor plans", pick an Interior asset. \
-If it says "resort-style pool", pick an Amenity/pool asset.
-5. When the script references a specific unit type (e.g., "one-bedroom"), prefer assets labeled \
-with that unit type (e.g., "1 Bed Interior", "One Bedroom Layout").
-6. Prefer variety — don't repeat the same asset. Mix categories (Exterior, Interior, Amenity, etc.).
-7. Each media_plan entry must include the exact asset_url from the inventory and a brief reason.
+1. ONLY use assets from the provided inventory — never invent URLs.
+2. Select 5–8 assets. Order them to tell a visual story aligned with social pacing:
+   attention-grabbing opener (exterior, aerial, or a hero shot) → interior reveal →
+   amenities / lifestyle → neighborhood / community → closing hero shot for CTA.
+3. Match content to the line of VO playing during it. If the line says "resort pool",
+   the scene should be the pool.
+4. Prefer MP4 clips over stills when available — motion holds attention on social.
+5. When the script references a unit type (e.g., "one-bedroom"), prefer assets labeled
+   with that unit type.
+6. Mix categories — don't repeat the same asset.
 
-OUTPUT FORMAT — return valid JSON only, no markdown fences, no explanation:
+OUTPUT FORMAT — valid JSON only, no markdown fences, no explanation:
 {
-  "script": "Your voiceover script text here...",
+  "script": "The full voiceover script.",
   "media_plan": [
-    {"asset_url": "https://...", "reason": "Opening exterior shot of the community"},
-    {"asset_url": "https://...", "reason": "Interior showing spacious living area"},
+    {"asset_url": "https://...", "reason": "Hook scene — aerial to stop the scroll"},
     ...
   ]
 }

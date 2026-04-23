@@ -468,6 +468,10 @@ class HeyGenProvider(VideoProvider):
             "test":         False,
             "dimension":    dimension,
             "video_inputs": inputs,
+            # Burn captions from the voiceover onto the video. HeyGen v2 reads
+            # this top-level flag and renders auto-generated subtitles in sync
+            # with the VO — required for silent-autoplay social feeds.
+            "caption":      True,
             # Pass our variant_id through so webhooks can map back to the right
             # HubSpot variant without relying on in-memory state.
             "callback_id":  callback_id,
