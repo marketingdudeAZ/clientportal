@@ -906,6 +906,11 @@ def seo_refresh_property():
         return jsonify({"error": "company_id required"}), 400
 
     include = set(payload.get("include") or ["ranks", "ai_mentions", "onpage", "content_planning"])
+    # Long-running steps (AI mentions = 20 LLM calls, on-page = up to 5 min crawl)
+    # can exceed Render's HTTP gateway timeout (~300s). When async=true we run
+    # the selected steps in a daemon thread and return 202 immediately; caller
+    # polls HubDB/HubSpot/BQ to observe completion.
+    run_async = bool(payload.get("async"))
 
     import time as _time
     t0 = _time.time()
@@ -946,62 +951,83 @@ def seo_refresh_property():
         logger.warning("tier lookup failed for %s: %s", company_id, e)
     results["tier"] = tier
 
-    # Step 1: Rank refresh (Phase 1)
-    if "ranks" in include:
+    def _run_steps(results_bucket: dict):
+        """Execute the selected refresh steps. Runs sync in the request thread
+        OR in a daemon thread when async=true. Writes into `results_bucket`."""
+        step_t0 = _time.time()
+
+        if "ranks" in include:
+            try:
+                from seo_refresh_cron import refresh_ranks
+                count = refresh_ranks(uuid, domain)
+                results_bucket["ranks"] = {"status": "ok", "keywords_refreshed": count}
+            except Exception as e:
+                logger.error("refresh_ranks failed for %s: %s", uuid, e, exc_info=True)
+                results_bucket["ranks"] = {"status": "error", "error": str(e)}
+
+        if "ai_mentions" in include:
+            try:
+                from seo_refresh_cron import refresh_ai_mentions
+                scan = refresh_ai_mentions(uuid, name, domain, city)
+                results_bucket["ai_mentions"] = {
+                    "status":          "ok",
+                    "composite_index": (scan or {}).get("composite_index"),
+                    "scanned_at":      (scan or {}).get("scanned_at"),
+                }
+            except Exception as e:
+                logger.error("refresh_ai_mentions failed for %s: %s", uuid, e, exc_info=True)
+                results_bucket["ai_mentions"] = {"status": "error", "error": str(e)}
+
+        if "onpage" in include:
+            try:
+                from seo_refresh_cron import refresh_onpage
+                score = refresh_onpage(company_id, domain)
+                results_bucket["onpage"] = {"status": "ok", "audit_score": score}
+            except Exception as e:
+                logger.error("refresh_onpage failed for %s: %s", uuid, e, exc_info=True)
+                results_bucket["onpage"] = {"status": "error", "error": str(e)}
+
+        if "content_planning" in include:
+            try:
+                from seo_refresh_cron import _meets_tier, _refresh_content_planning
+                if tier and _meets_tier(tier, "Standard"):
+                    _refresh_content_planning(uuid, domain)
+                    results_bucket["content_planning"] = {"status": "ok"}
+                else:
+                    results_bucket["content_planning"] = {"status": "skipped", "reason": f"tier={tier} below Standard"}
+            except Exception as e:
+                logger.error("content_planning failed for %s: %s", uuid, e, exc_info=True)
+                results_bucket["content_planning"] = {"status": "error", "error": str(e)}
+
         try:
-            from seo_refresh_cron import refresh_ranks
-            count = refresh_ranks(uuid, domain)
-            results["ranks"] = {"status": "ok", "keywords_refreshed": count}
-        except Exception as e:
-            logger.error("refresh_ranks failed for %s: %s", uuid, e, exc_info=True)
-            results["ranks"] = {"status": "error", "error": str(e)}
+            from seo_dashboard import invalidate as _invalidate_dashboard
+            _invalidate_dashboard(uuid)
+        except Exception:
+            pass
 
-    # Step 2: AI mentions scan (Phase 1)
-    if "ai_mentions" in include:
-        try:
-            from seo_refresh_cron import refresh_ai_mentions
-            scan = refresh_ai_mentions(uuid, name, domain, city)
-            results["ai_mentions"] = {
-                "status":          "ok",
-                "composite_index": (scan or {}).get("composite_index"),
-                "scanned_at":      (scan or {}).get("scanned_at"),
-            }
-        except Exception as e:
-            logger.error("refresh_ai_mentions failed for %s: %s", uuid, e, exc_info=True)
-            results["ai_mentions"] = {"status": "error", "error": str(e)}
+        logger.info("seo-refresh steps done for %s in %.1fs: %s",
+                    uuid, _time.time() - step_t0, results_bucket)
 
-    # Step 3: On-page audit (Phase 1) — writes audit score + timestamp to HubSpot
-    if "onpage" in include:
-        try:
-            from seo_refresh_cron import refresh_onpage
-            score = refresh_onpage(company_id, domain)
-            results["onpage"] = {"status": "ok", "audit_score": score}
-        except Exception as e:
-            logger.error("refresh_onpage failed for %s: %s", uuid, e, exc_info=True)
-            results["onpage"] = {"status": "error", "error": str(e)}
+    if run_async:
+        # Kick off in a daemon thread so the HTTP response returns fast.
+        # Caller should poll downstream (HubDB rpm_ai_mentions, HubSpot
+        # company seo_last_audit_score, BQ seo_ranks_daily) to observe results.
+        import threading
+        t = threading.Thread(target=_run_steps, args=({},), daemon=True)
+        t.start()
+        return jsonify({
+            "status":        "started",
+            "company_id":    company_id,
+            "property_uuid": uuid,
+            "property_name": name,
+            "tier":          tier,
+            "includes":      sorted(include),
+            "note":          "Work running in background thread. Poll downstream to verify completion.",
+        }), 202
 
-    # Step 4: Content planning (Phase 2, Standard+ only)
-    if "content_planning" in include:
-        try:
-            from seo_refresh_cron import _meets_tier, _refresh_content_planning
-            if tier and _meets_tier(tier, "Standard"):
-                _refresh_content_planning(uuid, domain)
-                results["content_planning"] = {"status": "ok"}
-            else:
-                results["content_planning"] = {"status": "skipped", "reason": f"tier={tier} below Standard"}
-        except Exception as e:
-            logger.error("content_planning failed for %s: %s", uuid, e, exc_info=True)
-            results["content_planning"] = {"status": "error", "error": str(e)}
-
-    # Bust the dashboard cache so the next portal load sees fresh data
-    try:
-        from seo_dashboard import invalidate as _invalidate_dashboard
-        _invalidate_dashboard(uuid)
-    except Exception:
-        pass
-
+    # Synchronous path (default) — for fast steps and debugging
+    _run_steps(results)
     runtime = round(_time.time() - t0, 1)
-    logger.info("seo-refresh-property done for %s in %.1fs: %s", uuid, runtime, results)
     return jsonify({
         "status":          "ok",
         "company_id":      company_id,
