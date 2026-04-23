@@ -68,7 +68,15 @@ def insert_row(table_id: str, values: dict) -> str | None:
         r = requests.post(url, headers=_headers(), json={"values": values}, timeout=_TIMEOUT)
         r.raise_for_status()
     except requests.RequestException as e:
-        logger.warning("HubDB insert failed for %s: %s", table_id, e)
+        # Log the actual HubSpot error response body, not just the status code —
+        # helps diagnose schema mismatches like DATETIME format issues.
+        body = ""
+        try:
+            if getattr(e, "response", None) is not None:
+                body = e.response.text[:500]
+        except Exception:
+            pass
+        logger.warning("HubDB insert failed for %s: %s | response=%s", table_id, e, body)
         return None
     return r.json().get("id")
 

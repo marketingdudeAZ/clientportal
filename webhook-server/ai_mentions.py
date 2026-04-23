@@ -168,11 +168,15 @@ def scan_mentions(property_name: str, domain: str, city: str, neighborhood: str 
 def persist_snapshot(property_uuid: str, scan: dict) -> str | None:
     if not HUBDB_AI_MENTIONS_TABLE_ID:
         return None
+    # HubDB DATETIME columns require milliseconds-since-epoch as int, not ISO
+    # strings. The ISO string on the scan object is kept as-is for downstream
+    # consumers (get_latest_snapshot etc).
+    scanned_at_ms = _iso_to_epoch_ms(scan.get("scanned_at"))
     row_id = insert_row(
         HUBDB_AI_MENTIONS_TABLE_ID,
         {
             "property_uuid": property_uuid,
-            "scanned_at": scan["scanned_at"],
+            "scanned_at": scanned_at_ms,
             "composite_index": scan["composite_index"],
             "chatgpt_rate": scan["by_engine"]["chatgpt"]["cited_rate"],
             "perplexity_rate": scan["by_engine"]["perplexity"]["cited_rate"],
@@ -183,6 +187,21 @@ def persist_snapshot(property_uuid: str, scan: dict) -> str | None:
     )
     publish(HUBDB_AI_MENTIONS_TABLE_ID)
     return row_id
+
+
+def _iso_to_epoch_ms(iso_str):
+    """Convert an ISO-8601 datetime string to milliseconds-since-epoch int.
+    Falls back to current time if parsing fails."""
+    from datetime import datetime, timezone
+    if not iso_str:
+        return int(datetime.now(timezone.utc).timestamp() * 1000)
+    try:
+        # Python's fromisoformat handles most ISO strings (3.11+ handles 'Z' too)
+        s = iso_str.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        return int(dt.timestamp() * 1000)
+    except (ValueError, AttributeError):
+        return int(datetime.now(timezone.utc).timestamp() * 1000)
 
 
 def get_latest_snapshot(property_uuid: str) -> dict:

@@ -248,7 +248,8 @@ def _refresh_content_planning(uuid: str, domain: str) -> None:
         if HUBDB_CONTENT_DECAY_TABLE_ID and decay_rows:
             import json as _json
             from hubdb_helpers import insert_row, publish
-            now_iso = _dt.utcnow().isoformat() + "Z"
+            # HubDB DATETIME columns need epoch-milliseconds, not ISO strings.
+            detected_at_ms = int(_dt.utcnow().timestamp() * 1000)
             for row in decay_rows:
                 try:
                     insert_row(HUBDB_CONTENT_DECAY_TABLE_ID, {
@@ -258,7 +259,7 @@ def _refresh_content_planning(uuid: str, domain: str) -> None:
                         "affected_keywords_count": row["affected_keywords_count"],
                         "affected_keywords_json":  _json.dumps(row["affected_keywords"]),
                         "priority":                row["priority"],
-                        "detected_at":             now_iso,
+                        "detected_at":             detected_at_ms,
                         "status":                  "open",
                     })
                 except Exception as e:
