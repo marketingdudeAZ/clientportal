@@ -127,10 +127,13 @@ class TestHeyGenProvider(unittest.TestCase):
         # (silent-autoplay social feeds are the default viewing context).
         self.assertTrue(payload["caption"])
 
-        # Every scene must be avatar-free with a voice + background
+        # Every scene must be avatar-free — HeyGen v2's `character` field only
+        # accepts "avatar" or "talking_photo", so we OMIT it entirely for
+        # voice-over-only renders (fixed in 5739742). Voice + background still
+        # required.
         self.assertEqual(len(payload["video_inputs"]), 2)
         for s in payload["video_inputs"]:
-            self.assertEqual(s["character"], {"type": "none"})
+            self.assertNotIn("character", s)
             self.assertEqual(s["voice"]["voice_id"], "voice-123")
             self.assertEqual(s["voice"]["type"], "text")
             self.assertIn(s["background"]["type"], ("image", "video"))
