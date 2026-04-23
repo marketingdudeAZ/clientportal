@@ -268,6 +268,91 @@ class TestHeyGenProvider(unittest.TestCase):
         self.assertEqual(st["failed_reason"], "bad asset url")
 
 
+class TestHeyGenResponseShapes(unittest.TestCase):
+    """Hardening tests — HeyGen responses vary between plan tiers and API versions."""
+
+    def test_extract_video_id_from_wrapped_data(self):
+        from video_providers.heygen_provider import _extract_video_id
+        self.assertEqual(
+            _extract_video_id({"data": {"video_id": "vid-1"}, "error": None}),
+            "vid-1",
+        )
+
+    def test_extract_video_id_from_top_level(self):
+        from video_providers.heygen_provider import _extract_video_id
+        self.assertEqual(_extract_video_id({"video_id": "vid-top"}), "vid-top")
+
+    def test_extract_video_id_from_data_id(self):
+        from video_providers.heygen_provider import _extract_video_id
+        self.assertEqual(_extract_video_id({"data": {"id": "vid-id"}}), "vid-id")
+
+    def test_extract_video_id_missing_returns_empty(self):
+        from video_providers.heygen_provider import _extract_video_id
+        self.assertEqual(_extract_video_id({"data": {}}), "")
+        self.assertEqual(_extract_video_id({}), "")
+        self.assertEqual(_extract_video_id(None), "")
+
+    def test_post_raises_on_error_envelope_with_200(self):
+        """HeyGen sometimes returns HTTP 200 with {'error': {...}} for bad requests."""
+        from video_providers import HeyGenProvider, ProviderError
+        with patch("video_providers.heygen_provider.HEYGEN_API_KEY", "test-key"):
+            provider = HeyGenProvider()
+            fake_session = MagicMock()
+            fake_resp = MagicMock()
+            fake_resp.ok = True
+            fake_resp.json.return_value = {"error": {"code": "voice_not_found",
+                                                      "message": "Voice abc123 not found"}}
+            fake_session.post.return_value = fake_resp
+            provider._session_obj = fake_session
+
+            with self.assertRaises(ProviderError) as ctx:
+                provider._post("/v2/video/generate", {})
+            self.assertIn("Voice abc123 not found", ctx.exception.user_message)
+
+    def test_webhook_signature_header_variations(self):
+        """Verify alt signature header names (HeyGen-Signature, sha256= prefix) work."""
+        import hashlib, hmac
+        from video_providers import HeyGenProvider
+        body = '{"event_type":"video.success","event_data":{"video_id":"vid-1"}}'
+        sig = hmac.new(b"secret", body.encode(), hashlib.sha256).hexdigest()
+
+        with patch("video_providers.heygen_provider.HEYGEN_API_KEY", "t"), \
+             patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", "secret"):
+            provider = HeyGenProvider()
+            # Alt header name
+            ok = provider.normalize_webhook(
+                {"event_type": "video.success", "event_data": {"video_id": "vid-1"}},
+                headers={"HeyGen-Signature": sig, "_raw_body": body},
+            )
+            self.assertEqual(ok["job_id"], "vid-1")
+            # sha256= prefix
+            ok = provider.normalize_webhook(
+                {"event_type": "video.success", "event_data": {"video_id": "vid-1"}},
+                headers={"X-Signature": f"sha256={sig}", "_raw_body": body},
+            )
+            self.assertEqual(ok["job_id"], "vid-1")
+
+    def test_webhook_event_name_variants(self):
+        """Cover avatar_video.completed + video.completed + video.success."""
+        from video_providers import HeyGenProvider
+        with patch("video_providers.heygen_provider.HEYGEN_API_KEY", "t"), \
+             patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
+            provider = HeyGenProvider()
+            for event in ("avatar_video.success", "video.success",
+                          "avatar_video.completed", "video.completed"):
+                result = provider.normalize_webhook({
+                    "event_type": event,
+                    "event_data": {"video_id": "v1", "url": "https://x.mp4"},
+                })
+                self.assertEqual(result["status"], "done", f"{event} should map to done")
+            for event in ("avatar_video.fail", "video.failed"):
+                result = provider.normalize_webhook({
+                    "event_type": event,
+                    "event_data": {"video_id": "v1"},
+                })
+                self.assertEqual(result["status"], "failed", f"{event} should map to failed")
+
+
 class TestSceneplanValidator(unittest.TestCase):
     def test_drops_invalid_and_sanitizes(self):
         from video_pipeline_config import validate_scene_plan

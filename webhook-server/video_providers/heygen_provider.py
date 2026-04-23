@@ -40,6 +40,35 @@ _ASPECT_PIXELS = {
 TIMEOUT = 30  # seconds per request
 
 
+def _extract_video_id(resp: dict | None) -> str:
+    """Pull the video_id from whatever response shape HeyGen returns.
+
+    Observed shapes across v2 / v3 account tiers:
+        {"data": {"video_id": "..."}, "error": null}
+        {"video_id": "..."}
+        {"data": {"id": "..."}}
+    """
+    if not isinstance(resp, dict):
+        return ""
+    for path in (
+        ("data", "video_id"),
+        ("data", "id"),
+        ("video_id",),
+        ("id",),
+    ):
+        cur: dict | str = resp
+        ok = True
+        for key in path:
+            if isinstance(cur, dict) and key in cur:
+                cur = cur[key]
+            else:
+                ok = False
+                break
+        if ok and isinstance(cur, str) and cur:
+            return cur
+    return ""
+
+
 def _session() -> requests.Session:
     s = requests.Session()
     # HeyGen's v2 endpoints use a single `X-Api-Key` header.
@@ -75,11 +104,29 @@ class HeyGenProvider(VideoProvider):
                 detail = r.json()
             except Exception:
                 detail = {"text": r.text[:400]}
+            # HeyGen's error envelope is usually {"error": {"code", "message"}}
+            # or {"message": "..."} — extract the human-readable bit.
+            err_msg = ""
+            if isinstance(detail, dict):
+                err_obj = detail.get("error")
+                if isinstance(err_obj, dict):
+                    err_msg = err_obj.get("message") or err_obj.get("code") or ""
+                err_msg = err_msg or detail.get("message") or detail.get("msg") or ""
             raise ProviderError(
                 f"HeyGen POST {path} -> {r.status_code}: {detail}",
-                user_message=f"HeyGen rejected the request ({r.status_code}).",
+                user_message=(err_msg
+                              or f"HeyGen rejected the request ({r.status_code})."),
             )
-        return r.json()
+        # Some HeyGen tiers return a top-level {"error": {...}} body with HTTP
+        # 200 when the request is semantically invalid (e.g. unknown voice_id).
+        body = r.json()
+        err_obj = (body or {}).get("error")
+        if isinstance(err_obj, dict) and (err_obj.get("code") or err_obj.get("message")):
+            raise ProviderError(
+                f"HeyGen returned an error envelope: {err_obj}",
+                user_message=err_obj.get("message") or err_obj.get("code") or "HeyGen error",
+            )
+        return body
 
     def _get(self, path: str, params: dict | None = None) -> dict:
         url = f"{HEYGEN_BASE_URL.rstrip('/')}{path}"
@@ -164,9 +211,7 @@ class HeyGenProvider(VideoProvider):
                     script_fallback=clean_script,
                 )
                 resp = self._post("/v2/video/generate", body)
-                # v2 responses wrap data: {"data": {"video_id": "..."}, "error": null}
-                data = (resp or {}).get("data") or {}
-                heygen_video_id = data.get("video_id") or resp.get("video_id")
+                heygen_video_id = _extract_video_id(resp)
                 if not heygen_video_id:
                     raise ProviderError(f"HeyGen did not return a video_id: {resp}")
                 variants.append(self._variant_dict(
@@ -200,27 +245,53 @@ class HeyGenProvider(VideoProvider):
         return variants
 
     def get_job_status(self, job_id: str) -> dict:
-        try:
-            resp = self._get("/v1/video_status.get", params={"video_id": job_id})
-        except Exception as exc:
-            raise ProviderError(f"HeyGen status poll failed: {exc}") from exc
+        # HeyGen exposes status under v1 and v2 paths across different plan
+        # tiers. We try v1 first (widely available), fall back to v2 on 404
+        # so the polling works regardless of account tier.
+        resp: dict = {}
+        last_err: Exception | None = None
+        for path, key in (
+            ("/v1/video_status.get", "video_id"),
+            ("/v2/video_status.get", "video_id"),
+        ):
+            try:
+                resp = self._get(path, params={key: job_id})
+                if resp:
+                    break
+            except ProviderError as exc:
+                last_err = exc
+                # 404 is "this account uses a different endpoint" — try next.
+                if "404" in str(exc):
+                    continue
+                raise
+        if not resp and last_err:
+            raise last_err
 
-        data = (resp or {}).get("data") or {}
-        # HeyGen v1 statuses: "pending" | "processing" | "completed" | "failed"
+        data = (resp or {}).get("data") or resp or {}
+        # HeyGen statuses: "pending" | "processing" | "waiting" | "completed" |
+        # "failed". Some account tiers use "success" instead of "completed".
         raw_status = (data.get("status") or "pending").lower()
         normalized = {
             "pending":    "pending",
-            "processing": "running",
             "waiting":    "pending",
+            "processing": "running",
+            "running":    "running",
             "completed":  "done",
+            "success":    "done",
+            "done":       "done",
             "failed":     "failed",
+            "error":      "failed",
         }.get(raw_status, raw_status)
         return {
             "status":        normalized,
-            "video_url":     data.get("video_url") or data.get("video_url_caption"),
-            "thumbnail_url": data.get("thumbnail_url") or data.get("gif_url"),
+            "video_url":     (data.get("video_url")
+                              or data.get("video_url_caption")
+                              or data.get("url")),
+            "thumbnail_url": (data.get("thumbnail_url")
+                              or data.get("gif_url")
+                              or data.get("gif_download_url")),
             "duration_s":    data.get("duration"),
-            "failed_reason": data.get("error") or data.get("message"),
+            "failed_reason": data.get("error") or data.get("message") or data.get("msg"),
             "raw":           resp,
         }
 
@@ -230,8 +301,20 @@ class HeyGenProvider(VideoProvider):
         # Optional signature check. HeyGen signs webhook bodies with HMAC-SHA256
         # when a secret is configured in their dashboard; we verify it here so
         # nobody outside HeyGen can flip our variants to approved/done.
+        # Header name varies across HeyGen docs ("X-Signature", "HeyGen-Signature",
+        # "X-HeyGen-Signature") — probe all of them.
         if HEYGEN_WEBHOOK_SECRET:
-            sig = headers.get("X-Signature") or headers.get("x-signature") or ""
+            sig = ""
+            for key in ("X-Signature", "x-signature",
+                        "HeyGen-Signature", "heygen-signature",
+                        "X-HeyGen-Signature", "x-heygen-signature",
+                        "Signature", "signature"):
+                if headers.get(key):
+                    sig = headers[key]
+                    break
+            # Many providers prefix the hex digest with "sha256=" — strip it.
+            if sig.startswith("sha256="):
+                sig = sig[len("sha256="):]
             body_raw = headers.get("_raw_body", "")
             if body_raw:
                 expected = hmac.new(
@@ -245,10 +328,22 @@ class HeyGenProvider(VideoProvider):
         data = (payload or {}).get("event_data") or payload or {}
         event = (payload or {}).get("event_type") or data.get("status") or ""
 
+        # Event names HeyGen emits vary by account tier and webhook version.
+        # Cover the known success/failure names plus the v3 dot-notation.
+        ok_events = {
+            "avatar_video.success", "video.success",
+            "avatar_video.completed", "video.completed",
+            "video_translate.success",
+        }
+        fail_events = {
+            "avatar_video.fail", "video.fail",
+            "avatar_video.failed", "video.failed",
+            "video_translate.fail",
+        }
         status = "pending"
-        if event in ("avatar_video.success", "video.success") or data.get("status") == "completed":
+        if event in ok_events or data.get("status") in ("completed", "success", "done"):
             status = "done"
-        elif event in ("avatar_video.fail", "video.fail") or data.get("status") == "failed":
+        elif event in fail_events or data.get("status") in ("failed", "error"):
             status = "failed"
 
         # Pull the original callback_id back out and split it into variant_id
