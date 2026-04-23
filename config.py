@@ -17,6 +17,8 @@ HUBDB_SEO_COMPETITORS_TABLE_ID = os.getenv("HUBDB_SEO_COMPETITORS_TABLE_ID")
 HUBDB_AI_MENTIONS_TABLE_ID = os.getenv("HUBDB_AI_MENTIONS_TABLE_ID")
 HUBDB_CONTENT_BRIEFS_TABLE_ID = os.getenv("HUBDB_CONTENT_BRIEFS_TABLE_ID")
 HUBDB_CONTENT_DECAY_TABLE_ID = os.getenv("HUBDB_CONTENT_DECAY_TABLE_ID")
+HUBDB_PAID_KEYWORDS_TABLE_ID = os.getenv("HUBDB_PAID_KEYWORDS_TABLE_ID")
+HUBDB_BRIEF_DRAFTS_TABLE_ID = os.getenv("HUBDB_BRIEF_DRAFTS_TABLE_ID")
 
 # --- Phase 3: Keyword Research + Trends ---
 KEYWORD_RESEARCH_MAX_RESULTS = 500
@@ -45,6 +47,10 @@ BIGQUERY_SEO_AUDIT_TABLE = os.getenv("BIGQUERY_SEO_AUDIT_TABLE", "seo_onpage_aud
 GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID", "1jRqmEzhOIe72zgwIOcDZTyvde_Y0_jvayaLTZhva9mk")
 GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
 
+# --- KB Draft Google Drive/Sheets ---
+KB_DRAFT_FOLDER_ID = os.getenv("KB_DRAFT_FOLDER_ID", "12Af-DJNd0OqZ4a2GlfMnkSoi5aeKHfJS")
+KB_LOG_SHEET_ID    = os.getenv("KB_LOG_SHEET_ID",    "18oIx_CmBcTPDsG44YY3mFy2CfKhSjcTshfWYsa3gheI")
+
 # --- Google BigQuery ---
 BIGQUERY_PROJECT_ID = os.getenv("BIGQUERY_PROJECT_ID")
 BIGQUERY_SERVICE_ACCOUNT_JSON = os.getenv("BIGQUERY_SERVICE_ACCOUNT_JSON")
@@ -69,11 +75,13 @@ CLICKUP_LISTS = {
     "onboarding": os.getenv("CLICKUP_LIST_ONBOARDING"),
 }
 
-# --- Creatify (Marquee video pipeline) ---
-CREATIFY_API_ID = os.getenv("CREATIFY_API_ID", "")
+# --- Creatify Video Pipeline ---
+CREATIFY_API_ID  = os.getenv("CREATIFY_API_ID", "")
 CREATIFY_API_KEY = os.getenv("CREATIFY_API_KEY", "")
 CREATIFY_BASE_URL = "https://api.creatify.ai"
 CREATIFY_WEBHOOK_SECRET = os.getenv("CREATIFY_WEBHOOK_SECRET", "")
+# Custom no-avatar template UUID (built in Creatify's web editor).
+# Expects a single text variable named 'script'. Media passed via media_urls.
 CREATIFY_TEMPLATE_ID = os.getenv("CREATIFY_TEMPLATE_ID", "")
 
 # --- HeyGen (alternative video provider) ---
@@ -86,9 +94,6 @@ HEYGEN_WEBHOOK_SECRET = os.getenv("HEYGEN_WEBHOOK_SECRET", "")
 # Which provider to use when the enrollment request omits `provider`.
 VIDEO_PROVIDER_DEFAULT = os.getenv("VIDEO_PROVIDER_DEFAULT", "creatify")
 
-# --- ApartmentIQ ---
-APARTMENTIQ_TOKEN = os.getenv("ApartmentIQ_Token", "")
-
 # --- NinjaCat ---
 NINJACAT_EXPORT_BUCKET = os.getenv("NINJACAT_EXPORT_BUCKET")
 
@@ -97,7 +102,7 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", "8443"))
 
 # --- URLs ---
-PORTAL_BASE_URL = os.getenv("PORTAL_BASE_URL", "https://go.rpmliving.com/digital/client-portal")
+PORTAL_BASE_URL = os.getenv("PORTAL_BASE_URL", "https://digital.rpmliving.com/client-portal")
 NINJACAT_DASHBOARD_ID = os.getenv("NINJACAT_DASHBOARD_ID", "16866")
 
 # --- Service Tiers ---
@@ -121,6 +126,12 @@ SEO_FEATURE_MIN_TIER = {
     "content_decay":    "Premium",   # Phase 2
     "keyword_research": "Basic",     # Phase 3
     "trend_explorer":   "Standard",  # Phase 3
+    # Onboarding + Paid Media (Phase 4)
+    "brief_ai_draft":   "Local",     # all tiers can use AI draft
+    "onboarding_keywords": "Basic",  # seed + classify + route
+    "paid_targeting":   "Local",
+    "paid_audiences":   "Local",
+    "paid_creative":    "Local",
 }
 
 SOCIAL_POSTING_TIERS = {
