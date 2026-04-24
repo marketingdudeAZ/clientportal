@@ -64,11 +64,22 @@ class TestCreatifyProvider(unittest.TestCase):
             "video_thumbnail": "https://cdn.example/thumb.jpg",
             "failed_reason": None,
         }
-        parsed = CreatifyProvider().normalize_webhook(payload)
+        # FLASK_ENV=development skips the HMAC check so this unit test can
+        # exercise just the payload-parsing path.
+        with patch.dict(os.environ, {"FLASK_ENV": "development"}):
+            parsed = CreatifyProvider().normalize_webhook(payload)
         self.assertEqual(parsed["job_id"], "job-abc")
         self.assertEqual(parsed["status"], "done")
         self.assertEqual(parsed["video_url"], "https://cdn.example/video.mp4")
         self.assertEqual(parsed["thumbnail_url"], "https://cdn.example/thumb.jpg")
+
+    def test_webhook_parser_fails_closed_without_secret_in_production(self):
+        """Creatify webhook must refuse unsigned payloads outside dev."""
+        from video_providers import CreatifyProvider, ProviderError
+        with patch.dict(os.environ, {"FLASK_ENV": "production"}), \
+             patch("video_providers.creatify_provider.CREATIFY_WEBHOOK_SECRET", ""):
+            with self.assertRaises(ProviderError):
+                CreatifyProvider().normalize_webhook({"id": "x", "status": "done"})
 
 
 class TestHeyGenProvider(unittest.TestCase):
@@ -194,8 +205,10 @@ class TestHeyGenProvider(unittest.TestCase):
                 "gif_url": "https://cdn.heygen.com/thumb.gif",
             },
         }
-        # Ensure no secret is configured so we skip the signature check
-        with patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
+        # Dev mode + no secret = signature check skipped so the parse logic
+        # is exercised on its own.
+        with patch.dict(os.environ, {"FLASK_ENV": "development"}), \
+             patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
             result = self.provider.normalize_webhook(payload)
         self.assertEqual(result["job_id"], "vid-xyz")
         self.assertEqual(result["status"], "done")
@@ -214,7 +227,8 @@ class TestHeyGenProvider(unittest.TestCase):
                 "url": "https://cdn.heygen.com/video.mp4",
             },
         }
-        with patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
+        with patch.dict(os.environ, {"FLASK_ENV": "development"}), \
+             patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
             result = self.provider.normalize_webhook(payload)
         self.assertEqual(result["variant_id"], "var-abc")
         self.assertEqual(result["property_uuid"], "uuid-xyz-123")
@@ -341,7 +355,8 @@ class TestHeyGenResponseShapes(unittest.TestCase):
     def test_webhook_event_name_variants(self):
         """Cover avatar_video.completed + video.completed + video.success."""
         from video_providers import HeyGenProvider
-        with patch("video_providers.heygen_provider.HEYGEN_API_KEY", "t"), \
+        with patch.dict(os.environ, {"FLASK_ENV": "development"}), \
+             patch("video_providers.heygen_provider.HEYGEN_API_KEY", "t"), \
              patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
             provider = HeyGenProvider()
             for event in ("avatar_video.success", "video.success",

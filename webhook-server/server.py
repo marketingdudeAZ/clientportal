@@ -4680,6 +4680,10 @@ def client_brief_accept():
     """
     if request.method == "OPTIONS":
         return _preflight_response()
+    # Auth belongs to update_client_brief() which we delegate to, but the
+    # check is explicit here too so this alias route is readable on its own.
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
     return update_client_brief()
 
 
