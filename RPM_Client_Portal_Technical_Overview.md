@@ -7,7 +7,7 @@
 
 The RPM Client Portal is a branded self-service hub for RPM Living property clients, hosted on HubSpot CMS at `go.rpmliving.com`. It gives clients visibility into their marketing performance, active campaigns, spend details, and support tickets — all connected live to HubSpot CRM, HubSpot Service Hub, and the broader RPM marketing stack.
 
-The portal is a single HubSpot page template (`demo.html`) that talks to a Flask API server (the "webhook server") hosted on Railway at `https://clientportal-production-05ac.up.railway.app`. The Flask server is the only thing that holds API keys and talks to HubSpot.
+The portal is a HubSpot page template (`hubspot-cms/templates/client-portal.html`) that talks to a Flask API server (the "webhook server") deployed from `webhook-server/` to Railway. The Flask server is the only thing that holds API keys and talks to HubSpot. The live API URL is set per-environment via the `WEBHOOK_SERVER_URL` env var.
 
 ---
 
@@ -18,16 +18,21 @@ Client Browser (go.rpmliving.com)
         │
         │  fetch() calls over HTTPS
         ▼
-Railway Flask API Server
-(clientportal-production-05ac.up.railway.app)
+Railway Flask API Server  (webhook-server/, URL in WEBHOOK_SERVER_URL)
         │
-        ├── HubSpot CRM v3/v4 API  (company, deal, ticket, note, contact data)
-        ├── HubSpot Conversations API  (ticket threads + replies)
-        ├── HubSpot CMS Site Search API  (knowledge base search)
-        ├── HubSpot HubDB  (assets, recommendations, budget tiers)
-        ├── Google BigQuery  (portfolio data, red-light signals)
-        └── Anthropic Claude API  (digest summaries, KB article drafts)
+        ├── HubSpot CRM v3/v4 API   (company, deal, ticket, note, contact data)
+        ├── HubSpot Conversations API (ticket threads + replies)
+        ├── HubSpot CMS Site Search  (knowledge base search)
+        ├── HubSpot HubDB            (assets, recommendations, keywords, briefs, …)
+        ├── Google BigQuery          (portfolio, red-light signals, SEO history)
+        ├── DataForSEO               (SERP ranks, keyword research, on-page audit)
+        ├── HeyGen / Creatify        (Marquee video generation)
+        ├── ClickUp                  (task routing per channel)
+        └── Anthropic Claude         (digest summaries, KB drafts, scene planner)
 ```
+
+A per-component architecture walkthrough lives in `docs/ARCHITECTURE.md`.
+A step-by-step "run / deploy / add a thing" guide lives in `docs/RUNBOOK.md`.
 
 The portal page itself is a static HTML/JS file deployed to HubSpot's Design Manager. There is no separate database — all persistent data lives in HubSpot CRM or HubDB.
 
@@ -37,12 +42,12 @@ The portal page itself is a static HTML/JS file deployed to HubSpot's Design Man
 
 | Component | Details |
 |-----------|---------|
-| Portal frontend | HubSpot CMS page template, `custom/client-portal/client-portal.html` |
-| Demo page | `templates/rpm-portal-demo.html` (HubSpot Source Code) |
+| Portal frontend | HubSpot CMS page template, `hubspot-cms/templates/client-portal.html` (+ `partials/`) |
+| Offline prototype | `demo.html` at repo root — standalone HTML, NOT connected to the Flask API. Reference only. |
 | API server | Railway, auto-deploys from GitHub on push to `main` |
 | GitHub repo | `github.com/marketingdudeAZ/clientportal` |
-| Server runtime | Python 3, Flask, Gunicorn (2 workers, 120s timeout) |
-| Root directory | `webhook-server/` (Procfile: `web: gunicorn server:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120`) |
+| Server runtime | Python 3, Flask, Waitress (4 threads) — see `webhook-server/start.py` |
+| Build root | `webhook-server/` (Railway `railway.toml` + `Procfile` both live there) |
 | Environment variables | Set in Railway Variables tab (HUBSPOT_API_KEY, ANTHROPIC_API_KEY, etc.) |
 
 ---
@@ -205,12 +210,12 @@ The table shows: Property, PLE Status, RPM Market, Marketing Manager, Latest Dea
 
 ## Deployment Workflow
 
-1. Edit files locally in `/Users/kyleshipp/Client-Portal/`
+1. Edit files locally (repo root)
 2. `git push origin main` → Railway auto-deploys the `webhook-server/` folder via GitHub integration
-3. Upload `demo.html` to HubSpot via Source Code API (`PUT /cms/v3/source-code/published/content/templates/rpm-portal-demo.html`)
-4. Push live via `POST /cms/v3/pages/site-pages/210424772716/draft/push-live`
+3. Upload `hubspot-cms/templates/client-portal.html` (and partials) to HubSpot via the Source Code API — driven by `scripts/deploy_template.py`
+4. Push live via `POST /cms/v3/pages/site-pages/<PAGE_ID>/draft/push-live`
 
-Steps 3–4 are handled by `scripts/deploy_to_hubspot.py` (for the full CMS template bundle) or run inline for the demo page specifically.
+`scripts/deploy_to_hubspot.py` handles the full CMS bundle including css/js/images. See `DEPLOY.md` for the two HubL branches inside `client-portal.html` and where new JS has to land to run on property detail.
 
 ---
 
