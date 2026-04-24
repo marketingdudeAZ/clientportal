@@ -6,10 +6,13 @@ belongs in `creatify_client.py`, not here.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
+import os
 from typing import Any
 
-from config import CREATIFY_API_ID, CREATIFY_API_KEY
+from config import CREATIFY_API_ID, CREATIFY_API_KEY, CREATIFY_WEBHOOK_SECRET
 
 from .base import VideoProvider, ProviderError
 
@@ -77,6 +80,36 @@ class CreatifyProvider(VideoProvider):
 
     def normalize_webhook(self, payload: dict, headers: dict[str, str] | None = None) -> dict:
         from creatify_client import parse_webhook_payload
+
+        # Signature check — fail closed in production. Creatify signs with
+        # HMAC-SHA256 over the raw request body when a webhook secret is set
+        # in their dashboard. Matches the pattern used by HeyGen.
+        headers = headers or {}
+        is_dev = os.getenv("FLASK_ENV", "").lower() == "development"
+        if not CREATIFY_WEBHOOK_SECRET:
+            if not is_dev:
+                raise ProviderError("Creatify webhook secret not configured")
+        else:
+            sig = ""
+            for key in ("X-Creatify-Signature", "x-creatify-signature",
+                        "Creatify-Signature", "creatify-signature",
+                        "X-Signature", "x-signature",
+                        "Signature", "signature"):
+                if headers.get(key):
+                    sig = headers[key]
+                    break
+            if sig.startswith("sha256="):
+                sig = sig[len("sha256="):]
+            body_raw = headers.get("_raw_body", "")
+            if not sig or not body_raw:
+                raise ProviderError("Creatify webhook missing signature")
+            expected = hmac.new(
+                CREATIFY_WEBHOOK_SECRET.encode(),
+                body_raw.encode() if isinstance(body_raw, str) else body_raw,
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(sig, expected):
+                raise ProviderError("Creatify webhook signature mismatch")
 
         parsed = parse_webhook_payload(payload or {})
         return {

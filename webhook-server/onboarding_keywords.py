@@ -129,8 +129,11 @@ def _persist_paid(property_uuid: str, rows: list[dict]) -> int:
             "generated_at":      now_ms,
             "approved":          False,
         }
-        if insert_row(HUBDB_PAID_KEYWORDS_TABLE_ID, values):
-            inserted += 1
+        try:
+            if insert_row(HUBDB_PAID_KEYWORDS_TABLE_ID, values):
+                inserted += 1
+        except Exception as e:
+            logger.warning("onboarding_keywords: insert failed for %s: %s", kw, e)
     if inserted:
         try:
             publish(HUBDB_PAID_KEYWORDS_TABLE_ID)

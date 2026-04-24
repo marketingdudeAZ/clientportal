@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, request, jsonify, make_response
 from config import WEBHOOK_PORT
+from auth import require_internal_key
 
 # Heavy modules are imported lazily inside each route handler so Flask
 # can boot and answer /health in < 1 second (Railway health-check window).
@@ -550,6 +551,12 @@ def asset_upload():
     if request.method == "OPTIONS":
         return _preflight_response()
 
+    # Require the portal identity header, same shape as every other state-
+    # changing route. Not cryptographic proof of identity — interim guard
+    # until signed-request auth lands.
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
+
     import json as _json
 
     property_uuid = request.form.get("property_uuid")
@@ -610,6 +617,9 @@ def asset_analyze():
     """
     if request.method == "OPTIONS":
         return _preflight_response()
+
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
 
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
@@ -721,13 +731,13 @@ def red_light_run():
     if request.method == "OPTIONS":
         return _preflight_response()
 
-    # Internal endpoint — validate a simple bearer token in production
-    # For now, check that request comes from an allowed origin or has X-Portal-Email
+    # Dual-auth: portal user (X-Portal-Email) OR server-to-server (X-Internal-Key).
+    import hmac as _hmac
     email = request.headers.get("X-Portal-Email", "").lower().strip()
     internal_key = request.headers.get("X-Internal-Key", "")
     expected_key = os.getenv("INTERNAL_API_KEY", "")
-
-    if not email and not (expected_key and internal_key == expected_key):
+    key_ok = bool(expected_key and internal_key and _hmac.compare_digest(expected_key, internal_key))
+    if not email and not key_ok:
         return jsonify({"error": "Authentication required"}), 401
 
     payload = request.get_json()
@@ -747,6 +757,7 @@ def red_light_run():
 
 
 @app.route("/api/red-light/ingest-csv", methods=["POST", "OPTIONS"])
+@require_internal_key
 def red_light_ingest_csv():
     """Bulk ingest a NinjaCat CSV export, score all properties, run full pipeline.
 
@@ -758,11 +769,6 @@ def red_light_ingest_csv():
     """
     if request.method == "OPTIONS":
         return _preflight_response()
-
-    internal_key = request.headers.get("X-Internal-Key", "")
-    expected_key = os.getenv("INTERNAL_API_KEY", "")
-    if not (expected_key and internal_key == expected_key):
-        return jsonify({"error": "Authentication required"}), 401
 
     # Accept either file upload or raw body
     if request.files.get("csv"):
@@ -790,6 +796,7 @@ def red_light_ingest_csv():
 
 
 @app.route("/api/internal/sync-properties-to-bq", methods=["POST", "OPTIONS"])
+@require_internal_key
 def sync_properties_to_bq():
     """Nightly sync of HubSpot company records into BigQuery rpm_properties.
 
@@ -805,11 +812,6 @@ def sync_properties_to_bq():
     """
     if request.method == "OPTIONS":
         return _preflight_response()
-
-    internal_key = request.headers.get("X-Internal-Key", "")
-    expected_key = os.getenv("INTERNAL_API_KEY", "")
-    if not (expected_key and internal_key == expected_key):
-        return jsonify({"error": "Authentication required"}), 401
 
     try:
         from bigquery_client import is_bigquery_configured, upsert_rpm_properties
@@ -876,6 +878,7 @@ def sync_properties_to_bq():
 
 
 @app.route("/api/internal/seo-refresh-property", methods=["POST", "OPTIONS"])
+@require_internal_key
 def seo_refresh_property():
     """Trigger a full SEO refresh for ONE property — same functions the weekly
     cron runs, scoped to a single company. Intended for onboarding new SEO
@@ -894,11 +897,6 @@ def seo_refresh_property():
     """
     if request.method == "OPTIONS":
         return _preflight_response()
-
-    expected = os.getenv("INTERNAL_API_KEY", "")
-    internal_key = request.headers.get("X-Internal-Key", "")
-    if not (expected and internal_key == expected):
-        return jsonify({"error": "Authentication required"}), 401
 
     payload = request.get_json(silent=True) or {}
     company_id = (payload.get("company_id") or "").strip()
@@ -3932,8 +3930,15 @@ def seo_keywords():
         "branded": bool(payload.get("branded", False)),
         "target_position": payload.get("target_position"),
     }
-    row_id = insert_row(HUBDB_SEO_KEYWORDS_TABLE_ID, values)
-    publish(HUBDB_SEO_KEYWORDS_TABLE_ID)
+    try:
+        row_id = insert_row(HUBDB_SEO_KEYWORDS_TABLE_ID, values)
+    except Exception as e:
+        logger.error("seo_keywords insert failed: %s", e)
+        return jsonify({"error": "HubDB insert failed", "detail": str(e)}), 500
+    try:
+        publish(HUBDB_SEO_KEYWORDS_TABLE_ID)
+    except Exception as e:
+        logger.warning("seo_keywords publish failed (row saved, draft only): %s", e)
     from seo_dashboard import invalidate
     invalidate(property_uuid)
     return jsonify({"status": "created", "id": row_id})
@@ -3952,8 +3957,15 @@ def seo_keyword_delete(row_id):
         return gate
     from config import HUBDB_SEO_KEYWORDS_TABLE_ID
     from hubdb_helpers import delete_row, publish
-    ok = delete_row(HUBDB_SEO_KEYWORDS_TABLE_ID, row_id)
-    publish(HUBDB_SEO_KEYWORDS_TABLE_ID)
+    try:
+        ok = delete_row(HUBDB_SEO_KEYWORDS_TABLE_ID, row_id)
+    except Exception as e:
+        logger.error("seo_keyword delete failed: %s", e)
+        return jsonify({"error": "HubDB delete failed", "detail": str(e)}), 500
+    try:
+        publish(HUBDB_SEO_KEYWORDS_TABLE_ID)
+    except Exception as e:
+        logger.warning("seo_keyword publish failed (row deleted, draft only): %s", e)
     from seo_dashboard import invalidate
     invalidate(property_uuid)
     return jsonify({"status": "deleted" if ok else "error"})
@@ -4000,12 +4012,19 @@ def seo_competitors():
     domain = (payload.get("competitor_domain") or "").strip().lower()
     if not domain:
         return jsonify({"error": "competitor_domain is required"}), 400
-    row_id = insert_row(HUBDB_SEO_COMPETITORS_TABLE_ID, {
-        "property_uuid": property_uuid,
-        "competitor_domain": domain,
-        "label": payload.get("label", ""),
-    })
-    publish(HUBDB_SEO_COMPETITORS_TABLE_ID)
+    try:
+        row_id = insert_row(HUBDB_SEO_COMPETITORS_TABLE_ID, {
+            "property_uuid": property_uuid,
+            "competitor_domain": domain,
+            "label": payload.get("label", ""),
+        })
+    except Exception as e:
+        logger.error("seo_competitors insert failed: %s", e)
+        return jsonify({"error": "HubDB insert failed", "detail": str(e)}), 500
+    try:
+        publish(HUBDB_SEO_COMPETITORS_TABLE_ID)
+    except Exception as e:
+        logger.warning("seo_competitors publish failed (row saved, draft only): %s", e)
     return jsonify({"status": "created", "id": row_id})
 
 
