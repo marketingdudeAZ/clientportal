@@ -56,10 +56,13 @@ class TierGatingTests(unittest.TestCase):
         """Basic tier gets top 3 decay rows + upgrade message."""
         full_rows = [{"url": f"u{i}", "avg_drop": 10, "affected_keywords_count": 3,
                       "affected_keywords": [], "priority": "medium"} for i in range(5)]
+        # The decay route reads from HubDB when HUBDB_CONTENT_DECAY_TABLE_ID
+        # is set, otherwise falls through to content_planner.detect_decay.
+        # In tests neither is configured, so we patch both paths to be safe.
         with patch("seo_entitlement.get_seo_tier") as mock_tier, \
-             patch("hubdb_helpers.read_rows") as mock_read:
+             patch("hubdb_helpers.read_rows", return_value=full_rows), \
+             patch("content_planner.detect_decay", return_value=full_rows):
             mock_tier.return_value = "Basic"
-            mock_read.return_value = full_rows
             r = self.client.get(
                 "/api/content/decay?company_id=123&property_uuid=456",
                 headers=_auth_headers(),
@@ -75,9 +78,9 @@ class TierGatingTests(unittest.TestCase):
         full_rows = [{"url": f"u{i}", "avg_drop": 10, "affected_keywords_count": 3,
                       "affected_keywords": [], "priority": "medium"} for i in range(5)]
         with patch("seo_entitlement.get_seo_tier") as mock_tier, \
-             patch("hubdb_helpers.read_rows") as mock_read:
+             patch("hubdb_helpers.read_rows", return_value=full_rows), \
+             patch("content_planner.detect_decay", return_value=full_rows):
             mock_tier.return_value = "Premium"
-            mock_read.return_value = full_rows
             r = self.client.get(
                 "/api/content/decay?company_id=123&property_uuid=456",
                 headers=_auth_headers(),

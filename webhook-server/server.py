@@ -3898,14 +3898,25 @@ def video_generate():
 
 
 def _resolve_seo_context():
-    """Pull email, company_id, property_uuid, tier. Returns tuple or Flask response."""
+    """Pull email, company_id, property_uuid, tier.
+
+    On success: returns a 4-tuple (email, company_id, property_uuid, tier).
+    On error: returns a single Flask Response with status set — callers
+    can use `if not isinstance(ctx, tuple): return ctx` to short-circuit.
+    Important: error returns are NOT (response, status) tuples here, because
+    a tuple would be indistinguishable from the success 4-tuple.
+    """
     email = request.headers.get("X-Portal-Email", "").lower().strip()
     if not email:
-        return jsonify({"error": "Authentication required"}), 401
+        resp = jsonify({"error": "Authentication required"})
+        resp.status_code = 401
+        return resp
     company_id = request.args.get("company_id") or (request.get_json(silent=True) or {}).get("company_id")
     property_uuid = request.args.get("property_uuid") or (request.get_json(silent=True) or {}).get("property_uuid")
     if not (company_id and property_uuid):
-        return jsonify({"error": "company_id and property_uuid are required"}), 400
+        resp = jsonify({"error": "company_id and property_uuid are required"})
+        resp.status_code = 400
+        return resp
     from seo_entitlement import get_seo_tier
     tier = get_seo_tier(str(company_id))
     return email, str(company_id), str(property_uuid), tier

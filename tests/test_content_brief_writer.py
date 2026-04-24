@@ -83,17 +83,15 @@ class BuildUserMessageTests(unittest.TestCase):
 
 class GenerateBriefTests(unittest.TestCase):
     def test_valid_json_response_parsed_correctly(self):
+        # generate_brief reads ANTHROPIC_API_KEY from config at call time
+        # via `from config import ANTHROPIC_API_KEY`, so the patch lives on
+        # config.* — that's where the import resolves it.
         with patch("anthropic.Anthropic") as mock_cls, \
-             patch.object(cbw, "ANTHROPIC_API_KEY", "fake-key", create=False):
-            # The real import chain resolves ANTHROPIC_API_KEY via config — we patch config here instead.
-            pass
-        with patch("anthropic.Anthropic") as mock_cls, \
-             patch("content_brief_writer._build_user_message") as mock_build:
+             patch("content_brief_writer._build_user_message") as mock_build, \
+             patch("config.ANTHROPIC_API_KEY", "sk-test"):
             mock_cls.return_value = _mock_anthropic_response(VALID_BRIEF_JSON)
             mock_build.return_value = "fake prompt"
-            # config.ANTHROPIC_API_KEY is set via config.py import; patch the value
-            with patch("config.ANTHROPIC_API_KEY", "sk-test"):
-                brief = cbw.generate_brief(_sample_cluster())
+            brief = cbw.generate_brief(_sample_cluster())
         self.assertEqual(brief["h1"], "Apartments in Winter Garden, FL: A 2026 Renter's Guide")
         self.assertEqual(len(brief["outline"]), 2)
         self.assertEqual(brief["target_word_count"], 1800)

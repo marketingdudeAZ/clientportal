@@ -22,17 +22,21 @@ paid_bp = Blueprint("paid", __name__)
 
 
 def _resolve_paid_context():
-    """Return (email, company_id, tier) or a Flask response on reject.
-
-    Same shape as server.py's `_resolve_seo_context` but with paid_* feature
-    keys. Kept here because only Paid routes use it.
+    """Return (email, company_id, tier) on success, or a Flask Response
+    on auth/validation reject. Errors return a Response (not a tuple) so
+    callers' `if not isinstance(ctx, tuple)` check can distinguish error
+    vs. success — same pattern as server.py's `_resolve_seo_context`.
     """
     email = request.headers.get("X-Portal-Email", "").lower().strip()
     if not email:
-        return jsonify({"error": "Authentication required"}), 401
+        resp = jsonify({"error": "Authentication required"})
+        resp.status_code = 401
+        return resp
     company_id = request.args.get("company_id") or (request.get_json(silent=True) or {}).get("company_id")
     if not company_id:
-        return jsonify({"error": "company_id is required"}), 400
+        resp = jsonify({"error": "company_id is required"})
+        resp.status_code = 400
+        return resp
     from seo_entitlement import get_seo_tier
     tier = get_seo_tier(str(company_id))
     return email, str(company_id), tier
