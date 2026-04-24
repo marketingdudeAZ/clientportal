@@ -7,7 +7,7 @@
 
 The RPM Client Portal is a branded self-service hub for RPM Living property clients, hosted on HubSpot CMS at `go.rpmliving.com`. It gives clients visibility into their marketing performance, active campaigns, spend details, and support tickets — all connected live to HubSpot CRM, HubSpot Service Hub, and the broader RPM marketing stack.
 
-The portal is a HubSpot page template (`hubspot-cms/templates/client-portal.html`) that talks to a Flask API server (the "webhook server") deployed from `webhook-server/` to Railway. The Flask server is the only thing that holds API keys and talks to HubSpot. The live API URL is set per-environment via the `WEBHOOK_SERVER_URL` env var.
+The portal is a HubSpot page template (`hubspot-cms/templates/client-portal.html`) that talks to a Flask API server (the "webhook server") deployed from `webhook-server/` to Render. The Flask server is the only thing that holds API keys and talks to HubSpot. The live API URL is set per-environment via the `WEBHOOK_SERVER_URL` env var.
 
 ---
 
@@ -18,7 +18,7 @@ Client Browser (go.rpmliving.com)
         │
         │  fetch() calls over HTTPS
         ▼
-Railway Flask API Server  (webhook-server/, URL in WEBHOOK_SERVER_URL)
+Render Flask API Server  (webhook-server/, URL in WEBHOOK_SERVER_URL)
         │
         ├── HubSpot CRM v3/v4 API   (company, deal, ticket, note, contact data)
         ├── HubSpot Conversations API (ticket threads + replies)
@@ -44,11 +44,11 @@ The portal page itself is a static HTML/JS file deployed to HubSpot's Design Man
 |-----------|---------|
 | Portal frontend | HubSpot CMS page template, `hubspot-cms/templates/client-portal.html` (+ `partials/`) |
 | Offline prototype | `demo.html` at repo root — standalone HTML, NOT connected to the Flask API. Reference only. |
-| API server | Railway, auto-deploys from GitHub on push to `main` |
+| API server | Render, auto-deploys from GitHub on push to `main` |
 | GitHub repo | `github.com/marketingdudeAZ/clientportal` |
 | Server runtime | Python 3, Flask, Waitress (4 threads) — see `webhook-server/start.py` |
-| Build root | `webhook-server/` (Railway `railway.toml` + `Procfile` both live there) |
-| Environment variables | Set in Railway Variables tab (HUBSPOT_API_KEY, ANTHROPIC_API_KEY, etc.) |
+| Build root | `webhook-server/` (`Procfile` lives there; Render service is configured to point at this subdir) |
+| Environment variables | Set in the Render service's Environment tab (HUBSPOT_API_KEY, ANTHROPIC_API_KEY, etc.) |
 
 ---
 
@@ -170,7 +170,7 @@ The table shows: Property, PLE Status, RPM Market, Marketing Manager, Latest Dea
 | PATCH | `/api/client-brief` | Update client brief fields |
 | GET | `/api/spend-sheet` | Full spend table across all properties (30-min cache) |
 | GET | `/api/budget` | Budget tier data from HubDB |
-| GET | `/health` | Health check (Railway uptime monitoring) |
+| GET | `/health` | Health check (Render uptime monitoring) |
 
 ---
 
@@ -202,7 +202,7 @@ The table shows: Property, PLE Status, RPM Market, Marketing Manager, Latest Dea
 ## Authentication & Security
 
 - All API calls from the portal include an `X-Portal-Email` header (injected by HubSpot's personalization tokens) which the server uses to identify the requesting client
-- API keys (HubSpot, Anthropic, ClickUp, Google) are stored only as Railway environment variables — never in code
+- API keys (HubSpot, Anthropic, ClickUp, Google) are stored only as Render environment variables — never in code
 - CORS is locked to the HubSpot portal domain
 - HubSpot webhook payloads are validated via HMAC signature (`hmac_validator.py`)
 
@@ -211,7 +211,7 @@ The table shows: Property, PLE Status, RPM Market, Marketing Manager, Latest Dea
 ## Deployment Workflow
 
 1. Edit files locally (repo root)
-2. `git push origin main` → Railway auto-deploys the `webhook-server/` folder via GitHub integration
+2. `git push origin main` → Render auto-deploys the `webhook-server/` folder via GitHub integration
 3. Upload `hubspot-cms/templates/client-portal.html` (and partials) to HubSpot via the Source Code API — driven by `scripts/deploy_template.py`
 4. Push live via `POST /cms/v3/pages/site-pages/<PAGE_ID>/draft/push-live`
 
@@ -219,7 +219,7 @@ The table shows: Property, PLE Status, RPM Market, Marketing Manager, Latest Dea
 
 ---
 
-## Environment Variables (Railway)
+## Environment Variables (Render)
 
 | Variable | Used For |
 |----------|---------|
@@ -276,4 +276,4 @@ python scripts/import_clickup_kb.py --all-lists --dry-run   # preview only
 - **KB article creation**: HubSpot has no public API to create KB articles. Drafts are written to a Google Sheet (full text) and attempted in Google Drive (best-effort). AMs paste from the sheet into HubSpot KB UI.
 - **Google Docs service account quota**: Service accounts have no personal Drive storage quota. Docs creation is best-effort; the full article text is always saved to the Sheet as a fallback.
 - **Spend sheet first load**: The first build after a server restart takes ~60 seconds (1,300+ companies × multiple API calls). A background thread pre-warms the cache on startup; subsequent loads return in under 1 second.
-- **HubSpot CSP**: HubSpot injects `upgrade-insecure-requests` on hosted pages, which means all fetch() calls must go to HTTPS endpoints. This is why the server is on Railway with a real TLS certificate rather than `localhost`.
+- **HubSpot CSP**: HubSpot injects `upgrade-insecure-requests` on hosted pages, which means all fetch() calls must go to HTTPS endpoints. This is why the server is on Render with a real TLS certificate rather than `localhost`.

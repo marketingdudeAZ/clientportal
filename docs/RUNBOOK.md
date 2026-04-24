@@ -24,24 +24,25 @@ Hit `http://localhost:8080/health` to confirm the server is up and the route map
 
 ## Deploy to production
 
-Deploys are GitOps-driven. Pushing to `main` triggers Railway.
+Deploys are GitOps-driven. Pushing to `main` triggers Render.
 
 ```bash
-# Normal release: land on main and let Railway deploy automatically
+# Normal release: land on main and let Render deploy automatically
 git push origin main
 ```
 
-Railway configuration (already in the repo, do not re-create):
-- `webhook-server/railway.toml` — start command, health check, restart policy
-- `webhook-server/Procfile` — `web: python start.py` fallback
+Render configuration:
+- The Render service is configured (via the Render dashboard) with `webhook-server/` as the build root.
+- `webhook-server/Procfile` — `web: python start.py`
 - `webhook-server/requirements.txt` — authoritative dependency list
+- Cron jobs (e.g. nightly `sync-properties-to-bq`, weekly SEO refresh) run as separate Render Cron services hitting `/api/internal/*` with `X-Internal-Key`.
 
 Watch the deploy:
-1. Open the Railway dashboard for the project.
+1. Open the Render dashboard for the service.
 2. Tail the Deploy Logs. `start.py` prints numbered `STEP` markers so you can see exactly where a crash happens (Python import, Flask app load, Waitress bind).
-3. The health check hits `/health` with a 300s grace window. If it fails, Railway rolls back.
+3. The health check hits `/health`. If it fails, the deploy doesn't go live.
 
-**Rolling the portal template** (HubSpot CMS side) is separate from Railway:
+**Rolling the portal template** (HubSpot CMS side) is separate from Render:
 
 ```bash
 python scripts/deploy_template.py       # pushes hubspot-cms/templates/ to Design Manager
@@ -82,11 +83,11 @@ See `DEPLOY.md` for the HubL branch trap: new JS appended to `client-portal.html
 
 | Symptom                                              | First thing to check                                          |
 |------------------------------------------------------|---------------------------------------------------------------|
-| `/health` 404 or 502 in Railway                      | Deploy logs — look for a `STEP` marker that didn't complete   |
+| `/health` 404 or 502 in Render                       | Deploy logs — look for a `STEP` marker that didn't complete   |
 | Portal page loads but API calls 401                  | `X-Portal-Email` header not reaching Flask — inspect Network tab |
 | SEO refresh finishes but dashboard empty             | HubDB DATETIME format — check logs for `HubDB insert failed` with response body |
-| Video webhook returns 401 in production              | `HEYGEN_WEBHOOK_SECRET` or `CREATIFY_WEBHOOK_SECRET` not set — add to Railway |
-| Config change deployed but not picked up             | Railway requires an explicit Redeploy after env var edits     |
+| Video webhook returns 401 in production              | A webhook secret env var IS set but the provider is sending mismatched/missing signatures. If you don't sign webhooks at all, leave `HEYGEN_WEBHOOK_SECRET` / `CREATIFY_WEBHOOK_SECRET` blank. |
+| Config change deployed but not picked up             | Render requires an explicit Redeploy after env var edits      |
 | Portal template updated but property detail unchanged| HubL branch trap — see `DEPLOY.md`                            |
 | `ModuleNotFoundError` at startup                     | Dep missing from `webhook-server/requirements.txt` (root file is a re-export, edit the subdir version) |
 

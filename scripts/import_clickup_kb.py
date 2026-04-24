@@ -300,7 +300,7 @@ def main():
     if args.all_lists:
         lists = get_clickup_list_ids_from_env()
         if not lists:
-            logger.error("No CLICKUP_LIST_* env vars found. Set them in .env or Railway.")
+            logger.error("No CLICKUP_LIST_* env vars found. Set them in .env or Render.")
             sys.exit(1)
         logger.info("Using lists from env: %s", list(lists.keys()))
     else:

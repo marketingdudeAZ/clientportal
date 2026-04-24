@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
-import os
 from typing import Any
 
 from config import CREATIFY_API_ID, CREATIFY_API_KEY, CREATIFY_WEBHOOK_SECRET
@@ -81,15 +80,12 @@ class CreatifyProvider(VideoProvider):
     def normalize_webhook(self, payload: dict, headers: dict[str, str] | None = None) -> dict:
         from creatify_client import parse_webhook_payload
 
-        # Signature check — fail closed in production. Creatify signs with
-        # HMAC-SHA256 over the raw request body when a webhook secret is set
-        # in their dashboard. Matches the pattern used by HeyGen.
+        # Signature check is OPT-IN. We don't enable webhook signing on
+        # Creatify's side, so leaving CREATIFY_WEBHOOK_SECRET unset is the
+        # supported configuration. If the secret IS set we validate
+        # strictly — same pattern as HeyGen.
         headers = headers or {}
-        is_dev = os.getenv("FLASK_ENV", "").lower() == "development"
-        if not CREATIFY_WEBHOOK_SECRET:
-            if not is_dev:
-                raise ProviderError("Creatify webhook secret not configured")
-        else:
+        if CREATIFY_WEBHOOK_SECRET:
             sig = ""
             for key in ("X-Creatify-Signature", "x-creatify-signature",
                         "Creatify-Signature", "creatify-signature",

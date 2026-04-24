@@ -56,6 +56,8 @@ class TestCreatifyProvider(unittest.TestCase):
                 )
 
     def test_webhook_parser_normalizes(self):
+        """When no Creatify webhook secret is set, parsing proceeds without
+        signature validation. This is the supported configuration today."""
         from video_providers import CreatifyProvider
         payload = {
             "id": "job-abc",
@@ -64,22 +66,42 @@ class TestCreatifyProvider(unittest.TestCase):
             "video_thumbnail": "https://cdn.example/thumb.jpg",
             "failed_reason": None,
         }
-        # FLASK_ENV=development skips the HMAC check so this unit test can
-        # exercise just the payload-parsing path.
-        with patch.dict(os.environ, {"FLASK_ENV": "development"}):
+        with patch("video_providers.creatify_provider.CREATIFY_WEBHOOK_SECRET", ""):
             parsed = CreatifyProvider().normalize_webhook(payload)
         self.assertEqual(parsed["job_id"], "job-abc")
         self.assertEqual(parsed["status"], "done")
         self.assertEqual(parsed["video_url"], "https://cdn.example/video.mp4")
         self.assertEqual(parsed["thumbnail_url"], "https://cdn.example/thumb.jpg")
 
-    def test_webhook_parser_fails_closed_without_secret_in_production(self):
-        """Creatify webhook must refuse unsigned payloads outside dev."""
+    def test_webhook_signature_enforced_when_secret_set(self):
+        """If CREATIFY_WEBHOOK_SECRET IS configured, an unsigned/wrong
+        payload must be rejected. Upgrade path for when signing is enabled."""
+        import hashlib
+        import hmac as _hmac
         from video_providers import CreatifyProvider, ProviderError
-        with patch.dict(os.environ, {"FLASK_ENV": "production"}), \
-             patch("video_providers.creatify_provider.CREATIFY_WEBHOOK_SECRET", ""):
+
+        body = '{"id":"x","status":"done"}'
+        good_sig = _hmac.new(b"secret", body.encode(), hashlib.sha256).hexdigest()
+
+        with patch("video_providers.creatify_provider.CREATIFY_WEBHOOK_SECRET", "secret"):
+            # Missing signature header → reject
             with self.assertRaises(ProviderError):
-                CreatifyProvider().normalize_webhook({"id": "x", "status": "done"})
+                CreatifyProvider().normalize_webhook(
+                    {"id": "x", "status": "done"},
+                    headers={"_raw_body": body},
+                )
+            # Wrong signature → reject
+            with self.assertRaises(ProviderError):
+                CreatifyProvider().normalize_webhook(
+                    {"id": "x", "status": "done"},
+                    headers={"X-Creatify-Signature": "0" * 64, "_raw_body": body},
+                )
+            # Good signature → pass
+            parsed = CreatifyProvider().normalize_webhook(
+                {"id": "x", "status": "done"},
+                headers={"X-Creatify-Signature": good_sig, "_raw_body": body},
+            )
+            self.assertEqual(parsed["job_id"], "x")
 
 
 class TestHeyGenProvider(unittest.TestCase):
@@ -205,10 +227,8 @@ class TestHeyGenProvider(unittest.TestCase):
                 "gif_url": "https://cdn.heygen.com/thumb.gif",
             },
         }
-        # Dev mode + no secret = signature check skipped so the parse logic
-        # is exercised on its own.
-        with patch.dict(os.environ, {"FLASK_ENV": "development"}), \
-             patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
+        # No secret configured → no signature check (the supported config).
+        with patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
             result = self.provider.normalize_webhook(payload)
         self.assertEqual(result["job_id"], "vid-xyz")
         self.assertEqual(result["status"], "done")
@@ -227,8 +247,7 @@ class TestHeyGenProvider(unittest.TestCase):
                 "url": "https://cdn.heygen.com/video.mp4",
             },
         }
-        with patch.dict(os.environ, {"FLASK_ENV": "development"}), \
-             patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
+        with patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
             result = self.provider.normalize_webhook(payload)
         self.assertEqual(result["variant_id"], "var-abc")
         self.assertEqual(result["property_uuid"], "uuid-xyz-123")
@@ -355,8 +374,7 @@ class TestHeyGenResponseShapes(unittest.TestCase):
     def test_webhook_event_name_variants(self):
         """Cover avatar_video.completed + video.completed + video.success."""
         from video_providers import HeyGenProvider
-        with patch.dict(os.environ, {"FLASK_ENV": "development"}), \
-             patch("video_providers.heygen_provider.HEYGEN_API_KEY", "t"), \
+        with patch("video_providers.heygen_provider.HEYGEN_API_KEY", "t"), \
              patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
             provider = HeyGenProvider()
             for event in ("avatar_video.success", "video.success",

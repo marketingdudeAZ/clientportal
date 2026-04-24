@@ -23,7 +23,7 @@ If something here contradicts the code, the code wins — open a PR to fix the d
                                        ▼
                        ┌───────────────────────────────┐
                        │  Flask API — webhook-server/  │
-                       │  Hosted on Railway             │
+                       │  Hosted on Render              │
                        │                                │
                        │  Entry point: start.py →       │
                        │    server.py (4.8k lines,      │
@@ -146,7 +146,7 @@ Core routes live in `webhook-server/server.py` (to be split into `routes/` bluep
 
 ## Out-of-tree but part of the system
 
-- **Railway project** — runs the Flask server. Env vars live in Railway Variables. Auto-deploys `main`.
+- **Render service** — runs the Flask server. Env vars live in the Render service's Environment tab. Auto-deploys `main`. Render Cron services trigger the `/api/internal/*` endpoints on schedule.
 - **HubSpot portal** — pages, templates, memberships, HubDB tables. Managed from the HubSpot UI + `scripts/` deploy helpers.
 - **Google Cloud project** — holds the BigQuery datasets and the service-account JSON.
 - **DataForSEO account** — separate API credentials.

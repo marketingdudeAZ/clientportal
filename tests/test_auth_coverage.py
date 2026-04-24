@@ -46,7 +46,7 @@ AUTH_MARKERS = (
 # explicit — anything added here should be defensible in a security review.
 UNAUTHENTICATED_ALLOWLIST = {
     # Health check — intentionally public, no PII, just confirms the process
-    # is alive for Railway.
+    # is alive for Render.
     "/health",
 }
 

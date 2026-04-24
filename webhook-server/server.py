@@ -45,7 +45,7 @@ from auth import require_internal_key
 from routes import register_all as register_blueprints
 
 # Heavy modules are imported lazily inside each route handler so Flask
-# can boot and answer /health in < 1 second (Railway health-check window).
+# can boot and answer /health in < 1 second (Render health-check window).
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)

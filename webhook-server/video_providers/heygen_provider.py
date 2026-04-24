@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
-import os
 import uuid as _uuid
 from typing import Any
 
@@ -299,17 +298,11 @@ class HeyGenProvider(VideoProvider):
     def normalize_webhook(self, payload: dict, headers: dict[str, str] | None = None) -> dict:
         headers = headers or {}
 
-        # Signature check. HeyGen signs webhook bodies with HMAC-SHA256 when a
-        # secret is configured in their dashboard. We fail CLOSED in
-        # production: a missing secret means misconfiguration and we refuse
-        # rather than accept anything. In FLASK_ENV=development the check is
-        # skipped so local dev doesn't need HeyGen to sign.
-        is_dev = os.getenv("FLASK_ENV", "").lower() == "development"
-        if not HEYGEN_WEBHOOK_SECRET:
-            if not is_dev:
-                raise ProviderError("HeyGen webhook secret not configured")
-        else:
-            # Header name varies across HeyGen docs — probe common spellings.
+        # Signature check is OPT-IN. We don't enable webhook signing on
+        # HeyGen's side, so leaving HEYGEN_WEBHOOK_SECRET unset is the
+        # supported configuration. If the secret IS set we validate
+        # strictly — that's the upgrade path when signing gets turned on.
+        if HEYGEN_WEBHOOK_SECRET:
             sig = ""
             for key in ("X-Signature", "x-signature",
                         "HeyGen-Signature", "heygen-signature",

@@ -31,29 +31,52 @@ class TestHeyGenWebhookJourney(unittest.TestCase):
         cls.app = server.app
         cls.client = cls.app.test_client()
 
-    def test_production_without_secret_fails_closed(self):
-        body = json.dumps({"event_type": "avatar_video.success"})
-        with mock.patch.dict(os.environ, {"FLASK_ENV": "production"}), \
-             mock.patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
+    def test_unsigned_payload_accepted_when_secret_unset(self):
+        """Supported config: no HEYGEN_WEBHOOK_SECRET → no signature check."""
+        body = json.dumps({
+            "event_type": "avatar_video.success",
+            "event_data": {"video_id": "vid-1", "callback_id": "var-1"},
+        })
+        search_resp = mock.MagicMock()
+        search_resp.status_code = 200
+        search_resp.json.return_value = {"results": []}
+        search_resp.raise_for_status = mock.MagicMock()
+        with mock.patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""), \
+             mock.patch("requests.post", return_value=search_resp):
             resp = self.client.post(
                 "/api/heygen-webhook",
                 data=body,
                 content_type="application/json",
             )
-        self.assertEqual(resp.status_code, 401)
+        self.assertNotEqual(resp.status_code, 401,
+                            "Unsigned webhook rejected with no secret configured")
 
-    def test_rejects_bad_signature(self):
+    def test_rejects_bad_signature_when_secret_set(self):
+        """When HEYGEN_WEBHOOK_SECRET is set, wrong signatures must be rejected."""
         body = json.dumps({
             "event_type": "avatar_video.success",
             "event_data": {"video_id": "vid-1", "callback_id": "var-1"},
         })
-        with mock.patch.dict(os.environ, {"FLASK_ENV": "production"}), \
-             mock.patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", "good-secret"):
+        with mock.patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", "good-secret"):
             resp = self.client.post(
                 "/api/heygen-webhook",
                 data=body,
                 content_type="application/json",
                 headers={"X-Signature": "0" * 64},
+            )
+        self.assertEqual(resp.status_code, 401)
+
+    def test_missing_signature_when_secret_set_rejected(self):
+        """When the secret is set but no signature header sent → reject."""
+        body = json.dumps({
+            "event_type": "avatar_video.success",
+            "event_data": {"video_id": "vid-1", "callback_id": "var-1"},
+        })
+        with mock.patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", "good-secret"):
+            resp = self.client.post(
+                "/api/heygen-webhook",
+                data=body,
+                content_type="application/json",
             )
         self.assertEqual(resp.status_code, 401)
 
@@ -67,15 +90,11 @@ class TestHeyGenWebhookJourney(unittest.TestCase):
             },
         })
         sig = _sign(body, "good-secret")
-        # Mock the inner HubSpot search to return nothing — the webhook
-        # should still 200 with {"ignored": True} or similar, proving the
-        # request got past auth.
         search_resp = mock.MagicMock()
         search_resp.status_code = 200
         search_resp.json.return_value = {"results": []}
         search_resp.raise_for_status = mock.MagicMock()
-        with mock.patch.dict(os.environ, {"FLASK_ENV": "production"}), \
-             mock.patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", "good-secret"), \
+        with mock.patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", "good-secret"), \
              mock.patch("requests.post", return_value=search_resp):
             resp = self.client.post(
                 "/api/heygen-webhook",
@@ -83,34 +102,11 @@ class TestHeyGenWebhookJourney(unittest.TestCase):
                 content_type="application/json",
                 headers={"X-Signature": sig},
             )
-        # Good-sig path never returns 401. Exact 200-vs-200-with-ignored
-        # depends on company lookup results; both are fine.
         self.assertNotEqual(resp.status_code, 401,
                             f"Good signature rejected: {resp.get_data(as_text=True)}")
 
-    def test_development_allows_unsigned(self):
-        body = json.dumps({
-            "event_type": "avatar_video.success",
-            "event_data": {"video_id": "vid-1", "callback_id": "var-1"},
-        })
-        search_resp = mock.MagicMock()
-        search_resp.status_code = 200
-        search_resp.json.return_value = {"results": []}
-        search_resp.raise_for_status = mock.MagicMock()
-        with mock.patch.dict(os.environ, {"FLASK_ENV": "development"}), \
-             mock.patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""), \
-             mock.patch("requests.post", return_value=search_resp):
-            resp = self.client.post(
-                "/api/heygen-webhook",
-                data=body,
-                content_type="application/json",
-            )
-        self.assertNotEqual(resp.status_code, 401,
-                            "Dev mode rejected an unsigned webhook")
-
     def test_malformed_json_returns_400(self):
-        with mock.patch.dict(os.environ, {"FLASK_ENV": "development"}), \
-             mock.patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
+        with mock.patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
             resp = self.client.post(
                 "/api/heygen-webhook",
                 data="{not valid json",
