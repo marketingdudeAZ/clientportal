@@ -1,14 +1,35 @@
 """RPM Client Portal — Webhook Server
 
-Flask endpoints for:
-- GET  /api/portfolio            → Portfolio data (portfolio dashboard)
-- GET  /api/digest               → AI-curated property digest (Phase 6)
-- POST /api/approve              → Recommendation approval routing (Phase 7)
-- POST /api/dismiss              → Dismiss recommendation (Phase 7)
-- POST /api/configurator-submit  → Deal + Quote creation + AM task
-- POST /api/asset-upload         → Asset upload to Files API + HubDB
+Flask app. Routes are being split into blueprints under `routes/`; sections
+below are contiguous and marked with banners to make future extractions
+mechanical.
 
-Authentication: HubSpot Memberships handles login on the CMS side.
+Section map (approximate line ranges):
+  ~55   Portfolio, digest, property, approve, dismiss            # /api/portfolio, /api/digest, /api/property, /api/approve, /api/dismiss
+  ~490  Configurator submit                                      # /api/configurator-submit
+  ~540  Asset upload, asset analyze, call notes                  # /api/asset-upload, /api/asset-analyze, /api/call-notes
+  ~700  Red Light pipeline                                        # /api/red-light/*
+  ~790  Internal sync + cron triggers                              # /api/internal/*
+  ~1040 Tickets + KB search                                        # /api/ticket*, /api/kb-search
+  ~1325 Client brief, spend sheet, budget, forecast, benchmarks  # /api/client-brief*, /api/spend-sheet, /api/budget, /api/forecast-context, /api/benchmarks
+  ~2125 Video enroll, creative, approve, revise, regenerate      # /api/video-*
+  ~3015 HeyGen webhook                                             # /api/heygen-webhook
+  ~3195 Call prep                                                  # /api/call-prep*, /api/report-data
+  ~3850 SEO: dashboard, keywords, AI mentions, competitors       # /api/seo/*
+  ~4040 Content: clusters, briefs, decay                         # /api/content/*
+  ~4285 Keywords: ideas, suggestions, difficulty, save, gap      # /api/keywords/*
+  ~4430 Trends                                                    # /api/trends/*
+  ~4500 /health                                                    # /health
+  ~4515 Onboarding: client brief draft/accept, keyword generator # /api/client-brief/draft, /api/onboarding/*
+  (paid) Extracted → webhook-server/routes/paid.py                # /api/paid/*
+  (end) Blueprint registration
+
+Authentication: HubSpot Memberships handles portal login on the CMS side.
+API-level auth: X-Portal-Email (interim), X-Internal-Key (server-to-server
+via @require_internal_key), HMAC-SHA256 bodies (webhooks).
+
+When extracting a section into a blueprint, follow the pattern in
+`routes/paid.py`. Add the new blueprint to `routes/__init__.register_all`.
 """
 
 import logging
@@ -21,6 +42,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Flask, request, jsonify, make_response
 from config import WEBHOOK_PORT
 from auth import require_internal_key
+from routes import register_all as register_blueprints
 
 # Heavy modules are imported lazily inside each route handler so Flask
 # can boot and answer /health in < 1 second (Railway health-check window).
@@ -30,14 +52,8 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# CORS origins
-ALLOWED_ORIGINS = [
-    "https://go.rpmliving.com",
-    "https://www.rpmliving.com",
-    "https://digital.rpmliving.com",
-]
-if os.getenv("FLASK_ENV") == "development":
-    ALLOWED_ORIGINS.append("http://localhost:3000")
+# CORS origins — shared with routes/ blueprints via _route_utils.ALLOWED_ORIGINS.
+from _route_utils import ALLOWED_ORIGINS  # noqa: E402
 
 
 @app.after_request
@@ -50,6 +66,9 @@ def add_cors(response):
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email"
     return response
+
+
+# ─── Portfolio, digest, property detail, approve/dismiss ────────────────────
 
 
 @app.route("/api/portfolio", methods=["GET", "OPTIONS"])
@@ -487,6 +506,9 @@ def dismiss_recommendation():
         return jsonify({"error": "Dismiss failed"}), 500
 
 
+# ─── Budget Configurator submit — HMAC-guarded ──────────────────────────────
+
+
 @app.route("/api/configurator-submit", methods=["POST"])
 def configurator_submit():
     """Phase 7: Receive configurator selections, create Deal + Quote, assign AM task."""
@@ -535,6 +557,9 @@ def configurator_submit():
     except Exception as e:
         logger.error("Configurator submit failed: %s", str(e), exc_info=True)
         return jsonify({"error": "Submission failed", "detail": str(e)}), 500
+
+
+# ─── Asset library + call notes ─────────────────────────────────────────────
 
 
 @app.route("/api/asset-upload", methods=["POST", "OPTIONS"])
@@ -708,6 +733,9 @@ def submit_call_notes():
         return jsonify({"error": "Failed to save notes", "detail": str(e)}), 500
 
 
+# ─── Red Light pipeline (dual-auth / internal-key) ──────────────────────────
+
+
 @app.route("/api/red-light/run", methods=["POST", "OPTIONS"])
 def red_light_run():
     """Run the full Red Light pipeline for a single property.
@@ -793,6 +821,9 @@ def red_light_ingest_csv():
     except Exception as e:
         logger.error("Bulk CSV ingest failed: %s", e, exc_info=True)
         return jsonify({"status": "error", "error": str(e)}), 500
+
+
+# ─── Internal sync + cron triggers (@require_internal_key) ──────────────────
 
 
 @app.route("/api/internal/sync-properties-to-bq", methods=["POST", "OPTIONS"])
@@ -1035,6 +1066,9 @@ def seo_refresh_property():
         "runtime_seconds": runtime,
         "results":         results,
     })
+
+
+# ─── Support: tickets + knowledge base search ───────────────────────────────
 
 
 @app.route("/api/ticket", methods=["POST", "OPTIONS"])
@@ -1319,6 +1353,9 @@ def reply_to_ticket(ticket_id):
     except Exception as e:
         logger.error("Reply failed for ticket %s: %s", ticket_id, e)
         return jsonify({"error": "Failed to post reply"}), 500
+
+
+# ─── Client brief, spend sheet, budget, forecast, benchmarks ────────────────
 
 
 @app.route("/api/client-brief", methods=["GET", "OPTIONS"])
@@ -2123,6 +2160,9 @@ def get_benchmarks():
         "segment":         {"market": market, "size_band": size_band},
         "data_source":     final_source,  # 'bigquery' | 'mixed' | 'seeded'
     })
+
+
+# ─── Video pipeline: enroll, creative, approve, revise, regenerate ──────────
 
 
 @app.route("/api/video-enroll", methods=["POST", "OPTIONS"])
@@ -3013,6 +3053,9 @@ def video_providers_list():
         return jsonify({"error": "Failed to load providers"}), 500
 
 
+# ─── HeyGen webhook callback — signature-validated in the provider ──────────
+
+
 @app.route("/api/heygen-webhook", methods=["POST"])
 def heygen_webhook():
     """Inbound HeyGen webhook — flips a variant from pending to pending_review.
@@ -3708,6 +3751,9 @@ def get_report_data():
     })
 
 
+# ─── Portal identity helper + report data ───────────────────────────────────
+
+
 @app.route("/api/portal/identify", methods=["GET", "OPTIONS"])
 def portal_identify():
     """Identify a portal visitor by their HubSpot tracking cookie (hubspotutk).
@@ -3846,6 +3892,9 @@ def video_generate():
 # Tier gating via seo_entitlement.get_seo_tier() + has_feature().
 # Keyword/competitor storage lives in HubDB; rank history lives in BigQuery.
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+# ─── SEO surface: dashboard, keywords, AI mentions, competitors ─────────────
 
 
 def _resolve_seo_context():
@@ -4057,6 +4106,9 @@ def seo_entitlement_probe():
 # Rebuilt by weekly cron; /api/content/clusters returns cached value if < 7 days old.
 _CONTENT_CLUSTER_CACHE: dict = {}
 _CLUSTER_CACHE_TTL_DAYS = 7
+
+
+# ─── Content planning: clusters, briefs, decay ──────────────────────────────
 
 
 @app.route("/api/content/clusters", methods=["GET", "OPTIONS"])
@@ -4304,6 +4356,9 @@ def content_decay():
 # Ideas/difficulty/gap → Basic+. Trends → Standard+.
 # ═══════════════════════════════════════════════════════════════════════════
 
+# ─── Keyword research: ideas, suggestions, difficulty, save, gap ────────────
+
+
 @app.route("/api/keywords/ideas", methods=["GET", "OPTIONS"])
 def keywords_ideas():
     if request.method == "OPTIONS":
@@ -4450,6 +4505,9 @@ def keywords_save():
         return jsonify({"error": "Save failed"}), 500
 
 
+# ─── Trends: explore, seasonal, rising ──────────────────────────────────────
+
+
 @app.route("/api/trends/explore", methods=["GET", "OPTIONS"])
 def trends_explore_route():
     if request.method == "OPTIONS":
@@ -4520,6 +4578,9 @@ def trends_rising_route():
         return jsonify({"error": "Rising query fetch failed"}), 500
 
 
+# ─── Health check (public) ──────────────────────────────────────────────────
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return '{"status":"ok"}', 200, {"Content-Type": "application/json"}
@@ -4535,6 +4596,9 @@ def health():
 # mid-draft the client just kicks off a new one. For durability across restarts,
 # persist to HUBDB_BRIEF_DRAFTS_TABLE_ID.
 _BRIEF_DRAFTS: dict[str, dict] = {}
+
+
+# ─── Onboarding: AI brief draft, keyword generator ──────────────────────────
 
 
 @app.route("/api/client-brief/draft", methods=["POST", "OPTIONS"])
@@ -4740,105 +4804,7 @@ def onboarding_generate_keywords():
 
 
 # ─── Paid Media surface ─────────────────────────────────────────────────────
-
-def _resolve_paid_context():
-    """Same shape as _resolve_seo_context but uses paid_* feature keys."""
-    email = request.headers.get("X-Portal-Email", "").lower().strip()
-    if not email:
-        return jsonify({"error": "Authentication required"}), 401
-    company_id = request.args.get("company_id") or (request.get_json(silent=True) or {}).get("company_id")
-    if not company_id:
-        return jsonify({"error": "company_id is required"}), 400
-    from seo_entitlement import get_seo_tier
-    tier = get_seo_tier(str(company_id))
-    return email, str(company_id), tier
-
-
-@app.route("/api/paid/targeting", methods=["GET", "OPTIONS"])
-def paid_targeting():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_paid_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, company_id, tier = ctx
-    gate = _require_feature(tier, "paid_targeting")
-    if gate:
-        return gate
-    platform = request.args.get("platform", "meta").lower()
-    try:
-        from paid_media import targeting_coverage
-        return jsonify({"tier": tier, **targeting_coverage(company_id, platform=platform)})
-    except Exception as e:
-        logger.error("paid targeting failed: %s", e, exc_info=True)
-        return jsonify({"error": "Failed to load targeting"}), 500
-
-
-@app.route("/api/paid/audiences", methods=["GET", "OPTIONS"])
-def paid_audiences():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_paid_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, company_id, tier = ctx
-    gate = _require_feature(tier, "paid_audiences")
-    if gate:
-        return gate
-    try:
-        from paid_media import audience_narrative
-        return jsonify({"tier": tier, **audience_narrative(company_id)})
-    except Exception as e:
-        logger.error("paid audiences failed: %s", e, exc_info=True)
-        return jsonify({"error": "Failed to load audiences"}), 500
-
-
-@app.route("/api/paid/creative", methods=["GET", "OPTIONS"])
-def paid_creative():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_paid_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, company_id, tier = ctx
-    gate = _require_feature(tier, "paid_creative")
-    if gate:
-        return gate
-    try:
-        from paid_media import creative_and_offers
-        return jsonify({"tier": tier, **creative_and_offers(company_id)})
-    except Exception as e:
-        logger.error("paid creative failed: %s", e, exc_info=True)
-        return jsonify({"error": "Failed to load creative"}), 500
-
-
-@app.route("/api/paid/trust-signal", methods=["POST", "OPTIONS"])
-def paid_trust_signal():
-    """Silent log when a client tries to drill into keyword-level detail in Paid.
-
-    v1: log-only, no notifications — we want to see volume before deciding on
-    routing (per plan). Paid JS fires this on keyword-like searches/filters
-    inside the Paid surface.
-    """
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    email = request.headers.get("X-Portal-Email", "").lower().strip()
-    if not email:
-        return jsonify({"error": "Authentication required"}), 401
-    payload = request.get_json(silent=True) or {}
-    company_id = str(payload.get("company_id") or "").strip()
-    if not company_id:
-        return jsonify({"error": "company_id is required"}), 400
-    signal_type = (payload.get("signal_type") or "paid_keyword_drilldown").strip()
-    detail = (payload.get("detail") or "").strip()
-    try:
-        from paid_media import log_trust_signal
-        log_trust_signal(company_id, email, signal_type, detail)
-    except Exception as e:
-        logger.warning("paid trust signal log failed: %s", e)
-    # Always 204 — we don't want the client to retry or learn whether logging
-    # succeeded; this is a best-effort observation channel.
-    return ("", 204)
+# Extracted to webhook-server/routes/paid.py — see Blueprint registration below.
 
 
 def _prewarm_spend_cache():
@@ -4855,6 +4821,12 @@ def _prewarm_spend_cache():
             logger.warning("Spend sheet pre-warm failed: %s", exc)
     t = threading.Thread(target=_run, daemon=True)
     t.start()
+
+
+# ─── Blueprint registration ────────────────────────────────────────────────
+# Every blueprint under routes/ gets attached here. Keep this at the END of
+# server.py so all module-level @app.route declarations above have run first.
+register_blueprints(app)
 
 
 if __name__ == "__main__":
