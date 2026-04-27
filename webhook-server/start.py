@@ -1,4 +1,4 @@
-"""WSGI startup with full diagnostic output so Railway Deploy Logs show any crash."""
+"""WSGI startup with full diagnostic output so Render Deploy Logs show any crash."""
 import os
 import sys
 import traceback

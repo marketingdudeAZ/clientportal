@@ -298,11 +298,10 @@ class HeyGenProvider(VideoProvider):
     def normalize_webhook(self, payload: dict, headers: dict[str, str] | None = None) -> dict:
         headers = headers or {}
 
-        # Optional signature check. HeyGen signs webhook bodies with HMAC-SHA256
-        # when a secret is configured in their dashboard; we verify it here so
-        # nobody outside HeyGen can flip our variants to approved/done.
-        # Header name varies across HeyGen docs ("X-Signature", "HeyGen-Signature",
-        # "X-HeyGen-Signature") — probe all of them.
+        # Signature check is OPT-IN. We don't enable webhook signing on
+        # HeyGen's side, so leaving HEYGEN_WEBHOOK_SECRET unset is the
+        # supported configuration. If the secret IS set we validate
+        # strictly — that's the upgrade path when signing gets turned on.
         if HEYGEN_WEBHOOK_SECRET:
             sig = ""
             for key in ("X-Signature", "x-signature",
@@ -312,18 +311,18 @@ class HeyGenProvider(VideoProvider):
                 if headers.get(key):
                     sig = headers[key]
                     break
-            # Many providers prefix the hex digest with "sha256=" — strip it.
             if sig.startswith("sha256="):
                 sig = sig[len("sha256="):]
             body_raw = headers.get("_raw_body", "")
-            if body_raw:
-                expected = hmac.new(
-                    HEYGEN_WEBHOOK_SECRET.encode(),
-                    body_raw.encode() if isinstance(body_raw, str) else body_raw,
-                    hashlib.sha256,
-                ).hexdigest()
-                if not hmac.compare_digest(sig, expected):
-                    raise ProviderError("HeyGen webhook signature mismatch")
+            if not sig or not body_raw:
+                raise ProviderError("HeyGen webhook missing signature")
+            expected = hmac.new(
+                HEYGEN_WEBHOOK_SECRET.encode(),
+                body_raw.encode() if isinstance(body_raw, str) else body_raw,
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(sig, expected):
+                raise ProviderError("HeyGen webhook signature mismatch")
 
         data = (payload or {}).get("event_data") or payload or {}
         event = (payload or {}).get("event_type") or data.get("status") or ""

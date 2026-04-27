@@ -56,6 +56,8 @@ class TestCreatifyProvider(unittest.TestCase):
                 )
 
     def test_webhook_parser_normalizes(self):
+        """When no Creatify webhook secret is set, parsing proceeds without
+        signature validation. This is the supported configuration today."""
         from video_providers import CreatifyProvider
         payload = {
             "id": "job-abc",
@@ -64,11 +66,42 @@ class TestCreatifyProvider(unittest.TestCase):
             "video_thumbnail": "https://cdn.example/thumb.jpg",
             "failed_reason": None,
         }
-        parsed = CreatifyProvider().normalize_webhook(payload)
+        with patch("video_providers.creatify_provider.CREATIFY_WEBHOOK_SECRET", ""):
+            parsed = CreatifyProvider().normalize_webhook(payload)
         self.assertEqual(parsed["job_id"], "job-abc")
         self.assertEqual(parsed["status"], "done")
         self.assertEqual(parsed["video_url"], "https://cdn.example/video.mp4")
         self.assertEqual(parsed["thumbnail_url"], "https://cdn.example/thumb.jpg")
+
+    def test_webhook_signature_enforced_when_secret_set(self):
+        """If CREATIFY_WEBHOOK_SECRET IS configured, an unsigned/wrong
+        payload must be rejected. Upgrade path for when signing is enabled."""
+        import hashlib
+        import hmac as _hmac
+        from video_providers import CreatifyProvider, ProviderError
+
+        body = '{"id":"x","status":"done"}'
+        good_sig = _hmac.new(b"secret", body.encode(), hashlib.sha256).hexdigest()
+
+        with patch("video_providers.creatify_provider.CREATIFY_WEBHOOK_SECRET", "secret"):
+            # Missing signature header → reject
+            with self.assertRaises(ProviderError):
+                CreatifyProvider().normalize_webhook(
+                    {"id": "x", "status": "done"},
+                    headers={"_raw_body": body},
+                )
+            # Wrong signature → reject
+            with self.assertRaises(ProviderError):
+                CreatifyProvider().normalize_webhook(
+                    {"id": "x", "status": "done"},
+                    headers={"X-Creatify-Signature": "0" * 64, "_raw_body": body},
+                )
+            # Good signature → pass
+            parsed = CreatifyProvider().normalize_webhook(
+                {"id": "x", "status": "done"},
+                headers={"X-Creatify-Signature": good_sig, "_raw_body": body},
+            )
+            self.assertEqual(parsed["job_id"], "x")
 
 
 class TestHeyGenProvider(unittest.TestCase):
@@ -194,7 +227,7 @@ class TestHeyGenProvider(unittest.TestCase):
                 "gif_url": "https://cdn.heygen.com/thumb.gif",
             },
         }
-        # Ensure no secret is configured so we skip the signature check
+        # No secret configured → no signature check (the supported config).
         with patch("video_providers.heygen_provider.HEYGEN_WEBHOOK_SECRET", ""):
             result = self.provider.normalize_webhook(payload)
         self.assertEqual(result["job_id"], "vid-xyz")

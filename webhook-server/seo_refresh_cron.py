@@ -1,6 +1,6 @@
 """Daily / weekly SEO refresh driver.
 
-Invoked by Railway cron (or ad-hoc by POST /api/admin/seo-refresh) to:
+Invoked by Render cron (or ad-hoc by POST /api/admin/seo-refresh) to:
   - Pull rank snapshots for all tracked keywords of every SEO-tier property
     and append to the BigQuery rank table.
   - Weekly: run AI-mentions scan, persist snapshot to HubDB.

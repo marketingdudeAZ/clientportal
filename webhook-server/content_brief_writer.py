@@ -218,8 +218,11 @@ def persist_brief(property_uuid: str, hub_keyword: str, brief: dict) -> str | No
     }
     try:
         row_id = insert_row(HUBDB_CONTENT_BRIEFS_TABLE_ID, values)
-        publish(HUBDB_CONTENT_BRIEFS_TABLE_ID)
-        return row_id
     except Exception as e:
-        logger.error("persist_brief failed: %s", e)
+        logger.error("persist_brief insert failed: %s", e)
         return None
+    try:
+        publish(HUBDB_CONTENT_BRIEFS_TABLE_ID)
+    except Exception as e:
+        logger.warning("persist_brief publish failed (row saved, draft only): %s", e)
+    return row_id

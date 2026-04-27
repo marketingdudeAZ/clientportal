@@ -163,9 +163,9 @@ ASSET_CATEGORIES = ["Photography", "Video", "Brand & Creative", "Marketing Colla
 PHOTO_SUBCATEGORIES = ["Exterior", "Interior", "Amenity", "Aerial", "Neighborhood"]
 VIDEO_SUBCATEGORIES = ["Ad Creative", "Property Tour", "Testimonial"]
 MAX_UPLOAD_SIZE_MB = 100
-ALLOWED_IMAGE_TYPES = ["jpg", "jpeg", "png", "gif"]
+ALLOWED_IMAGE_TYPES = ["jpg", "jpeg", "png", "gif", "webp"]
 ALLOWED_VIDEO_TYPES = ["mp4", "mov"]
-ALLOWED_DOC_TYPES   = ["pdf"]
+ALLOWED_DOC_TYPES   = ["pdf", "ai", "eps", "psd", "svg"]
 
 # --- Included Services (per-unit pricing) ---
 INCLUDED_SERVICES = [

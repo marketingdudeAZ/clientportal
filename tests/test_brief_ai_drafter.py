@@ -45,7 +45,7 @@ class TestNormalizeDomain(unittest.TestCase):
 
 
 class TestDraftBrief(unittest.TestCase):
-    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
+    @patch("config.ANTHROPIC_API_KEY", "test-key")
     @patch("anthropic.Anthropic")
     def test_returns_shape_matching_hubspot_property_names(self, MockAnthropic):
         client = MockAnthropic.return_value
@@ -62,7 +62,7 @@ class TestDraftBrief(unittest.TestCase):
             self.assertIn("value", result[field])
             self.assertIn("confidence", result[field])
 
-    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
+    @patch("config.ANTHROPIC_API_KEY", "test-key")
     @patch("anthropic.Anthropic")
     def test_confidence_is_clamped_to_0_1(self, MockAnthropic):
         client = MockAnthropic.return_value
@@ -78,7 +78,7 @@ class TestDraftBrief(unittest.TestCase):
         self.assertEqual(result["property_voice_and_tone"]["confidence"], 1.0)
         self.assertEqual(result["neighborhoods_to_target"]["confidence"], 0.0)
 
-    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
+    @patch("config.ANTHROPIC_API_KEY", "test-key")
     @patch("anthropic.Anthropic")
     def test_attaches_pdf_document_blocks(self, MockAnthropic):
         client = MockAnthropic.return_value
@@ -98,7 +98,7 @@ class TestDraftBrief(unittest.TestCase):
         titles = {b.get("title") for b in doc_blocks}
         self.assertEqual(titles, {"Pitch Deck", "RFP"})
 
-    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
+    @patch("config.ANTHROPIC_API_KEY", "test-key")
     @patch("anthropic.Anthropic")
     def test_system_prompt_uses_cache_control(self, MockAnthropic):
         client = MockAnthropic.return_value
@@ -112,7 +112,7 @@ class TestDraftBrief(unittest.TestCase):
         self.assertIsInstance(system, list)
         self.assertEqual(system[0].get("cache_control", {}).get("type"), "ephemeral")
 
-    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
+    @patch("config.ANTHROPIC_API_KEY", "test-key")
     @patch("anthropic.Anthropic")
     def test_raises_on_malformed_json(self, MockAnthropic):
         client = MockAnthropic.return_value

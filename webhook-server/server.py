@@ -1,14 +1,35 @@
 """RPM Client Portal — Webhook Server
 
-Flask endpoints for:
-- GET  /api/portfolio            → Portfolio data (portfolio dashboard)
-- GET  /api/digest               → AI-curated property digest (Phase 6)
-- POST /api/approve              → Recommendation approval routing (Phase 7)
-- POST /api/dismiss              → Dismiss recommendation (Phase 7)
-- POST /api/configurator-submit  → Deal + Quote creation + AM task
-- POST /api/asset-upload         → Asset upload to Files API + HubDB
+Flask app. Routes are being split into blueprints under `routes/`; sections
+below are contiguous and marked with banners to make future extractions
+mechanical.
 
-Authentication: HubSpot Memberships handles login on the CMS side.
+Section map (approximate line ranges):
+  ~55   Portfolio, digest, property, approve, dismiss            # /api/portfolio, /api/digest, /api/property, /api/approve, /api/dismiss
+  ~490  Configurator submit                                      # /api/configurator-submit
+  ~540  Asset upload, asset analyze, call notes                  # /api/asset-upload, /api/asset-analyze, /api/call-notes
+  ~700  Red Light pipeline                                        # /api/red-light/*
+  ~790  Internal sync + cron triggers                              # /api/internal/*
+  ~1040 Tickets + KB search                                        # /api/ticket*, /api/kb-search
+  ~1325 Client brief, spend sheet, budget, forecast, benchmarks  # /api/client-brief*, /api/spend-sheet, /api/budget, /api/forecast-context, /api/benchmarks
+  ~2125 Video enroll, creative, approve, revise, regenerate      # /api/video-*
+  ~3015 HeyGen webhook                                             # /api/heygen-webhook
+  ~3195 Call prep                                                  # /api/call-prep*, /api/report-data
+  ~3850 SEO: dashboard, keywords, AI mentions, competitors       # /api/seo/*
+  ~4040 Content: clusters, briefs, decay                         # /api/content/*
+  ~4285 Keywords: ideas, suggestions, difficulty, save, gap      # /api/keywords/*
+  ~4430 Trends                                                    # /api/trends/*
+  ~4500 /health                                                    # /health
+  ~4515 Onboarding: client brief draft/accept, keyword generator # /api/client-brief/draft, /api/onboarding/*
+  (paid) Extracted → webhook-server/routes/paid.py                # /api/paid/*
+  (end) Blueprint registration
+
+Authentication: HubSpot Memberships handles portal login on the CMS side.
+API-level auth: X-Portal-Email (interim), X-Internal-Key (server-to-server
+via @require_internal_key), HMAC-SHA256 bodies (webhooks).
+
+When extracting a section into a blueprint, follow the pattern in
+`routes/paid.py`. Add the new blueprint to `routes/__init__.register_all`.
 """
 
 import logging
@@ -20,23 +41,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, request, jsonify, make_response
 from config import WEBHOOK_PORT
+from auth import require_internal_key
+from routes import register_all as register_blueprints
 
 # Heavy modules are imported lazily inside each route handler so Flask
-# can boot and answer /health in < 1 second (Railway health-check window).
+# can boot and answer /health in < 1 second (Render health-check window).
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# CORS origins
-ALLOWED_ORIGINS = [
-    "https://go.rpmliving.com",
-    "https://www.rpmliving.com",
-    "https://digital.rpmliving.com",
-]
-if os.getenv("FLASK_ENV") == "development":
-    ALLOWED_ORIGINS.append("http://localhost:3000")
+# CORS origins — shared with routes/ blueprints via _route_utils.ALLOWED_ORIGINS.
+from _route_utils import ALLOWED_ORIGINS  # noqa: E402
 
 
 @app.after_request
@@ -49,6 +66,9 @@ def add_cors(response):
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email"
     return response
+
+
+# ─── Portfolio, digest, property detail, approve/dismiss ────────────────────
 
 
 @app.route("/api/portfolio", methods=["GET", "OPTIONS"])
@@ -486,6 +506,9 @@ def dismiss_recommendation():
         return jsonify({"error": "Dismiss failed"}), 500
 
 
+# ─── Budget Configurator submit — HMAC-guarded ──────────────────────────────
+
+
 @app.route("/api/configurator-submit", methods=["POST"])
 def configurator_submit():
     """Phase 7: Receive configurator selections, create Deal + Quote, assign AM task."""
@@ -536,6 +559,9 @@ def configurator_submit():
         return jsonify({"error": "Submission failed", "detail": str(e)}), 500
 
 
+# ─── Asset library + call notes ─────────────────────────────────────────────
+
+
 @app.route("/api/asset-upload", methods=["POST", "OPTIONS"])
 def asset_upload():
     """Upload files + per-file metadata, store in Files API, create HubDB rows.
@@ -549,6 +575,12 @@ def asset_upload():
     """
     if request.method == "OPTIONS":
         return _preflight_response()
+
+    # Require the portal identity header, same shape as every other state-
+    # changing route. Not cryptographic proof of identity — interim guard
+    # until signed-request auth lands.
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
 
     import json as _json
 
@@ -610,6 +642,9 @@ def asset_analyze():
     """
     if request.method == "OPTIONS":
         return _preflight_response()
+
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
 
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
@@ -698,6 +733,9 @@ def submit_call_notes():
         return jsonify({"error": "Failed to save notes", "detail": str(e)}), 500
 
 
+# ─── Red Light pipeline (dual-auth / internal-key) ──────────────────────────
+
+
 @app.route("/api/red-light/run", methods=["POST", "OPTIONS"])
 def red_light_run():
     """Run the full Red Light pipeline for a single property.
@@ -721,13 +759,13 @@ def red_light_run():
     if request.method == "OPTIONS":
         return _preflight_response()
 
-    # Internal endpoint — validate a simple bearer token in production
-    # For now, check that request comes from an allowed origin or has X-Portal-Email
+    # Dual-auth: portal user (X-Portal-Email) OR server-to-server (X-Internal-Key).
+    import hmac as _hmac
     email = request.headers.get("X-Portal-Email", "").lower().strip()
     internal_key = request.headers.get("X-Internal-Key", "")
     expected_key = os.getenv("INTERNAL_API_KEY", "")
-
-    if not email and not (expected_key and internal_key == expected_key):
+    key_ok = bool(expected_key and internal_key and _hmac.compare_digest(expected_key, internal_key))
+    if not email and not key_ok:
         return jsonify({"error": "Authentication required"}), 401
 
     payload = request.get_json()
@@ -747,6 +785,7 @@ def red_light_run():
 
 
 @app.route("/api/red-light/ingest-csv", methods=["POST", "OPTIONS"])
+@require_internal_key
 def red_light_ingest_csv():
     """Bulk ingest a NinjaCat CSV export, score all properties, run full pipeline.
 
@@ -758,11 +797,6 @@ def red_light_ingest_csv():
     """
     if request.method == "OPTIONS":
         return _preflight_response()
-
-    internal_key = request.headers.get("X-Internal-Key", "")
-    expected_key = os.getenv("INTERNAL_API_KEY", "")
-    if not (expected_key and internal_key == expected_key):
-        return jsonify({"error": "Authentication required"}), 401
 
     # Accept either file upload or raw body
     if request.files.get("csv"):
@@ -789,7 +823,11 @@ def red_light_ingest_csv():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+# ─── Internal sync + cron triggers (@require_internal_key) ──────────────────
+
+
 @app.route("/api/internal/sync-properties-to-bq", methods=["POST", "OPTIONS"])
+@require_internal_key
 def sync_properties_to_bq():
     """Nightly sync of HubSpot company records into BigQuery rpm_properties.
 
@@ -805,11 +843,6 @@ def sync_properties_to_bq():
     """
     if request.method == "OPTIONS":
         return _preflight_response()
-
-    internal_key = request.headers.get("X-Internal-Key", "")
-    expected_key = os.getenv("INTERNAL_API_KEY", "")
-    if not (expected_key and internal_key == expected_key):
-        return jsonify({"error": "Authentication required"}), 401
 
     try:
         from bigquery_client import is_bigquery_configured, upsert_rpm_properties
@@ -876,6 +909,7 @@ def sync_properties_to_bq():
 
 
 @app.route("/api/internal/seo-refresh-property", methods=["POST", "OPTIONS"])
+@require_internal_key
 def seo_refresh_property():
     """Trigger a full SEO refresh for ONE property — same functions the weekly
     cron runs, scoped to a single company. Intended for onboarding new SEO
@@ -894,11 +928,6 @@ def seo_refresh_property():
     """
     if request.method == "OPTIONS":
         return _preflight_response()
-
-    expected = os.getenv("INTERNAL_API_KEY", "")
-    internal_key = request.headers.get("X-Internal-Key", "")
-    if not (expected and internal_key == expected):
-        return jsonify({"error": "Authentication required"}), 401
 
     payload = request.get_json(silent=True) or {}
     company_id = (payload.get("company_id") or "").strip()
@@ -1037,6 +1066,9 @@ def seo_refresh_property():
         "runtime_seconds": runtime,
         "results":         results,
     })
+
+
+# ─── Support: tickets + knowledge base search ───────────────────────────────
 
 
 @app.route("/api/ticket", methods=["POST", "OPTIONS"])
@@ -1321,6 +1353,9 @@ def reply_to_ticket(ticket_id):
     except Exception as e:
         logger.error("Reply failed for ticket %s: %s", ticket_id, e)
         return jsonify({"error": "Failed to post reply"}), 500
+
+
+# ─── Client brief, spend sheet, budget, forecast, benchmarks ────────────────
 
 
 @app.route("/api/client-brief", methods=["GET", "OPTIONS"])
@@ -2125,6 +2160,9 @@ def get_benchmarks():
         "segment":         {"market": market, "size_band": size_band},
         "data_source":     final_source,  # 'bigquery' | 'mixed' | 'seeded'
     })
+
+
+# ─── Video pipeline: enroll, creative, approve, revise, regenerate ──────────
 
 
 @app.route("/api/video-enroll", methods=["POST", "OPTIONS"])
@@ -3015,6 +3053,9 @@ def video_providers_list():
         return jsonify({"error": "Failed to load providers"}), 500
 
 
+# ─── HeyGen webhook callback — signature-validated in the provider ──────────
+
+
 @app.route("/api/heygen-webhook", methods=["POST"])
 def heygen_webhook():
     """Inbound HeyGen webhook — flips a variant from pending to pending_review.
@@ -3710,6 +3751,9 @@ def get_report_data():
     })
 
 
+# ─── Portal identity helper + report data ───────────────────────────────────
+
+
 @app.route("/api/portal/identify", methods=["GET", "OPTIONS"])
 def portal_identify():
     """Identify a portal visitor by their HubSpot tracking cookie (hubspotutk).
@@ -3843,662 +3887,12 @@ def video_generate():
         return jsonify({"error": f"Video generation failed: {str(exc)}"}), 500
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# SEO Insights (Phase 1) — DataForSEO + AI Mentions
-# Tier gating via seo_entitlement.get_seo_tier() + has_feature().
-# Keyword/competitor storage lives in HubDB; rank history lives in BigQuery.
-# ═══════════════════════════════════════════════════════════════════════════
+# ─── SEO + Content + Keywords + Trends ─────────────────────────────────────
+# Extracted to webhook-server/routes/seo.py — see Blueprint registration below.
+# Routes covered: /api/seo/*, /api/content/*, /api/keywords/*, /api/trends/*.
 
 
-def _resolve_seo_context():
-    """Pull email, company_id, property_uuid, tier. Returns tuple or Flask response."""
-    email = request.headers.get("X-Portal-Email", "").lower().strip()
-    if not email:
-        return jsonify({"error": "Authentication required"}), 401
-    company_id = request.args.get("company_id") or (request.get_json(silent=True) or {}).get("company_id")
-    property_uuid = request.args.get("property_uuid") or (request.get_json(silent=True) or {}).get("property_uuid")
-    if not (company_id and property_uuid):
-        return jsonify({"error": "company_id and property_uuid are required"}), 400
-    from seo_entitlement import get_seo_tier
-    tier = get_seo_tier(str(company_id))
-    return email, str(company_id), str(property_uuid), tier
-
-
-def _require_feature(tier, feature):
-    from seo_entitlement import has_feature
-    if not has_feature(tier, feature):
-        return jsonify({
-            "error": "Feature not available on current SEO tier",
-            "feature": feature,
-            "tier": tier,
-        }), 403
-    return None
-
-
-@app.route("/api/seo/dashboard", methods=["GET", "OPTIONS"])
-def seo_dashboard():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, company_id, property_uuid, tier = ctx
-    gate = _require_feature(tier, "dashboard")
-    if gate:
-        return gate
-    try:
-        from seo_dashboard import build_dashboard
-        payload = build_dashboard(property_uuid)
-        payload["tier"] = tier
-        return jsonify(payload)
-    except Exception as e:
-        logger.error("seo dashboard failed: %s", e, exc_info=True)
-        return jsonify({"error": "Failed to load SEO dashboard"}), 500
-
-
-@app.route("/api/seo/keywords", methods=["GET", "POST", "OPTIONS"])
-def seo_keywords():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, property_uuid, tier = ctx
-
-    if request.method == "GET":
-        gate = _require_feature(tier, "keywords_read")
-        if gate:
-            return gate
-        from config import HUBDB_SEO_KEYWORDS_TABLE_ID
-        from hubdb_helpers import read_rows
-        rows = read_rows(HUBDB_SEO_KEYWORDS_TABLE_ID, filters={"property_uuid": property_uuid})
-        return jsonify({"rows": rows})
-
-    gate = _require_feature(tier, "keywords_write")
-    if gate:
-        return gate
-    from config import HUBDB_SEO_KEYWORDS_TABLE_ID
-    from hubdb_helpers import insert_row, publish
-    payload = request.get_json(silent=True) or {}
-    keyword = (payload.get("keyword") or "").strip()
-    if not keyword:
-        return jsonify({"error": "keyword is required"}), 400
-    values = {
-        "property_uuid": property_uuid,
-        "keyword": keyword,
-        "priority": payload.get("priority", "medium"),
-        "tag": payload.get("tag"),
-        "intent": payload.get("intent"),
-        "branded": bool(payload.get("branded", False)),
-        "target_position": payload.get("target_position"),
-    }
-    row_id = insert_row(HUBDB_SEO_KEYWORDS_TABLE_ID, values)
-    publish(HUBDB_SEO_KEYWORDS_TABLE_ID)
-    from seo_dashboard import invalidate
-    invalidate(property_uuid)
-    return jsonify({"status": "created", "id": row_id})
-
-
-@app.route("/api/seo/keywords/<row_id>/delete", methods=["POST", "OPTIONS"])
-def seo_keyword_delete(row_id):
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, property_uuid, tier = ctx
-    gate = _require_feature(tier, "keywords_write")
-    if gate:
-        return gate
-    from config import HUBDB_SEO_KEYWORDS_TABLE_ID
-    from hubdb_helpers import delete_row, publish
-    ok = delete_row(HUBDB_SEO_KEYWORDS_TABLE_ID, row_id)
-    publish(HUBDB_SEO_KEYWORDS_TABLE_ID)
-    from seo_dashboard import invalidate
-    invalidate(property_uuid)
-    return jsonify({"status": "deleted" if ok else "error"})
-
-
-@app.route("/api/seo/ai-mentions", methods=["GET", "OPTIONS"])
-def seo_ai_mentions():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, property_uuid, tier = ctx
-    gate = _require_feature(tier, "ai_mentions")
-    if gate:
-        return gate
-    try:
-        from ai_mentions import get_latest_snapshot
-        return jsonify(get_latest_snapshot(property_uuid))
-    except Exception as e:
-        logger.error("ai-mentions read failed: %s", e, exc_info=True)
-        return jsonify({"error": "Failed to load AI mentions"}), 500
-
-
-@app.route("/api/seo/competitors", methods=["GET", "POST", "OPTIONS"])
-def seo_competitors():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, property_uuid, tier = ctx
-    from config import HUBDB_SEO_COMPETITORS_TABLE_ID
-    from hubdb_helpers import insert_row, publish, read_rows
-
-    if request.method == "GET":
-        rows = read_rows(HUBDB_SEO_COMPETITORS_TABLE_ID, filters={"property_uuid": property_uuid})
-        return jsonify({"rows": rows})
-
-    gate = _require_feature(tier, "keywords_write")
-    if gate:
-        return gate
-    payload = request.get_json(silent=True) or {}
-    domain = (payload.get("competitor_domain") or "").strip().lower()
-    if not domain:
-        return jsonify({"error": "competitor_domain is required"}), 400
-    row_id = insert_row(HUBDB_SEO_COMPETITORS_TABLE_ID, {
-        "property_uuid": property_uuid,
-        "competitor_domain": domain,
-        "label": payload.get("label", ""),
-    })
-    publish(HUBDB_SEO_COMPETITORS_TABLE_ID)
-    return jsonify({"status": "created", "id": row_id})
-
-
-@app.route("/api/seo/entitlement", methods=["GET", "OPTIONS"])
-def seo_entitlement_probe():
-    """Tell the frontend which SEO features to render — cheap, no DataForSEO call."""
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    email = request.headers.get("X-Portal-Email", "").lower().strip()
-    if not email:
-        return jsonify({"error": "Authentication required"}), 401
-    company_id = request.args.get("company_id")
-    if not company_id:
-        return jsonify({"error": "company_id is required"}), 400
-    from config import SEO_FEATURE_MIN_TIER
-    from seo_entitlement import get_seo_tier, has_feature
-    tier = get_seo_tier(str(company_id))
-    return jsonify({
-        "tier": tier,
-        "features": {f: has_feature(tier, f) for f in SEO_FEATURE_MIN_TIER},
-    })
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Phase 2 — Content Planner (iPullRank / GEO)
-# Tier gating: Standard+ for clusters/briefs. Basic sees teaser decay (top 3).
-# ═══════════════════════════════════════════════════════════════════════════
-
-# In-memory cluster cache: {property_uuid: (timestamp_iso, clusters_list)}
-# Rebuilt by weekly cron; /api/content/clusters returns cached value if < 7 days old.
-_CONTENT_CLUSTER_CACHE: dict = {}
-_CLUSTER_CACHE_TTL_DAYS = 7
-
-
-@app.route("/api/content/clusters", methods=["GET", "OPTIONS"])
-def content_clusters():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, property_uuid, tier = ctx
-    gate = _require_feature(tier, "content_clusters")
-    if gate:
-        return gate
-
-    from datetime import datetime as _dt, timedelta as _td
-    cached = _CONTENT_CLUSTER_CACHE.get(property_uuid)
-    if cached:
-        ts, data = cached
-        if _dt.fromisoformat(ts) > _dt.utcnow() - _td(days=_CLUSTER_CACHE_TTL_DAYS):
-            return jsonify({"clusters": data, "cached_at": ts, "stale": False})
-
-    # Build on-demand (only if cache miss — cron populates proactively)
-    try:
-        from content_planner import cluster_keywords
-        clusters = cluster_keywords(property_uuid)
-        ts = _dt.utcnow().isoformat()
-        _CONTENT_CLUSTER_CACHE[property_uuid] = (ts, clusters)
-        return jsonify({"clusters": clusters, "cached_at": ts, "stale": False})
-    except Exception as e:
-        logger.error("content_clusters failed for %s: %s", property_uuid, e, exc_info=True)
-        return jsonify({"error": "Failed to build clusters"}), 500
-
-
-@app.route("/api/content/clusters/rebuild", methods=["POST", "OPTIONS"])
-def content_clusters_rebuild():
-    """Force-rebuild the cluster cache (AM-initiated)."""
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, property_uuid, tier = ctx
-    gate = _require_feature(tier, "content_clusters")
-    if gate:
-        return gate
-    from datetime import datetime as _dt
-    try:
-        from content_planner import cluster_keywords
-        clusters = cluster_keywords(property_uuid)
-        ts = _dt.utcnow().isoformat()
-        _CONTENT_CLUSTER_CACHE[property_uuid] = (ts, clusters)
-        return jsonify({"clusters": clusters, "cached_at": ts, "rebuilt": True})
-    except Exception as e:
-        logger.error("cluster rebuild failed: %s", e, exc_info=True)
-        return jsonify({"error": "Rebuild failed"}), 500
-
-
-@app.route("/api/content/briefs", methods=["GET", "POST", "OPTIONS"])
-def content_briefs():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, company_id, property_uuid, tier = ctx
-    gate = _require_feature(tier, "content_briefs")
-    if gate:
-        return gate
-
-    if request.method == "GET":
-        from config import HUBDB_CONTENT_BRIEFS_TABLE_ID
-        from hubdb_helpers import read_rows
-        rows = read_rows(HUBDB_CONTENT_BRIEFS_TABLE_ID, filters={"property_uuid": property_uuid}) if HUBDB_CONTENT_BRIEFS_TABLE_ID else []
-        return jsonify({"briefs": rows})
-
-    # POST: generate a new brief
-    payload = request.get_json(silent=True) or {}
-    hub_keyword = (payload.get("cluster_hub_keyword") or "").strip()
-    if not hub_keyword:
-        return jsonify({"error": "cluster_hub_keyword is required"}), 400
-
-    # Kick off generation in a background thread so the HTTP request returns fast.
-    import threading
-    def _generate():
-        try:
-            # Build the cluster_data dict the writer expects
-            from dataforseo_client import serp_organic_advanced, onpage_content_parsing
-            from content_brief_writer import generate_brief, persist_brief
-            from entity_audit import extract_entities
-
-            serp = serp_organic_advanced(hub_keyword) or {}
-            items = serp.get("items") or []
-            top_urls = [it.get("url") for it in items if it.get("type") == "organic"][:5]
-            paa = [it.get("title") for it in items if it.get("type") == "people_also_ask"][:10]
-            related = [it.get("keyword") for it in items if it.get("type") == "related_searches"][:10]
-
-            competitor_headings = []
-            for u in top_urls[:3]:
-                try:
-                    parsed = onpage_content_parsing(u) or {}
-                    it = (parsed.get("items") or [{}])[0]
-                    meta = it.get("meta") or {}
-                    htags = meta.get("htags") or {}
-                    competitor_headings.append({
-                        "url": u,
-                        "h1":  (htags.get("h1") or [""])[0] if htags.get("h1") else "",
-                        "h2s": htags.get("h2") or [],
-                    })
-                except Exception:
-                    pass
-
-            entities: list = []
-            for u in top_urls[:3]:
-                for e in extract_entities(u):
-                    entities.append(e["name"])
-            entities = list(dict.fromkeys(entities))  # dedupe preserving order
-
-            # Property context from HubSpot
-            import requests as _req
-            from config import HUBSPOT_API_KEY as _HK
-            r = _req.get(
-                f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties=name,domain,rpmmarket",
-                headers={"Authorization": f"Bearer {_HK}"}, timeout=10,
-            )
-            props = (r.json().get("properties") or {}) if r.status_code == 200 else {}
-
-            cluster_data = {
-                "hub_keyword":      hub_keyword,
-                "spokes":           payload.get("spokes") or [],
-                "property_name":    props.get("name", ""),
-                "property_domain":  props.get("domain", ""),
-                "market":           props.get("rpmmarket", ""),
-                "top_serp_urls":    top_urls,
-                "competitor_headings": competitor_headings,
-                "paa_questions":    paa,
-                "related_searches": related,
-                "competitor_entities": entities,
-                "existing_tracked_keywords": payload.get("existing_tracked_keywords") or [],
-            }
-
-            brief = generate_brief(cluster_data)
-            persist_brief(property_uuid, hub_keyword, brief)
-            logger.info("content brief persisted for %s / %s", property_uuid, hub_keyword)
-        except Exception as exc:
-            logger.error("brief generation failed: %s", exc, exc_info=True)
-
-    threading.Thread(target=_generate, daemon=True).start()
-    return jsonify({"status": "generating", "hub_keyword": hub_keyword}), 202
-
-
-@app.route("/api/content/briefs/<brief_id>", methods=["GET", "OPTIONS"])
-def content_brief_detail(brief_id):
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, property_uuid, tier = ctx
-    gate = _require_feature(tier, "content_briefs")
-    if gate:
-        return gate
-    from config import HUBDB_CONTENT_BRIEFS_TABLE_ID
-    from hubdb_helpers import read_rows
-    if not HUBDB_CONTENT_BRIEFS_TABLE_ID:
-        return jsonify({"error": "Content briefs table not configured"}), 503
-    rows = read_rows(HUBDB_CONTENT_BRIEFS_TABLE_ID, filters={"brief_id": brief_id})
-    if not rows:
-        return jsonify({"error": "Not found"}), 404
-    return jsonify(rows[0])
-
-
-@app.route("/api/content/approve", methods=["POST", "OPTIONS"])
-def content_brief_approve():
-    """Approve a brief → route to Content team via approval_agent (rec_type=content_brief)."""
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, company_id, property_uuid, tier = ctx
-    gate = _require_feature(tier, "content_briefs")
-    if gate:
-        return gate
-    payload = request.get_json(silent=True) or {}
-    brief_id = (payload.get("brief_id") or "").strip()
-    if not brief_id:
-        return jsonify({"error": "brief_id is required"}), 400
-
-    from config import HUBDB_CONTENT_BRIEFS_TABLE_ID
-    from hubdb_helpers import read_rows
-    rows = read_rows(HUBDB_CONTENT_BRIEFS_TABLE_ID, filters={"brief_id": brief_id}) if HUBDB_CONTENT_BRIEFS_TABLE_ID else []
-    if not rows:
-        return jsonify({"error": "Brief not found"}), 404
-    brief = rows[0]
-
-    try:
-        from approval_agent import route_approval
-        property_name = payload.get("property_name") or ""
-        result = route_approval(
-            rec_id=brief_id,
-            rec_type="content_brief",
-            property_uuid=property_uuid,
-            company_id=company_id,
-            property_name=property_name,
-            rec_title=brief.get("h1", "") or brief.get("hub_keyword", ""),
-            rec_body=brief.get("outline_json", "") + "\n\n" + (brief.get("meta_description", "") or ""),
-        )
-        return jsonify(result)
-    except Exception as e:
-        logger.error("content brief approve failed: %s", e, exc_info=True)
-        return jsonify({"error": "Approval failed"}), 500
-
-
-@app.route("/api/content/decay", methods=["GET", "OPTIONS"])
-def content_decay():
-    """Return decaying-pages queue. Basic tier sees top-3 teaser; Premium sees full list."""
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, property_uuid, tier = ctx
-
-    # Everyone with an SEO package can see the teaser; Premium gets full list.
-    from seo_entitlement import has_feature
-    is_premium = has_feature(tier, "content_decay")
-
-    # Read from the cached HubDB table if populated by the weekly cron.
-    from config import HUBDB_CONTENT_DECAY_TABLE_ID
-    from hubdb_helpers import read_rows
-    if HUBDB_CONTENT_DECAY_TABLE_ID:
-        rows = read_rows(HUBDB_CONTENT_DECAY_TABLE_ID, filters={"property_uuid": property_uuid})
-    else:
-        # Fallback: compute live (expensive — only use for testing)
-        from content_planner import detect_decay
-        rows = detect_decay(property_uuid)
-
-    if not is_premium:
-        return jsonify({"rows": rows[:3], "teaser": True, "total": len(rows), "upgrade_required": "Premium"})
-    return jsonify({"rows": rows, "teaser": False, "total": len(rows)})
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Phase 3 — Keyword Research + Trends
-# Ideas/difficulty/gap → Basic+. Trends → Standard+.
-# ═══════════════════════════════════════════════════════════════════════════
-
-@app.route("/api/keywords/ideas", methods=["GET", "OPTIONS"])
-def keywords_ideas():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, _, tier = ctx
-    gate = _require_feature(tier, "keyword_research")
-    if gate:
-        return gate
-    seed = (request.args.get("seed") or "").strip()
-    if not seed:
-        return jsonify({"error": "seed is required"}), 400
-    try:
-        location = int(request.args.get("location", 2840))
-    except (ValueError, TypeError):
-        location = 2840
-    try:
-        from config import KEYWORD_RESEARCH_MAX_RESULTS
-        limit = min(int(request.args.get("limit", 200)), KEYWORD_RESEARCH_MAX_RESULTS)
-    except (ValueError, TypeError):
-        limit = 200
-    try:
-        from keyword_research import expand_seed
-        seeds = [s.strip() for s in seed.split(",") if s.strip()]
-        results = expand_seed(seeds, location_code=location, limit=limit)
-        return jsonify({"keywords": results, "count": len(results)})
-    except Exception as e:
-        logger.error("keywords_ideas failed: %s", e, exc_info=True)
-        return jsonify({"error": "Idea expansion failed"}), 500
-
-
-@app.route("/api/keywords/suggestions", methods=["GET", "OPTIONS"])
-def keywords_suggestions():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, _, tier = ctx
-    gate = _require_feature(tier, "keyword_research")
-    if gate:
-        return gate
-    seed = (request.args.get("seed") or "").strip()
-    if not seed:
-        return jsonify({"error": "seed is required"}), 400
-    try:
-        from keyword_research import suggest_variations
-        results = suggest_variations(seed, limit=int(request.args.get("limit", 200)))
-        return jsonify({"keywords": results, "count": len(results)})
-    except Exception as e:
-        logger.error("keywords_suggestions failed: %s", e, exc_info=True)
-        return jsonify({"error": "Suggestion fetch failed"}), 500
-
-
-@app.route("/api/keywords/difficulty", methods=["POST", "OPTIONS"])
-def keywords_difficulty():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, _, tier = ctx
-    gate = _require_feature(tier, "keyword_research")
-    if gate:
-        return gate
-    payload = request.get_json(silent=True) or {}
-    kws = payload.get("keywords") or []
-    if not isinstance(kws, list):
-        return jsonify({"error": "keywords must be a list"}), 400
-    from config import KEYWORD_DIFFICULTY_BATCH_MAX
-    if len(kws) > KEYWORD_DIFFICULTY_BATCH_MAX * 10:
-        return jsonify({"error": f"Max {KEYWORD_DIFFICULTY_BATCH_MAX * 10} keywords per request"}), 400
-    try:
-        from keyword_research import enrich_difficulty
-        results = enrich_difficulty([k for k in kws if isinstance(k, str)], batch_max=KEYWORD_DIFFICULTY_BATCH_MAX)
-        return jsonify({"results": results, "count": len(results)})
-    except Exception as e:
-        logger.error("keywords_difficulty failed: %s", e, exc_info=True)
-        return jsonify({"error": "Difficulty check failed"}), 500
-
-
-@app.route("/api/keywords/gap", methods=["GET", "OPTIONS"])
-def keywords_gap():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, company_id, _, tier = ctx
-    gate = _require_feature(tier, "keyword_research")
-    if gate:
-        return gate
-    competitor = (request.args.get("competitor") or "").strip().lower()
-    if not competitor:
-        return jsonify({"error": "competitor is required"}), 400
-
-    # Fetch property's own domain from HubSpot
-    import requests as _req
-    from config import HUBSPOT_API_KEY as _HK
-    try:
-        r = _req.get(
-            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties=domain",
-            headers={"Authorization": f"Bearer {_HK}"}, timeout=10,
-        )
-        property_domain = (r.json().get("properties") or {}).get("domain") if r.status_code == 200 else ""
-    except Exception:
-        property_domain = ""
-    if not property_domain:
-        return jsonify({"error": "Property domain not set on HubSpot company — cannot compute gap"}), 400
-
-    try:
-        from keyword_research import competitor_gap
-        gaps = competitor_gap(property_domain, competitor)
-        return jsonify({"gaps": gaps, "count": len(gaps), "property_domain": property_domain, "competitor": competitor})
-    except Exception as e:
-        logger.error("keywords_gap failed: %s", e, exc_info=True)
-        return jsonify({"error": "Gap analysis failed"}), 500
-
-
-@app.route("/api/keywords/save", methods=["POST", "OPTIONS"])
-def keywords_save():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, property_uuid, tier = ctx
-    # Writing keywords = same gate as keywords_write, not keyword_research (research is read-only discovery)
-    gate = _require_feature(tier, "keywords_write")
-    if gate:
-        return gate
-    payload = request.get_json(silent=True) or {}
-    kws = payload.get("keywords") or []
-    if not isinstance(kws, list) or not kws:
-        return jsonify({"error": "keywords list required"}), 400
-    try:
-        from keyword_research import save_to_tracked
-        saved = save_to_tracked(property_uuid, kws)
-        return jsonify({"status": "ok", "saved": saved})
-    except Exception as e:
-        logger.error("keywords_save failed: %s", e, exc_info=True)
-        return jsonify({"error": "Save failed"}), 500
-
-
-@app.route("/api/trends/explore", methods=["GET", "OPTIONS"])
-def trends_explore_route():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, _, tier = ctx
-    gate = _require_feature(tier, "trend_explorer")
-    if gate:
-        return gate
-    kws_raw = (request.args.get("keywords") or "").strip()
-    kws = [k.strip() for k in kws_raw.split(",") if k.strip()]
-    if not kws:
-        return jsonify({"error": "keywords is required"}), 400
-    timeframe = request.args.get("timeframe", "past_12_months")
-    try:
-        from trend_explorer import explore
-        result = explore(kws, timeframe=timeframe)
-        return jsonify(result)
-    except Exception as e:
-        logger.error("trends_explore_route failed: %s", e, exc_info=True)
-        return jsonify({"error": "Trend exploration failed"}), 500
-
-
-@app.route("/api/trends/seasonal", methods=["GET", "OPTIONS"])
-def trends_seasonal_route():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, _, tier = ctx
-    gate = _require_feature(tier, "trend_explorer")
-    if gate:
-        return gate
-    kws_raw = (request.args.get("keywords") or "").strip()
-    kws = [k.strip() for k in kws_raw.split(",") if k.strip()]
-    if not kws:
-        return jsonify({"error": "keywords is required"}), 400
-    try:
-        from trend_explorer import seasonal_peaks
-        return jsonify(seasonal_peaks(kws))
-    except Exception as e:
-        logger.error("trends_seasonal_route failed: %s", e, exc_info=True)
-        return jsonify({"error": "Seasonal analysis failed"}), 500
-
-
-@app.route("/api/trends/rising", methods=["GET", "OPTIONS"])
-def trends_rising_route():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_seo_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, _, _, tier = ctx
-    gate = _require_feature(tier, "trend_explorer")
-    if gate:
-        return gate
-    seed = (request.args.get("seed") or "").strip()
-    if not seed:
-        return jsonify({"error": "seed is required"}), 400
-    try:
-        from trend_explorer import related_rising
-        return jsonify(related_rising(seed))
-    except Exception as e:
-        logger.error("trends_rising_route failed: %s", e, exc_info=True)
-        return jsonify({"error": "Rising query fetch failed"}), 500
+# ─── Health check (public) ──────────────────────────────────────────────────
 
 
 @app.route("/health", methods=["GET"])
@@ -4516,6 +3910,9 @@ def health():
 # mid-draft the client just kicks off a new one. For durability across restarts,
 # persist to HUBDB_BRIEF_DRAFTS_TABLE_ID.
 _BRIEF_DRAFTS: dict[str, dict] = {}
+
+
+# ─── Onboarding: AI brief draft, keyword generator ──────────────────────────
 
 
 @app.route("/api/client-brief/draft", methods=["POST", "OPTIONS"])
@@ -4661,6 +4058,10 @@ def client_brief_accept():
     """
     if request.method == "OPTIONS":
         return _preflight_response()
+    # Auth belongs to update_client_brief() which we delegate to, but the
+    # check is explicit here too so this alias route is readable on its own.
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
     return update_client_brief()
 
 
@@ -4717,105 +4118,7 @@ def onboarding_generate_keywords():
 
 
 # ─── Paid Media surface ─────────────────────────────────────────────────────
-
-def _resolve_paid_context():
-    """Same shape as _resolve_seo_context but uses paid_* feature keys."""
-    email = request.headers.get("X-Portal-Email", "").lower().strip()
-    if not email:
-        return jsonify({"error": "Authentication required"}), 401
-    company_id = request.args.get("company_id") or (request.get_json(silent=True) or {}).get("company_id")
-    if not company_id:
-        return jsonify({"error": "company_id is required"}), 400
-    from seo_entitlement import get_seo_tier
-    tier = get_seo_tier(str(company_id))
-    return email, str(company_id), tier
-
-
-@app.route("/api/paid/targeting", methods=["GET", "OPTIONS"])
-def paid_targeting():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_paid_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, company_id, tier = ctx
-    gate = _require_feature(tier, "paid_targeting")
-    if gate:
-        return gate
-    platform = request.args.get("platform", "meta").lower()
-    try:
-        from paid_media import targeting_coverage
-        return jsonify({"tier": tier, **targeting_coverage(company_id, platform=platform)})
-    except Exception as e:
-        logger.error("paid targeting failed: %s", e, exc_info=True)
-        return jsonify({"error": "Failed to load targeting"}), 500
-
-
-@app.route("/api/paid/audiences", methods=["GET", "OPTIONS"])
-def paid_audiences():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_paid_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, company_id, tier = ctx
-    gate = _require_feature(tier, "paid_audiences")
-    if gate:
-        return gate
-    try:
-        from paid_media import audience_narrative
-        return jsonify({"tier": tier, **audience_narrative(company_id)})
-    except Exception as e:
-        logger.error("paid audiences failed: %s", e, exc_info=True)
-        return jsonify({"error": "Failed to load audiences"}), 500
-
-
-@app.route("/api/paid/creative", methods=["GET", "OPTIONS"])
-def paid_creative():
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    ctx = _resolve_paid_context()
-    if not isinstance(ctx, tuple):
-        return ctx
-    _, company_id, tier = ctx
-    gate = _require_feature(tier, "paid_creative")
-    if gate:
-        return gate
-    try:
-        from paid_media import creative_and_offers
-        return jsonify({"tier": tier, **creative_and_offers(company_id)})
-    except Exception as e:
-        logger.error("paid creative failed: %s", e, exc_info=True)
-        return jsonify({"error": "Failed to load creative"}), 500
-
-
-@app.route("/api/paid/trust-signal", methods=["POST", "OPTIONS"])
-def paid_trust_signal():
-    """Silent log when a client tries to drill into keyword-level detail in Paid.
-
-    v1: log-only, no notifications — we want to see volume before deciding on
-    routing (per plan). Paid JS fires this on keyword-like searches/filters
-    inside the Paid surface.
-    """
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    email = request.headers.get("X-Portal-Email", "").lower().strip()
-    if not email:
-        return jsonify({"error": "Authentication required"}), 401
-    payload = request.get_json(silent=True) or {}
-    company_id = str(payload.get("company_id") or "").strip()
-    if not company_id:
-        return jsonify({"error": "company_id is required"}), 400
-    signal_type = (payload.get("signal_type") or "paid_keyword_drilldown").strip()
-    detail = (payload.get("detail") or "").strip()
-    try:
-        from paid_media import log_trust_signal
-        log_trust_signal(company_id, email, signal_type, detail)
-    except Exception as e:
-        logger.warning("paid trust signal log failed: %s", e)
-    # Always 204 — we don't want the client to retry or learn whether logging
-    # succeeded; this is a best-effort observation channel.
-    return ("", 204)
+# Extracted to webhook-server/routes/paid.py — see Blueprint registration below.
 
 
 def _prewarm_spend_cache():
@@ -4832,6 +4135,12 @@ def _prewarm_spend_cache():
             logger.warning("Spend sheet pre-warm failed: %s", exc)
     t = threading.Thread(target=_run, daemon=True)
     t.start()
+
+
+# ─── Blueprint registration ────────────────────────────────────────────────
+# Every blueprint under routes/ gets attached here. Keep this at the END of
+# server.py so all module-level @app.route declarations above have run first.
+register_blueprints(app)
 
 
 if __name__ == "__main__":

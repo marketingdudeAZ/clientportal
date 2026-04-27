@@ -6,10 +6,12 @@ belongs in `creatify_client.py`, not here.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 from typing import Any
 
-from config import CREATIFY_API_ID, CREATIFY_API_KEY
+from config import CREATIFY_API_ID, CREATIFY_API_KEY, CREATIFY_WEBHOOK_SECRET
 
 from .base import VideoProvider, ProviderError
 
@@ -77,6 +79,33 @@ class CreatifyProvider(VideoProvider):
 
     def normalize_webhook(self, payload: dict, headers: dict[str, str] | None = None) -> dict:
         from creatify_client import parse_webhook_payload
+
+        # Signature check is OPT-IN. We don't enable webhook signing on
+        # Creatify's side, so leaving CREATIFY_WEBHOOK_SECRET unset is the
+        # supported configuration. If the secret IS set we validate
+        # strictly — same pattern as HeyGen.
+        headers = headers or {}
+        if CREATIFY_WEBHOOK_SECRET:
+            sig = ""
+            for key in ("X-Creatify-Signature", "x-creatify-signature",
+                        "Creatify-Signature", "creatify-signature",
+                        "X-Signature", "x-signature",
+                        "Signature", "signature"):
+                if headers.get(key):
+                    sig = headers[key]
+                    break
+            if sig.startswith("sha256="):
+                sig = sig[len("sha256="):]
+            body_raw = headers.get("_raw_body", "")
+            if not sig or not body_raw:
+                raise ProviderError("Creatify webhook missing signature")
+            expected = hmac.new(
+                CREATIFY_WEBHOOK_SECRET.encode(),
+                body_raw.encode() if isinstance(body_raw, str) else body_raw,
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(sig, expected):
+                raise ProviderError("Creatify webhook signature mismatch")
 
         parsed = parse_webhook_payload(payload or {})
         return {

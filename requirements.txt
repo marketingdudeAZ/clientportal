@@ -1,5 +1,5 @@
-flask>=3.0
-python-dotenv>=1.0
-requests>=2.31
-Pillow>=10.0
-gunicorn>=21.2
+# Authoritative dependency list lives in webhook-server/requirements.txt.
+# This thin wrapper lets `pip install -r requirements.txt` work from the repo
+# root (e.g. for local dev or scripts/) while production on Railway builds
+# from webhook-server/ directly.
+-r webhook-server/requirements.txt

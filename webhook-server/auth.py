@@ -1,17 +1,20 @@
 """Portal authentication — HubSpot Membership integration.
 
-With HubSpot Memberships handling login, this module provides a simple
-HMAC-based request verification so the Flask API can trust requests
-forwarded from the HubSpot CMS page.
-
-The HubL template signs (email + timestamp) with a shared secret and
-passes it to dashboard.js, which includes it in API requests.
+With HubSpot Memberships handling login, this module provides:
+  1. HMAC-based request verification for future signed-request rollout
+     (generate_request_signature / verify_request_signature).
+  2. require_internal_key: Flask decorator for server-to-server endpoints
+     (cron jobs, internal sync). Uses timing-safe comparison.
 """
 
 import hashlib
 import hmac
 import logging
+import os
 import time
+from functools import wraps
+
+from flask import jsonify, request
 
 from config import WEBHOOK_SECRET
 
@@ -19,6 +22,27 @@ logger = logging.getLogger(__name__)
 
 # Signature validity window (seconds)
 SIGNATURE_MAX_AGE = 300  # 5 minutes
+
+
+def require_internal_key(fn):
+    """Guard an endpoint with the INTERNAL_API_KEY shared secret.
+
+    Caller must send X-Internal-Key header matching the env var. Uses
+    timing-safe comparison to avoid character-by-character leaks. Passes
+    OPTIONS through untouched so CORS preflight still works.
+    """
+
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if request.method == "OPTIONS":
+            return fn(*args, **kwargs)
+        expected = os.getenv("INTERNAL_API_KEY", "")
+        provided = request.headers.get("X-Internal-Key", "")
+        if not expected or not provided or not hmac.compare_digest(expected, provided):
+            return jsonify({"error": "Authentication required"}), 401
+        return fn(*args, **kwargs)
+
+    return wrapper
 
 
 def generate_request_signature(email, timestamp, secret=None):

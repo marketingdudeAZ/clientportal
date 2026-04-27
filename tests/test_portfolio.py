@@ -25,38 +25,30 @@ with mock.patch.dict(os.environ, {
 
 
 class TestFilterGroups:
-    def test_manager_filter(self):
-        groups = _build_filter_groups("mgr@test.com", "marketing_manager")
-        assert len(groups) == 1
-        filters = groups[0]["filters"]
-        assert filters[0]["propertyName"] == "marketing_manager_email"
-        assert filters[0]["value"] == "mgr@test.com"
+    """Per portfolio.py: all authenticated portal members see all properties.
+    role/email are accepted for backward compat but ignored. The function
+    always returns one group filtered by plestatus. These tests pin that
+    behavior so a future role-based change is a deliberate decision."""
 
-    def test_director_filter(self):
-        groups = _build_filter_groups("dir@test.com", "marketing_director")
-        assert len(groups) == 2
-        fields = [g["filters"][0]["propertyName"] for g in groups]
-        assert "marketing_director_email" in fields
-        assert "marketing_manager_email" in fields
+    def test_returns_single_group_regardless_of_role(self):
+        for role in ("marketing_manager", "marketing_director", "marketing_rvp", None):
+            groups = _build_filter_groups("anyone@test.com", role)
+            assert len(groups) == 1, f"role={role} produced {len(groups)} groups"
 
-    def test_rvp_filter(self):
-        groups = _build_filter_groups("rvp@test.com", "marketing_rvp")
-        assert len(groups) == 3
-        fields = [g["filters"][0]["propertyName"] for g in groups]
-        assert "marketing_rvp_email" in fields
-        assert "marketing_director_email" in fields
-        assert "marketing_manager_email" in fields
+    def test_filter_is_plestatus_in(self):
+        groups = _build_filter_groups("any@test.com", "marketing_manager")
+        f = groups[0]["filters"][0]
+        assert f["propertyName"] == "plestatus"
+        assert f["operator"] == "IN"
+        assert "RPM Managed" in f["values"]
+        assert "Dispositioning" in f["values"]
+        assert "Onboarding" in f["values"]
 
-    def test_email_normalized(self):
-        groups = _build_filter_groups("  MGR@Test.COM  ", "marketing_manager")
-        assert groups[0]["filters"][0]["value"] == "mgr@test.com"
-
-    def test_all_groups_include_status_filter(self):
-        groups = _build_filter_groups("rvp@test.com", "marketing_rvp")
-        for group in groups:
-            status_filter = [f for f in group["filters"] if f["propertyName"] == "plestatus"]
-            assert len(status_filter) == 1
-            assert "RPM Managed" in status_filter[0]["values"]
+    def test_role_email_ignored(self):
+        """Passing different emails must produce identical filter groups."""
+        a = _build_filter_groups("alice@test.com", "marketing_manager")
+        b = _build_filter_groups("bob@test.com", "marketing_rvp")
+        assert a == b
 
 
 class TestSafeConversions:
@@ -119,16 +111,19 @@ class TestComputeRollups:
         }
 
     def test_basic_rollups(self):
+        # Health bands per portfolio.compute_rollups: >=75 healthy,
+        # >=50 warning, <50 critical. Pick scores that fall cleanly inside
+        # each band (avoid 50 — it's the warning/critical boundary).
         companies = [
             self._make_company("A", score=85, flags=2, units=200, market="Dallas"),
-            self._make_company("B", score=72, flags=5, units=150, market="Houston"),
-            self._make_company("C", score=50, flags=10, units=300, market="Dallas"),
+            self._make_company("B", score=60, flags=5, units=150, market="Houston"),
+            self._make_company("C", score=30, flags=10, units=300, market="Dallas"),
         ]
         r = compute_rollups(companies)
         assert r["total_properties"] == 3
         assert r["total_units"] == 650
         assert r["total_flags"] == 17
-        assert r["avg_health_score"] == round((85 + 72 + 50) / 3, 1)
+        assert r["avg_health_score"] == round((85 + 60 + 30) / 3, 1)
         assert r["health_distribution"]["healthy"] == 1
         assert r["health_distribution"]["warning"] == 1
         assert r["health_distribution"]["critical"] == 1
