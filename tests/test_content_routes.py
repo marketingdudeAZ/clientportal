@@ -111,7 +111,9 @@ class AuthTests(unittest.TestCase):
 class ClusterCacheTests(unittest.TestCase):
     def setUp(self):
         self.client = server.app.test_client()
-        server._CONTENT_CLUSTER_CACHE.clear()
+        # Cache moved to routes/seo.py during blueprint extraction.
+        from routes.seo import CONTENT_CLUSTER_CACHE
+        CONTENT_CLUSTER_CACHE.clear()
 
     def test_clusters_cache_hit_skips_rebuild(self):
         """Second call within 7d should NOT re-invoke cluster_keywords."""
