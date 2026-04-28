@@ -1,0 +1,7 @@
+Property UUID,Variable Name,Variable Value,Type,Approved
+aurora-heights-phoenix-az,property_name,Aurora Heights,text,TRUE
+aurora-heights-phoenix-az,neighborhood,Midtown Phoenix,text,TRUE
+aurora-heights-phoenix-az,concession_amount,1500,number,TRUE
+aurora-heights-phoenix-az,concession_text,$1500 off first month with 13-month lease,text,TRUE
+aurora-heights-phoenix-az,brand_primary,#2356C5,color,TRUE
+aurora-heights-phoenix-az,brand_secondary,#C8964E,color,TRUE

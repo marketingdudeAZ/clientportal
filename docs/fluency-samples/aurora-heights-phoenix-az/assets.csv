@@ -1,0 +1,5 @@
+Property UUID,Asset Role,Variable Name,URL,Width,Height
+aurora-heights-phoenix-az,logo_square,{{logo_square}},https://hubspot-cdn.example.com/aurora-heights/logo_1200x1200.png,1200,1200
+aurora-heights-phoenix-az,logo_landscape,{{logo_landscape}},https://hubspot-cdn.example.com/aurora-heights/logo_1200x300.png,1200,300
+aurora-heights-phoenix-az,hero_landscape,{{hero_landscape}},https://hubspot-cdn.example.com/aurora-heights/hero_1200x628.jpg,1200,628
+aurora-heights-phoenix-az,hero_square,{{hero_square}},https://hubspot-cdn.example.com/aurora-heights/hero_1200x1200.jpg,1200,1200
