@@ -7,14 +7,71 @@ asset pushes from the RPM portal.
 **Goal of the email:** confirm ingestion path, schema shape, and Blueprint
 mapping so we don't ship a bad first import.
 
-**Attachments to include:**
-1. `docs/fluency-samples/aurora-heights-phoenix-az/keywords.csv`
-2. `docs/fluency-samples/aurora-heights-phoenix-az/variables.csv`
-3. `docs/fluency-samples/aurora-heights-phoenix-az/tags.csv`
-4. `docs/fluency-samples/aurora-heights-phoenix-az/assets.csv`
+## Sample CSVs to attach
 
-These are synthetic samples generated from our exporter — the schema we'd
-push to you for every property we onboard.
+The 4 sample CSVs live in the repo at:
+
+```
+docs/fluency-samples/aurora-heights-phoenix-az/
+├── keywords.csv
+├── variables.csv
+├── tags.csv
+└── assets.csv
+```
+
+**To download them directly from GitHub** (after this branch is merged or
+while it's still open):
+
+- https://github.com/marketingdudeAZ/clientportal/raw/claude/client-onboarding-discovery-rcQj4/docs/fluency-samples/aurora-heights-phoenix-az/keywords.csv
+- https://github.com/marketingdudeAZ/clientportal/raw/claude/client-onboarding-discovery-rcQj4/docs/fluency-samples/aurora-heights-phoenix-az/variables.csv
+- https://github.com/marketingdudeAZ/clientportal/raw/claude/client-onboarding-discovery-rcQj4/docs/fluency-samples/aurora-heights-phoenix-az/tags.csv
+- https://github.com/marketingdudeAZ/clientportal/raw/claude/client-onboarding-discovery-rcQj4/docs/fluency-samples/aurora-heights-phoenix-az/assets.csv
+
+The full contents are also inlined below so you can copy/paste each into
+a `.csv` file locally if it's faster than cloning.
+
+### keywords.csv
+
+```csv
+Property UUID,Keyword,Match Type,Ad Group,Priority,Intent,CPC Low,CPC High,Negative
+aurora-heights-phoenix-az,|aurora heights apartments|,exact,brand,high,navigational,0.8,1.5,FALSE
+aurora-heights-phoenix-az,"""luxury apartments midtown phoenix""",phrase,transactional,high,transactional,1.2,3.5,FALSE
+aurora-heights-phoenix-az,|midtown phoenix 2 bedroom apartments|,exact,transactional,high,transactional,1.1,2.8,FALSE
+aurora-heights-phoenix-az,apartments near downtown phoenix,broad,discovery,medium,commercial,0.9,2.4,FALSE
+aurora-heights-phoenix-az,"-""cheap apartments""",phrase,transactional,low,,0,0,TRUE
+```
+
+### variables.csv
+
+```csv
+Property UUID,Variable Name,Variable Value,Type,Approved
+aurora-heights-phoenix-az,property_name,Aurora Heights,text,TRUE
+aurora-heights-phoenix-az,neighborhood,Midtown Phoenix,text,TRUE
+aurora-heights-phoenix-az,concession_amount,1500,number,TRUE
+aurora-heights-phoenix-az,concession_text,$1500 off first month with 13-month lease,text,TRUE
+aurora-heights-phoenix-az,brand_primary,#2356C5,color,TRUE
+aurora-heights-phoenix-az,brand_secondary,#C8964E,color,TRUE
+```
+
+### tags.csv
+
+```csv
+Property UUID,Tag Name,Tag Value
+aurora-heights-phoenix-az,lifecycle,stabilized
+aurora-heights-phoenix-az,market,phx
+aurora-heights-phoenix-az,segment,luxury
+aurora-heights-phoenix-az,fair_housing_locked,true
+```
+
+### assets.csv
+
+```csv
+Property UUID,Asset Role,Variable Name,URL,Width,Height
+aurora-heights-phoenix-az,logo_square,{{logo_square}},https://hubspot-cdn.example.com/aurora-heights/logo_1200x1200.png,1200,1200
+aurora-heights-phoenix-az,logo_landscape,{{logo_landscape}},https://hubspot-cdn.example.com/aurora-heights/logo_1200x300.png,1200,300
+aurora-heights-phoenix-az,hero_landscape,{{hero_landscape}},https://hubspot-cdn.example.com/aurora-heights/hero_1200x628.jpg,1200,628
+aurora-heights-phoenix-az,hero_square,{{hero_square}},https://hubspot-cdn.example.com/aurora-heights/hero_1200x1200.jpg,1200,1200
+```
 
 ---
 
