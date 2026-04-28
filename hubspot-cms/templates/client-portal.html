@@ -923,43 +923,56 @@ body{padding-top:36px}
     </div>
   </div>
 
-  <div class="kpi-row">
-    <div class="kpi">
-      <div class="kpi-icon" id="kpi-health-icon" style="background:rgba(212,145,10,0.1)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4910A" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+  <!-- 30-second summary card (consolidates Health, Leads, CPL + active issues) -->
+  <div class="summary-card status-inactive" id="summary-card">
+    <div class="summary-card-header">
+      <div class="summary-status-pill" id="summary-status-pill">
+        <span class="summary-status-dot"></span>
+        <span id="summary-status-text">Loading…</span>
       </div>
-      <div class="kpi-v" id="kpi-health-score" style="color:#D4910A">—</div>
-      <div class="kpi-l">Health Score</div>
-      <div class="kpi-delta down" id="kpi-health-delta">Loading…</div>
-      <div class="kpi-bar" id="kpi-health-bar" style="background:linear-gradient(90deg,#D4910A,#F5A623)"></div>
+      <div class="summary-card-meta" id="summary-card-meta"></div>
     </div>
-    <div class="kpi">
-      <div class="kpi-icon" style="background:#FEF9C3">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#854D0E" stroke-width="2"><path d="M12 2a7 7 0 017 7c0 3-1.7 5.6-4.3 6.8V18H9.3v-2.2C6.7 14.6 5 12 5 9a7 7 0 017-7z"/><path d="M9 21h6"/></svg>
+
+    <div class="summary-card-kpis">
+      <div class="summary-kpi">
+        <div class="summary-kpi-label">Health score</div>
+        <div class="summary-kpi-value" id="summary-kpi-health"><span class="summary-kpi-dash">—</span></div>
+        <div class="summary-kpi-sub" id="summary-kpi-health-sub">Awaiting score</div>
       </div>
-      <div class="kpi-v" id="kpi-recs-count">—</div>
-      <div class="kpi-l">Open Recs</div>
-      <div class="kpi-delta warn">Awaiting your approval</div>
-      <div class="kpi-bar" style="background:linear-gradient(90deg,#D4910A,#FDE68A)"></div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-icon" style="background:#DBEAFE">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      <div class="summary-kpi">
+        <div class="summary-kpi-label">Last-month leads</div>
+        <div class="summary-kpi-value" id="summary-kpi-leads"><span class="summary-kpi-dash">—</span></div>
+        <div class="summary-kpi-sub" id="summary-kpi-leads-sub">Awaiting NinjaCat sync</div>
       </div>
-      <div class="kpi-v" id="kpi-tickets-count">—</div>
-      <div class="kpi-l">Support</div>
-      <div class="kpi-delta warn" id="kpi-tickets-delta">Loading…</div>
-      <div class="kpi-bar" style="background:linear-gradient(90deg,#3B82F6,#93C5FD)"></div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-icon" style="background:var(--cug)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C8964E" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+      <div class="summary-kpi">
+        <div class="summary-kpi-label">Blended CPL</div>
+        <div class="summary-kpi-value" id="summary-kpi-cpl"><span class="summary-kpi-dash">—</span></div>
+        <div class="summary-kpi-sub" id="summary-kpi-cpl-sub">Awaiting NinjaCat sync</div>
       </div>
-      <div class="kpi-v" id="kpi-spend" style="font-size:22px">—</div>
-      <div class="kpi-l">Monthly Spend</div>
-      <div class="kpi-delta up">All enrolled services</div>
-      <div class="kpi-bar" style="background:linear-gradient(90deg,var(--cu),var(--cul))"></div>
     </div>
+
+    <div class="summary-card-pills">
+      <span class="summary-pill" id="summary-pill-recs">
+        <span id="summary-recs-count">—</span> open rec<span id="summary-recs-s">s</span>
+      </span>
+      <span class="summary-pill" id="summary-pill-tickets">
+        <span id="summary-tickets-count">—</span> open ticket<span id="summary-tickets-s">s</span>
+      </span>
+      <span class="summary-pill" id="summary-pill-spend">
+        <span id="summary-spend-amt">—</span>/mo enrolled spend
+      </span>
+    </div>
+  </div>
+
+  <!-- Hidden legacy KPI hooks (read by older _renderOverview branches; will be removed once all branches migrate) -->
+  <div style="display:none" aria-hidden="true">
+    <span id="kpi-health-score">—</span>
+    <span id="kpi-health-delta"></span>
+    <span id="kpi-health-bar"></span>
+    <span id="kpi-recs-count">—</span>
+    <span id="kpi-tickets-count">—</span>
+    <span id="kpi-tickets-delta"></span>
+    <span id="kpi-spend">—</span>
   </div>
 
   <!-- Leasing Health Row -->
@@ -4367,6 +4380,127 @@ function _renderOverview(propData, ticketsData, budgetData) {
     if (trendBadge) trendBadge.textContent = renew != null && renew < 20 ? 'RENEWAL FOCUS' : 'EXPIRING';
     if (trendDelta && renew != null) trendDelta.textContent = renew + ' renewals tracked in window';
   }
+
+  // 30-second summary card (consolidates Health + Leads + CPL + active issues)
+  _renderSummaryCard(propData, ticketsData, budgetData);
+}
+
+function _renderSummaryCard(propData, ticketsData, budgetData) {
+  var card = document.getElementById('summary-card');
+  if (!card || !propData) return;
+
+  function setText(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+  function setHTML(id, val) { var el = document.getElementById(id); if (el) el.innerHTML = val; }
+
+  var perf   = propData.current_perf || null;
+  var health = propData.health  || {};
+  var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // ── Severity ──────────────────────────────────────────
+  // Severity drives the left border + status pill color.
+  // Maps health.overall to the unified palette: sage / amber / red / grey.
+  var hs = health.overall != null ? Math.round(health.overall) : null;
+  var sev = 'inactive';
+  if (hs != null) {
+    if (hs >= 75)      sev = 'on-track';
+    else if (hs >= 50) sev = 'warning';
+    else               sev = 'critical';
+  }
+  card.classList.remove('status-on-track','status-warning','status-critical','status-improving','status-inactive');
+  card.classList.add('status-' + sev);
+
+  // ── Status text ───────────────────────────────────────
+  var rawStatus = (health.status || '').trim();
+  var statusText;
+  if (rawStatus) {
+    statusText = rawStatus.charAt(0) + rawStatus.slice(1).toLowerCase();
+  } else if (sev === 'on-track')  statusText = 'On track';
+  else if (sev === 'warning')     statusText = 'Watch';
+  else if (sev === 'critical')    statusText = 'Needs attention';
+  else                            statusText = 'Awaiting score';
+  setText('summary-status-text', statusText);
+
+  // ── Meta line ─────────────────────────────────────────
+  var meta = '';
+  if (perf && perf.month) {
+    var mp = perf.month.split('-');
+    meta = 'Performance · ' + monthNames[parseInt(mp[1],10)-1] + ' ' + mp[0];
+  } else if (health.last_scored) {
+    var d = new Date(health.last_scored + 'T00:00:00');
+    if (!isNaN(d.getTime())) {
+      meta = 'Health scored ' + monthNames[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+    }
+  }
+  setText('summary-card-meta', meta);
+
+  // ── Health KPI ────────────────────────────────────────
+  if (hs != null) {
+    setHTML('summary-kpi-health', hs);
+  } else {
+    setHTML('summary-kpi-health', '<span class="summary-kpi-dash">—</span>');
+  }
+  setText('summary-kpi-health-sub', statusText);
+
+  // ── Leads KPI ─────────────────────────────────────────
+  if (perf && perf.leads != null) {
+    setHTML('summary-kpi-leads', perf.leads.toLocaleString());
+    var leadsSub = perf.spend ? '$' + Math.round(perf.spend).toLocaleString() + ' spend' : '';
+    setText('summary-kpi-leads-sub', leadsSub);
+  } else {
+    setHTML('summary-kpi-leads', '<span class="summary-kpi-dash">—</span>');
+    setText('summary-kpi-leads-sub', 'Awaiting NinjaCat sync');
+  }
+
+  // ── Blended CPL KPI ───────────────────────────────────
+  if (perf && perf.cpl != null) {
+    setHTML('summary-kpi-cpl', '$' + Math.round(perf.cpl).toLocaleString());
+    setText('summary-kpi-cpl-sub', 'Blended across paid channels');
+  } else {
+    setHTML('summary-kpi-cpl', '<span class="summary-kpi-dash">—</span>');
+    setText('summary-kpi-cpl-sub', 'Awaiting NinjaCat sync');
+  }
+
+  // ── Pills: open recs ──────────────────────────────────
+  // Recs count is populated separately by the recommendations loader into #pending-recs-count.
+  // Read it if present; default to 0.
+  var recsBtnEl = document.getElementById('pending-recs-count');
+  var recsCount = recsBtnEl ? parseInt((recsBtnEl.textContent || '').trim(), 10) : 0;
+  if (isNaN(recsCount)) recsCount = 0;
+  setText('summary-recs-count', recsCount);
+  setText('summary-recs-s', recsCount === 1 ? '' : 's');
+  var pillRecs = document.getElementById('summary-pill-recs');
+  if (pillRecs) {
+    pillRecs.classList.toggle('has-action', recsCount > 0);
+    pillRecs.classList.toggle('is-empty', recsCount === 0);
+    pillRecs.onclick = recsCount > 0 ? function(){ var n = document.querySelector('[onclick*=recommendations]'); if (n) nav('recommendations', n); } : null;
+  }
+
+  // ── Pills: open tickets ───────────────────────────────
+  var openTix = 0;
+  if (ticketsData && ticketsData.tickets) {
+    openTix = ticketsData.tickets.filter(function(t){
+      var s = (t.status || '').toLowerCase();
+      return s !== 'done' && s !== 'closed';
+    }).length;
+  }
+  setText('summary-tickets-count', openTix);
+  setText('summary-tickets-s', openTix === 1 ? '' : 's');
+  var pillTix = document.getElementById('summary-pill-tickets');
+  if (pillTix) {
+    pillTix.classList.toggle('has-action', openTix > 0);
+    pillTix.classList.toggle('is-empty', openTix === 0);
+    pillTix.onclick = openTix > 0 ? function(){ var n = document.querySelector('[onclick*=tickets]'); if (n) nav('tickets', n); } : null;
+  }
+
+  // ── Pills: enrolled monthly spend ─────────────────────
+  var totalSpend = null;
+  if (budgetData) {
+    if (budgetData.summary && budgetData.summary.total != null) totalSpend = budgetData.summary.total;
+    else if (budgetData.total != null) totalSpend = budgetData.total;
+  }
+  setText('summary-spend-amt', totalSpend != null ? '$' + Math.round(totalSpend).toLocaleString() : '—');
+  var pillSpend = document.getElementById('summary-pill-spend');
+  if (pillSpend) pillSpend.classList.toggle('is-empty', totalSpend == null || totalSpend === 0);
 }
 
 function _loadOverviewActivity(acts, isDemo) {
