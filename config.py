@@ -19,6 +19,12 @@ HUBDB_CONTENT_BRIEFS_TABLE_ID = os.getenv("HUBDB_CONTENT_BRIEFS_TABLE_ID")
 HUBDB_CONTENT_DECAY_TABLE_ID = os.getenv("HUBDB_CONTENT_DECAY_TABLE_ID")
 HUBDB_PAID_KEYWORDS_TABLE_ID = os.getenv("HUBDB_PAID_KEYWORDS_TABLE_ID")
 HUBDB_BRIEF_DRAFTS_TABLE_ID = os.getenv("HUBDB_BRIEF_DRAFTS_TABLE_ID")
+# Onboarding/discovery + Fluency Blueprint pipeline (Phase 5).
+HUBDB_ONBOARDING_INTAKE_TABLE_ID = os.getenv("HUBDB_ONBOARDING_INTAKE_TABLE_ID")
+HUBDB_GAP_RESPONSES_TABLE_ID = os.getenv("HUBDB_GAP_RESPONSES_TABLE_ID")
+HUBDB_BLUEPRINT_VARIABLES_TABLE_ID = os.getenv("HUBDB_BLUEPRINT_VARIABLES_TABLE_ID")
+HUBDB_BLUEPRINT_TAGS_TABLE_ID = os.getenv("HUBDB_BLUEPRINT_TAGS_TABLE_ID")
+HUBDB_BLUEPRINT_ASSETS_TABLE_ID = os.getenv("HUBDB_BLUEPRINT_ASSETS_TABLE_ID")
 
 # --- Phase 3: Keyword Research + Trends ---
 KEYWORD_RESEARCH_MAX_RESULTS = 500
@@ -154,6 +160,57 @@ SETUP_FEES = {
 
 PLE_STATUS_INCLUDE = ["RPM Managed", "Dispositioning", "Onboarding"]
 PAID_MEDIA_REVIEW_WINDOW_HOURS = 48
+
+# --- Onboarding/Discovery Pipeline (Phase 5) ---
+# Target: deal-signed → live in 5-7 days. HubSpot workflow watches
+# rpm_onboarding_status_changed_at and alerts the company owner if a stage
+# exceeds its budget.
+ONBOARDING_SLA_DAYS_TOTAL = 7
+ONBOARDING_SLA_PER_STAGE_HOURS = {
+    "intake_sent":              48,   # client has 2 days to start the form
+    "intake_in_progress":       24,   # once started, finish within 1 day
+    "brief_drafting":            6,   # AI draft is async, allow 6h headroom
+    "brief_review":             24,   # CSM review window
+    "strategy_in_build":        72,   # paid + SEO build in parallel
+    "awaiting_client_approval": 24,
+}
+# Gap-review email workflow — see docs/handoffs/HUBSPOT_GAP_REVIEW_WORKFLOW.md.
+GAP_REVIEW_TOKEN_TTL_DAYS = 7
+GAP_REVIEW_REMINDER_HOURS = 24       # owner reminder if no email sent
+GAP_REVIEW_ESCALATION_HOURS = 48     # escalate to RM if no CM response
+GAP_REVIEW_FINAL_TIMEOUT_HOURS = 72  # flag onboarding_status=escalated
+
+# AI-slop classifier threshold on free-text intake fields. Above this score,
+# the field gets surfaced in gap_questions for CM verification.
+AI_SLOP_FLAG_THRESHOLD = 0.7
+
+# Fluency Blueprint asset size variants. Logos must be transparent PNG;
+# property hero photos can be JPG with EXIF intact (provenance check).
+# Asset uploader pre-resizes to these dims via Pillow before HubSpot Files
+# upload — Fluency pulls the exact dim it needs, no server-side resize.
+FLUENCY_ASSET_VARIANTS = {
+    "logo": [
+        {"role": "logo_square",    "width": 1200, "height": 1200, "fmt": "PNG"},
+        {"role": "logo_landscape", "width": 1200, "height": 300,  "fmt": "PNG"},
+        {"role": "logo_small",     "width": 600,  "height": 600,  "fmt": "PNG"},
+        {"role": "favicon",        "width": 128,  "height": 128,  "fmt": "PNG"},
+    ],
+    "hero": [
+        {"role": "hero_landscape", "width": 1200, "height": 628,  "fmt": "JPG"},
+        {"role": "hero_square",    "width": 1200, "height": 1200, "fmt": "JPG"},
+        {"role": "hero_portrait",  "width": 960,  "height": 1200, "fmt": "JPG"},
+    ],
+}
+
+# Brand color extraction — pull top-N dominant colors from logo (k-means
+# on pixel data, ignoring transparent + near-white/near-black regions).
+# PMA picks primary/secondary from these swatches; CSM approves.
+BRAND_COLOR_EXTRACT_COUNT = 5
+BRAND_COLOR_REQUIRE_APPROVAL = True
+
+# RPM Living email convention — used to derive Community Manager and
+# Regional Manager names from their emails on intake submit.
+RPM_EMAIL_DOMAIN = "rpmliving.com"
 
 # --- Portal ---
 WEBHOOK_SERVER_URL = os.getenv("WEBHOOK_SERVER_URL", "http://localhost:8443")

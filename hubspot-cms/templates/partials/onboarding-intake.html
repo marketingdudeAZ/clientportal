@@ -1,0 +1,159 @@
+<!--
+  Onboarding/Discovery Intake Form
+
+  Six-layer anti-slop architecture (see docs/handoffs/HUBSPOT_GAP_REVIEW_WORKFLOW.md):
+    1. SYSTEM PULL — fields the AI drafter pre-filled (read-only display)
+    2. STRUCTURED PICK — dropdowns + multi-select (typo-proof)
+    3. AI STRAWMAN + THIS-OR-THAT — surface only low-confidence fields as binary picks
+    4. ARTIFACT UPLOAD — logo (transparent PNG required) + hero photo
+    5. FORCED-FACT FIELDS — concession (numeric), occupancy (percent), CM/RM emails
+    6. FREE TEXT — narrowly-scoped, AI-slop classifier runs on submit
+
+  Field IDs match REQUIRED_FIELDS in webhook-server/gap_review.py — keep in sync.
+-->
+<section class="portal-card onboarding-intake" id="onboarding-intake">
+  <h2 class="section-header">Onboarding Discovery</h2>
+  <p class="section-subtitle">
+    Quick form to set up your property's marketing. Most fields are pre-filled
+    from your website — review, correct, and pick from options where shown.
+  </p>
+
+  <form id="onboarding-form"
+        data-company-id="{{ property.hs_object_id }}"
+        data-uuid="{{ property.uuid }}"
+        novalidate>
+
+    {# ── Layer 2: STRUCTURED PICK ── #}
+    <fieldset class="intake-section">
+      <legend>Property basics</legend>
+
+      <label for="ob-name">Property name</label>
+      <input type="text" id="ob-name" name="property_name"
+             value="{{ property.name|default('') }}" readonly />
+      <small class="hint">Pulled from HubSpot. Contact your CSM to change.</small>
+
+      <label for="ob-neighborhoods">Target neighborhoods</label>
+      <select id="ob-neighborhoods" name="neighborhoods" multiple required>
+        {# Populated client-side from /api/onboarding/intake/draft #}
+      </select>
+      <small class="hint">Select all neighborhoods you target.</small>
+
+      <label for="ob-units">Unit types offered</label>
+      <select id="ob-units" name="unit_types" multiple required>
+        <option value="Studio">Studio</option>
+        <option value="1BR">1 Bedroom</option>
+        <option value="2BR">2 Bedroom</option>
+        <option value="3BR">3 Bedroom</option>
+        <option value="4BR+">4+ Bedroom</option>
+        <option value="Loft">Loft</option>
+        <option value="Townhouse">Townhouse</option>
+        <option value="Penthouse">Penthouse</option>
+      </select>
+
+      <label for="ob-competitors">Primary competitors</label>
+      <select id="ob-competitors" name="primary_competitors" multiple required>
+        {# Populated client-side from AI draft + free entry disabled #}
+      </select>
+      <small class="hint">Pick from the list — typed competitor names are blocked to keep data clean.</small>
+    </fieldset>
+
+    {# ── Layer 1: SYSTEM PULL — ILS profile URLs ── #}
+    {# Public ILS pages give us real resident reviews + structured amenity
+       and unit data, processed by ils_research.py and fed to the AI brief
+       drafter as a strong anti-slop signal. #}
+    <fieldset class="intake-section">
+      <legend>ILS profiles (anti-slop signal)</legend>
+
+      <label for="ob-ils-apartments">Apartments.com URL</label>
+      <input type="url" id="ob-ils-apartments" name="ils_apartments_com"
+             placeholder="https://www.apartments.com/.../" />
+
+      <label for="ob-ils-zillow">Zillow URL</label>
+      <input type="url" id="ob-ils-zillow" name="ils_zillow"
+             placeholder="https://www.zillow.com/apartments/..." />
+
+      <label for="ob-ils-other">Other ILS URLs (one per line)</label>
+      <textarea id="ob-ils-other" name="ils_other"
+                placeholder="rent.com URL&#10;apartmentlist.com URL"></textarea>
+      <small class="hint">
+        Optional but strongly recommended. We pull real review excerpts from
+        these pages — much harder to AI-fabricate than website copy.
+      </small>
+    </fieldset>
+
+    {# ── Layer 5: FORCED-FACT FIELDS ── #}
+    <fieldset class="intake-section">
+      <legend>Current performance</legend>
+
+      <label for="ob-concession">Current concession</label>
+      <input type="text" id="ob-concession" name="current_concession"
+             placeholder="$1500 or 0" required pattern="^\\$?[\\d,]+$|^0$|^[Nn]one$" />
+      <small class="hint">Dollar amount or "0" — prose like "two months free" won't validate.</small>
+
+      <label for="ob-occupancy">Current occupancy %</label>
+      <input type="number" id="ob-occupancy" name="current_occupancy_pct"
+             min="0" max="100" step="0.1" required />
+
+      <label for="ob-cm-email">Community Manager email</label>
+      <input type="email" id="ob-cm-email" name="community_manager_email"
+             pattern="^[a-z]+\\.[a-z]+(?:-[a-z]+)?@rpmliving\\.com$"
+             placeholder="first.last@rpmliving.com" required />
+      <small class="hint" id="ob-cm-name-preview"></small>
+
+      <label for="ob-rm-email">Regional Manager email</label>
+      <input type="email" id="ob-rm-email" name="regional_manager_email"
+             pattern="^[a-z]+\\.[a-z]+(?:-[a-z]+)?@rpmliving\\.com$"
+             placeholder="first.last@rpmliving.com" required />
+      <small class="hint" id="ob-rm-name-preview"></small>
+    </fieldset>
+
+    {# ── Layer 3: AI STRAWMAN + THIS-OR-THAT ── #}
+    <fieldset class="intake-section">
+      <legend>Brand voice</legend>
+      <p class="hint">
+        Our AI drafted the items below from your website. Pick the option that feels
+        most accurate, or choose "Different" if neither fits.
+      </p>
+      <div id="ob-this-or-that">
+        {# Populated client-side from /api/onboarding/intake/draft #}
+      </div>
+    </fieldset>
+
+    {# ── Layer 6: FREE TEXT (narrowly scoped, slop-classified on submit) ── #}
+    <fieldset class="intake-section">
+      <legend>What we'd miss from just reading your website</legend>
+      <label for="ob-complaint">Top recent resident complaint (last 90 days)</label>
+      <textarea id="ob-complaint" name="top_resident_complaint"
+                maxlength="280" required></textarea>
+      <small class="hint">
+        Be specific — "pool was closed three times in February" beats "amenity issues."
+        Generic answers will trigger a follow-up to the Community Manager.
+      </small>
+    </fieldset>
+
+    {# ── Layer 4: ARTIFACT UPLOAD ── #}
+    <fieldset class="intake-section">
+      <legend>Brand assets</legend>
+
+      <label for="ob-logo">Logo (transparent PNG required)</label>
+      <input type="file" id="ob-logo" name="logo" accept="image/png" />
+      <small class="hint">
+        Logo must be a PNG with transparent background. We'll auto-generate the
+        sizes Fluency needs (1200×1200, 1200×300, 600×600, 128×128).
+      </small>
+
+      <div id="ob-color-swatches" class="color-swatches"></div>
+
+      <label for="ob-hero">Property hero photo</label>
+      <input type="file" id="ob-hero" name="hero" accept="image/jpeg,image/png" />
+      <small class="hint">
+        At least 1200px on the shortest side. EXIF preserved for provenance.
+      </small>
+    </fieldset>
+
+    <div class="intake-footer">
+      <button type="submit" class="btn-primary" id="ob-submit">Submit intake</button>
+      <span id="ob-status" class="status-text"></span>
+    </div>
+  </form>
+</section>

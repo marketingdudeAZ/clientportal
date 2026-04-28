@@ -60,6 +60,15 @@ You will receive one or more of:
   - Text scraped from the property's website
   - A pitch deck (PDF)
   - An RFP document (PDF)
+  - ILS LISTING RESEARCH — auto-extracted from public ILS profiles
+    (apartments.com, zillow, etc.) including REAL RESIDENT REVIEW EXCERPTS
+
+WEIGHT THE ILS REVIEWS HEAVILY when drafting voice/tone, unique selling
+points, and overarching goals. Resident reviews are the most reliable signal
+in the input — much more so than website copy (often AI-generated) or pitch
+decks (sales-coded). When the website says "luxurious lifestyle" but reviews
+mention "the elevator is always broken," the brief should reflect both: the
+property's positioning AND a flag that operations may need to align with it.
 
 Produce a JSON object with a draft value + a confidence score (0.0-1.0) for each field below. Use `null` for the value when the source material does not support a confident answer — do not guess or hallucinate.
 
@@ -156,6 +165,7 @@ def draft_brief(
     deck_pdf_bytes: bytes | None = None,
     rfp_pdf_bytes: bytes | None = None,
     site_text: str | None = None,
+    ils_urls: dict[str, str] | list[str] | None = None,
 ) -> dict:
     """Call Claude Sonnet and return the drafted brief JSON.
 
@@ -165,6 +175,10 @@ def draft_brief(
         rfp_pdf_bytes: raw bytes of the RFP PDF (optional).
         site_text: pre-scraped homepage text. If None, scrape_site_text is
             called here.
+        ils_urls: optional dict ({"apartments_com": url, "zillow": url, ...})
+            or list of URLs to also research. Real resident reviews from
+            ILS profiles are a strong anti-slop signal — much harder for
+            a PMA to AI-fabricate than website copy. See ils_research.py.
 
     Returns a dict keyed by DRAFTABLE_FIELDS with {value, confidence} entries.
     Raises BriefDrafterError if Sonnet returns unparseable JSON.
@@ -178,6 +192,21 @@ def draft_brief(
 
     if site_text is None:
         site_text = scrape_site_text(domain)
+
+    # ILS research — best-effort, never raises. Adds resident review quotes
+    # and structured amenity/unit data that grounds the brief in something
+    # the PMA can't have AI-generated.
+    ils_text = ""
+    if ils_urls:
+        try:
+            from ils_research import format_for_prompt, research_ils_listings
+            ils_data = research_ils_listings(ils_urls)
+            ils_text = format_for_prompt(ils_data)
+            logger.info("brief_ai_drafter: ILS research found %d providers, %d quotes",
+                        len(ils_data.get("providers") or []),
+                        len(ils_data.get("merged_review_quotes") or []))
+        except Exception as e:
+            logger.warning("brief_ai_drafter: ILS research failed: %s", e)
 
     # Build Claude content blocks. Put stable/large inputs first (system prompt
     # is already cached; site text is reusable across drafts of the same
@@ -221,6 +250,14 @@ def draft_brief(
         user_content.append({
             "type": "text",
             "text": f"(No website text available for {domain}.)",
+        })
+
+    # ILS research — placed AFTER website text so the website is the cache
+    # boundary; ILS data changes more often than website content.
+    if ils_text:
+        user_content.append({
+            "type": "text",
+            "text": ils_text,
         })
 
     user_content.append({

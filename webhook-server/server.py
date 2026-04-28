@@ -3938,9 +3938,20 @@ def client_brief_draft_start():
     rfp_bytes = None
     domain = ""
     company_id = ""
+    ils_urls: dict[str, str] = {}
     if request.content_type and request.content_type.startswith("multipart/"):
         domain = (request.form.get("domain") or "").strip()
         company_id = (request.form.get("company_id") or "").strip()
+        # ILS URLs as flat form fields — apartments.com, zillow, plus newline-
+        # separated "other" textarea. ils_research auto-detects providers.
+        for key in ("ils_apartments_com", "ils_zillow"):
+            v = (request.form.get(key) or "").strip()
+            if v:
+                ils_urls[key.replace("ils_", "")] = v
+        for line in (request.form.get("ils_other") or "").splitlines():
+            v = line.strip()
+            if v:
+                ils_urls.setdefault(v, v)  # keyed by URL itself for "other" entries
         if "deck" in request.files:
             deck_bytes = request.files["deck"].read()
         if "rfp" in request.files:
@@ -3949,6 +3960,12 @@ def client_brief_draft_start():
         payload = request.get_json(silent=True) or {}
         domain = (payload.get("domain") or "").strip()
         company_id = str(payload.get("company_id") or "").strip()
+        # JSON path: accept either dict {provider: url} or list of URLs
+        raw_ils = payload.get("ils_urls")
+        if isinstance(raw_ils, dict):
+            ils_urls = {k: str(v).strip() for k, v in raw_ils.items() if v}
+        elif isinstance(raw_ils, list):
+            ils_urls = {u: u for u in raw_ils if u}
 
     if not domain and not company_id:
         return jsonify({"error": "Provide `domain` (URL or bare host) or `company_id`"}), 400
@@ -4014,6 +4031,7 @@ def client_brief_draft_start():
                 domain=resolved_domain,
                 deck_pdf_bytes=deck_bytes,
                 rfp_pdf_bytes=rfp_bytes,
+                ils_urls=ils_urls or None,
             )
             _BRIEF_DRAFTS[draft_id].update(status="ready", draft=result)
             logger.info("brief draft %s ready for company %s", draft_id, company_id)
