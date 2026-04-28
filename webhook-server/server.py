@@ -1112,6 +1112,7 @@ def submit_ticket():
         category=category,
         company_id=company_id,
         contact_id=contact_id or None,
+        submitter_email=email,
     )
 
     if result["status"] == "error":
@@ -1149,6 +1150,128 @@ def get_tickets():
     except Exception as e:
         logger.error("Ticket list failed for company %s: %s", company_id, e)
         return jsonify({"error": "Failed to load tickets"}), 500
+
+
+@app.route("/api/tickets/mine", methods=["GET", "OPTIONS"])
+def get_my_tickets():
+    """Cross-property: every open ticket the calling user filed.
+
+    Powers the "My Tickets" header link added in the UX rework. Reads the
+    submitter from X-Portal-Email and walks all PLE-managed companies'
+    tickets, filtering on the embedded portal-submitter tag.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    include_closed = request.args.get("include_closed", "false").lower() == "true"
+    try:
+        from ticket_manager import list_my_tickets
+        tickets = list_my_tickets(email, include_closed=include_closed)
+        return jsonify({"tickets": tickets, "count": len(tickets), "submitter": email})
+    except Exception as e:
+        logger.error("My-tickets fetch failed for %s: %s", email, e)
+        return jsonify({"error": "Failed to load tickets"}), 500
+
+
+@app.route("/api/tickets/bulk", methods=["POST", "OPTIONS"])
+def submit_bulk_tickets():
+    """File the same ticket against multiple properties in one call.
+
+    Body JSON:
+        company_ids  — list of HubSpot company IDs (required, min 1)
+        subject      — Ticket title (required)
+        description  — Full description
+        priority     — High | Medium | Low (default Medium)
+        category     — channel category (default Other)
+
+    Returns:
+        { results: [{ company_id, status, ticket_id?, error? }, ...],
+          ok_count, error_count }
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    payload = request.get_json() or {}
+    company_ids = payload.get("company_ids") or []
+    subject     = (payload.get("subject") or "").strip()
+    description = (payload.get("description") or "").strip()
+    priority    = payload.get("priority", "Medium")
+    category    = payload.get("category", "Other")
+
+    if not company_ids or not isinstance(company_ids, list):
+        return jsonify({"error": "company_ids must be a non-empty list"}), 400
+    if not subject:
+        return jsonify({"error": "subject is required"}), 400
+    if len(company_ids) > 50:
+        return jsonify({"error": "Max 50 properties per bulk request"}), 400
+
+    from ticket_manager import list_my_tickets as _invalidate_marker  # ensure import works
+    from ticket_manager import create_ticket, _MY_TICKETS_CACHE
+
+    results = []
+    ok = 0
+    err = 0
+    for cid in company_ids:
+        cid = (cid or "").strip()
+        if not cid:
+            continue
+        try:
+            r = create_ticket(
+                subject=subject,
+                description=description,
+                priority=priority,
+                category=category,
+                company_id=cid,
+                submitter_email=email,
+            )
+            if r.get("status") == "ok":
+                ok += 1
+                results.append({"company_id": cid, "status": "ok", "ticket_id": r.get("ticket_id")})
+            else:
+                err += 1
+                results.append({"company_id": cid, "status": "error", "error": r.get("error", "unknown")})
+        except Exception as e:
+            err += 1
+            logger.error("Bulk ticket create failed for %s: %s", cid, e)
+            results.append({"company_id": cid, "status": "error", "error": str(e)})
+
+    # Bust the per-user cache so the new tickets show up on next /api/tickets/mine read
+    _MY_TICKETS_CACHE.clear()
+
+    logger.info("Bulk ticket submit by %s: %d ok, %d err across %d properties", email, ok, err, len(company_ids))
+    return jsonify({"results": results, "ok_count": ok, "error_count": err})
+
+
+@app.route("/api/portfolio/triage", methods=["GET", "OPTIONS"])
+def get_portfolio_triage_route():
+    """Ranked "what needs you today" list across all managed properties.
+
+    Replaces the Red Light color-only grid as the portfolio landing view.
+    Each row is one property + one specific reason + a CTA target. Sorted
+    by severity (critical → on-track), then by ticket age within band.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    force = request.args.get("force", "false").lower() == "true"
+    try:
+        from triage import get_portfolio_triage
+        return jsonify(get_portfolio_triage(force=force))
+    except Exception as e:
+        logger.error("Portfolio triage failed: %s", e)
+        return jsonify({"error": "Failed to build triage list"}), 500
 
 
 @app.route("/api/ticket/<ticket_id>/stage", methods=["POST", "OPTIONS"])

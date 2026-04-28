@@ -74,7 +74,7 @@ def _get_company_owner(company_id):
         return None
 
 
-def create_ticket(subject, description, priority, category, company_id, contact_id=None):
+def create_ticket(subject, description, priority, category, company_id, contact_id=None, submitter_email=None):
     """Create a HubSpot ticket and associate it with the company (and optionally contact).
 
     Args:
@@ -98,8 +98,12 @@ def create_ticket(subject, description, priority, category, company_id, contact_
     hs_priority = PRIORITY_MAP.get(priority, "MEDIUM")
     hs_channel  = CATEGORY_MAP.get(category, "SEO")
 
-    # Prefix description to make portal source obvious in Service Hub
-    full_desc = f"[Submitted via RPM Client Portal]\n\nCategory: {category}\n\n{description}"
+    # Prefix description to make portal source obvious in Service Hub.
+    # Embed submitter_email so list_my_tickets can recover "who filed this"
+    # without a custom HubSpot property. The "[portal-submitter:..]" tag is
+    # the single source of truth for ownership inside HubSpot.
+    submitter_tag = f"[portal-submitter: {submitter_email}]\n" if submitter_email else ""
+    full_desc = f"[Submitted via RPM Client Portal]\n{submitter_tag}\nCategory: {category}\n\n{description}"
 
     ticket_payload = {
         "properties": {
@@ -212,22 +216,187 @@ def list_tickets(company_id, include_closed=False):
             continue
 
         owner_id = props.get("hubspot_owner_id", "")
+        raw_content = props.get("content", "") or ""
         tickets.append({
-            "id":           t["id"],
-            "subject":      props.get("subject", ""),
-            "description":  (props.get("content", "") or "").replace("[Submitted via RPM Client Portal]\n\n", ""),
-            "stage_id":     stage_id,
-            "stage_label":  STAGE_LABELS.get(stage_id, "New"),
-            "priority":     (props.get("hs_ticket_priority") or "MEDIUM").upper(),
-            "channel":      props.get("channel", ""),
-            "owner_name":   owner_map.get(owner_id, "Your AM"),
-            "created_at":   props.get("createdate", ""),
-            "updated_at":   props.get("hs_lastmodifieddate", ""),
+            "id":              t["id"],
+            "subject":         props.get("subject", ""),
+            "description":     _strip_portal_tags(raw_content),
+            "submitter_email": _extract_submitter_email(raw_content),
+            "stage_id":        stage_id,
+            "stage_label":     STAGE_LABELS.get(stage_id, "New"),
+            "priority":        (props.get("hs_ticket_priority") or "MEDIUM").upper(),
+            "channel":         props.get("channel", ""),
+            "owner_name":      owner_map.get(owner_id, "Your AM"),
+            "created_at":      props.get("createdate", ""),
+            "updated_at":      props.get("hs_lastmodifieddate", ""),
         })
 
     # Sort newest first
     tickets.sort(key=lambda x: x["created_at"], reverse=True)
     return tickets
+
+
+_SUBMITTER_RE = None
+
+
+def _extract_submitter_email(content: str) -> str:
+    """Pull the embedded portal-submitter email from a ticket's description."""
+    global _SUBMITTER_RE
+    if _SUBMITTER_RE is None:
+        import re
+        _SUBMITTER_RE = re.compile(r"\[portal-submitter:\s*([^\]\s]+)\s*\]", re.IGNORECASE)
+    if not content:
+        return ""
+    m = _SUBMITTER_RE.search(content)
+    return (m.group(1).strip().lower() if m else "")
+
+
+def _strip_portal_tags(content: str) -> str:
+    """Remove the portal source/submitter tags so the description renders cleanly."""
+    if not content:
+        return ""
+    cleaned = content.replace("[Submitted via RPM Client Portal]", "")
+    if _SUBMITTER_RE is None:
+        _extract_submitter_email("")  # warm the regex
+    return _SUBMITTER_RE.sub("", cleaned).lstrip("\n").lstrip()
+
+
+def list_my_tickets(submitter_email: str, include_closed: bool = False) -> list[dict]:
+    """Cross-property view: every ticket the given email filed.
+
+    Scans all PLE-managed companies, batch-reads their tickets, and filters
+    to those whose embedded submitter tag matches. Result is a flat list
+    sorted newest-first with company_name + company_id attached so the UI
+    can deep-link back to the right property.
+
+    Cached for 60 seconds in-process to avoid hammering HubSpot when the
+    user reopens the My Tickets drawer multiple times in a session.
+    """
+    if not submitter_email or not HUBSPOT_API_KEY:
+        return []
+
+    submitter_email = submitter_email.strip().lower()
+
+    import time
+    now = time.time()
+    cache_key = (submitter_email, include_closed)
+    cached = _MY_TICKETS_CACHE.get(cache_key)
+    if cached and (now - cached[0]) < _MY_TICKETS_TTL:
+        return cached[1]
+
+    # Pull the same managed-company list the triage view uses
+    try:
+        from triage import _list_managed_companies  # type: ignore
+        companies = _list_managed_companies()
+    except Exception as e:
+        logger.error("My-tickets: managed-company lookup failed: %s", e)
+        return []
+
+    company_ids = [c["id"] for c in companies]
+    company_meta = {c["id"]: c for c in companies}
+
+    # company → ticket associations (batched)
+    associations: dict[str, list[str]] = {}
+    for chunk in _chunked(company_ids, 100):
+        try:
+            r = requests.post(
+                f"{HS_BASE}/crm/v4/associations/companies/tickets/batch/read",
+                headers=HS_HEADERS,
+                json={"inputs": [{"id": cid} for cid in chunk]},
+                timeout=20,
+            )
+            if r.status_code not in (200, 207):
+                continue
+            for row in r.json().get("results", []):
+                cid = row.get("from", {}).get("id")
+                if not cid:
+                    continue
+                associations[cid] = [t["toObjectId"] for t in row.get("to", [])]
+        except Exception as e:
+            logger.warning("My-tickets assoc fetch failed: %s", e)
+            continue
+
+    all_ticket_ids = sorted({tid for tids in associations.values() for tid in tids})
+    if not all_ticket_ids:
+        return []
+
+    # Batch-read ticket details with content (so we can match submitter)
+    raw_tickets_by_id: dict[str, dict] = {}
+    for chunk in _chunked(all_ticket_ids, 100):
+        try:
+            r = requests.post(
+                f"{HS_BASE}/crm/v3/objects/tickets/batch/read",
+                headers=HS_HEADERS,
+                json={
+                    "inputs": [{"id": tid} for tid in chunk],
+                    "properties": [
+                        "subject", "content", "hs_pipeline_stage",
+                        "hs_ticket_priority", "hubspot_owner_id",
+                        "createdate", "hs_lastmodifieddate", "channel",
+                    ],
+                },
+                timeout=20,
+            )
+            if r.status_code != 200:
+                continue
+            for t in r.json().get("results", []):
+                raw_tickets_by_id[t["id"]] = t
+        except Exception as e:
+            logger.warning("My-tickets batch read failed: %s", e)
+            continue
+
+    # Resolve owners across the whole result set in one call
+    owner_ids = [
+        t.get("properties", {}).get("hubspot_owner_id")
+        for t in raw_tickets_by_id.values()
+        if t.get("properties", {}).get("hubspot_owner_id")
+    ]
+    owner_map = _get_owner_names(owner_ids)
+
+    # Walk back through associations so we know which company each ticket belongs to
+    out: list[dict] = []
+    for cid, tids in associations.items():
+        meta = company_meta.get(cid, {})
+        for tid in tids:
+            t = raw_tickets_by_id.get(str(tid)) or raw_tickets_by_id.get(tid)
+            if not t:
+                continue
+            props = t.get("properties", {})
+            stage_id = props.get("hs_pipeline_stage", "1")
+            if not include_closed and stage_id == STAGES["closed"]:
+                continue
+            content = props.get("content", "") or ""
+            if _extract_submitter_email(content) != submitter_email:
+                continue
+            owner_id = props.get("hubspot_owner_id", "")
+            out.append({
+                "id":           t["id"],
+                "subject":      props.get("subject", ""),
+                "description":  _strip_portal_tags(content),
+                "stage_id":     stage_id,
+                "stage_label":  STAGE_LABELS.get(stage_id, "New"),
+                "priority":     (props.get("hs_ticket_priority") or "MEDIUM").upper(),
+                "channel":      props.get("channel", ""),
+                "owner_name":   owner_map.get(owner_id, "Your AM"),
+                "created_at":   props.get("createdate", ""),
+                "updated_at":   props.get("hs_lastmodifieddate", ""),
+                "company_id":   cid,
+                "company_name": meta.get("name", ""),
+                "company_uuid": meta.get("uuid", ""),
+            })
+
+    out.sort(key=lambda x: x["created_at"], reverse=True)
+    _MY_TICKETS_CACHE[cache_key] = (now, out)
+    return out
+
+
+_MY_TICKETS_CACHE: dict = {}
+_MY_TICKETS_TTL = 60  # seconds
+
+
+def _chunked(items, size):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
 
 
 def update_ticket_stage(ticket_id, stage_key):

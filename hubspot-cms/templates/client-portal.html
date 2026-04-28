@@ -74,6 +74,16 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 .nav-item.active svg{opacity:1}
 .nav-badge{margin-left:auto;background:#E06666;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center}
 .nav-badge.amber{background:var(--amb)}
+/* Advanced nav drawer (UX rework — collapses legacy items) */
+.sb-advanced-toggle{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:10px 20px 6px;color:rgba(255,255,255,0.35);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;cursor:pointer;font-family:inherit}
+.sb-advanced-toggle:hover{color:rgba(255,255,255,0.6)}
+#sb-advanced-list .nav-item{color:rgba(255,255,255,0.4)}
+#sb-advanced-list .nav-item svg{opacity:.4}
+#sb-advanced-list .nav-item:hover{color:rgba(255,255,255,0.7)}
+#sb-advanced-list .nav-item:hover svg{opacity:.7}
+#sb-advanced-list .nav-item.active{color:#fff;background:rgba(200,150,78,0.1)}
+#sb-advanced-list .nav-item.active svg{opacity:1}
+.nav-badge[id="video-new-badge"]{background:var(--cu);font-size:8px;letter-spacing:.06em}
 .sb-footer{padding:16px 20px;border-top:1px solid rgba(255,255,255,0.07)}
 .sb-user{display:flex;align-items:center;gap:8px}
 .sb-avatar{width:28px;height:28px;border-radius:7px;background:var(--cug);border:1px solid var(--cu);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--cu);flex-shrink:0}
@@ -317,19 +327,21 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 .kb-article-snippet{font-size:11px;color:var(--tm);margin-top:2px;line-height:1.5}
 .kb-deflect-actions{display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--bd)}
 
-/* ── Ticket Thread ── */
-.ticket-thread{background:var(--bdl);border-radius:8px;padding:12px;margin:8px 0}
-.thread-msg{margin-bottom:10px;display:flex;flex-direction:column}
+/* ── Ticket Thread (chat-bubble UX rework) ── */
+.ticket-thread{background:#FAFAF9;border:1px solid var(--bd);border-radius:12px;padding:16px;margin:10px 0;display:flex;flex-direction:column;gap:12px}
+.thread-msg{display:flex;flex-direction:column;max-width:100%}
 .thread-msg.outgoing{align-items:flex-start}
 .thread-msg.incoming{align-items:flex-end}
-.thread-bubble{max-width:85%;padding:9px 12px;border-radius:10px;font-size:12px;line-height:1.6}
-.thread-msg.outgoing .thread-bubble{background:#fff;border:1px solid var(--bd);color:var(--tp)}
-.thread-msg.incoming .thread-bubble{background:var(--cu);color:#fff}
-.thread-meta{font-size:10px;color:var(--tm);margin-top:3px;padding:0 2px}
-.thread-reply-bar{display:flex;gap:8px;margin-top:10px}
-.thread-reply-bar textarea{flex:1;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-family:inherit;font-size:12px;resize:none;min-height:36px;outline:none}
+.thread-bubble{max-width:78%;padding:10px 14px;border-radius:14px;font-size:13px;line-height:1.55;word-wrap:break-word;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.thread-msg.outgoing .thread-bubble{background:#fff;border:1px solid var(--bd);color:var(--tp);border-bottom-left-radius:4px}
+.thread-msg.incoming .thread-bubble{background:var(--cu);color:#fff;border-bottom-right-radius:4px}
+.thread-meta{font-size:10px;color:var(--tm);margin-top:4px;padding:0 6px;display:flex;align-items:center;gap:6px}
+.thread-msg.outgoing .thread-meta{padding-left:8px}
+.thread-msg.incoming .thread-meta{padding-right:8px}
+.thread-reply-bar{display:flex;gap:8px;margin-top:6px;padding-top:10px;border-top:1px solid var(--bd)}
+.thread-reply-bar textarea{flex:1;padding:10px 12px;border:1px solid var(--bd);border-radius:10px;font-family:inherit;font-size:13px;resize:none;min-height:40px;outline:none;background:#fff}
 .thread-reply-bar textarea:focus{border-color:var(--cu);box-shadow:0 0 0 3px var(--cug)}
-.thread-loading{font-size:11px;color:var(--tm);padding:8px;text-align:center}
+.thread-loading{font-size:12px;color:var(--tm);padding:14px;text-align:center}
 .ticket-view-thread{font-size:11px;font-weight:600;color:var(--cu);cursor:pointer;border:none;background:none;padding:0;text-decoration:underline}
 
 /* ── Client Brief ── */
@@ -760,6 +772,176 @@ body{padding-top:36px}
 #onboarding-form .ob-status-text{font-size:12px;color:var(--ts)}
 .sec-status-pill{padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;background:var(--cug);color:var(--cu);text-transform:uppercase;letter-spacing:.04em}
 .sec-status-pill.sla-breach{background:#fee2e2;color:#b00020}
+
+/* ─────────────────────────────────────────────────────────────────
+   UX rework — added April 2026. New styles below this line live in
+   the template (not portal.css) because portal.css is uploaded but
+   never linked from the page. Variables match the existing scheme:
+   --j, --jd, --cu, --cul, --cug, --sage, --mint, --ml, --red, --amb,
+   --tp, --ts, --tm, --bd, --bdl, --r.
+   ───────────────────────────────────────────────────────────────── */
+
+/* Severity tokens — one scale for status pills, badges, KPI deltas */
+:root{
+  --sev-critical:#C94444;--sev-warning:#D4910A;--sev-watch:#9CA3AF;
+  --sev-on-track:#8FA68E;--sev-improving:#5B8C5A;--sev-inactive:#D1D5DB;
+  --sev-critical-bg:rgba(201,68,68,0.10);--sev-warning-bg:rgba(212,145,10,0.12);
+  --sev-watch-bg:rgba(156,163,175,0.14);--sev-on-track-bg:rgba(143,166,142,0.14);
+  --sev-improving-bg:rgba(91,140,90,0.14);--sev-inactive-bg:rgba(209,213,219,0.20);
+}
+.sev-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--sev-watch-bg);color:var(--sev-watch)}
+.sev-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.sev-pill.sev-critical{background:var(--sev-critical-bg);color:var(--sev-critical)}
+.sev-pill.sev-warning{background:var(--sev-warning-bg);color:var(--sev-warning)}
+.sev-pill.sev-watch{background:var(--sev-watch-bg);color:var(--sev-watch)}
+.sev-pill.sev-on-track{background:var(--sev-on-track-bg);color:var(--sev-on-track)}
+.sev-pill.sev-improving{background:var(--sev-improving-bg);color:var(--sev-improving)}
+
+/* 30-second summary card (Overview header) */
+.summary-card{background:#fff;border:1px solid var(--bd);border-left:4px solid var(--tm);border-radius:var(--r);box-shadow:var(--sh);padding:22px 26px;margin-bottom:20px;transition:border-color .2s}
+.summary-card.status-on-track{border-left-color:var(--sage)}
+.summary-card.status-warning{border-left-color:var(--amb)}
+.summary-card.status-critical{border-left-color:var(--red)}
+.summary-card.status-improving{border-left-color:var(--sage)}
+.summary-card.status-inactive{border-left-color:var(--tm)}
+.summary-card-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.summary-status-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;background:var(--sev-watch-bg);color:var(--ts)}
+.summary-status-pill .summary-status-dot{width:8px;height:8px;border-radius:50%;background:var(--tm)}
+.status-on-track .summary-status-pill{background:var(--sev-on-track-bg);color:var(--sage)}
+.status-on-track .summary-status-pill .summary-status-dot{background:var(--sage)}
+.status-improving .summary-status-pill{background:var(--sev-improving-bg);color:var(--sev-improving)}
+.status-improving .summary-status-pill .summary-status-dot{background:var(--sev-improving)}
+.status-warning .summary-status-pill{background:var(--sev-warning-bg);color:var(--amb)}
+.status-warning .summary-status-pill .summary-status-dot{background:var(--amb)}
+.status-critical .summary-status-pill{background:var(--sev-critical-bg);color:var(--red)}
+.status-critical .summary-status-pill .summary-status-dot{background:var(--red)}
+.summary-card-meta{font-size:12px;font-weight:500;color:var(--tm);text-align:right}
+.summary-card-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;padding-bottom:18px;border-bottom:1px solid var(--bdl);margin-bottom:16px}
+.summary-kpi-label{font-size:11px;font-weight:700;color:var(--ts);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.summary-kpi-value{font-size:32px;font-weight:600;color:var(--tp);line-height:1.05;letter-spacing:-.01em}
+.summary-kpi-value .unit{font-size:16px;font-weight:500;color:var(--ts);margin-left:4px}
+.summary-kpi-dash{color:var(--tm);font-weight:500}
+.summary-kpi-sub{font-size:12px;color:var(--tm);margin-top:6px;min-height:16px}
+.summary-card-pills{display:flex;flex-wrap:wrap;gap:8px}
+.summary-pill{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;background:var(--bg);color:var(--ts);border:1px solid var(--bd);user-select:none;transition:background .2s,border-color .2s,color .2s}
+.summary-pill.has-action{background:var(--cug);color:var(--cu);border-color:rgba(200,150,78,.32);cursor:pointer}
+.summary-pill.has-action:hover{background:rgba(200,150,78,.18);border-color:rgba(200,150,78,.5)}
+.summary-pill.is-empty{opacity:.6}
+@media(max-width:720px){.summary-card{padding:18px}.summary-card-header{flex-direction:column;align-items:flex-start;gap:8px}.summary-card-meta{text-align:left}.summary-card-kpis{grid-template-columns:1fr;gap:14px;padding-bottom:14px}.summary-kpi-value{font-size:28px}}
+
+/* Header icon buttons (Help, My Tickets) + tier badge + recently-viewed */
+.pnb-icon-btn{position:relative;background:transparent;border:none;width:30px;height:30px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:rgba(255,255,255,.75);cursor:pointer;transition:background .15s,color .15s}
+.pnb-icon-btn:hover{background:rgba(255,255,255,.08);color:#fff}
+.pnb-icon-badge{position:absolute;top:2px;right:2px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--cu);color:#fff;font-size:9px;font-weight:800;line-height:16px;text-align:center}
+.pnb-tier-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 9px;border-radius:999px;background:var(--cug);color:var(--cul);border:1px solid rgba(200,150,78,.32)}
+.pnb-tier-badge.tier-local{background:rgba(156,163,175,.16);color:#C5CBD2;border-color:rgba(156,163,175,.3)}
+.pnb-tier-badge.tier-lite{background:rgba(143,166,142,.16);color:#B5CCB4;border-color:rgba(143,166,142,.3)}
+.pnb-tier-badge.tier-basic{background:rgba(143,166,142,.20);color:#C8DBC7;border-color:rgba(143,166,142,.35)}
+.pnb-tier-badge.tier-standard{background:rgba(200,150,78,.18);color:var(--cul);border-color:rgba(200,150,78,.35)}
+.pnb-tier-badge.tier-premium{background:rgba(200,150,78,.28);color:#F0CB8E;border-color:rgba(200,150,78,.5)}
+.pnb-recent{padding:10px 14px 6px;border-bottom:1px solid var(--bdl)}
+.pnb-recent-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--tm);margin-bottom:6px}
+.pnb-recent-chips{display:flex;flex-wrap:wrap;gap:4px}
+.pnb-recent-chip{font-size:11px;font-weight:600;padding:4px 9px;background:var(--bg);border:1px solid var(--bd);border-radius:999px;color:var(--ts);text-decoration:none;transition:background .2s,color .2s}
+.pnb-recent-chip:hover{background:var(--cug);color:var(--cu)}
+
+/* Slide-over panels (KB, My Tickets, Bulk ticket) */
+.slideover{position:fixed;inset:0;z-index:1000;display:none}
+.slideover.is-open{display:block}
+.slideover-backdrop{position:absolute;inset:0;background:rgba(31,41,55,.45);opacity:0;transition:opacity .2s cubic-bezier(.4,0,.2,1)}
+.slideover.is-open .slideover-backdrop{opacity:1}
+.slideover-panel{position:absolute;top:0;right:0;bottom:0;width:440px;max-width:92vw;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.12);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s cubic-bezier(.4,0,.2,1)}
+.slideover.is-open .slideover-panel{transform:translateX(0)}
+.slideover-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--bd);flex-shrink:0}
+.slideover-title{font-size:16px;font-weight:700;color:var(--tp)}
+.slideover-sub{font-size:12px;color:var(--tm);margin-top:2px}
+.slideover-close{background:none;border:1px solid var(--bd);border-radius:6px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;color:var(--ts);cursor:pointer;transition:background .2s,color .2s}
+.slideover-close:hover{background:var(--bg);color:var(--tp)}
+.slideover-body{flex:1;overflow-y:auto;padding:18px 22px 22px;display:flex;flex-direction:column;gap:14px}
+.slideover-body label{display:block;font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.06em}
+.slideover-body label > input[type=text],.slideover-body label > input[type=search],.slideover-body label > select,.slideover-body label > textarea{display:block;width:100%;margin-top:6px;padding:10px 12px;border:1px solid var(--bd);border-radius:8px;font-family:inherit;font-size:14px;font-weight:400;color:var(--tp);background:#fff;transition:border-color .2s,box-shadow .2s}
+.slideover-body label > input:focus,.slideover-body label > select:focus,.slideover-body label > textarea:focus{outline:none;border-color:var(--cu);box-shadow:0 0 0 3px var(--cug)}
+.slideover-search{width:100%;padding:12px 14px;border:1px solid var(--bd);border-radius:10px;font-family:inherit;font-size:14px;background:#fff}
+.slideover-search:focus{outline:none;border-color:var(--cu);box-shadow:0 0 0 3px var(--cug)}
+.kb-quick-tiles{display:flex;flex-wrap:wrap;gap:6px}
+.kb-tile{background:var(--bg);border:1px solid var(--bd);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;color:var(--ts);cursor:pointer;font-family:inherit;transition:background .2s,color .2s}
+.kb-tile:hover{background:var(--cug);color:var(--cu)}
+.kb-results{display:flex;flex-direction:column;gap:10px}
+.kb-result-item{padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:#fff;text-decoration:none;color:inherit;transition:border-color .2s,background .2s}
+.kb-result-item:hover{border-color:var(--cu);background:#FAFAF9}
+.kb-result-title{font-weight:700;font-size:13px;color:var(--tp)}
+.kb-result-snippet{font-size:12px;color:var(--ts);margin-top:4px;line-height:1.5}
+.kb-empty{padding:20px 4px;text-align:center;font-size:12px;color:var(--tm);line-height:1.6}
+.my-tickets-list{display:flex;flex-direction:column;gap:10px}
+.my-ticket-row{padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:#fff;cursor:pointer;transition:border-color .2s}
+.my-ticket-row:hover{border-color:var(--cu)}
+.my-ticket-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.my-ticket-subject{font-weight:700;font-size:13px;color:var(--tp);flex:1}
+.my-ticket-meta{font-size:11px;color:var(--tm);margin-top:6px}
+.my-ticket-prop{font-size:11px;font-weight:600;color:var(--cu);margin-top:2px}
+.my-ticket-stage{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.my-ticket-stage.stage-new{background:var(--sev-watch-bg);color:var(--sev-watch)}
+.my-ticket-stage.stage-in_progress{background:var(--sev-on-track-bg);color:var(--sage)}
+.my-ticket-stage.stage-stuck{background:var(--sev-warning-bg);color:var(--amb)}
+.my-ticket-stage.stage-closed{background:var(--sev-inactive-bg);color:var(--tm)}
+.bulk-prop-search{margin:6px 0 8px}
+.bulk-prop-search input{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-family:inherit;font-size:13px}
+.bulk-prop-list{max-height:160px;overflow-y:auto;border:1px solid var(--bd);border-radius:8px;padding:4px}
+.bulk-prop-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;color:var(--tp)}
+.bulk-prop-item:hover{background:var(--bg)}
+.bulk-prop-item input[type=checkbox]{margin:0;cursor:pointer}
+.bulk-prop-item .bulk-prop-market{font-size:11px;color:var(--tm);margin-left:auto}
+.bulk-form-foot{display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid var(--bdl);font-size:12px;color:var(--ts)}
+
+/* Toast */
+.toast-stack{position:fixed;top:60px;right:24px;z-index:1100;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{pointer-events:auto;background:#fff;border:1px solid var(--bd);border-left:4px solid var(--tm);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:500;color:var(--tp);box-shadow:var(--shm);min-width:240px;max-width:360px;display:flex;align-items:flex-start;gap:10px;opacity:0;transform:translateX(20px);transition:opacity .2s,transform .2s}
+.toast.is-visible{opacity:1;transform:translateX(0)}
+.toast.toast-ok{border-left-color:var(--sage)}
+.toast.toast-error{border-left-color:var(--red)}
+.toast.toast-info{border-left-color:var(--cu)}
+.toast a{color:var(--cu);text-decoration:none;font-weight:700;margin-left:auto}
+.toast a:hover{text-decoration:underline}
+
+/* Empty state */
+.empty-state{text-align:center;padding:36px 24px;background:#FAFAF9;border:1px dashed var(--bd);border-radius:var(--r);color:var(--ts)}
+.empty-state svg{width:48px;height:48px;margin:0 auto 12px;color:var(--tm);opacity:.7}
+.empty-state-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:4px}
+.empty-state-sub{font-size:12px;color:var(--tm);margin-bottom:12px;line-height:1.6}
+.empty-state .btn{margin-top:4px}
+
+/* Skeleton loader */
+@keyframes skeleton-shimmer{0%{background-position:-480px 0}100%{background-position:480px 0}}
+.skeleton{background:linear-gradient(90deg,#EDEFF2 0%,#F7F8FA 50%,#EDEFF2 100%);background-size:480px 100%;animation:skeleton-shimmer 1.4s linear infinite;border-radius:6px}
+.skeleton-line{height:12px;margin-bottom:8px}
+.skeleton-line.w-50{width:50%}.skeleton-line.w-75{width:75%}.skeleton-line.w-100{width:100%}
+.skeleton-block{height:100px}
+
+/* Video Creative flagship hero */
+.video-hero{background:linear-gradient(135deg,#1A2530 0%,#2C3B49 60%,#3D2B1F 100%);color:#fff;padding:36px 32px;border-radius:16px;margin-bottom:18px;position:relative;overflow:hidden;box-shadow:0 12px 32px rgba(20,28,38,.18)}
+.video-hero::after{content:"";position:absolute;top:-50%;right:-10%;width:380px;height:380px;background:radial-gradient(circle,rgba(200,150,78,.18) 0%,transparent 60%);pointer-events:none}
+.video-hero-eyebrow{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--cul);margin-bottom:8px}
+.video-hero-title{font-size:26px;font-weight:800;line-height:1.18;letter-spacing:-.01em;margin-bottom:6px;max-width:520px;position:relative}
+.video-hero-sub{font-size:14px;font-weight:500;color:rgba(255,255,255,.65);max-width:520px;margin-bottom:20px;line-height:1.55}
+.video-hero-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:relative}
+.video-hero-actions .btn-primary{background:var(--cu);color:#fff;border:none;padding:11px 22px;font-size:13px;font-weight:700;border-radius:10px;cursor:pointer;box-shadow:0 4px 14px rgba(200,150,78,.32)}
+.video-hero-actions .btn-primary:hover{background:var(--cul)}
+.video-hero-stat{font-size:12px;font-weight:600;color:rgba(255,255,255,.55);display:inline-flex;align-items:center;gap:8px}
+.video-hero-stat .pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 0 rgba(143,166,142,.5);animation:pulse-dot 2s infinite}
+@keyframes pulse-dot{0%{box-shadow:0 0 0 0 rgba(143,166,142,.5)}70%{box-shadow:0 0 0 10px rgba(143,166,142,0)}100%{box-shadow:0 0 0 0 rgba(143,166,142,0)}}
+@media(max-width:720px){.video-hero{padding:24px 20px}.video-hero-title{font-size:22px}}
+
+/* Density refresh — applies once at the body level */
+body{line-height:1.55}
+.card,.card-p,.card-p-sm{border-radius:12px}
+
+/* Mobile: hide power-user surfaces to keep mobile read-only */
+@media(max-width:640px){
+  .sb-advanced-toggle,#sb-advanced-list{display:none}
+  .video-hero{padding:18px 16px;margin-bottom:12px}
+  .summary-card-pills .summary-pill:nth-child(n+3){display:none}
+  .video-grid{grid-template-columns:1fr!important}
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -776,9 +958,24 @@ body{padding-top:36px}
     <span id="pnb-prop-name">{{ property.name }}</span>
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
   </button>
+  <span class="pnb-tier-badge" id="pnb-tier-badge" style="display:none">—</span>
+
+  <div style="flex:1"></div>
+
+  <button class="pnb-icon-btn" id="pnb-mytix-btn" title="My tickets across all properties" onclick="openSlideover('my-tickets-slideover'); loadMyTickets();">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+    <span class="pnb-icon-badge" id="pnb-mytix-badge" style="display:none">0</span>
+  </button>
+  <button class="pnb-icon-btn" id="pnb-help-btn" title="Knowledge base" onclick="openSlideover('kb-slideover'); document.getElementById('kb-search-input') && document.getElementById('kb-search-input').focus();">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  </button>
 
   <!-- Dropdown panel -->
   <div class="pnb-dropdown" id="pnb-dropdown" style="display:none">
+    <div class="pnb-recent" id="pnb-recent" style="display:none">
+      <div class="pnb-recent-label">Recently viewed</div>
+      <div class="pnb-recent-chips" id="pnb-recent-chips"></div>
+    </div>
     <input class="pnb-search" id="pnb-search" placeholder="Search properties…" oninput="filterPropSwitcher(this.value)" autocomplete="off">
     <div class="pnb-list" id="pnb-list">
       <div style="padding:16px;text-align:center;color:var(--tm);font-size:12px">Loading…</div>
@@ -820,83 +1017,110 @@ body{padding-top:36px}
     </div>
   </div>
   <nav class="sb-nav">
+    <!-- 7-item primary nav (UX rework). Section IDs preserved so all
+         existing JS continues to work; only labels and order changed.
+         Items merged elsewhere live below the Advanced toggle. -->
     <div class="sb-nav-group">
-      <div class="sb-nav-label">Property</div>
-      <div class="nav-item active" onclick="nav('overview',this)">
+      <div class="nav-item active" onclick="nav('overview',this)" title="Property summary, digest, history">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         Overview
       </div>
-      <div class="nav-item" onclick="nav('performance',this)">
+      <div class="nav-item" onclick="nav('performance',this)" title="Health, trends, forecast">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Performance
       </div>
-      <div class="nav-item" id="nav-seo" onclick="nav('seo',this)" style="display:none">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        SEO &amp; AI
-      </div>
-      <div class="nav-item" id="nav-content" onclick="nav('content',this)" style="display:none">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-        Content
-      </div>
-      <div class="nav-item" id="nav-research" onclick="nav('research',this)" style="display:none">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-4.35-4.35"/><circle cx="11" cy="11" r="8"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-        Research
-      </div>
-      <div class="nav-item" onclick="nav('services',this)">
+      <div class="nav-item" onclick="nav('services',this)" title="Plan, spend, recommendations, paid media">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
-        Services
-      </div>
-      <div class="nav-item" onclick="nav('recommendations',this)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-        Call Prep
+        Plan &amp; Spend
         <span class="nav-badge" id="recs-badge">2</span>
       </div>
-      <div class="nav-item" id="nav-onboarding" onclick="nav('onboarding',this)" style="display:none">
+      <div class="nav-item" onclick="nav('tickets',this)" title="Open tickets and team threads">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-        Onboarding
-        <span class="nav-badge" id="onboarding-badge" style="display:none">!</span>
-      </div>
-      <div class="nav-item" onclick="nav('brief',this)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        Client Brief
-      </div>
-      <div class="nav-item" id="nav-paid" onclick="nav('paid',this)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
-        Paid Media
-      </div>
-      <div class="nav-item" onclick="nav('budget',this)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-        Budget & SKUs
-      </div>
-    </div>
-    <div class="sb-nav-group">
-      <div class="sb-nav-label">Content</div>
-      <div class="nav-item" onclick="nav('assets',this)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        Assets
-      </div>
-      <div class="nav-item" id="nav-video" onclick="nav('video',this)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
-        Video Creative
-      </div>
-      <div class="nav-item" id="nav-forecast" onclick="nav('forecast',this)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-        Performance Forecast
-      </div>
-    </div>
-    <div class="sb-nav-group">
-      <div class="sb-nav-label">Team</div>
-      <div class="nav-item" onclick="nav('tickets',this)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-        Support
+        Tickets
         <span class="nav-badge amber" id="tickets-badge">3</span>
       </div>
-      <div class="nav-item" onclick="nav('activity',this)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        Activity & Deals
+      <div class="nav-item" onclick="nav('assets',this)" title="Photos, videos, brand files">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        Files
+      </div>
+      <div class="nav-item" id="nav-seo" onclick="nav('seo',this)" style="display:none" title="Rankings, content planner, research">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        SEO
+      </div>
+      <div class="nav-item" id="nav-video" onclick="nav('video',this)" title="Automated video creative">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        Video Creative
+        <span class="nav-badge" id="video-new-badge" style="display:none">NEW</span>
+      </div>
+    </div>
+
+    <!-- Advanced: legacy nav items kept reachable for power users.
+         Most are now sub-tabs of the seven above; this drawer is a
+         safety net during the rollout. Hidden by default. -->
+    <div class="sb-nav-group" id="sb-advanced-group">
+      <button type="button" class="sb-advanced-toggle" id="sb-advanced-toggle" onclick="toggleAdvancedNav()" aria-expanded="false">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="sb-advanced-chevron" style="transition:transform .2s"><polyline points="9 18 15 12 9 6"/></svg>
+        Advanced
+      </button>
+      <div id="sb-advanced-list" style="display:none">
+        <div class="nav-item" onclick="nav('recommendations',this)" title="Approvals + AM questions (now also in Plan &amp; Spend)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+          Call Prep
+        </div>
+        <div class="nav-item" id="nav-content" onclick="nav('content',this)" style="display:none" title="Topic clusters and briefs">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+          Content
+        </div>
+        <div class="nav-item" id="nav-research" onclick="nav('research',this)" style="display:none" title="Keyword research and trends">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-4.35-4.35"/><circle cx="11" cy="11" r="8"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          Research
+        </div>
+        <div class="nav-item" id="nav-onboarding" onclick="nav('onboarding',this)" style="display:none" title="Intake and gap review">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Onboarding
+          <span class="nav-badge" id="onboarding-badge" style="display:none">!</span>
+        </div>
+        <div class="nav-item" onclick="nav('brief',this)" title="Property profile and brief">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Property profile
+        </div>
+        <div class="nav-item" id="nav-paid" onclick="nav('paid',this)" title="Paid media compliance + targeting">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+          Paid Media
+        </div>
+        <div class="nav-item" onclick="nav('budget',this)" title="Budget tiers (now part of Plan &amp; Spend)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+          Budget &amp; SKUs
+        </div>
+        <div class="nav-item" id="nav-forecast" onclick="nav('forecast',this)" title="Performance forecast simulator">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          Forecast
+        </div>
+        <div class="nav-item" onclick="nav('activity',this)" title="Timeline of deals, reports, calls">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Activity &amp; Deals
+        </div>
       </div>
     </div>
   </nav>
+  <script>
+    function toggleAdvancedNav() {
+      var list = document.getElementById('sb-advanced-list');
+      var btn  = document.getElementById('sb-advanced-toggle');
+      var chev = document.getElementById('sb-advanced-chevron');
+      if (!list || !btn) return;
+      var open = list.style.display !== 'none';
+      list.style.display = open ? 'none' : 'block';
+      btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+      if (chev) chev.style.transform = open ? '' : 'rotate(90deg)';
+      try { localStorage.setItem('rpm_nav_advanced', open ? '0' : '1'); } catch (e) {}
+    }
+    (function() {
+      try {
+        if (localStorage.getItem('rpm_nav_advanced') === '1') toggleAdvancedNav();
+      } catch (e) {}
+    })();
+  </script>
   <div class="sb-footer">
     <div class="sb-user">
       <div class="sb-avatar">KD</div>
@@ -923,43 +1147,56 @@ body{padding-top:36px}
     </div>
   </div>
 
-  <div class="kpi-row">
-    <div class="kpi">
-      <div class="kpi-icon" id="kpi-health-icon" style="background:rgba(212,145,10,0.1)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4910A" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+  <!-- 30-second summary card (consolidates Health, Leads, CPL + active issues) -->
+  <div class="summary-card status-inactive" id="summary-card">
+    <div class="summary-card-header">
+      <div class="summary-status-pill" id="summary-status-pill">
+        <span class="summary-status-dot"></span>
+        <span id="summary-status-text">Loading…</span>
       </div>
-      <div class="kpi-v" id="kpi-health-score" style="color:#D4910A">—</div>
-      <div class="kpi-l">Health Score</div>
-      <div class="kpi-delta down" id="kpi-health-delta">Loading…</div>
-      <div class="kpi-bar" id="kpi-health-bar" style="background:linear-gradient(90deg,#D4910A,#F5A623)"></div>
+      <div class="summary-card-meta" id="summary-card-meta"></div>
     </div>
-    <div class="kpi">
-      <div class="kpi-icon" style="background:#FEF9C3">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#854D0E" stroke-width="2"><path d="M12 2a7 7 0 017 7c0 3-1.7 5.6-4.3 6.8V18H9.3v-2.2C6.7 14.6 5 12 5 9a7 7 0 017-7z"/><path d="M9 21h6"/></svg>
+
+    <div class="summary-card-kpis">
+      <div class="summary-kpi">
+        <div class="summary-kpi-label">Health score</div>
+        <div class="summary-kpi-value" id="summary-kpi-health"><span class="summary-kpi-dash">—</span></div>
+        <div class="summary-kpi-sub" id="summary-kpi-health-sub">Awaiting score</div>
       </div>
-      <div class="kpi-v" id="kpi-recs-count">—</div>
-      <div class="kpi-l">Open Recs</div>
-      <div class="kpi-delta warn">Awaiting your approval</div>
-      <div class="kpi-bar" style="background:linear-gradient(90deg,#D4910A,#FDE68A)"></div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-icon" style="background:#DBEAFE">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      <div class="summary-kpi">
+        <div class="summary-kpi-label">Last-month leads</div>
+        <div class="summary-kpi-value" id="summary-kpi-leads"><span class="summary-kpi-dash">—</span></div>
+        <div class="summary-kpi-sub" id="summary-kpi-leads-sub">Awaiting NinjaCat sync</div>
       </div>
-      <div class="kpi-v" id="kpi-tickets-count">—</div>
-      <div class="kpi-l">Support</div>
-      <div class="kpi-delta warn" id="kpi-tickets-delta">Loading…</div>
-      <div class="kpi-bar" style="background:linear-gradient(90deg,#3B82F6,#93C5FD)"></div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-icon" style="background:var(--cug)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C8964E" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+      <div class="summary-kpi">
+        <div class="summary-kpi-label">Blended CPL</div>
+        <div class="summary-kpi-value" id="summary-kpi-cpl"><span class="summary-kpi-dash">—</span></div>
+        <div class="summary-kpi-sub" id="summary-kpi-cpl-sub">Awaiting NinjaCat sync</div>
       </div>
-      <div class="kpi-v" id="kpi-spend" style="font-size:22px">—</div>
-      <div class="kpi-l">Monthly Spend</div>
-      <div class="kpi-delta up">All enrolled services</div>
-      <div class="kpi-bar" style="background:linear-gradient(90deg,var(--cu),var(--cul))"></div>
     </div>
+
+    <div class="summary-card-pills">
+      <span class="summary-pill" id="summary-pill-recs">
+        <span id="summary-recs-count">—</span> open rec<span id="summary-recs-s">s</span>
+      </span>
+      <span class="summary-pill" id="summary-pill-tickets">
+        <span id="summary-tickets-count">—</span> open ticket<span id="summary-tickets-s">s</span>
+      </span>
+      <span class="summary-pill" id="summary-pill-spend">
+        <span id="summary-spend-amt">—</span>/mo enrolled spend
+      </span>
+    </div>
+  </div>
+
+  <!-- Hidden legacy KPI hooks (read by older _renderOverview branches; will be removed once all branches migrate) -->
+  <div style="display:none" aria-hidden="true">
+    <span id="kpi-health-score">—</span>
+    <span id="kpi-health-delta"></span>
+    <span id="kpi-health-bar"></span>
+    <span id="kpi-recs-count">—</span>
+    <span id="kpi-tickets-count">—</span>
+    <span id="kpi-tickets-delta"></span>
+    <span id="kpi-spend">—</span>
   </div>
 
   <!-- Leasing Health Row -->
@@ -1793,10 +2030,14 @@ body{padding-top:36px}
 
 <!-- ── VIDEO CREATIVE ── -->
 <section id="section-video" class="section">
-  <div class="sec-topbar">
-    <div>
-      <div class="sec-title">Marquee <span style="font-size:13px;font-weight:600;color:var(--tm);letter-spacing:0;text-transform:none">· Video Creative</span></div>
-      <div class="sec-sub">Recurring Smart Video Creative · review &amp; approve variants</div>
+  <!-- Flagship hero banner for the Marquee video product -->
+  <div class="video-hero">
+    <div class="video-hero-eyebrow">Marquee · Automated Video Creative</div>
+    <div class="video-hero-title">A new video for this property, every month.</div>
+    <div class="video-hero-sub">Trend-aware scripts. Auto-rendered in 5 platform sizes. Review, approve, ship.</div>
+    <div class="video-hero-actions" id="video-hero-actions">
+      <button class="btn btn-primary" onclick="(function(){var el=document.getElementById('video-cycle-content');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});})();" id="video-hero-cta">View this cycle</button>
+      <span class="video-hero-stat" id="video-hero-stat"></span>
     </div>
   </div>
 
@@ -4367,6 +4608,127 @@ function _renderOverview(propData, ticketsData, budgetData) {
     if (trendBadge) trendBadge.textContent = renew != null && renew < 20 ? 'RENEWAL FOCUS' : 'EXPIRING';
     if (trendDelta && renew != null) trendDelta.textContent = renew + ' renewals tracked in window';
   }
+
+  // 30-second summary card (consolidates Health + Leads + CPL + active issues)
+  _renderSummaryCard(propData, ticketsData, budgetData);
+}
+
+function _renderSummaryCard(propData, ticketsData, budgetData) {
+  var card = document.getElementById('summary-card');
+  if (!card || !propData) return;
+
+  function setText(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+  function setHTML(id, val) { var el = document.getElementById(id); if (el) el.innerHTML = val; }
+
+  var perf   = propData.current_perf || null;
+  var health = propData.health  || {};
+  var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // ── Severity ──────────────────────────────────────────
+  // Severity drives the left border + status pill color.
+  // Maps health.overall to the unified palette: sage / amber / red / grey.
+  var hs = health.overall != null ? Math.round(health.overall) : null;
+  var sev = 'inactive';
+  if (hs != null) {
+    if (hs >= 75)      sev = 'on-track';
+    else if (hs >= 50) sev = 'warning';
+    else               sev = 'critical';
+  }
+  card.classList.remove('status-on-track','status-warning','status-critical','status-improving','status-inactive');
+  card.classList.add('status-' + sev);
+
+  // ── Status text ───────────────────────────────────────
+  var rawStatus = (health.status || '').trim();
+  var statusText;
+  if (rawStatus) {
+    statusText = rawStatus.charAt(0) + rawStatus.slice(1).toLowerCase();
+  } else if (sev === 'on-track')  statusText = 'On track';
+  else if (sev === 'warning')     statusText = 'Watch';
+  else if (sev === 'critical')    statusText = 'Needs attention';
+  else                            statusText = 'Awaiting score';
+  setText('summary-status-text', statusText);
+
+  // ── Meta line ─────────────────────────────────────────
+  var meta = '';
+  if (perf && perf.month) {
+    var mp = perf.month.split('-');
+    meta = 'Performance · ' + monthNames[parseInt(mp[1],10)-1] + ' ' + mp[0];
+  } else if (health.last_scored) {
+    var d = new Date(health.last_scored + 'T00:00:00');
+    if (!isNaN(d.getTime())) {
+      meta = 'Health scored ' + monthNames[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+    }
+  }
+  setText('summary-card-meta', meta);
+
+  // ── Health KPI ────────────────────────────────────────
+  if (hs != null) {
+    setHTML('summary-kpi-health', hs);
+  } else {
+    setHTML('summary-kpi-health', '<span class="summary-kpi-dash">—</span>');
+  }
+  setText('summary-kpi-health-sub', statusText);
+
+  // ── Leads KPI ─────────────────────────────────────────
+  if (perf && perf.leads != null) {
+    setHTML('summary-kpi-leads', perf.leads.toLocaleString());
+    var leadsSub = perf.spend ? '$' + Math.round(perf.spend).toLocaleString() + ' spend' : '';
+    setText('summary-kpi-leads-sub', leadsSub);
+  } else {
+    setHTML('summary-kpi-leads', '<span class="summary-kpi-dash">—</span>');
+    setText('summary-kpi-leads-sub', 'Awaiting NinjaCat sync');
+  }
+
+  // ── Blended CPL KPI ───────────────────────────────────
+  if (perf && perf.cpl != null) {
+    setHTML('summary-kpi-cpl', '$' + Math.round(perf.cpl).toLocaleString());
+    setText('summary-kpi-cpl-sub', 'Blended across paid channels');
+  } else {
+    setHTML('summary-kpi-cpl', '<span class="summary-kpi-dash">—</span>');
+    setText('summary-kpi-cpl-sub', 'Awaiting NinjaCat sync');
+  }
+
+  // ── Pills: open recs ──────────────────────────────────
+  // Recs count is populated separately by the recommendations loader into #pending-recs-count.
+  // Read it if present; default to 0.
+  var recsBtnEl = document.getElementById('pending-recs-count');
+  var recsCount = recsBtnEl ? parseInt((recsBtnEl.textContent || '').trim(), 10) : 0;
+  if (isNaN(recsCount)) recsCount = 0;
+  setText('summary-recs-count', recsCount);
+  setText('summary-recs-s', recsCount === 1 ? '' : 's');
+  var pillRecs = document.getElementById('summary-pill-recs');
+  if (pillRecs) {
+    pillRecs.classList.toggle('has-action', recsCount > 0);
+    pillRecs.classList.toggle('is-empty', recsCount === 0);
+    pillRecs.onclick = recsCount > 0 ? function(){ var n = document.querySelector('[onclick*=recommendations]'); if (n) nav('recommendations', n); } : null;
+  }
+
+  // ── Pills: open tickets ───────────────────────────────
+  var openTix = 0;
+  if (ticketsData && ticketsData.tickets) {
+    openTix = ticketsData.tickets.filter(function(t){
+      var s = (t.status || '').toLowerCase();
+      return s !== 'done' && s !== 'closed';
+    }).length;
+  }
+  setText('summary-tickets-count', openTix);
+  setText('summary-tickets-s', openTix === 1 ? '' : 's');
+  var pillTix = document.getElementById('summary-pill-tickets');
+  if (pillTix) {
+    pillTix.classList.toggle('has-action', openTix > 0);
+    pillTix.classList.toggle('is-empty', openTix === 0);
+    pillTix.onclick = openTix > 0 ? function(){ var n = document.querySelector('[onclick*=tickets]'); if (n) nav('tickets', n); } : null;
+  }
+
+  // ── Pills: enrolled monthly spend ─────────────────────
+  var totalSpend = null;
+  if (budgetData) {
+    if (budgetData.summary && budgetData.summary.total != null) totalSpend = budgetData.summary.total;
+    else if (budgetData.total != null) totalSpend = budgetData.total;
+  }
+  setText('summary-spend-amt', totalSpend != null ? '$' + Math.round(totalSpend).toLocaleString() : '—');
+  var pillSpend = document.getElementById('summary-pill-spend');
+  if (pillSpend) pillSpend.classList.toggle('is-empty', totalSpend == null || totalSpend === 0);
 }
 
 function _loadOverviewActivity(acts, isDemo) {
@@ -5873,6 +6235,34 @@ function loadVideoCreative() {
 function _renderVideoCreative(d) {
   _renderCycleView(d);
   _renderHistoryView(d.history || []);
+  // Hero stat + NEW badge in nav whenever variants are pending review
+  var pending = (d.variants || []).filter(function(v){ return v.status === 'pending_review'; }).length;
+  var heroStat = document.getElementById('video-hero-stat');
+  if (heroStat) {
+    if (pending > 0) {
+      heroStat.innerHTML = '<span class="pulse-dot"></span>' + pending + ' variant' + (pending === 1 ? '' : 's') + ' awaiting your review';
+    } else if (d.enrolled) {
+      heroStat.textContent = (d.cycle_status || 'Enrolled') + ' · ' + (d.tier || 'Standard');
+    } else {
+      heroStat.textContent = '';
+    }
+  }
+  var heroCta = document.getElementById('video-hero-cta');
+  if (heroCta) {
+    if (!d.enrolled) {
+      heroCta.textContent = 'Enroll this property';
+      heroCta.onclick = function () { var em = document.getElementById('enroll-modal'); if (em) em.classList.add('open'); };
+    } else if (pending > 0) {
+      heroCta.textContent = 'Review ' + pending + ' variant' + (pending === 1 ? '' : 's');
+    } else {
+      heroCta.textContent = 'View this cycle';
+    }
+  }
+  var navBadge = document.getElementById('video-new-badge');
+  if (navBadge) {
+    if (pending > 0) { navBadge.style.display = ''; navBadge.textContent = 'NEW'; }
+    else navBadge.style.display = 'none';
+  }
   // Start polling if any variant is in revision
   var inRevision = (d.variants||[]).some(function(v){ return v.status === 'revision_in_progress'; });
   if (inRevision && !_videoPollingTimer) {
@@ -8328,6 +8718,455 @@ setTimeout(loadPropertySwitcher, 1500);
 })();
 
 </script>
+
+<!-- ════════════════════════════════════════════════════════════════════
+     Global help + cross-property surfaces (KB, My Tickets, Bulk ticket).
+     These render once per page load and are opened by the icon buttons
+     in prop-nav-bar. Mirror copy lives in the {% else %} portfolio branch.
+     ════════════════════════════════════════════════════════════════════ -->
+
+<!-- Slide-over: Knowledge base front door (Persona E) -->
+<div class="slideover" id="kb-slideover" aria-hidden="true">
+  <div class="slideover-backdrop" onclick="closeSlideover('kb-slideover')"></div>
+  <aside class="slideover-panel" role="dialog" aria-label="Knowledge base">
+    <header class="slideover-header">
+      <div>
+        <div class="slideover-title">Knowledge base</div>
+        <div class="slideover-sub">Search articles or pick a topic</div>
+      </div>
+      <button class="slideover-close" onclick="closeSlideover('kb-slideover')" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </header>
+    <div class="slideover-body">
+      <input type="search" class="slideover-search" id="kb-search-input" placeholder="Search articles…" oninput="kbSearchDebounced(this.value)">
+      <div class="kb-quick-tiles">
+        <button class="kb-tile" type="button" onclick="kbSearch('GA4 access')">GA4 access</button>
+        <button class="kb-tile" type="button" onclick="kbSearch('budget update')">Budget update</button>
+        <button class="kb-tile" type="button" onclick="kbSearch('cancellation')">Cancellation</button>
+        <button class="kb-tile" type="button" onclick="kbSearch('SLA timeline')">SLA timeline</button>
+        <button class="kb-tile" type="button" onclick="kbSearch('GTM install')">GTM install</button>
+        <button class="kb-tile" type="button" onclick="kbSearch('creative refresh')">Creative refresh</button>
+      </div>
+      <div class="kb-results" id="kb-results">
+        <div class="kb-empty">Type to search the knowledge base, or pick a topic above.</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Slide-over: My Tickets (Persona C) -->
+<div class="slideover" id="my-tickets-slideover" aria-hidden="true">
+  <div class="slideover-backdrop" onclick="closeSlideover('my-tickets-slideover')"></div>
+  <aside class="slideover-panel" role="dialog" aria-label="My tickets">
+    <header class="slideover-header">
+      <div>
+        <div class="slideover-title">My tickets</div>
+        <div class="slideover-sub" id="my-tickets-sub">Across every property</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-primary btn-sm" type="button" onclick="openBulkTicketForm()">+ New</button>
+        <button class="slideover-close" onclick="closeSlideover('my-tickets-slideover')" aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </header>
+    <div class="slideover-body">
+      <div class="my-tickets-list" id="my-tickets-list">
+        <div class="kb-empty">Loading…</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Slide-over: Bulk ticket filing (Persona C) -->
+<div class="slideover" id="bulk-ticket-slideover" aria-hidden="true">
+  <div class="slideover-backdrop" onclick="closeSlideover('bulk-ticket-slideover')"></div>
+  <aside class="slideover-panel" role="dialog" aria-label="New ticket">
+    <header class="slideover-header">
+      <div>
+        <div class="slideover-title">New ticket</div>
+        <div class="slideover-sub">File against one or more properties</div>
+      </div>
+      <button class="slideover-close" onclick="closeSlideover('bulk-ticket-slideover')" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </header>
+    <form class="slideover-body" id="bulk-ticket-form" onsubmit="event.preventDefault(); submitBulkTicket();">
+      <label>Properties
+        <div class="bulk-prop-search">
+          <input type="search" placeholder="Search properties…" oninput="filterBulkProps(this.value)" id="bulk-prop-search-input">
+        </div>
+        <div class="bulk-prop-list" id="bulk-prop-list">
+          <div class="kb-empty">Loading…</div>
+        </div>
+      </label>
+      <label>Subject
+        <input type="text" id="bulk-subject" required maxlength="120" placeholder="e.g. Creative refresh — amenity photos">
+      </label>
+      <label>Category
+        <select id="bulk-category">
+          <option value="Other">Other</option>
+          <option value="SEO">SEO</option>
+          <option value="Paid Search">Paid Search</option>
+          <option value="Paid Social">Paid Social</option>
+          <option value="Reputation">Reputation</option>
+          <option value="Creative">Creative</option>
+        </select>
+      </label>
+      <label>Priority
+        <select id="bulk-priority">
+          <option value="Medium">Medium</option>
+          <option value="High">High</option>
+          <option value="Low">Low</option>
+        </select>
+      </label>
+      <label>Description
+        <textarea id="bulk-description" rows="4" placeholder="Add any details the team needs."></textarea>
+      </label>
+      <div class="bulk-form-foot">
+        <span id="bulk-selected-count">0 selected</span>
+        <button type="submit" class="btn btn-primary" id="bulk-submit-btn" disabled>File tickets</button>
+      </div>
+    </form>
+  </aside>
+</div>
+
+<!-- Toast stack (microinteractions) -->
+<div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+/* ──────────────────────────────────────────────────────────────────
+   Slide-over + KB + My Tickets + Bulk ticket + Toast helpers
+   Single source of truth; mirrored in the portfolio branch below.
+   ────────────────────────────────────────────────────────────────── */
+(function () {
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var EMAIL    = (window.__PORTAL_EMAIL__ || '').toLowerCase();
+  var RECENT_KEY = 'rpm_recent_props';
+  var RECENT_MAX = 5;
+
+  // ── Slide-over open/close ────────────────────────────────────────
+  window.openSlideover = function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add('is-open');
+    el.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  };
+  window.closeSlideover = function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('is-open');
+    el.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  };
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    ['kb-slideover', 'my-tickets-slideover', 'bulk-ticket-slideover'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && el.classList.contains('is-open')) closeSlideover(id);
+    });
+  });
+
+  // ── Toast ────────────────────────────────────────────────────────
+  window.toast = function (msg, kind, opts) {
+    kind = kind || 'info';
+    opts = opts || {};
+    var stack = document.getElementById('toast-stack');
+    if (!stack) return;
+    var el = document.createElement('div');
+    el.className = 'toast toast-' + kind;
+    var html = '<div>' + msg + '</div>';
+    if (opts.linkLabel && opts.linkAction) {
+      var aid = 'toast-link-' + Date.now() + Math.random().toString(36).slice(2, 6);
+      html += '<a href="#" id="' + aid + '">' + opts.linkLabel + '</a>';
+      stack.appendChild(el);
+      el.innerHTML = html;
+      var a = document.getElementById(aid);
+      if (a) a.addEventListener('click', function (ev) { ev.preventDefault(); opts.linkAction(); el.remove(); });
+    } else {
+      stack.appendChild(el);
+      el.innerHTML = html;
+    }
+    requestAnimationFrame(function () { el.classList.add('is-visible'); });
+    setTimeout(function () {
+      el.classList.remove('is-visible');
+      setTimeout(function () { el.remove(); }, 250);
+    }, opts.duration || 4500);
+  };
+
+  // ── KB search ────────────────────────────────────────────────────
+  var _kbDebounce = null;
+  window.kbSearchDebounced = function (q) {
+    if (_kbDebounce) clearTimeout(_kbDebounce);
+    _kbDebounce = setTimeout(function () { kbSearch(q); }, 300);
+  };
+  window.kbSearch = function (q) {
+    var input = document.getElementById('kb-search-input');
+    if (input && input.value !== q) input.value = q;
+    var results = document.getElementById('kb-results');
+    if (!results) return;
+    var query = (q || '').trim();
+    if (!query) {
+      results.innerHTML = '<div class="kb-empty">Type to search the knowledge base, or pick a topic above.</div>';
+      return;
+    }
+    results.innerHTML = '<div class="kb-empty">Searching…</div>';
+    fetch(API_BASE + '/api/kb-search?q=' + encodeURIComponent(query),
+      { headers: { 'X-Portal-Email': EMAIL } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var arts = (data && data.articles) || [];
+        if (!arts.length) {
+          results.innerHTML =
+            '<div class="empty-state">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+            '<div class="empty-state-title">No articles found</div>' +
+            '<div class="empty-state-sub">Try a shorter phrase, or file a ticket and the team will help.</div>' +
+            '</div>';
+          return;
+        }
+        results.innerHTML = arts.map(function (a) {
+          return '<a class="kb-result-item" target="_blank" rel="noopener" href="' + (a.url || '#') + '">' +
+            '<div class="kb-result-title">' + escapeHtml(a.title || 'Untitled') + '</div>' +
+            (a.snippet ? '<div class="kb-result-snippet">' + escapeHtml(a.snippet) + '</div>' : '') +
+            '</a>';
+        }).join('');
+      })
+      .catch(function () {
+        results.innerHTML = '<div class="kb-empty">Search failed. Try again in a moment.</div>';
+      });
+  };
+
+  // ── My Tickets ───────────────────────────────────────────────────
+  window.loadMyTickets = function () {
+    var list = document.getElementById('my-tickets-list');
+    if (!list) return;
+    list.innerHTML =
+      '<div class="skeleton-block skeleton"></div>' +
+      '<div class="skeleton-block skeleton" style="margin-top:8px"></div>';
+    fetch(API_BASE + '/api/tickets/mine',
+      { headers: { 'X-Portal-Email': EMAIL } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var tickets = (data && data.tickets) || [];
+        var sub = document.getElementById('my-tickets-sub');
+        if (sub) sub.textContent = tickets.length + ' ticket' + (tickets.length === 1 ? '' : 's') + ' filed by you';
+        var badge = document.getElementById('pnb-mytix-badge');
+        var openCount = tickets.filter(function (t) { return t.stage_id !== '4'; }).length;
+        if (badge) {
+          if (openCount > 0) { badge.style.display = ''; badge.textContent = openCount > 9 ? '9+' : openCount; }
+          else badge.style.display = 'none';
+        }
+        if (!tickets.length) {
+          list.innerHTML =
+            '<div class="empty-state">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>' +
+            '<div class="empty-state-title">No tickets yet</div>' +
+            '<div class="empty-state-sub">When you file a ticket from any property, it shows up here.</div>' +
+            '<button class="btn btn-primary btn-sm" type="button" onclick="openBulkTicketForm()">File a ticket</button>' +
+            '</div>';
+          return;
+        }
+        list.innerHTML = tickets.map(function (t) {
+          var stage = (t.stage_id === '4') ? 'closed' : (t.stage_label || 'New').toLowerCase().replace(/\s+/g, '_');
+          var ageDays = '';
+          if (t.created_at) {
+            var ms = Date.now() - new Date(t.created_at).getTime();
+            var d = Math.max(0, Math.floor(ms / 86400000));
+            ageDays = d === 0 ? 'today' : d + 'd ago';
+          }
+          var deepLink = t.company_uuid
+            ? ('https://digital.rpmliving.com/portal-dashboard?uuid=' + encodeURIComponent(t.company_uuid))
+            : null;
+          return '<div class="my-ticket-row" ' + (deepLink ? ('onclick="window.location.href=\'' + deepLink + '\'"') : '') + '>' +
+            '<div class="my-ticket-top">' +
+            '<div class="my-ticket-subject">' + escapeHtml(t.subject || '(no subject)') + '</div>' +
+            '<span class="my-ticket-stage stage-' + stage + '">' + escapeHtml(t.stage_label || 'New') + '</span>' +
+            '</div>' +
+            '<div class="my-ticket-prop">' + escapeHtml(t.company_name || '') + '</div>' +
+            '<div class="my-ticket-meta">' + escapeHtml(t.owner_name || '') + ' · ' + ageDays + '</div>' +
+            '</div>';
+        }).join('');
+      })
+      .catch(function () {
+        list.innerHTML = '<div class="kb-empty">Could not load tickets.</div>';
+      });
+  };
+
+  // ── Bulk ticket form ─────────────────────────────────────────────
+  var _bulkProps = [];
+  var _bulkSelected = new Set();
+  window.openBulkTicketForm = function () {
+    closeSlideover('my-tickets-slideover');
+    openSlideover('bulk-ticket-slideover');
+    if (!_bulkProps.length) loadBulkProps();
+  };
+  function loadBulkProps() {
+    var list = document.getElementById('bulk-prop-list');
+    if (!list) return;
+    fetch(API_BASE + '/api/portfolio/triage',
+      { headers: { 'X-Portal-Email': EMAIL } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        _bulkProps = (data && data.rows) || [];
+        renderBulkProps('');
+      })
+      .catch(function () {
+        list.innerHTML = '<div class="kb-empty">Could not load properties.</div>';
+      });
+  }
+  window.filterBulkProps = function (q) { renderBulkProps((q || '').toLowerCase()); };
+  function renderBulkProps(q) {
+    var list = document.getElementById('bulk-prop-list');
+    if (!list) return;
+    var filtered = _bulkProps.filter(function (p) {
+      if (!q) return true;
+      return (p.name || '').toLowerCase().indexOf(q) !== -1 ||
+             (p.market || '').toLowerCase().indexOf(q) !== -1;
+    });
+    if (!filtered.length) {
+      list.innerHTML = '<div class="kb-empty">No matches.</div>';
+      return;
+    }
+    list.innerHTML = filtered.slice(0, 100).map(function (p) {
+      var checked = _bulkSelected.has(p.property_id) ? 'checked' : '';
+      return '<label class="bulk-prop-item">' +
+        '<input type="checkbox" data-cid="' + p.property_id + '" ' + checked + ' onchange="toggleBulkProp(this)">' +
+        escapeHtml(p.name || '(unnamed)') +
+        '<span class="bulk-prop-market">' + escapeHtml(p.market || '') + '</span>' +
+        '</label>';
+    }).join('');
+  }
+  window.toggleBulkProp = function (cb) {
+    var cid = cb.getAttribute('data-cid');
+    if (cb.checked) _bulkSelected.add(cid); else _bulkSelected.delete(cid);
+    var c = document.getElementById('bulk-selected-count');
+    if (c) c.textContent = _bulkSelected.size + ' selected';
+    var btn = document.getElementById('bulk-submit-btn');
+    if (btn) btn.disabled = _bulkSelected.size === 0;
+  };
+  window.submitBulkTicket = function () {
+    var subject = (document.getElementById('bulk-subject') || {}).value || '';
+    var description = (document.getElementById('bulk-description') || {}).value || '';
+    var category = (document.getElementById('bulk-category') || {}).value || 'Other';
+    var priority = (document.getElementById('bulk-priority') || {}).value || 'Medium';
+    if (!subject.trim() || _bulkSelected.size === 0) return;
+    var btn = document.getElementById('bulk-submit-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Filing…'; }
+
+    fetch(API_BASE + '/api/tickets/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Portal-Email': EMAIL },
+      body: JSON.stringify({
+        company_ids: Array.from(_bulkSelected),
+        subject: subject.trim(),
+        description: description.trim(),
+        category: category,
+        priority: priority,
+      }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (btn) { btn.disabled = false; btn.textContent = 'File tickets'; }
+        var ok = data.ok_count || 0;
+        var err = data.error_count || 0;
+        if (ok > 0 && err === 0) {
+          toast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' filed.', 'ok',
+            { linkLabel: 'View', linkAction: function () { openSlideover('my-tickets-slideover'); loadMyTickets(); } });
+          // Reset form
+          _bulkSelected.clear();
+          renderBulkProps('');
+          var c = document.getElementById('bulk-selected-count'); if (c) c.textContent = '0 selected';
+          if (btn) btn.disabled = true;
+          document.getElementById('bulk-subject').value = '';
+          document.getElementById('bulk-description').value = '';
+          closeSlideover('bulk-ticket-slideover');
+        } else if (ok > 0) {
+          toast(ok + ' filed, ' + err + ' failed. Check console.', 'info');
+          console.warn('Bulk ticket partial failures:', data.results);
+        } else {
+          toast('Could not file tickets.', 'error');
+        }
+      })
+      .catch(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'File tickets'; }
+        toast('Network error filing tickets.', 'error');
+      });
+  };
+
+  // ── Tier badge in header ─────────────────────────────────────────
+  var TIER_LABELS = { local: 'Local', lite: 'Lite', basic: 'Basic', standard: 'Standard', premium: 'Premium' };
+  function loadTierBadge() {
+    var cid = window.__PORTAL_COMPANY_ID__ || '';
+    if (!cid) return;
+    fetch(API_BASE + '/api/seo/entitlement?company_id=' + encodeURIComponent(cid),
+      { headers: { 'X-Portal-Email': EMAIL } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data) return;
+        var tier = (data.tier || data.seo_tier || '').toLowerCase();
+        if (!tier || !TIER_LABELS[tier]) return;
+        var badge = document.getElementById('pnb-tier-badge');
+        if (!badge) return;
+        badge.textContent = TIER_LABELS[tier];
+        badge.className = 'pnb-tier-badge tier-' + tier;
+        badge.style.display = '';
+        var feats = (data.features || {});
+        var count = Object.keys(feats).filter(function (k) { return feats[k]; }).length;
+        if (count) badge.title = 'Tier: ' + TIER_LABELS[tier] + ' · ' + count + ' features enabled';
+      })
+      .catch(function () {});
+  }
+
+  // ── Recently-viewed strip in property switcher dropdown ──────────
+  function recordRecent() {
+    var name = window.__PORTAL_PROP_NAME || '';
+    var uuid = window.__PORTAL_UUID__ || '';
+    if (!name || !uuid) return;
+    var raw;
+    try { raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { raw = []; }
+    raw = raw.filter(function (r) { return r && r.uuid !== uuid; });
+    raw.unshift({ name: name, uuid: uuid, ts: Date.now() });
+    raw = raw.slice(0, RECENT_MAX);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(raw)); } catch (e) {}
+  }
+  window.renderRecentChips = function () {
+    var box = document.getElementById('pnb-recent');
+    var chips = document.getElementById('pnb-recent-chips');
+    if (!box || !chips) return;
+    var raw;
+    try { raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { raw = []; }
+    var currentUuid = window.__PORTAL_UUID__ || '';
+    var others = raw.filter(function (r) { return r && r.uuid && r.uuid !== currentUuid; });
+    if (!others.length) { box.style.display = 'none'; return; }
+    box.style.display = '';
+    chips.innerHTML = others.map(function (r) {
+      var url = 'https://digital.rpmliving.com/portal-dashboard?uuid=' + encodeURIComponent(r.uuid);
+      return '<a class="pnb-recent-chip" href="' + url + '">' + escapeHtml(r.name) + '</a>';
+    }).join('');
+  };
+
+  // ── Helpers ──────────────────────────────────────────────────────
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  window.escapeHtml = window.escapeHtml || escapeHtml;
+
+  // ── Boot ─────────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', function () {
+    recordRecent();
+    renderRecentChips();
+    loadTierBadge();
+    // Pre-warm the My-Tickets badge so it shows up before the user clicks
+    setTimeout(loadMyTickets, 800);
+  });
+})();
+</script>
+
 </body>
 </html>
 {% else %}
@@ -8440,6 +9279,127 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 .btn-sm{padding:6px 12px;font-size:12px}
 
 @media(max-width:900px){.dash-kpi-row{grid-template-columns:repeat(3,1fr)}.portal-top-tabs{gap:2px}.ptab{padding:8px 12px;font-size:12px}}
+
+/* ─────────────────────────────────────────────────────────────────
+   UX rework — added April 2026 (mirror of property-branch additions
+   so the portfolio view shares the same patterns).
+   ───────────────────────────────────────────────────────────────── */
+
+/* Severity tokens */
+:root{
+  --sev-critical:#C94444;--sev-warning:#D4910A;--sev-watch:#9CA3AF;
+  --sev-on-track:#8FA68E;--sev-improving:#5B8C5A;--sev-inactive:#D1D5DB;
+  --sev-critical-bg:rgba(201,68,68,0.10);--sev-warning-bg:rgba(212,145,10,0.12);
+  --sev-watch-bg:rgba(156,163,175,0.14);--sev-on-track-bg:rgba(143,166,142,0.14);
+  --sev-improving-bg:rgba(91,140,90,0.14);--sev-inactive-bg:rgba(209,213,219,0.20);
+}
+.sev-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--sev-watch-bg);color:var(--sev-watch)}
+.sev-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.sev-pill.sev-critical{background:var(--sev-critical-bg);color:var(--sev-critical)}
+.sev-pill.sev-warning{background:var(--sev-warning-bg);color:var(--sev-warning)}
+.sev-pill.sev-watch{background:var(--sev-watch-bg);color:var(--sev-watch)}
+.sev-pill.sev-on-track{background:var(--sev-on-track-bg);color:var(--sev-on-track)}
+
+/* Header icon buttons (Help, My Tickets) — placed in portal-top-hdr */
+.ptop-icon-btn{position:relative;background:transparent;border:1px solid var(--bd);width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:var(--ts);cursor:pointer;transition:background .15s,color .15s,border-color .15s;margin-left:6px}
+.ptop-icon-btn:hover{background:var(--ml);color:var(--cu);border-color:var(--cu)}
+.ptop-icon-badge{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--cu);color:#fff;font-size:9px;font-weight:800;line-height:16px;text-align:center;border:2px solid #fff}
+
+/* Slide-overs */
+.slideover{position:fixed;inset:0;z-index:1000;display:none}
+.slideover.is-open{display:block}
+.slideover-backdrop{position:absolute;inset:0;background:rgba(31,41,55,.45);opacity:0;transition:opacity .2s cubic-bezier(.4,0,.2,1)}
+.slideover.is-open .slideover-backdrop{opacity:1}
+.slideover-panel{position:absolute;top:0;right:0;bottom:0;width:440px;max-width:92vw;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.12);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s cubic-bezier(.4,0,.2,1)}
+.slideover.is-open .slideover-panel{transform:translateX(0)}
+.slideover-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--bd);flex-shrink:0}
+.slideover-title{font-size:16px;font-weight:700;color:var(--tp)}
+.slideover-sub{font-size:12px;color:var(--tm);margin-top:2px}
+.slideover-close{background:none;border:1px solid var(--bd);border-radius:6px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;color:var(--ts);cursor:pointer;transition:background .2s,color .2s}
+.slideover-close:hover{background:var(--bg);color:var(--tp)}
+.slideover-body{flex:1;overflow-y:auto;padding:18px 22px 22px;display:flex;flex-direction:column;gap:14px}
+.slideover-body label{display:block;font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.06em}
+.slideover-body label > input[type=text],.slideover-body label > input[type=search],.slideover-body label > select,.slideover-body label > textarea{display:block;width:100%;margin-top:6px;padding:10px 12px;border:1px solid var(--bd);border-radius:8px;font-family:inherit;font-size:14px;color:var(--tp);background:#fff;transition:border-color .2s,box-shadow .2s}
+.slideover-body label > input:focus,.slideover-body label > select:focus,.slideover-body label > textarea:focus{outline:none;border-color:var(--cu);box-shadow:0 0 0 3px var(--cug)}
+.slideover-search{width:100%;padding:12px 14px;border:1px solid var(--bd);border-radius:10px;font-family:inherit;font-size:14px;background:#fff}
+.slideover-search:focus{outline:none;border-color:var(--cu);box-shadow:0 0 0 3px var(--cug)}
+.kb-quick-tiles{display:flex;flex-wrap:wrap;gap:6px}
+.kb-tile{background:var(--bg);border:1px solid var(--bd);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;color:var(--ts);cursor:pointer;font-family:inherit;transition:background .2s,color .2s}
+.kb-tile:hover{background:var(--cug);color:var(--cu)}
+.kb-results{display:flex;flex-direction:column;gap:10px}
+.kb-result-item{padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:#fff;text-decoration:none;color:inherit;transition:border-color .2s,background .2s}
+.kb-result-item:hover{border-color:var(--cu);background:#FAFAF9}
+.kb-result-title{font-weight:700;font-size:13px;color:var(--tp)}
+.kb-result-snippet{font-size:12px;color:var(--ts);margin-top:4px;line-height:1.5}
+.kb-empty{padding:20px 4px;text-align:center;font-size:12px;color:var(--tm);line-height:1.6}
+.my-tickets-list{display:flex;flex-direction:column;gap:10px}
+.my-ticket-row{padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:#fff;cursor:pointer;transition:border-color .2s}
+.my-ticket-row:hover{border-color:var(--cu)}
+.my-ticket-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.my-ticket-subject{font-weight:700;font-size:13px;color:var(--tp);flex:1}
+.my-ticket-meta{font-size:11px;color:var(--tm);margin-top:6px}
+.my-ticket-prop{font-size:11px;font-weight:600;color:var(--cu);margin-top:2px}
+.my-ticket-stage{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.my-ticket-stage.stage-new{background:var(--sev-watch-bg);color:var(--sev-watch)}
+.my-ticket-stage.stage-in_progress{background:var(--sev-on-track-bg);color:var(--sage)}
+.my-ticket-stage.stage-stuck{background:var(--sev-warning-bg);color:var(--amb)}
+.my-ticket-stage.stage-closed{background:var(--sev-inactive-bg);color:var(--tm)}
+.bulk-prop-search{margin:6px 0 8px}
+.bulk-prop-search input{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-family:inherit;font-size:13px}
+.bulk-prop-list{max-height:160px;overflow-y:auto;border:1px solid var(--bd);border-radius:8px;padding:4px}
+.bulk-prop-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;color:var(--tp)}
+.bulk-prop-item:hover{background:var(--bg)}
+.bulk-prop-item input[type=checkbox]{margin:0;cursor:pointer}
+.bulk-prop-item .bulk-prop-market{font-size:11px;color:var(--tm);margin-left:auto}
+.bulk-form-foot{display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid var(--bdl);font-size:12px;color:var(--ts)}
+
+/* Toast */
+.toast-stack{position:fixed;top:60px;right:24px;z-index:1100;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{pointer-events:auto;background:#fff;border:1px solid var(--bd);border-left:4px solid var(--tm);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:500;color:var(--tp);box-shadow:var(--shm);min-width:240px;max-width:360px;display:flex;align-items:flex-start;gap:10px;opacity:0;transform:translateX(20px);transition:opacity .2s,transform .2s}
+.toast.is-visible{opacity:1;transform:translateX(0)}
+.toast.toast-ok{border-left-color:var(--sage)}
+.toast.toast-error{border-left-color:var(--red)}
+.toast.toast-info{border-left-color:var(--cu)}
+.toast a{color:var(--cu);text-decoration:none;font-weight:700;margin-left:auto}
+.toast a:hover{text-decoration:underline}
+
+/* Empty state */
+.empty-state{text-align:center;padding:36px 24px;background:#FAFAF9;border:1px dashed var(--bd);border-radius:var(--r);color:var(--ts)}
+.empty-state svg{width:48px;height:48px;margin:0 auto 12px;color:var(--tm);opacity:.7}
+.empty-state-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:4px}
+.empty-state-sub{font-size:12px;color:var(--tm);margin-bottom:12px;line-height:1.6}
+.empty-state .btn{margin-top:4px}
+
+/* Skeleton loader */
+@keyframes skeleton-shimmer{0%{background-position:-480px 0}100%{background-position:480px 0}}
+.skeleton{background:linear-gradient(90deg,#EDEFF2 0%,#F7F8FA 50%,#EDEFF2 100%);background-size:480px 100%;animation:skeleton-shimmer 1.4s linear infinite;border-radius:6px}
+.skeleton-line{height:12px;margin-bottom:8px}
+.skeleton-line.w-50{width:50%}.skeleton-line.w-75{width:75%}.skeleton-line.w-100{width:100%}
+.skeleton-block{height:100px}
+
+/* Triage list — replaces Red Light color-only grid */
+.triage-summary-bar{display:flex;flex-wrap:wrap;gap:24px;margin-bottom:18px;padding:16px 22px;background:#fff;border:1px solid var(--bd);border-radius:12px}
+.triage-summary-stat{display:flex;flex-direction:column;gap:2px}
+.triage-summary-stat .v{font-size:24px;font-weight:700;color:var(--tp);line-height:1}
+.triage-summary-stat .l{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm)}
+.triage-summary-stat.crit .v{color:var(--sev-critical)}
+.triage-summary-stat.warn .v{color:var(--sev-warning)}
+.triage-summary-stat.ok .v{color:var(--sev-on-track)}
+.triage-list{display:flex;flex-direction:column;gap:8px}
+.triage-row{display:grid;grid-template-columns:130px 1fr 1.4fr auto;align-items:center;gap:14px;padding:14px 18px;background:#fff;border:1px solid var(--bd);border-left:4px solid var(--sev-watch);border-radius:10px;cursor:pointer;text-decoration:none;color:inherit;transition:background .2s,box-shadow .2s}
+.triage-row:hover{background:#FAFAF9;box-shadow:var(--sh)}
+.triage-row.sev-critical{border-left-color:var(--sev-critical)}
+.triage-row.sev-warning{border-left-color:var(--sev-warning)}
+.triage-row.sev-watch{border-left-color:var(--sev-watch)}
+.triage-row.sev-on-track{border-left-color:var(--sev-on-track)}
+.triage-row-prop{display:flex;flex-direction:column;gap:2px;min-width:0}
+.triage-row-name{font-weight:700;font-size:13px;color:var(--tp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.triage-row-market{font-size:11px;color:var(--tm)}
+.triage-row-reason{font-size:13px;color:var(--tp);font-weight:500}
+.triage-row-cta{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--cu);white-space:nowrap}
+.triage-row-cta svg{transition:transform .2s}
+.triage-row:hover .triage-row-cta svg{transform:translateX(3px)}
+@media(max-width:720px){.triage-row{grid-template-columns:1fr;gap:6px}.triage-row-cta{justify-content:flex-start}}
 </style>
 </head>
 <body>
@@ -8448,18 +9408,54 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 <header class="portal-top-hdr">
   <img src="https://19843861.fs1.hubspotusercontent-na1.net/hubfs/19843861/client-portal/images/rpm-logo.png" class="ptop-logo" alt="RPM Living">
   <nav class="portal-top-tabs">
-    <button class="ptab active" id="ptab-list"      onclick="topView('list',this)">Properties</button>
+    <button class="ptab active" id="ptab-triage"    onclick="topView('triage',this)">What needs you</button>
+    <button class="ptab"        id="ptab-list"      onclick="topView('list',this)">Properties</button>
     <button class="ptab"        id="ptab-portfolio" onclick="topView('portfolio',this)">Portfolio Dashboard</button>
     <button class="ptab"        id="ptab-spend"     onclick="topView('spend',this)">Spend Sheet</button>
   </nav>
   <div class="ptop-user" id="ptop-user-label">
     <span id="ptop-email" style="display:none"></span>
     <span class="ptop-user-badge" id="ptop-role" style="display:none"></span>
+    <button class="ptop-icon-btn" id="ptop-mytix-btn" title="My tickets across all properties" onclick="openSlideover('my-tickets-slideover'); loadMyTickets();">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      <span class="ptop-icon-badge" id="ptop-mytix-badge" style="display:none">0</span>
+    </button>
+    <button class="ptop-icon-btn" id="ptop-help-btn" title="Knowledge base" onclick="openSlideover('kb-slideover'); document.getElementById('kb-search-input') && document.getElementById('kb-search-input').focus();">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </button>
   </div>
 </header>
 
+<!-- ════════════ PANEL 0: TRIAGE — "What needs you today" ════════════ -->
+<div id="ptab-panel-triage" class="ptab-panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+    <div>
+      <div style="font-size:22px;font-weight:800;color:var(--tp)">What needs you today</div>
+      <div style="font-size:12px;color:var(--tm);margin-top:3px" id="triage-subtitle">Loading triage…</div>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="reloadTriage()" title="Force a fresh fetch">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+  </div>
+
+  <div class="triage-summary-bar" id="triage-summary-bar" style="display:none">
+    <div class="triage-summary-stat"><span class="v" id="triage-total">0</span><span class="l">Properties</span></div>
+    <div class="triage-summary-stat crit"><span class="v" id="triage-critical">0</span><span class="l">Critical</span></div>
+    <div class="triage-summary-stat warn"><span class="v" id="triage-warning">0</span><span class="l">Warning</span></div>
+    <div class="triage-summary-stat"><span class="v" id="triage-watch">0</span><span class="l">Watch</span></div>
+    <div class="triage-summary-stat ok"><span class="v" id="triage-ontrack">0</span><span class="l">On track</span></div>
+  </div>
+
+  <div class="triage-list" id="triage-list">
+    <div class="skeleton skeleton-block"></div>
+    <div class="skeleton skeleton-block" style="margin-top:8px"></div>
+    <div class="skeleton skeleton-block" style="margin-top:8px"></div>
+  </div>
+</div>
+
 <!-- ════════════ PANEL 1: PROPERTIES LIST ════════════ -->
-<div id="ptab-panel-list" class="ptab-panel">
+<div id="ptab-panel-list" class="ptab-panel" style="display:none">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
     <div>
       <div style="font-size:22px;font-weight:800;color:var(--tp)">Properties</div>
@@ -8633,16 +9629,18 @@ var _portfolioLoaded = false;
 var _spendLoaded     = false;
 
 function topView(tab, btn) {
-  ['list','portfolio','spend'].forEach(function(t) {
+  ['triage','list','portfolio','spend'].forEach(function(t) {
     var p = document.getElementById('ptab-panel-' + t);
     if (p) p.style.display = (t === tab) ? 'block' : 'none';
     var b = document.getElementById('ptab-' + t);
     if (b) b.classList.toggle('active', t === tab);
   });
+  if (tab === 'triage'    && !_triageLoaded)    loadTriage();
   if (tab === 'list'      && !_propListLoaded)  loadPropList();
   if (tab === 'portfolio' && !_portfolioLoaded) loadPortfolio();
   if (tab === 'spend'     && !_spendLoaded)     loadSpendSheet();
 }
+var _triageLoaded = false;
 
 // ── Properties List ───────────────────────────────────────────────────────────
 var _propListData = [];
@@ -8890,8 +9888,396 @@ function renderSpendSheet(rows) {
 }
 
 // ── Init: load Properties list on page load ───────────────────────────────────
+// Triage list — primary landing view
+function loadTriage() {
+  var listEl = document.getElementById('triage-list');
+  var subEl  = document.getElementById('triage-subtitle');
+  if (!listEl) return;
+  if (subEl) subEl.textContent = 'Loading triage…';
+  fetch(_apiBase + '/api/portfolio/triage', { headers: { 'X-Portal-Email': _email } })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      _triageLoaded = true;
+      var rows = (d && d.rows) || [];
+      var sum  = (d && d.summary) || {};
+      var bar  = document.getElementById('triage-summary-bar');
+      if (bar) bar.style.display = '';
+      setTri('triage-total', sum.total || 0);
+      setTri('triage-critical', sum.critical || 0);
+      setTri('triage-warning', sum.warning || 0);
+      setTri('triage-watch', sum.watch || 0);
+      setTri('triage-ontrack', sum.on_track || 0);
+      var attention = (sum.critical || 0) + (sum.warning || 0);
+      if (subEl) {
+        subEl.textContent = attention === 0
+          ? 'All clear across ' + (sum.total || 0) + ' properties.'
+          : attention + ' propert' + (attention === 1 ? 'y needs' : 'ies need') + ' attention out of ' + (sum.total || 0);
+      }
+      if (!rows.length) {
+        listEl.innerHTML =
+          '<div class="empty-state">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="20 6 9 17 4 12"/></svg>' +
+          '<div class="empty-state-title">All clear</div>' +
+          '<div class="empty-state-sub">Nothing needs your attention right now.</div>' +
+          '</div>';
+        return;
+      }
+      // Show a "rest are on track" collapsible if there are many on-track rows
+      var critWarn = rows.filter(function(r){ return r.severity === 'critical' || r.severity === 'warning'; });
+      var others   = rows.filter(function(r){ return r.severity !== 'critical' && r.severity !== 'warning'; });
+      var visible  = critWarn.length ? critWarn.concat(others.slice(0, Math.max(0, 12 - critWarn.length))) : rows.slice(0, 24);
+      var html = visible.map(triageRowHtml).join('');
+      var hidden = rows.length - visible.length;
+      if (hidden > 0) {
+        html += '<div style="margin-top:6px;font-size:12px;color:var(--tm);text-align:center">' +
+          hidden + ' more on track or watch — switch to Properties tab for the full list' +
+          '</div>';
+      }
+      listEl.innerHTML = html;
+    })
+    .catch(function(){
+      if (subEl) subEl.textContent = 'Could not load triage.';
+      listEl.innerHTML = '<div class="empty-state"><div class="empty-state-title">Triage unavailable</div><div class="empty-state-sub">Try refreshing in a moment.</div></div>';
+    });
+}
+function reloadTriage() {
+  _triageLoaded = false;
+  fetch(_apiBase + '/api/portfolio/triage?force=true', { headers: { 'X-Portal-Email': _email } })
+    .finally(loadTriage);
+}
+function setTri(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
+function triageRowHtml(r) {
+  var url = r.uuid
+    ? 'https://digital.rpmliving.com/portal-dashboard?uuid=' + encodeURIComponent(r.uuid)
+    : '#';
+  var ctaLabel = (r.cta_section === 'tickets') ? 'Open ticket' :
+                 (r.cta_section === 'performance') ? 'View report' :
+                 (r.cta_section === 'overview') ? 'Open property' : 'Review';
+  var sev = r.severity || 'watch';
+  var sevLabel = sev === 'critical' ? 'Critical' :
+                 sev === 'warning'  ? 'Warning'  :
+                 sev === 'watch'    ? 'Watch'    : 'On track';
+  return '<a class="triage-row sev-' + sev + '" href="' + url + '">' +
+    '<div><span class="sev-pill sev-' + sev + '">' + sevLabel + '</span></div>' +
+    '<div class="triage-row-prop">' +
+      '<div class="triage-row-name">' + escapeHtml(r.name || '') + '</div>' +
+      '<div class="triage-row-market">' + escapeHtml(r.market || '') + '</div>' +
+    '</div>' +
+    '<div class="triage-row-reason">' + escapeHtml(r.reason || '') + '</div>' +
+    '<div class="triage-row-cta">' + ctaLabel +
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>' +
+    '</div>' +
+  '</a>';
+}
+function escapeHtml(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// ── Init: load triage (default landing) + start property list in background ───
+loadTriage();
 loadPropList();
 
+</script>
+
+<!-- ════════════════════════════════════════════════════════════════════
+     Slide-over surfaces (KB, My Tickets, Bulk ticket) — mirror of the
+     property branch. Same CSS class names, same JS behavior.
+     ════════════════════════════════════════════════════════════════════ -->
+<div class="slideover" id="kb-slideover" aria-hidden="true">
+  <div class="slideover-backdrop" onclick="closeSlideover('kb-slideover')"></div>
+  <aside class="slideover-panel" role="dialog" aria-label="Knowledge base">
+    <header class="slideover-header">
+      <div>
+        <div class="slideover-title">Knowledge base</div>
+        <div class="slideover-sub">Search articles or pick a topic</div>
+      </div>
+      <button class="slideover-close" onclick="closeSlideover('kb-slideover')" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </header>
+    <div class="slideover-body">
+      <input type="search" class="slideover-search" id="kb-search-input" placeholder="Search articles…" oninput="kbSearchDebounced(this.value)">
+      <div class="kb-quick-tiles">
+        <button class="kb-tile" type="button" onclick="kbSearch('GA4 access')">GA4 access</button>
+        <button class="kb-tile" type="button" onclick="kbSearch('budget update')">Budget update</button>
+        <button class="kb-tile" type="button" onclick="kbSearch('cancellation')">Cancellation</button>
+        <button class="kb-tile" type="button" onclick="kbSearch('SLA timeline')">SLA timeline</button>
+        <button class="kb-tile" type="button" onclick="kbSearch('GTM install')">GTM install</button>
+        <button class="kb-tile" type="button" onclick="kbSearch('creative refresh')">Creative refresh</button>
+      </div>
+      <div class="kb-results" id="kb-results">
+        <div class="kb-empty">Type to search the knowledge base, or pick a topic above.</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="slideover" id="my-tickets-slideover" aria-hidden="true">
+  <div class="slideover-backdrop" onclick="closeSlideover('my-tickets-slideover')"></div>
+  <aside class="slideover-panel" role="dialog" aria-label="My tickets">
+    <header class="slideover-header">
+      <div>
+        <div class="slideover-title">My tickets</div>
+        <div class="slideover-sub" id="my-tickets-sub">Across every property</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-secondary btn-sm" type="button" onclick="openBulkTicketForm()" style="background:var(--cu);color:#fff;border-color:var(--cu)">+ New</button>
+        <button class="slideover-close" onclick="closeSlideover('my-tickets-slideover')" aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </header>
+    <div class="slideover-body">
+      <div class="my-tickets-list" id="my-tickets-list">
+        <div class="kb-empty">Loading…</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="slideover" id="bulk-ticket-slideover" aria-hidden="true">
+  <div class="slideover-backdrop" onclick="closeSlideover('bulk-ticket-slideover')"></div>
+  <aside class="slideover-panel" role="dialog" aria-label="New ticket">
+    <header class="slideover-header">
+      <div>
+        <div class="slideover-title">New ticket</div>
+        <div class="slideover-sub">File against one or more properties</div>
+      </div>
+      <button class="slideover-close" onclick="closeSlideover('bulk-ticket-slideover')" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </header>
+    <form class="slideover-body" id="bulk-ticket-form" onsubmit="event.preventDefault(); submitBulkTicket();">
+      <label>Properties
+        <div class="bulk-prop-search"><input type="search" placeholder="Search properties…" oninput="filterBulkProps(this.value)"></div>
+        <div class="bulk-prop-list" id="bulk-prop-list"><div class="kb-empty">Loading…</div></div>
+      </label>
+      <label>Subject<input type="text" id="bulk-subject" required maxlength="120" placeholder="e.g. Creative refresh — amenity photos"></label>
+      <label>Category
+        <select id="bulk-category">
+          <option value="Other">Other</option><option value="SEO">SEO</option>
+          <option value="Paid Search">Paid Search</option><option value="Paid Social">Paid Social</option>
+          <option value="Reputation">Reputation</option><option value="Creative">Creative</option>
+        </select>
+      </label>
+      <label>Priority
+        <select id="bulk-priority">
+          <option value="Medium">Medium</option><option value="High">High</option><option value="Low">Low</option>
+        </select>
+      </label>
+      <label>Description<textarea id="bulk-description" rows="4" placeholder="Add any details the team needs."></textarea></label>
+      <div class="bulk-form-foot">
+        <span id="bulk-selected-count">0 selected</span>
+        <button type="submit" class="btn btn-primary" id="bulk-submit-btn" disabled style="background:var(--cu);color:#fff">File tickets</button>
+      </div>
+    </form>
+  </aside>
+</div>
+
+<div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+/* Slide-over + KB + My Tickets + Bulk ticket + Toast helpers (portfolio branch copy) */
+(function () {
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var EMAIL    = (window.__PORTAL_EMAIL__ || (window.localStorage && localStorage.getItem('rpm_portal_email')) || '').toLowerCase();
+
+  window.openSlideover = function (id) {
+    var el = document.getElementById(id); if (!el) return;
+    el.classList.add('is-open'); el.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  };
+  window.closeSlideover = function (id) {
+    var el = document.getElementById(id); if (!el) return;
+    el.classList.remove('is-open'); el.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  };
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    ['kb-slideover','my-tickets-slideover','bulk-ticket-slideover'].forEach(function (id) {
+      var el = document.getElementById(id); if (el && el.classList.contains('is-open')) closeSlideover(id);
+    });
+  });
+
+  window.toast = function (msg, kind, opts) {
+    kind = kind || 'info'; opts = opts || {};
+    var stack = document.getElementById('toast-stack'); if (!stack) return;
+    var el = document.createElement('div'); el.className = 'toast toast-' + kind;
+    var html = '<div>' + msg + '</div>';
+    if (opts.linkLabel && opts.linkAction) {
+      var aid = 'tl-' + Date.now() + Math.random().toString(36).slice(2,6);
+      html += '<a href="#" id="' + aid + '">' + opts.linkLabel + '</a>';
+      stack.appendChild(el); el.innerHTML = html;
+      var a = document.getElementById(aid);
+      if (a) a.addEventListener('click', function (ev) { ev.preventDefault(); opts.linkAction(); el.remove(); });
+    } else { stack.appendChild(el); el.innerHTML = html; }
+    requestAnimationFrame(function () { el.classList.add('is-visible'); });
+    setTimeout(function () { el.classList.remove('is-visible'); setTimeout(function () { el.remove(); }, 250); }, opts.duration || 4500);
+  };
+
+  var _kbDebounce = null;
+  window.kbSearchDebounced = function (q) {
+    if (_kbDebounce) clearTimeout(_kbDebounce);
+    _kbDebounce = setTimeout(function () { kbSearch(q); }, 300);
+  };
+  window.kbSearch = function (q) {
+    var input = document.getElementById('kb-search-input');
+    if (input && input.value !== q) input.value = q;
+    var results = document.getElementById('kb-results'); if (!results) return;
+    var query = (q || '').trim();
+    if (!query) { results.innerHTML = '<div class="kb-empty">Type to search the knowledge base, or pick a topic above.</div>'; return; }
+    results.innerHTML = '<div class="kb-empty">Searching…</div>';
+    fetch(API_BASE + '/api/kb-search?q=' + encodeURIComponent(query), { headers: { 'X-Portal-Email': EMAIL } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var arts = (data && data.articles) || [];
+        if (!arts.length) {
+          results.innerHTML = '<div class="empty-state"><div class="empty-state-title">No articles found</div><div class="empty-state-sub">Try a shorter phrase, or file a ticket and the team will help.</div></div>';
+          return;
+        }
+        results.innerHTML = arts.map(function (a) {
+          return '<a class="kb-result-item" target="_blank" rel="noopener" href="' + (a.url || '#') + '">' +
+            '<div class="kb-result-title">' + esc(a.title || 'Untitled') + '</div>' +
+            (a.snippet ? '<div class="kb-result-snippet">' + esc(a.snippet) + '</div>' : '') +
+          '</a>';
+        }).join('');
+      })
+      .catch(function () { results.innerHTML = '<div class="kb-empty">Search failed. Try again.</div>'; });
+  };
+
+  window.loadMyTickets = function () {
+    var list = document.getElementById('my-tickets-list'); if (!list) return;
+    list.innerHTML = '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block" style="margin-top:8px"></div>';
+    fetch(API_BASE + '/api/tickets/mine', { headers: { 'X-Portal-Email': EMAIL } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var tickets = (data && data.tickets) || [];
+        var sub = document.getElementById('my-tickets-sub');
+        if (sub) sub.textContent = tickets.length + ' ticket' + (tickets.length === 1 ? '' : 's') + ' filed by you';
+        var badge = document.getElementById('ptop-mytix-badge');
+        var openCount = tickets.filter(function (t) { return t.stage_id !== '4'; }).length;
+        if (badge) {
+          if (openCount > 0) { badge.style.display = ''; badge.textContent = openCount > 9 ? '9+' : openCount; }
+          else badge.style.display = 'none';
+        }
+        if (!tickets.length) {
+          list.innerHTML =
+            '<div class="empty-state">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>' +
+            '<div class="empty-state-title">No tickets yet</div>' +
+            '<div class="empty-state-sub">When you file a ticket from any property, it shows up here.</div>' +
+            '<button class="btn btn-secondary btn-sm" type="button" onclick="openBulkTicketForm()" style="background:var(--cu);color:#fff;border-color:var(--cu)">File a ticket</button>' +
+            '</div>';
+          return;
+        }
+        list.innerHTML = tickets.map(function (t) {
+          var stage = (t.stage_id === '4') ? 'closed' : (t.stage_label || 'New').toLowerCase().replace(/\s+/g, '_');
+          var ageDays = '';
+          if (t.created_at) {
+            var ms = Date.now() - new Date(t.created_at).getTime();
+            var d = Math.max(0, Math.floor(ms / 86400000));
+            ageDays = d === 0 ? 'today' : d + 'd ago';
+          }
+          var deepLink = t.company_uuid
+            ? ('https://digital.rpmliving.com/portal-dashboard?uuid=' + encodeURIComponent(t.company_uuid))
+            : null;
+          return '<div class="my-ticket-row" ' + (deepLink ? ('onclick="window.location.href=\'' + deepLink + '\'"') : '') + '>' +
+            '<div class="my-ticket-top">' +
+            '<div class="my-ticket-subject">' + esc(t.subject || '(no subject)') + '</div>' +
+            '<span class="my-ticket-stage stage-' + stage + '">' + esc(t.stage_label || 'New') + '</span>' +
+            '</div>' +
+            '<div class="my-ticket-prop">' + esc(t.company_name || '') + '</div>' +
+            '<div class="my-ticket-meta">' + esc(t.owner_name || '') + ' · ' + ageDays + '</div>' +
+            '</div>';
+        }).join('');
+      })
+      .catch(function () { list.innerHTML = '<div class="kb-empty">Could not load tickets.</div>'; });
+  };
+
+  var _bulkProps = [];
+  var _bulkSelected = new Set();
+  window.openBulkTicketForm = function () {
+    closeSlideover('my-tickets-slideover'); openSlideover('bulk-ticket-slideover');
+    if (!_bulkProps.length) loadBulkProps();
+  };
+  function loadBulkProps() {
+    var list = document.getElementById('bulk-prop-list'); if (!list) return;
+    fetch(API_BASE + '/api/portfolio/triage', { headers: { 'X-Portal-Email': EMAIL } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) { _bulkProps = (data && data.rows) || []; renderBulkProps(''); })
+      .catch(function () { list.innerHTML = '<div class="kb-empty">Could not load properties.</div>'; });
+  }
+  window.filterBulkProps = function (q) { renderBulkProps((q || '').toLowerCase()); };
+  function renderBulkProps(q) {
+    var list = document.getElementById('bulk-prop-list'); if (!list) return;
+    var filtered = _bulkProps.filter(function (p) {
+      if (!q) return true;
+      return (p.name || '').toLowerCase().indexOf(q) !== -1 || (p.market || '').toLowerCase().indexOf(q) !== -1;
+    });
+    if (!filtered.length) { list.innerHTML = '<div class="kb-empty">No matches.</div>'; return; }
+    list.innerHTML = filtered.slice(0, 100).map(function (p) {
+      var checked = _bulkSelected.has(p.property_id) ? 'checked' : '';
+      return '<label class="bulk-prop-item">' +
+        '<input type="checkbox" data-cid="' + p.property_id + '" ' + checked + ' onchange="toggleBulkProp(this)">' +
+        esc(p.name || '(unnamed)') +
+        '<span class="bulk-prop-market">' + esc(p.market || '') + '</span>' +
+      '</label>';
+    }).join('');
+  }
+  window.toggleBulkProp = function (cb) {
+    var cid = cb.getAttribute('data-cid');
+    if (cb.checked) _bulkSelected.add(cid); else _bulkSelected.delete(cid);
+    var c = document.getElementById('bulk-selected-count');
+    if (c) c.textContent = _bulkSelected.size + ' selected';
+    var btn = document.getElementById('bulk-submit-btn');
+    if (btn) btn.disabled = _bulkSelected.size === 0;
+  };
+  window.submitBulkTicket = function () {
+    var subject = (document.getElementById('bulk-subject') || {}).value || '';
+    var description = (document.getElementById('bulk-description') || {}).value || '';
+    var category = (document.getElementById('bulk-category') || {}).value || 'Other';
+    var priority = (document.getElementById('bulk-priority') || {}).value || 'Medium';
+    if (!subject.trim() || _bulkSelected.size === 0) return;
+    var btn = document.getElementById('bulk-submit-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Filing…'; }
+    fetch(API_BASE + '/api/tickets/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Portal-Email': EMAIL },
+      body: JSON.stringify({
+        company_ids: Array.from(_bulkSelected),
+        subject: subject.trim(), description: description.trim(),
+        category: category, priority: priority,
+      }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (btn) { btn.disabled = false; btn.textContent = 'File tickets'; }
+        var ok = data.ok_count || 0; var err = data.error_count || 0;
+        if (ok > 0 && err === 0) {
+          toast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' filed.', 'ok',
+            { linkLabel: 'View', linkAction: function () { openSlideover('my-tickets-slideover'); loadMyTickets(); } });
+          _bulkSelected.clear(); renderBulkProps('');
+          var c = document.getElementById('bulk-selected-count'); if (c) c.textContent = '0 selected';
+          if (btn) btn.disabled = true;
+          document.getElementById('bulk-subject').value = '';
+          document.getElementById('bulk-description').value = '';
+          closeSlideover('bulk-ticket-slideover');
+        } else if (ok > 0) {
+          toast(ok + ' filed, ' + err + ' failed.', 'info');
+          console.warn('Bulk ticket partial failures:', data.results);
+        } else {
+          toast('Could not file tickets.', 'error');
+        }
+      })
+      .catch(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'File tickets'; }
+        toast('Network error filing tickets.', 'error');
+      });
+  };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  document.addEventListener('DOMContentLoaded', function () { setTimeout(loadMyTickets, 1000); });
+})();
 </script>
 </body>
 </html>
