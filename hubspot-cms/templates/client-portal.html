@@ -731,6 +731,35 @@ body{padding-top:36px}
 .pnb-item-chip{width:28px;height:28px;border-radius:7px;background:var(--cu);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:.02em}
 .pnb-item-name{font-size:12px;font-weight:600;color:var(--tp);line-height:1.3}
 .pnb-item-market{font-size:11px;color:var(--ts);margin-top:1px}
+
+/* ─── Onboarding Discovery (intake form) ─── */
+#onboarding-form .ob-section{border:1px solid var(--bd);border-radius:8px;padding:18px 22px;margin:20px 0}
+#onboarding-form legend{font-weight:700;font-size:13px;padding:0 8px;color:var(--tp);text-transform:uppercase;letter-spacing:.05em}
+#onboarding-form label{display:block;font-weight:600;margin-top:14px;margin-bottom:6px;color:var(--tp);font-size:13px}
+#onboarding-form input[type=text],#onboarding-form input[type=email],#onboarding-form input[type=number],#onboarding-form textarea,#onboarding-form select{width:100%;padding:9px 11px;border:1px solid var(--bd);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;background:#fff;color:var(--tp)}
+#onboarding-form input:invalid:not(:placeholder-shown){border-color:#b00020}
+#onboarding-form input[readonly]{background:#f4f6fa;color:var(--tm)}
+#onboarding-form textarea{min-height:90px;resize:vertical}
+#onboarding-form select[multiple]{min-height:120px}
+#onboarding-form .ob-hint{display:block;margin-top:5px;font-size:11px;color:var(--tm)}
+#onboarding-form .this-or-that-card{margin:10px 0;padding:12px 14px;background:var(--bg);border-radius:6px}
+#onboarding-form .t-or-t-label{font-weight:600;text-transform:capitalize;margin-bottom:8px;font-size:13px}
+#onboarding-form .t-or-t-options{display:flex;gap:10px;flex-wrap:wrap}
+#onboarding-form .t-or-t-option{display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--bd);border-radius:5px;cursor:pointer;font-weight:400;margin:0;font-size:12px;background:#fff}
+#onboarding-form .t-or-t-option:has(input:checked){border-color:var(--cu);background:var(--cug)}
+#onboarding-form .ob-color-swatches{margin:14px 0}
+#onboarding-form .swatch-help{font-size:12px;color:var(--ts);margin-bottom:8px}
+#onboarding-form .swatch-grid{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+#onboarding-form .swatch{width:60px;height:60px;border:2px solid var(--bd);border-radius:6px;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;padding:0;position:relative}
+#onboarding-form .swatch-hex{display:block;width:100%;font-size:9px;background:rgba(255,255,255,.85);color:var(--tp);padding:1px 0;border-radius:0 0 4px 4px;font-family:ui-monospace,SFMono-Regular,monospace}
+#onboarding-form .swatch-picked-primary{outline:3px solid var(--cu);outline-offset:2px}
+#onboarding-form .swatch-picked-secondary{outline:3px solid #6b9bff;outline-offset:2px}
+#onboarding-form .swatch-picks{display:flex;gap:24px;font-size:12px;color:var(--tp)}
+#onboarding-form .swatch-picks em{font-family:ui-monospace,SFMono-Regular,monospace;font-style:normal;font-weight:700}
+#onboarding-form .ob-footer{display:flex;align-items:center;gap:14px;margin-top:24px}
+#onboarding-form .ob-status-text{font-size:12px;color:var(--ts)}
+.sec-status-pill{padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;background:var(--cug);color:var(--cu);text-transform:uppercase;letter-spacing:.04em}
+.sec-status-pill.sla-breach{background:#fee2e2;color:#b00020}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -821,6 +850,11 @@ body{padding-top:36px}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
         Call Prep
         <span class="nav-badge" id="recs-badge">2</span>
+      </div>
+      <div class="nav-item" id="nav-onboarding" onclick="nav('onboarding',this)" style="display:none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        Onboarding
+        <span class="nav-badge" id="onboarding-badge" style="display:none">!</span>
       </div>
       <div class="nav-item" onclick="nav('brief',this)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
@@ -1996,6 +2030,117 @@ body{padding-top:36px}
   </div>
 </section>
 
+<!-- ── ONBOARDING DISCOVERY ── -->
+<section id="section-onboarding" class="section">
+  <div class="sec-topbar">
+    <div>
+      <div class="sec-title">Onboarding Discovery</div>
+      <div class="sec-sub">Discovery intake · brand assets · gap review for Community Manager follow-up</div>
+    </div>
+    <div id="onboarding-status-pill" class="sec-status-pill"></div>
+  </div>
+
+  <form id="onboarding-form"
+        class="card card-p"
+        data-company-id="{{ property.hs_object_id|default(uuid_param, true) }}"
+        data-uuid="{{ property.uuid|default(uuid_param, true) }}"
+        novalidate>
+
+    {# ── Layer 2: STRUCTURED PICK ── #}
+    <fieldset class="ob-section">
+      <legend>Property basics</legend>
+      <label for="ob-name">Property name</label>
+      <input type="text" id="ob-name" name="property_name" value="{{ property.name|default('') }}" readonly />
+      <small class="ob-hint">Pulled from HubSpot. Contact your CSM to change.</small>
+
+      <label for="ob-neighborhoods">Target neighborhoods</label>
+      <select id="ob-neighborhoods" name="neighborhoods" multiple required></select>
+      <small class="ob-hint">Hold ⌘/Ctrl to select multiple. Type-ahead disabled to keep names clean.</small>
+
+      <label for="ob-units">Unit types offered</label>
+      <select id="ob-units" name="unit_types" multiple required>
+        <option value="Studio">Studio</option>
+        <option value="1BR">1 Bedroom</option>
+        <option value="2BR">2 Bedroom</option>
+        <option value="3BR">3 Bedroom</option>
+        <option value="4BR+">4+ Bedroom</option>
+        <option value="Loft">Loft</option>
+        <option value="Townhouse">Townhouse</option>
+        <option value="Penthouse">Penthouse</option>
+      </select>
+
+      <label for="ob-competitors">Primary competitors</label>
+      <select id="ob-competitors" name="primary_competitors" multiple required></select>
+      <small class="ob-hint">Pick from the AI-suggested list — typed names blocked to prevent typos.</small>
+    </fieldset>
+
+    {# ── Layer 5: FORCED-FACT FIELDS ── #}
+    <fieldset class="ob-section">
+      <legend>Current performance</legend>
+      <label for="ob-concession">Current concession</label>
+      <input type="text" id="ob-concession" name="current_concession"
+             placeholder="$1500 or 0" required pattern="^\$?[\d,]+$|^0$|^[Nn]one$" />
+      <small class="ob-hint">Dollar amount or "0" — prose like "two months free" won't validate.</small>
+
+      <label for="ob-occupancy">Current occupancy %</label>
+      <input type="number" id="ob-occupancy" name="current_occupancy_pct"
+             min="0" max="100" step="0.1" required />
+
+      <label for="ob-cm-email">Community Manager email</label>
+      <input type="email" id="ob-cm-email" name="community_manager_email"
+             pattern="^[a-z]+\.[a-z]+(?:-[a-z]+)?@rpmliving\.com$"
+             placeholder="first.last@rpmliving.com" required />
+      <small class="ob-hint" id="ob-cm-name-preview"></small>
+
+      <label for="ob-rm-email">Regional Manager email</label>
+      <input type="email" id="ob-rm-email" name="regional_manager_email"
+             pattern="^[a-z]+\.[a-z]+(?:-[a-z]+)?@rpmliving\.com$"
+             placeholder="first.last@rpmliving.com" required />
+      <small class="ob-hint" id="ob-rm-name-preview"></small>
+    </fieldset>
+
+    {# ── Layer 3: AI STRAWMAN + THIS-OR-THAT ── #}
+    <fieldset class="ob-section">
+      <legend>Brand voice</legend>
+      <p class="ob-hint">
+        Our AI drafted these from your website. Pick the option that fits, or "Different" if neither does.
+      </p>
+      <div id="ob-this-or-that"></div>
+    </fieldset>
+
+    {# ── Layer 6: FREE TEXT (slop-classified on submit) ── #}
+    <fieldset class="ob-section">
+      <legend>What we'd miss from just reading your website</legend>
+      <label for="ob-complaint">Top recent resident complaint (last 90 days)</label>
+      <textarea id="ob-complaint" name="top_resident_complaint" maxlength="280" required></textarea>
+      <small class="ob-hint">
+        Be specific — "pool was closed three times in February" beats "amenity issues."
+        Generic answers will trigger a follow-up to the Community Manager.
+      </small>
+    </fieldset>
+
+    {# ── Layer 4: ARTIFACT UPLOAD ── #}
+    <fieldset class="ob-section">
+      <legend>Brand assets</legend>
+      <label for="ob-logo">Logo (transparent PNG required)</label>
+      <input type="file" id="ob-logo" name="logo" accept="image/png" />
+      <small class="ob-hint">
+        Logo must be a PNG with transparent background. We auto-generate the 4 sizes Fluency needs.
+      </small>
+      <div id="ob-color-swatches" class="ob-color-swatches"></div>
+
+      <label for="ob-hero">Property hero photo</label>
+      <input type="file" id="ob-hero" name="hero" accept="image/jpeg,image/png" />
+      <small class="ob-hint">At least 1200px on the shortest side. EXIF preserved for provenance.</small>
+    </fieldset>
+
+    <div class="ob-footer">
+      <button type="submit" class="btn btn-primary" id="ob-submit">Submit intake</button>
+      <span id="ob-status" class="ob-status-text"></span>
+    </div>
+  </form>
+</section>
+
 <!-- ── CLIENT BRIEF ── -->
 <section id="section-brief" class="section">
   <div class="sec-topbar">
@@ -2785,6 +2930,7 @@ function nav(id, el) {
   if (id === 'services')         { loadServices(); }
   if (id === 'assets')           { assetInitDropzone(); loadAssets(); }
   if (id === 'paid')             { loadPaidMedia(); }
+  if (id === 'onboarding')       { if (typeof loadOnboarding === 'function') loadOnboarding(); }
 }
 
 function switchDemo(view, btn) {
@@ -7897,6 +8043,264 @@ setTimeout(loadPropertySwitcher, 1500);
           });
       });
   };
+})();
+
+/* ─── Onboarding Discovery — intake form wiring ─── */
+(function () {
+  var apiBase = window.__PORTAL_API_BASE || '';
+  var portalEmail = window.__PORTAL_EMAIL__ || '';
+  var form = document.getElementById('onboarding-form');
+  if (!form) return;
+
+  var companyId = form.dataset.companyId;
+  var propertyUuid = form.dataset.uuid;
+  var hydrated = false;
+
+  function api(path, opts) {
+    return fetch(apiBase + path, Object.assign({}, opts, {
+      headers: Object.assign({
+        'Content-Type': 'application/json',
+        'X-Portal-Email': portalEmail,
+        'X-Company-Id': companyId,
+      }, (opts && opts.headers) || {}),
+    })).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); });
+  }
+
+  function apiUpload(path, fd) {
+    return fetch(apiBase + path, {
+      method: 'POST',
+      headers: { 'X-Portal-Email': portalEmail, 'X-Company-Id': companyId },
+      body: fd,
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); });
+  }
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function populateSelect(id, options) {
+    var sel = document.getElementById(id);
+    if (!sel) return;
+    if (!options || !options.length) return;
+    sel.innerHTML = options.map(function (o) {
+      return '<option value="' + escapeHtml(o) + '">' + escapeHtml(o) + '</option>';
+    }).join('');
+  }
+
+  // Show or hide the nav item + status pill based on rpm_onboarding_status
+  function refreshStatusPill() {
+    api('/api/onboarding/state').then(function (res) {
+      if (!res.ok) return;
+      var pill = document.getElementById('onboarding-status-pill');
+      var navItem = document.getElementById('nav-onboarding');
+      var badge = document.getElementById('onboarding-badge');
+      var status = res.data.status || 'not_started';
+      var inProgress = ['intake_sent', 'intake_in_progress'].indexOf(status) !== -1;
+      if (navItem) navItem.style.display = (status === 'not_started' || status === 'live') ? 'none' : '';
+      if (badge)  badge.style.display = inProgress ? '' : 'none';
+      if (pill) {
+        pill.textContent = status.replace(/_/g, ' ');
+        pill.classList.toggle('sla-breach', !!res.data.sla_breached);
+      }
+    });
+  }
+
+  // Lazy-load the AI strawman + multi-select options on first nav into the section
+  window.loadOnboarding = function () {
+    refreshStatusPill();
+    if (hydrated) return;
+    hydrated = true;
+    api('/api/onboarding/intake/draft').then(function (res) {
+      if (!res.ok) return;
+      var data = res.data || {};
+      var tot = document.getElementById('ob-this-or-that');
+      if (tot && Array.isArray(data.this_or_that)) {
+        tot.innerHTML = data.this_or_that.map(function (q) {
+          return '<div class="this-or-that-card">' +
+            '<div class="t-or-t-label">' + escapeHtml(q.field.replace(/_/g, ' ')) + '</div>' +
+            '<div class="t-or-t-options">' + q.options.map(function (opt, j) {
+              return '<label class="t-or-t-option"><input type="radio" name="' + escapeHtml(q.field) +
+                '" value="' + escapeHtml(opt) + '" ' + (j === 0 ? 'checked' : '') + ' />' +
+                '<span>' + escapeHtml(opt) + '</span></label>';
+            }).join('') + '</div></div>';
+        }).join('');
+      }
+      if (data.draft) {
+        var competitors = (data.draft.primary_competitors || '').split(/[;,]/).map(function (s) { return s.trim(); }).filter(Boolean);
+        var hoods = (data.draft.neighborhoods_to_target || '').split(/[;,]/).map(function (s) { return s.trim(); }).filter(Boolean);
+        populateSelect('ob-competitors', competitors);
+        populateSelect('ob-neighborhoods', hoods);
+      }
+    });
+  };
+
+  // Manager-name preview as user types email
+  ['ob-cm-email', 'ob-rm-email'].forEach(function (inputId) {
+    var input = document.getElementById(inputId);
+    var preview = document.getElementById(inputId.replace('-email', '-name-preview'));
+    if (!input || !preview) return;
+    input.addEventListener('blur', function () {
+      var email = input.value.trim();
+      if (!email) { preview.textContent = ''; return; }
+      api('/api/onboarding/managers/derive-name', {
+        method: 'POST', body: JSON.stringify({ email: email }),
+      }).then(function (res) {
+        if (res.data && res.data.name) {
+          preview.textContent = '→ ' + res.data.name;
+          preview.style.color = '#1a6b1a';
+        } else {
+          preview.textContent = 'Email format not recognized — must be first.last@rpmliving.com';
+          preview.style.color = '#b00020';
+        }
+      });
+    });
+  });
+
+  // Logo upload → extract colors → render swatches → pick primary/secondary
+  var logoInput = document.getElementById('ob-logo');
+  var swatchesEl = document.getElementById('ob-color-swatches');
+  var pickedColors = { primary: null, secondary: null };
+
+  if (logoInput) {
+    logoInput.addEventListener('change', function () {
+      if (!logoInput.files || !logoInput.files[0]) return;
+      swatchesEl.innerHTML = '<small class="ob-hint">Extracting colors…</small>';
+      var fd = new FormData();
+      fd.append('file', logoInput.files[0]);
+      apiUpload('/api/onboarding/colors/extract', fd).then(function (res) {
+        if (!res.ok) {
+          swatchesEl.innerHTML = '<small class="ob-hint" style="color:#b00020">' +
+            escapeHtml(res.data.error || 'Color extraction failed') + '</small>';
+          return;
+        }
+        renderSwatches(res.data.colors || []);
+      });
+    });
+  }
+
+  function renderSwatches(colors) {
+    if (!colors.length) { swatchesEl.innerHTML = '<small class="ob-hint">No colors extracted from logo.</small>'; return; }
+    swatchesEl.innerHTML =
+      '<div class="swatch-help">Pick your <strong>primary</strong> and <strong>secondary</strong> brand colors:</div>' +
+      '<div class="swatch-grid">' + colors.map(function (c) {
+        return '<button type="button" class="swatch" data-hex="' + escapeHtml(c) +
+          '" style="background:' + escapeHtml(c) + '" title="' + escapeHtml(c) + '">' +
+          '<span class="swatch-hex">' + escapeHtml(c) + '</span></button>';
+      }).join('') + '</div>' +
+      '<div class="swatch-picks">' +
+        '<span>Primary: <em id="swatch-primary">—</em></span>' +
+        '<span>Secondary: <em id="swatch-secondary">—</em></span>' +
+      '</div>';
+    swatchesEl.querySelectorAll('.swatch').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var hex = btn.dataset.hex;
+        if (!pickedColors.primary) {
+          pickedColors.primary = hex;
+          document.getElementById('swatch-primary').textContent = hex;
+          btn.classList.add('swatch-picked-primary');
+        } else if (!pickedColors.secondary && hex !== pickedColors.primary) {
+          pickedColors.secondary = hex;
+          document.getElementById('swatch-secondary').textContent = hex;
+          btn.classList.add('swatch-picked-secondary');
+        } else {
+          // Reset on third click
+          pickedColors = { primary: null, secondary: null };
+          swatchesEl.querySelectorAll('.swatch').forEach(function (b) {
+            b.classList.remove('swatch-picked-primary', 'swatch-picked-secondary');
+          });
+          document.getElementById('swatch-primary').textContent = '—';
+          document.getElementById('swatch-secondary').textContent = '—';
+        }
+      });
+    });
+  }
+
+  // Submit
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var status = document.getElementById('ob-status');
+    var btn = document.getElementById('ob-submit');
+    btn.disabled = true; status.textContent = 'Submitting…';
+
+    var fd = new FormData(form);
+    var payload = {};
+    fd.forEach(function (v, k) {
+      if (payload[k] !== undefined) {
+        if (!Array.isArray(payload[k])) payload[k] = [payload[k]];
+        payload[k].push(v);
+      } else {
+        payload[k] = v;
+      }
+    });
+    document.querySelectorAll('#onboarding-form select[multiple]').forEach(function (sel) {
+      payload[sel.name] = Array.from(sel.selectedOptions).map(function (o) { return o.value; });
+    });
+    payload.property_uuid = propertyUuid;
+
+    var heroInput = document.getElementById('ob-hero');
+    var logoFile = logoInput && logoInput.files && logoInput.files[0];
+    var heroFile = heroInput && heroInput.files && heroInput.files[0];
+
+    var uploads = Promise.resolve();
+    if (logoFile) {
+      uploads = uploads.then(function () {
+        var f = new FormData();
+        f.append('file', logoFile);
+        f.append('asset_kind', 'logo');
+        f.append('property_uuid', propertyUuid);
+        return apiUpload('/api/onboarding/assets/upload', f);
+      });
+    }
+    if (heroFile) {
+      uploads = uploads.then(function () {
+        var f = new FormData();
+        f.append('file', heroFile);
+        f.append('asset_kind', 'hero');
+        f.append('property_uuid', propertyUuid);
+        return apiUpload('/api/onboarding/assets/upload', f);
+      });
+    }
+    if (pickedColors.primary && pickedColors.secondary) {
+      uploads = uploads.then(function () {
+        return api('/api/onboarding/colors/save', {
+          method: 'POST',
+          body: JSON.stringify({
+            property_uuid: propertyUuid,
+            primary: pickedColors.primary,
+            secondary: pickedColors.secondary,
+          }),
+        });
+      });
+    }
+
+    uploads.then(function () {
+      return api('/api/onboarding/intake', {
+        method: 'POST',
+        body: JSON.stringify({ company_id: companyId, property_uuid: propertyUuid, payload: payload }),
+      });
+    }).then(function (res) {
+      if (!res.ok) {
+        status.textContent = 'Error: ' + (res.data.error || 'submit failed');
+        btn.disabled = false;
+        return;
+      }
+      var n = (res.data.gap_questions || []).length;
+      if (n > 0) {
+        status.innerHTML = 'Submitted with <strong>' + n + '</strong> item' + (n === 1 ? '' : 's') +
+          ' flagged. CSM will email the Community Manager.';
+      } else {
+        status.textContent = 'Intake submitted — clean. CSM will be in touch shortly.';
+      }
+      refreshStatusPill();
+    }).catch(function (e) {
+      status.textContent = 'Error: ' + (e && e.message ? e.message : 'submit failed');
+      btn.disabled = false;
+    });
+  });
+
+  // Initial pill check on page load (so the nav badge appears even without nav click)
+  if (companyId) refreshStatusPill();
 })();
 
 </script>

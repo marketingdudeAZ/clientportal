@@ -47,6 +47,12 @@ DEPLOY_MANIFEST = [
     # Dashboard CSS/JS
     {"local": "css/dashboard.css", "path": "custom/client-portal/css/dashboard.css", "type": 24, "label": "dashboard.css"},
     {"local": "js/dashboard.js", "path": "custom/client-portal/js/dashboard.js", "type": 22, "label": "dashboard.js"},
+    # Onboarding intake — partial + standalone CSS/JS. The main client-portal
+    # template inlines the same content; these uploaded copies exist so future
+    # templates (or a HubL `{% include %}` migration) can reuse them.
+    {"local": "templates/partials/onboarding-intake.html", "path": "custom/client-portal/partials/onboarding-intake.html", "type": 22, "label": "onboarding-intake.html"},
+    {"local": "css/onboarding-intake.css", "path": "custom/client-portal/css/onboarding-intake.css", "type": 24, "label": "onboarding-intake.css"},
+    {"local": "js/onboarding-intake.js", "path": "custom/client-portal/js/onboarding-intake.js", "type": 22, "label": "onboarding-intake.js"},
     # Page error template
     {"local": "templates/portal-error.html", "path": "custom/client-portal/portal-error.html", "type": 22, "label": "portal-error.html"},
     # Main page template — uses direct PUT to avoid 409 path conflict.
