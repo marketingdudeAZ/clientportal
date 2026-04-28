@@ -1,0 +1,88 @@
+name: Deploy HubSpot template
+
+# Auto-deploys hubspot-cms/templates/client-portal.html to HubSpot CMS via
+# scripts/deploy_template.py. Triggers on merges to main that touch the
+# template, or manually from the Actions tab.
+#
+# Requires repository secret HUBSPOT_API_KEY (same value as Render's env var).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'hubspot-cms/templates/**'
+      - 'scripts/deploy_template.py'
+      - '.github/workflows/deploy-hubspot-template.yml'
+  workflow_dispatch:
+
+# Serialize: never run two HubSpot deploys at once
+concurrency:
+  group: deploy-hubspot-template
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install --quiet requests python-dotenv
+
+      - name: Deploy template
+        id: deploy
+        env:
+          HUBSPOT_API_KEY: ${{ secrets.HUBSPOT_API_KEY }}
+        run: |
+          if [ -z "$HUBSPOT_API_KEY" ]; then
+            echo "::error::HUBSPOT_API_KEY repository secret is not set."
+            echo "Add it at: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            exit 1
+          fi
+
+          # Capture exit code without aborting the step on rc=2 (cache stale)
+          set +e
+          python3 scripts/deploy_template.py
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+
+          case "$rc" in
+            0)
+              echo "## ✓ Deploy successful" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "Template uploaded via v2 Content API. Live page confirmed serving the new render." >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            2)
+              # Upload worked, but Cloudflare's edge cache is still serving the
+              # old HTML. The script exits 2 to signal "needs manual slug bust".
+              # We surface this as a warning, not a failure, since the upload
+              # itself succeeded.
+              echo "::warning title=Cache bust needed::Template uploaded but Cloudflare prerender cache is serving the old HTML. Bust by changing the page URL slug in HubSpot."
+              {
+                echo "## ⚠ Upload OK — cache bust needed"
+                echo ""
+                echo "The template uploaded successfully, but Cloudflare's prerender cache is still serving the old HTML at the edge. To force a refresh:"
+                echo ""
+                echo "1. Open HubSpot → Marketing → Website → Pages"
+                echo "2. Find **RPM Client Portal**"
+                echo "3. Edit page settings → change the URL slug slightly (e.g. add and remove a hyphen)"
+                echo "4. Save / publish"
+                echo "5. Wait ~30 seconds, then load the live URL to verify the new render"
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::Deploy script failed with exit code $rc"
+              echo "## ✗ Deploy failed" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "Exit code: \`$rc\`. See the step logs above for details." >> "$GITHUB_STEP_SUMMARY"
+              exit "$rc"
+              ;;
+          esac
