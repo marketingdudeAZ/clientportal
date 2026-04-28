@@ -270,6 +270,24 @@ def review_intake(payload: dict[str, Any]) -> dict[str, Any]:
     completeness = present_count / len(REQUIRED_FIELDS) if REQUIRED_FIELDS else 1.0
     avg_slop = sum(slop_scores) / len(slop_scores) if slop_scores else 0.0
 
+    # Anti-slop nudge: if the PMA didn't supply a single ILS URL, surface a
+    # gentle gap question. ILS reviews are the strongest non-fabricable
+    # signal we can ground the brief in.
+    ils_present = any(
+        payload.get(k) for k in ("ils_apartments_com", "ils_zillow", "ils_other")
+    )
+    if not ils_present:
+        gap_questions.append({
+            "field":  "ils_apartments_com",
+            "label":  "Apartments.com / Zillow URL",
+            "prompt": (
+                "We didn't get an ILS profile URL (apartments.com, zillow, etc.). "
+                "Real resident reviews from those pages are our strongest signal — "
+                "can you share the property's ILS profile URLs?"
+            ),
+            "type":   "text",
+        })
+
     return {
         "field_trust":       field_trust,
         "completeness":      round(completeness, 3),

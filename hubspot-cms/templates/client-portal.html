@@ -2074,6 +2074,30 @@ body{padding-top:36px}
       <small class="ob-hint">Pick from the AI-suggested list — typed names blocked to prevent typos.</small>
     </fieldset>
 
+    {# ── Layer 1: SYSTEM PULL — ILS URLs ── #}
+    {# ILS profile pages give us real resident reviews — the strongest
+       anti-slop signal in the whole intake. We pass these to the AI brief
+       drafter which extracts amenities, unit mix, ratings, and quote
+       excerpts via ils_research.py. #}
+    <fieldset class="ob-section">
+      <legend>ILS profiles (real reviews ground the brief)</legend>
+      <label for="ob-ils-apartments">Apartments.com URL</label>
+      <input type="url" id="ob-ils-apartments" name="ils_apartments_com"
+             placeholder="https://www.apartments.com/aurora-heights-phoenix-az/abc123/" />
+
+      <label for="ob-ils-zillow">Zillow URL</label>
+      <input type="url" id="ob-ils-zillow" name="ils_zillow"
+             placeholder="https://www.zillow.com/apartments/phoenix-az/aurora-heights/abc123/" />
+
+      <label for="ob-ils-other">Other ILS (one per line)</label>
+      <textarea id="ob-ils-other" name="ils_other"
+                placeholder="https://www.rent.com/...&#10;https://www.apartmentlist.com/..."></textarea>
+      <small class="ob-hint">
+        Optional but strongly recommended. The AI drafter pulls real review excerpts
+        from these pages — much harder to AI-fabricate than website copy.
+      </small>
+    </fieldset>
+
     {# ── Layer 5: FORCED-FACT FIELDS ── #}
     <fieldset class="ob-section">
       <legend>Current performance</legend>

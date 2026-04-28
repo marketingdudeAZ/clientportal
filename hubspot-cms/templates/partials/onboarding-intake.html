@@ -57,6 +57,30 @@
       <small class="hint">Pick from the list — typed competitor names are blocked to keep data clean.</small>
     </fieldset>
 
+    {# ── Layer 1: SYSTEM PULL — ILS profile URLs ── #}
+    {# Public ILS pages give us real resident reviews + structured amenity
+       and unit data, processed by ils_research.py and fed to the AI brief
+       drafter as a strong anti-slop signal. #}
+    <fieldset class="intake-section">
+      <legend>ILS profiles (anti-slop signal)</legend>
+
+      <label for="ob-ils-apartments">Apartments.com URL</label>
+      <input type="url" id="ob-ils-apartments" name="ils_apartments_com"
+             placeholder="https://www.apartments.com/.../" />
+
+      <label for="ob-ils-zillow">Zillow URL</label>
+      <input type="url" id="ob-ils-zillow" name="ils_zillow"
+             placeholder="https://www.zillow.com/apartments/..." />
+
+      <label for="ob-ils-other">Other ILS URLs (one per line)</label>
+      <textarea id="ob-ils-other" name="ils_other"
+                placeholder="rent.com URL&#10;apartmentlist.com URL"></textarea>
+      <small class="hint">
+        Optional but strongly recommended. We pull real review excerpts from
+        these pages — much harder to AI-fabricate than website copy.
+      </small>
+    </fieldset>
+
     {# ── Layer 5: FORCED-FACT FIELDS ── #}
     <fieldset class="intake-section">
       <legend>Current performance</legend>

@@ -89,11 +89,35 @@ class TestReviewIntake(unittest.TestCase):
             "brand_archetype":         "The Caregiver",
             "community_manager_email": "jane.smith@rpmliving.com",
             "regional_manager_email":  "bob.jones@rpmliving.com",
+            # ILS URLs — required for a clean, no-gap intake (anti-slop)
+            "ils_apartments_com":      "https://www.apartments.com/aurora-heights/abc/",
         }
         review = gr.review_intake(payload)
         self.assertEqual(review["completeness"], 1.0)
         self.assertEqual(review["gap_questions"], [])
         self.assertEqual(review["validation_errors"], {})
+
+    @patch("gap_review.score_slop")
+    def test_missing_ils_creates_soft_gap(self, mock_slop):
+        """No ILS URL → gap question appended even if everything else is valid."""
+        mock_slop.return_value = {"slop_score": 0.1, "reason": "specific"}
+        payload = {
+            "property_name":           "Aurora Heights",
+            "neighborhoods":           ["Midtown"],
+            "unit_types":              ["Studio"],
+            "primary_competitors":     ["X"],
+            "current_concession":      "0",
+            "current_occupancy_pct":   "92",
+            "top_resident_complaint":  "Specific complaint with detail about the property.",
+            "brand_archetype":         "Sage",
+            "community_manager_email": "jane.smith@rpmliving.com",
+            "regional_manager_email":  "bob.jones@rpmliving.com",
+        }
+        review = gr.review_intake(payload)
+        gap_fields = [q["field"] for q in review["gap_questions"]]
+        self.assertIn("ils_apartments_com", gap_fields)
+        # Completeness should still be 1.0 since ILS isn't a hard-required field
+        self.assertEqual(review["completeness"], 1.0)
 
     @patch("gap_review.score_slop")
     def test_missing_field_creates_gap(self, mock_slop):

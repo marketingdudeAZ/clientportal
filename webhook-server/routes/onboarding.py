@@ -269,6 +269,13 @@ def intake_submit():
     cm_name = derive_rpm_name(cm_email) if cm_email else ""
     rm_name = derive_rpm_name(rm_email) if rm_email else ""
 
+    # If the PMA gave us ILS URLs, fire a fresh brief draft that includes
+    # ILS research (apartments.com / zillow review excerpts). This runs
+    # asynchronously — the intake response doesn't block on it.
+    ils_urls = _collect_ils_urls(payload)
+    if ils_urls:
+        _kick_brief_redraft_with_ils(company_id, ils_urls, email)
+
     from gap_review import review_intake, trigger_gap_email_workflow
     review = review_intake(payload)
 
@@ -316,6 +323,59 @@ def intake_submit():
         "typo_flags":        review["typo_flags"],
         "gap_review_token":  gap_token,
     })
+
+
+def _collect_ils_urls(payload: dict) -> dict[str, str]:
+    """Pull ILS URLs out of a form payload into the dict shape ils_research expects."""
+    urls: dict[str, str] = {}
+    for key in ("ils_apartments_com", "ils_zillow"):
+        v = (payload.get(key) or "").strip()
+        if v:
+            urls[key.replace("ils_", "")] = v
+    other = payload.get("ils_other") or ""
+    if isinstance(other, list):
+        other_lines = other
+    else:
+        other_lines = str(other).splitlines()
+    for line in other_lines:
+        v = (line or "").strip()
+        if v:
+            urls.setdefault(v, v)
+    return urls
+
+
+def _kick_brief_redraft_with_ils(company_id: str, ils_urls: dict[str, str], actor_email: str) -> None:
+    """Fire-and-forget: call /api/client-brief/draft internally with ILS URLs.
+
+    We use a thread rather than the existing endpoint so we don't add a new
+    network round-trip from this handler. On failure we just log — the
+    intake response still succeeds, and the existing (non-ILS) draft will
+    have been generated earlier in the flow.
+    """
+    import threading
+
+    def _run():
+        try:
+            import requests as _req
+            from config import HUBSPOT_API_KEY as _HK
+            r = _req.get(
+                f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
+                "?properties=domain,uuid",
+                headers={"Authorization": f"Bearer {_HK}"}, timeout=10,
+            )
+            r.raise_for_status()
+            domain = (r.json().get("properties") or {}).get("domain") or ""
+            if not domain:
+                logger.info("redraft skipped: no domain on company %s", company_id)
+                return
+            from brief_ai_drafter import draft_brief, normalize_domain
+            draft_brief(domain=normalize_domain(domain), ils_urls=ils_urls)
+            logger.info("brief redraft with ILS complete for company %s (urls=%d)",
+                        company_id, len(ils_urls))
+        except Exception as e:
+            logger.warning("brief redraft with ILS failed for %s: %s", company_id, e)
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _persist_intake(
