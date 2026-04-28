@@ -6251,7 +6251,7 @@ function _renderVideoCreative(d) {
   if (heroCta) {
     if (!d.enrolled) {
       heroCta.textContent = 'Enroll this property';
-      heroCta.onclick = function () { var em = document.getElementById('enroll-modal'); if (em) em.classList.add('is-open'); };
+      heroCta.onclick = function () { var em = document.getElementById('enroll-modal'); if (em) em.classList.add('open'); };
     } else if (pending > 0) {
       heroCta.textContent = 'Review ' + pending + ' variant' + (pending === 1 ? '' : 's');
     } else {
