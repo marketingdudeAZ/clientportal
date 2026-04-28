@@ -1213,8 +1213,7 @@ def submit_bulk_tickets():
     if len(company_ids) > 50:
         return jsonify({"error": "Max 50 properties per bulk request"}), 400
 
-    from ticket_manager import list_my_tickets as _invalidate_marker  # ensure import works
-    from ticket_manager import create_ticket, _MY_TICKETS_CACHE
+    from ticket_manager import create_ticket, invalidate_my_tickets_cache
 
     results = []
     ok = 0
@@ -1243,8 +1242,8 @@ def submit_bulk_tickets():
             logger.error("Bulk ticket create failed for %s: %s", cid, e)
             results.append({"company_id": cid, "status": "error", "error": str(e)})
 
-    # Bust the per-user cache so the new tickets show up on next /api/tickets/mine read
-    _MY_TICKETS_CACHE.clear()
+    # Bust the per-user cache so new tickets show up on next /api/tickets/mine read
+    invalidate_my_tickets_cache()
 
     logger.info("Bulk ticket submit by %s: %d ok, %d err across %d properties", email, ok, err, len(company_ids))
     return jsonify({"results": results, "ok_count": ok, "error_count": err})
@@ -1257,6 +1256,10 @@ def get_portfolio_triage_route():
     Replaces the Red Light color-only grid as the portfolio landing view.
     Each row is one property + one specific reason + a CTA target. Sorted
     by severity (critical → on-track), then by ticket age within band.
+
+    `?force=true` bypasses the in-process cache and is gated by the
+    server-to-server INTERNAL_API_KEY (X-Internal-Key) so portal users
+    can't spam HubSpot's CRM API by repeatedly defeating the cache.
     """
     if request.method == "OPTIONS":
         return _preflight_response()
@@ -1265,7 +1268,15 @@ def get_portfolio_triage_route():
     if not email:
         return jsonify({"error": "Authentication required"}), 401
 
-    force = request.args.get("force", "false").lower() == "true"
+    force = False
+    if request.args.get("force", "false").lower() == "true":
+        import hmac as _hmac
+        internal_key = request.headers.get("X-Internal-Key", "")
+        expected_key = os.getenv("INTERNAL_API_KEY", "")
+        force = bool(expected_key and internal_key and _hmac.compare_digest(expected_key, internal_key))
+        # Silently ignore force when not authorized — the request still
+        # serves cached data, so the user sees a result either way.
+
     try:
         from triage import get_portfolio_triage
         return jsonify(get_portfolio_triage(force=force))

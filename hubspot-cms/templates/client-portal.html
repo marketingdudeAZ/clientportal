@@ -1188,17 +1188,6 @@ body{line-height:1.55}
     </div>
   </div>
 
-  <!-- Hidden legacy KPI hooks (read by older _renderOverview branches; will be removed once all branches migrate) -->
-  <div style="display:none" aria-hidden="true">
-    <span id="kpi-health-score">—</span>
-    <span id="kpi-health-delta"></span>
-    <span id="kpi-health-bar"></span>
-    <span id="kpi-recs-count">—</span>
-    <span id="kpi-tickets-count">—</span>
-    <span id="kpi-tickets-delta"></span>
-    <span id="kpi-spend">—</span>
-  </div>
-
   <!-- Leasing Health Row -->
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">
     <div class="kpi" id="kpi-occ-card" style="border-top:3px solid var(--sage)">
@@ -9941,9 +9930,12 @@ function loadTriage() {
     });
 }
 function reloadTriage() {
+  // ?force=true requires INTERNAL_API_KEY auth, so the portal can't bust
+  // the server-side cache from the browser. Just re-run loadTriage; the
+  // 10-min cache may serve stale data, but bulk-ticket submissions
+  // already invalidate it server-side via invalidate_my_tickets_cache.
   _triageLoaded = false;
-  fetch(_apiBase + '/api/portfolio/triage?force=true', { headers: { 'X-Portal-Email': _email } })
-    .finally(loadTriage);
+  loadTriage();
 }
 function setTri(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
 function triageRowHtml(r) {

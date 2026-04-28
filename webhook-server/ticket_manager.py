@@ -394,6 +394,11 @@ _MY_TICKETS_CACHE: dict = {}
 _MY_TICKETS_TTL = 60  # seconds
 
 
+def invalidate_my_tickets_cache() -> None:
+    """Drop the per-user My Tickets cache. Call after creating tickets."""
+    _MY_TICKETS_CACHE.clear()
+
+
 def _chunked(items, size):
     for i in range(0, len(items), size):
         yield items[i:i + size]
