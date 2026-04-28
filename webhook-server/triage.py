@@ -205,7 +205,9 @@ def _list_managed_companies() -> list[dict]:
 
     out: list[dict] = []
     after = None
-    for _ in range(20):  # safety: max 2,000 companies
+    MAX_PAGES = 20  # 100 results/page → 2,000-company cap
+    pages_fetched = 0
+    for _ in range(MAX_PAGES):
         body = {
             "filterGroups": [{"filters": [
                 {"propertyName": "plestatus", "operator": "IN", "values": PLE_STATUSES}
@@ -237,9 +239,18 @@ def _list_managed_companies() -> list[dict]:
                 "red_light_report_status": props.get("red_light_report_status"),
                 "redlight_flag_count":     props.get("redlight_flag_count"),
             })
+        pages_fetched += 1
         after = data.get("paging", {}).get("next", {}).get("after")
         if not after:
             break
+    else:
+        # Loop exhausted without breaking — pagination kept going past the cap
+        if after:
+            logger.warning(
+                "Triage: hit MAX_PAGES (%d) cap with %d companies and more available; "
+                "raise the cap or paginate the API response",
+                MAX_PAGES, len(out),
+            )
     return out
 
 
