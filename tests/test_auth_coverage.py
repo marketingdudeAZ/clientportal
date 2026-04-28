@@ -37,9 +37,11 @@ AUTH_MARKERS = (
     "X-Portal-Email",              # PORTAL_EMAIL (inline check)
     "_resolve_seo_context",        # PORTAL_EMAIL (SEO context helper)
     "_resolve_paid_context",       # PORTAL_EMAIL (paid context helper)
+    "_resolve_onboarding_context", # PORTAL_EMAIL (onboarding context helper)
     "normalize_webhook",           # PROVIDER_SIG
     "require_portal_auth",         # SIGNED_REQUEST (reserved)
     "verify_request_signature",    # SIGNED_REQUEST (raw helper)
+    "_lookup_token",               # TOKEN_AUTH (gap-response form — token in URL is the auth)
 )
 
 # Routes that are legitimately unauthenticated. Keep this list SHORT and

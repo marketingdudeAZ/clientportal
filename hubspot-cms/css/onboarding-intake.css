@@ -1,0 +1,189 @@
+/* Onboarding Intake form styles. Matches portal.css typography conventions. */
+
+.onboarding-intake .intake-section {
+  border: 1px solid #e5e8ec;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin: 1.25rem 0;
+}
+
+.onboarding-intake legend {
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 0 .5rem;
+  color: #1a1f2c;
+}
+
+.onboarding-intake label {
+  display: block;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: .35rem;
+  color: #2a3140;
+}
+
+.onboarding-intake input[type=text],
+.onboarding-intake input[type=email],
+.onboarding-intake input[type=number],
+.onboarding-intake textarea,
+.onboarding-intake select {
+  width: 100%;
+  padding: .55rem .7rem;
+  border: 1px solid #c2c8d0;
+  border-radius: 6px;
+  font-size: 1rem;
+  box-sizing: border-box;
+  background: white;
+}
+
+.onboarding-intake input:invalid {
+  border-color: #b00020;
+}
+
+.onboarding-intake input[readonly] {
+  background: #f4f6fa;
+  color: #555;
+}
+
+.onboarding-intake textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.onboarding-intake .hint {
+  display: block;
+  margin-top: .35rem;
+  font-size: .85rem;
+  color: #555;
+}
+
+/* This-or-that picks */
+.this-or-that-card {
+  margin: .75rem 0;
+  padding: .75rem 1rem;
+  background: #fafbfc;
+  border-radius: 6px;
+}
+
+.t-or-t-label {
+  font-weight: 600;
+  text-transform: capitalize;
+  margin-bottom: .5rem;
+}
+
+.t-or-t-options {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.t-or-t-option {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .35rem .75rem;
+  border: 1px solid #d6dae0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 400;
+  margin: 0;
+}
+
+.t-or-t-option:has(input:checked) {
+  border-color: #2356c5;
+  background: #eef2fb;
+}
+
+/* Color swatches */
+.color-swatches {
+  margin: 1rem 0;
+}
+
+.swatch-help {
+  font-size: .9rem;
+  color: #444;
+  margin-bottom: .5rem;
+}
+
+.swatch-grid {
+  display: flex;
+  gap: .5rem;
+  flex-wrap: wrap;
+  margin-bottom: .5rem;
+}
+
+.swatch {
+  width: 64px;
+  height: 64px;
+  border: 2px solid #d6dae0;
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+}
+
+.swatch-hex {
+  display: block;
+  width: 100%;
+  font-size: .65rem;
+  background: rgba(255, 255, 255, .85);
+  color: #1a1f2c;
+  padding: 1px 0;
+  border-radius: 0 0 4px 4px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.swatch-picked-primary {
+  outline: 3px solid #2356c5;
+  outline-offset: 2px;
+}
+
+.swatch-picked-secondary {
+  outline: 3px solid #6b9bff;
+  outline-offset: 2px;
+}
+
+.swatch-picks {
+  display: flex;
+  gap: 2rem;
+  font-size: .9rem;
+  color: #2a3140;
+}
+
+.swatch-picks em {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-style: normal;
+  font-weight: 600;
+}
+
+/* Submit footer */
+.intake-footer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.intake-footer .btn-primary {
+  padding: .7rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  background: #2356c5;
+  color: white;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.intake-footer .btn-primary:disabled {
+  background: #99a;
+  cursor: not-allowed;
+}
+
+.status-text {
+  font-size: .9rem;
+  color: #2a3140;
+}
