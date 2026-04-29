@@ -29,7 +29,7 @@ Exit codes:
     2 = upload succeeded but live page still stale;
         follow printed instructions to change URL slug
 """
-import os, sys, time, requests
+import os, re, sys, time, requests
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
@@ -68,14 +68,45 @@ def _h(json_body=False):
     return h
 
 
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_HUBL_DIRECTIVE_RE = re.compile(r"{%\s*(if|else|elif|endif|for|endfor|set)\b")
+
+
+def find_hubl_directives_in_html_comments(source):
+    """Return list of (line_no, snippet) for any HubL directive token found
+    inside an HTML comment.
+
+    HubL processes templating directives BEFORE HTML parsing, so any
+    `{% if %}`, `{% else %}`, etc. that appears inside an English-language
+    HTML comment is treated as a real directive and silently scrambles the
+    branch structure. This bit us on 2026-04-28 — a self-referential comment
+    in client-portal.html ("Mirror copy lives in the {% else %} portfolio
+    branch.") terminated the property branch 450 lines early, dropping all
+    the slide-over IIFE code from the rendered output.
+
+    Returns: list of (line_no_1indexed, comment_snippet) tuples. Empty list
+             means clean.
+    """
+    hits = []
+    for m in _HTML_COMMENT_RE.finditer(source):
+        body = m.group(0)
+        if _HUBL_DIRECTIVE_RE.search(body):
+            line_no = source.count("\n", 0, m.start()) + 1
+            hits.append((line_no, body[:160]))
+    return hits
+
+
 def validate_hubl_structure(source):
     """Fail fast if the IIFE JS blocks ended up in the wrong HubL branch.
 
     Template has {% if uuid_param %}...{% else %}...{% endif %}. Phase 1/2/3 JS
     must be inside the IF branch; if appended to end-of-file (common Claude edit
     mistake), they land in the ELSE branch and never run on /client-portal?uuid=X.
+
+    Also catches HubL directives accidentally written inside HTML comment
+    text (see find_hubl_directives_in_html_comments docstring).
     """
-    # Find positions of markers
+    # Check 1: structural — IIFE inside IF branch
     if_pos = source.find("{% if uuid_param %}")
     else_pos = source.find("{% else %}")
     endif_pos = source.rfind("{% endif %}")
@@ -92,6 +123,20 @@ def validate_hubl_structure(source):
             f"The JS IIFEs were appended to the wrong branch. "
             f"Move them before the </script></body></html>{{% else %}} block."
         )
+
+    # Check 2: no HubL directives inside HTML comments — they get parsed
+    # before HTML, scrambling the branch structure.
+    rogue = find_hubl_directives_in_html_comments(source)
+    if rogue:
+        lines = "\n".join(f"  line {ln}: {snip!r}" for ln, snip in rogue)
+        return False, (
+            f"HubL directive found inside {len(rogue)} HTML comment(s). "
+            f"HubL parses directives before HTML, so writing `{{% else %}}` "
+            f"or `{{% if %}}` inside comment text creates a phantom branch "
+            f"that scrambles the live render. Rephrase the comment(s):\n"
+            f"{lines}"
+        )
+
     return True, None
 
 
