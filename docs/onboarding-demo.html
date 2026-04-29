@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RPM Onboarding Discovery — Demo Preview</title>
+<style>
+  /* Variables matching the production portal palette */
+  :root {
+    --tp: #1a1f2c;     /* text primary */
+    --ts: #4a5160;     /* text secondary */
+    --tm: #6b7280;     /* text muted */
+    --bd: #e5e8ec;     /* border */
+    --bg: #f6f8fb;     /* page background */
+    --cu: #2356c5;     /* accent */
+    --cug: #eef2fb;    /* accent ghost */
+  }
+  body {
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    margin: 0; background: var(--bg); color: var(--tp);
+  }
+  .demo-banner {
+    background: #fff7ed; border-bottom: 1px solid #f59e0b;
+    padding: 10px 24px; font-size: 12px; color: #92400e;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .demo-banner strong { color: #78350f; }
+  .demo-page {
+    max-width: 920px; margin: 32px auto; padding: 0 24px;
+  }
+  .demo-header {
+    margin-bottom: 16px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--bd);
+  }
+  .demo-header h1 {
+    font-size: 18px; margin: 0 0 4px; color: var(--tp);
+  }
+  .demo-header .lead {
+    font-size: 13px; color: var(--ts); margin: 0;
+  }
+  .sec-topbar {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 24px 0 14px;
+  }
+  .sec-title { font-size: 21px; font-weight: 800; color: var(--tp); }
+  .sec-sub { font-size: 13px; color: var(--ts); margin-top: 2px; }
+  .sec-status-pill {
+    padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
+    background: var(--cug); color: var(--cu); text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .card {
+    background: white; border: 1px solid var(--bd);
+    border-radius: 10px; padding: 28px; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+
+  /* The form styles — same as the production inline block */
+  #onboarding-form .ob-section {
+    border: 1px solid var(--bd); border-radius: 8px;
+    padding: 18px 22px; margin: 20px 0;
+  }
+  #onboarding-form legend {
+    font-weight: 700; font-size: 13px; padding: 0 8px;
+    color: var(--tp); text-transform: uppercase; letter-spacing: .05em;
+  }
+  #onboarding-form label {
+    display: block; font-weight: 600; margin-top: 14px; margin-bottom: 6px;
+    color: var(--tp); font-size: 13px;
+  }
+  #onboarding-form input[type=text],
+  #onboarding-form input[type=email],
+  #onboarding-form input[type=number],
+  #onboarding-form input[type=url],
+  #onboarding-form textarea,
+  #onboarding-form select {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--bd);
+    border-radius: 6px; font-size: 13px; font-family: inherit;
+    box-sizing: border-box; background: white; color: var(--tp);
+  }
+  #onboarding-form input:invalid:not(:placeholder-shown) { border-color: #b00020; }
+  #onboarding-form input[readonly] { background: #f4f6fa; color: var(--tm); }
+  #onboarding-form textarea { min-height: 90px; resize: vertical; }
+  #onboarding-form select[multiple] { min-height: 120px; }
+  #onboarding-form .ob-hint {
+    display: block; margin-top: 5px; font-size: 11px; color: var(--tm);
+  }
+
+  /* This-or-that picks */
+  .this-or-that-card {
+    margin: 10px 0; padding: 12px 14px; background: var(--bg); border-radius: 6px;
+  }
+  .t-or-t-label {
+    font-weight: 600; text-transform: capitalize; margin-bottom: 8px; font-size: 13px;
+  }
+  .t-or-t-options { display: flex; gap: 10px; flex-wrap: wrap; }
+  .t-or-t-option {
+    display: flex; align-items: center; gap: 6px; padding: 6px 12px;
+    border: 1px solid var(--bd); border-radius: 5px; cursor: pointer;
+    font-weight: 400; margin: 0; font-size: 12px; background: white;
+  }
+  .t-or-t-option:has(input:checked) { border-color: var(--cu); background: var(--cug); }
+
+  /* Color swatches */
+  .ob-color-swatches { margin: 14px 0; }
+  .swatch-help { font-size: 12px; color: var(--ts); margin-bottom: 8px; }
+  .swatch-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .swatch {
+    width: 60px; height: 60px; border: 2px solid var(--bd); border-radius: 6px;
+    cursor: pointer; display: flex; align-items: flex-end; justify-content: center;
+    padding: 0; position: relative;
+  }
+  .swatch-hex {
+    display: block; width: 100%; font-size: 9px;
+    background: rgba(255,255,255,.85); color: var(--tp);
+    padding: 1px 0; border-radius: 0 0 4px 4px;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+  .swatch-picked-primary { outline: 3px solid var(--cu); outline-offset: 2px; }
+  .swatch-picked-secondary { outline: 3px solid #6b9bff; outline-offset: 2px; }
+  .swatch-picks { display: flex; gap: 24px; font-size: 12px; color: var(--tp); }
+  .swatch-picks em {
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-style: normal; font-weight: 700;
+  }
+
+  /* Submit footer */
+  .ob-footer { display: flex; align-items: center; gap: 14px; margin-top: 24px; }
+  .btn-primary {
+    padding: 10px 20px; font-size: 14px; font-weight: 700;
+    background: var(--cu); color: white; border: 0; border-radius: 6px; cursor: pointer;
+  }
+  .ob-status-text { font-size: 12px; color: var(--ts); }
+</style>
+</head>
+<body>
+
+<div class="demo-banner">
+  <strong>DEMO PREVIEW</strong> — this is a static rendering of the new Onboarding Discovery section.
+  In production it lives inside the live RPM Client Portal at <code>digital.rpmliving.com/client-portal</code>.
+  Form submit and uploads are stubbed in this demo.
+</div>
+
+<div class="demo-page">
+  <div class="demo-header">
+    <h1>RPM Client Portal — Onboarding section</h1>
+    <p class="lead">
+      This is what a Property Marketing Associate sees during onboarding. The PMA fills it out
+      once; the system runs gap review, drafts the AI brief from website + ILS reviews, and
+      hands clean structured data to the Paid Media and SEO teams.
+    </p>
+  </div>
+
+  <section id="section-onboarding" class="section">
+    <div class="sec-topbar">
+      <div>
+        <div class="sec-title">Onboarding Discovery</div>
+        <div class="sec-sub">Discovery intake · brand assets · gap review for Community Manager follow-up</div>
+      </div>
+      <div id="onboarding-status-pill" class="sec-status-pill">intake in progress</div>
+    </div>
+
+    <form id="onboarding-form" class="card" novalidate onsubmit="handleSubmit(event)">
+
+      <fieldset class="ob-section">
+        <legend>Property basics</legend>
+        <label for="ob-name">Property name</label>
+        <input type="text" id="ob-name" value="Aurora Heights" readonly />
+        <small class="ob-hint">Pulled from HubSpot. Contact your CSM to change.</small>
+
+        <label for="ob-neighborhoods">Target neighborhoods</label>
+        <select id="ob-neighborhoods" multiple required>
+          <option selected>Midtown Phoenix</option>
+          <option selected>Downtown Phoenix</option>
+          <option>Encanto</option>
+          <option>Roosevelt</option>
+          <option>Garfield</option>
+        </select>
+        <small class="ob-hint">Hold ⌘/Ctrl to select multiple. Type-ahead disabled to keep names clean.</small>
+
+        <label for="ob-units">Unit types offered</label>
+        <select id="ob-units" multiple required>
+          <option selected>Studio</option>
+          <option selected>1BR</option>
+          <option selected>2BR</option>
+          <option>3BR</option>
+          <option>4BR+</option>
+          <option>Loft</option>
+        </select>
+
+        <label for="ob-competitors">Primary competitors</label>
+        <select id="ob-competitors" multiple required>
+          <option selected>The Pinnacle</option>
+          <option selected>Skyline at Midtown</option>
+          <option>Roosevelt Lofts</option>
+        </select>
+        <small class="ob-hint">Pick from the AI-suggested list — typed names blocked to prevent typos.</small>
+      </fieldset>
+
+      <fieldset class="ob-section">
+        <legend>ILS profiles (real reviews ground the brief)</legend>
+        <label for="ob-ils-apartments">Apartments.com URL</label>
+        <input type="url" id="ob-ils-apartments"
+               value="https://www.apartments.com/aurora-heights-phoenix-az/abc123/" />
+
+        <label for="ob-ils-zillow">Zillow URL</label>
+        <input type="url" id="ob-ils-zillow"
+               value="https://www.zillow.com/apartments/phoenix-az/aurora-heights/abc123/" />
+
+        <label for="ob-ils-other">Other ILS (one per line)</label>
+        <textarea id="ob-ils-other" placeholder="https://www.rent.com/...&#10;https://www.apartmentlist.com/..."></textarea>
+        <small class="ob-hint">
+          Optional but strongly recommended. The AI drafter pulls real review excerpts
+          from these pages — much harder to AI-fabricate than website copy.
+        </small>
+      </fieldset>
+
+      <fieldset class="ob-section">
+        <legend>Current performance</legend>
+        <label for="ob-concession">Current concession</label>
+        <input type="text" id="ob-concession" value="$1500" pattern="^\$?[\d,]+$|^0$|^[Nn]one$" required />
+        <small class="ob-hint">Dollar amount or "0" — prose like "two months free" won't validate.</small>
+
+        <label for="ob-occupancy">Current occupancy %</label>
+        <input type="number" id="ob-occupancy" value="92" min="0" max="100" step="0.1" required />
+
+        <label for="ob-cm-email">Community Manager email</label>
+        <input type="email" id="ob-cm-email" value="jane.smith@rpmliving.com"
+               pattern="^[a-z]+\.[a-z]+(?:-[a-z]+)?@rpmliving\.com$" required />
+        <small class="ob-hint" style="color:#1a6b1a">→ Jane Smith</small>
+
+        <label for="ob-rm-email">Regional Manager email</label>
+        <input type="email" id="ob-rm-email" value="bob.jones@rpmliving.com"
+               pattern="^[a-z]+\.[a-z]+(?:-[a-z]+)?@rpmliving\.com$" required />
+        <small class="ob-hint" style="color:#1a6b1a">→ Bob Jones</small>
+      </fieldset>
+
+      <fieldset class="ob-section">
+        <legend>Brand voice</legend>
+        <p class="ob-hint">Our AI drafted these from your website. Pick the option that fits, or "Different" if neither does.</p>
+        <div id="ob-this-or-that">
+          <div class="this-or-that-card">
+            <div class="t-or-t-label">brand archetype</div>
+            <div class="t-or-t-options">
+              <label class="t-or-t-option">
+                <input type="radio" name="archetype" value="caregiver" checked />
+                <span>The Caregiver — warm, supportive (matches your reviews)</span>
+              </label>
+              <label class="t-or-t-option">
+                <input type="radio" name="archetype" value="sage" />
+                <span>The Sage — knowledgeable, advisory</span>
+              </label>
+              <label class="t-or-t-option">
+                <input type="radio" name="archetype" value="other" />
+                <span>Different — let me clarify</span>
+              </label>
+            </div>
+          </div>
+          <div class="this-or-that-card">
+            <div class="t-or-t-label">tagline tone</div>
+            <div class="t-or-t-options">
+              <label class="t-or-t-option">
+                <input type="radio" name="tagline" value="aspirational" />
+                <span>Aspirational — "Live elevated"</span>
+              </label>
+              <label class="t-or-t-option">
+                <input type="radio" name="tagline" value="grounded" checked />
+                <span>Grounded — "Midtown done right"</span>
+              </label>
+              <label class="t-or-t-option">
+                <input type="radio" name="tagline" value="other" />
+                <span>Different — let me clarify</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="ob-section">
+        <legend>What we'd miss from just reading your website</legend>
+        <label for="ob-complaint">Top recent resident complaint (last 90 days)</label>
+        <textarea id="ob-complaint" maxlength="280" required>Pool maintenance has been slow this quarter — three closures since February. Residents are frustrated about the lack of communication.</textarea>
+        <small class="ob-hint">
+          Be specific — "pool was closed three times in February" beats "amenity issues."
+          Generic answers will trigger a follow-up to the Community Manager.
+        </small>
+      </fieldset>
+
+      <fieldset class="ob-section">
+        <legend>Brand assets</legend>
+        <label for="ob-logo">Logo (transparent PNG required)</label>
+        <input type="file" id="ob-logo" accept="image/png" />
+        <small class="ob-hint">
+          Logo must be a PNG with transparent background. We auto-generate the 4 sizes Fluency needs.
+        </small>
+
+        <div id="ob-color-swatches">
+          <div class="swatch-help">Pick your <strong>primary</strong> and <strong>secondary</strong> brand colors:</div>
+          <div class="swatch-grid">
+            <div class="swatch swatch-picked-primary" style="background:#2356C5"><span class="swatch-hex">#2356C5</span></div>
+            <div class="swatch swatch-picked-secondary" style="background:#C8964E"><span class="swatch-hex">#C8964E</span></div>
+            <div class="swatch" style="background:#1A1F2C"><span class="swatch-hex">#1A1F2C</span></div>
+            <div class="swatch" style="background:#E8C04E"><span class="swatch-hex">#E8C04E</span></div>
+            <div class="swatch" style="background:#6B9BFF"><span class="swatch-hex">#6B9BFF</span></div>
+          </div>
+          <div class="swatch-picks">
+            <span>Primary: <em>#2356C5</em></span>
+            <span>Secondary: <em>#C8964E</em></span>
+          </div>
+        </div>
+
+        <label for="ob-hero">Property hero photo</label>
+        <input type="file" id="ob-hero" accept="image/jpeg,image/png" />
+        <small class="ob-hint">At least 1200px on the shortest side. EXIF preserved for provenance.</small>
+      </fieldset>
+
+      <div class="ob-footer">
+        <button type="submit" class="btn-primary">Submit intake</button>
+        <span class="ob-status-text">In production: submit triggers gap review, AI brief redraft with ILS data, and state machine advance.</span>
+      </div>
+    </form>
+  </section>
+
+  <p style="text-align:center;font-size:12px;color:var(--tm);margin-top:32px">
+    Demo of the production form at <code>hubspot-cms/templates/client-portal.html</code> §
+    <code>section-onboarding</code> · Branch: <code>claude/client-onboarding-discovery-rcQj4</code>
+  </p>
+</div>
+
+<script>
+function handleSubmit(e) {
+  e.preventDefault();
+  alert(
+    "DEMO ONLY — in production this would:\n\n" +
+    "1. POST /api/onboarding/intake with the form payload\n" +
+    "2. Run gap_review.review_intake — score completeness, validate forced facts, run AI-slop classifier on free text\n" +
+    "3. Insert row into rpm_onboarding_intake HubDB\n" +
+    "4. Auto-derive CM/RM names from emails\n" +
+    "5. Upload logo + hero (auto-resized to 4 logo + 3 hero variants)\n" +
+    "6. Save approved colors as Blueprint variables\n" +
+    "7. Transition state machine to intake_complete\n" +
+    "8. If gap_questions exist → set rpm_gap_review_action = send_cm_email\n" +
+    "9. HubSpot Workflow fires task to company owner with pre-drafted email\n" +
+    "10. Re-run AI brief drafter with ILS URLs for resident-review grounding"
+  );
+}
+</script>
+</body>
+</html>
