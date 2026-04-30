@@ -79,7 +79,40 @@ CLICKUP_LISTS = {
     "social": os.getenv("CLICKUP_LIST_SOCIAL"),
     "reputation": os.getenv("CLICKUP_LIST_REPUTATION"),
     "onboarding": os.getenv("CLICKUP_LIST_ONBOARDING"),
+    # Property brief intake — drives the automation in property_brief.py.
+    "property_brief": os.getenv("CLICKUP_LIST_PROPERTY_BRIEF"),
 }
+# Per-stage ClickUp ticket statuses for the property brief workflow.
+# These slugs are passed to ClickUp's update-task API; they must match the
+# statuses configured on the property-brief list. Defaults are conservative
+# so unconfigured environments simply skip status updates rather than 400.
+CLICKUP_BRIEF_STATUSES = {
+    "deal_created":      os.getenv("CLICKUP_BRIEF_STATUS_DEAL_CREATED",      "deal sent"),
+    "awaiting_approval": os.getenv("CLICKUP_BRIEF_STATUS_AWAITING_APPROVAL", "brief in review"),
+    "needs_edits":       os.getenv("CLICKUP_BRIEF_STATUS_NEEDS_EDITS",       "brief needs edits"),
+    "approved":          os.getenv("CLICKUP_BRIEF_STATUS_APPROVED",          "brief approved"),
+    "quote_signed":      os.getenv("CLICKUP_BRIEF_STATUS_QUOTE_SIGNED",      "quote signed"),
+    "blocked":           os.getenv("CLICKUP_BRIEF_STATUS_BLOCKED",           "blocked"),
+    "escalated":         os.getenv("CLICKUP_BRIEF_STATUS_ESCALATED",         "escalated"),
+}
+CLICKUP_WEBHOOK_SECRET = os.getenv("CLICKUP_WEBHOOK_SECRET", "")
+HUBSPOT_QUOTE_WEBHOOK_SECRET = os.getenv("HUBSPOT_QUOTE_WEBHOOK_SECRET", "")
+
+# --- Property Brief Automation ---
+# Token-gated approval portal. Tokens are unguessable and consumed once a
+# decision is captured (see property_brief_store.py).
+PROPERTY_BRIEF_TOKEN_TTL_HOURS = int(os.getenv("PROPERTY_BRIEF_TOKEN_TTL_HOURS", "168"))   # 7 days
+PROPERTY_BRIEF_MAX_REVISIONS = int(os.getenv("PROPERTY_BRIEF_MAX_REVISIONS", "3"))
+# After the cap, the brief escalates to the ops queue rather than re-running
+# the LLM. Notifications go through PROPERTY_BRIEF_FAILURE_CHANNEL.
+PROPERTY_BRIEF_FAILURE_CHANNEL = os.getenv("PROPERTY_BRIEF_FAILURE_CHANNEL", "clickup")
+# HubDB table used as the brief store. Keyed by token. See docs/property_brief.md.
+HUBDB_PROPERTY_BRIEFS_TABLE_ID = os.getenv("HUBDB_PROPERTY_BRIEFS_TABLE_ID")
+# Public base URL used to render approval links. Falls back to WEBHOOK_SERVER_URL.
+PROPERTY_BRIEF_PUBLIC_URL = os.getenv("PROPERTY_BRIEF_PUBLIC_URL") or os.getenv("WEBHOOK_SERVER_URL", "http://localhost:8443")
+# Re-fire updates only when this ClickUp custom field is flipped to true.
+# Default: never re-fire on updates (creation-only trigger).
+PROPERTY_BRIEF_REFIRE_FIELD = os.getenv("PROPERTY_BRIEF_REFIRE_FIELD", "rpm_brief_reprocess")
 
 # --- Creatify Video Pipeline ---
 CREATIFY_API_ID  = os.getenv("CREATIFY_API_ID", "")

@@ -42,6 +42,9 @@ AUTH_MARKERS = (
     "require_portal_auth",         # SIGNED_REQUEST (reserved)
     "verify_request_signature",    # SIGNED_REQUEST (raw helper)
     "_lookup_token",               # TOKEN_AUTH (gap-response form — token in URL is the auth)
+    "_verify_clickup_signature",   # HMAC_BODY (property-brief ClickUp webhook)
+    "_verify_hubspot_signature",   # HMAC_BODY (property-brief HubSpot quote webhook)
+    "store.consume",               # TOKEN_AUTH (property-brief approval portal — single-use token)
 )
 
 # Routes that are legitimately unauthenticated. Keep this list SHORT and
