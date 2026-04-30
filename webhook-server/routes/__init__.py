@@ -6,6 +6,7 @@ calls `register_all(app)` once at startup.
 
 from .onboarding import onboarding_bp
 from .paid import paid_bp
+from .property_brief import property_brief_bp
 from .seo import seo_bp
 
 
@@ -14,3 +15,4 @@ def register_all(app):
     app.register_blueprint(paid_bp)
     app.register_blueprint(seo_bp)
     app.register_blueprint(onboarding_bp)
+    app.register_blueprint(property_brief_bp)
