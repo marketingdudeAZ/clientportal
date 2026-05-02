@@ -4355,6 +4355,240 @@ def accounts_property_detail():
     })
 
 
+# ─── Fluency tag sync (Track 2 of /accounts spec v3) ───────────────────────
+
+@app.route("/api/internal/fluency-tag-sync", methods=["POST", "OPTIONS"])
+def fluency_tag_sync():
+    """Run the Apt IQ → HubSpot fluency_* sync. Track 2 phases 2.0 + 2.1.
+
+    Body JSON: {
+        "sample":  <int|null>     limit run to first N companies (AXIS first if available)
+        "dry_run": <bool>         compute only, don't write to HubSpot
+        "commit_override": <bool> bypass autonomy gate failures (use with care)
+    }
+
+    Auth: X-Internal-Key = INTERNAL_API_KEY env var.
+
+    Synchronous for sample mode (returns the dry-run summary inline).
+    For full live mode (no sample, dry_run=false): kicks off in a background
+    thread and returns immediately with status=queued. Caller polls the result
+    file path returned in the response, or checks fluency_last_sync_at on
+    company records.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    # Auth (matches sync-properties-to-bq pattern)
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+
+    body = request.get_json(silent=True) or {}
+    sample          = int(body.get("sample") or 0)
+    dry_run         = bool(body.get("dry_run", True))
+    commit_override = bool(body.get("commit_override", False))
+
+    try:
+        from services.fluency_ingestion import apt_iq_reader
+        from services.fluency_ingestion.tag_builder import build_tags
+        from services.fluency_ingestion.hubspot_writer import update_companies_batch
+    except Exception as e:
+        logger.error("fluency-tag-sync import failed: %s", e, exc_info=True)
+        return jsonify({"error": f"import failed: {e}"}), 500
+
+    import datetime as _dt
+    import json as _json
+    import time as _t
+    import threading as _th
+    from collections import defaultdict
+    import requests as _req
+    from config import HUBSPOT_API_KEY
+
+    PLE_INCLUDE = ["RPM Managed", "Onboarding", "Dispositioning"]
+    LOCKED_VOICE     = {"luxury", "standard", "value", "lifestyle"}
+    LOCKED_LIFECYCLE = {"lease_up", "pre_lease", "stabilized", "rebrand", "renovated"}
+    VALID_BR         = {"Studio", "0BR", "1BR", "2BR", "3BR", "4BR"}
+    HS_HDRS = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+
+    def _fetch_companies():
+        url = "https://api.hubapi.com/crm/v3/objects/companies/search"
+        all_results = []
+        after = None
+        while True:
+            payload = {
+                "filterGroups": [{"filters": [
+                    {"propertyName": "plestatus", "operator": "IN", "values": PLE_INCLUDE},
+                    {"propertyName": "aptiq_property_id", "operator": "HAS_PROPERTY"},
+                ]}],
+                "properties": [
+                    "name", "domain", "uuid", "rpmmarket", "city", "state",
+                    "aptiq_property_id", "aptiq_market_id",
+                    "fluency_voice_tier_override", "fluency_lifecycle_state_override",
+                    "plestatus",
+                ],
+                "limit": 100,
+            }
+            if after:
+                payload["after"] = after
+            r = _req.post(url, headers=HS_HDRS, json=payload, timeout=30)
+            r.raise_for_status()
+            d = r.json()
+            all_results.extend(d.get("results", []))
+            after = (d.get("paging") or {}).get("next", {}).get("after")
+            if not after:
+                break
+            _t.sleep(0.15)
+        return all_results
+
+    def _normalize(raw):
+        p = raw.get("properties") or {}
+        return {
+            "id":                 raw.get("id"),
+            "name":               p.get("name") or "",
+            "domain":             p.get("domain") or "",
+            "uuid":               p.get("uuid") or "",
+            "market":             p.get("rpmmarket") or "",
+            "city":               p.get("city") or "",
+            "state":              p.get("state") or "",
+            "aptiq_property_id":  p.get("aptiq_property_id") or "",
+            "aptiq_market_id":    p.get("aptiq_market_id") or "",
+            "voice_override":     p.get("fluency_voice_tier_override") or "",
+            "lifecycle_override": p.get("fluency_lifecycle_state_override") or "",
+            "plestatus":          p.get("plestatus") or "",
+        }
+
+    def _gate(envs):
+        fails = []
+        if not envs:
+            return False, ["no envelopes to check"]
+        unmatched = [e for e in envs if not e["apt_iq"].get("matched")]
+        if unmatched:
+            fails.append(f"unmatched: {len(unmatched)}/{len(envs)} (" +
+                         ", ".join(e["company"]["name"] for e in unmatched[:5]) + ")")
+        bad_voice = [e for e in envs if e["computed"] and e["computed"].get("fluency_voice_tier") not in LOCKED_VOICE]
+        if bad_voice:
+            fails.append("voice_tier off-vocab: " +
+                         ", ".join(f"{e['company']['name']}={e['computed'].get('fluency_voice_tier')!r}" for e in bad_voice))
+        bad_life = [e for e in envs if e["computed"] and e["computed"].get("fluency_lifecycle_state") not in LOCKED_LIFECYCLE]
+        if bad_life:
+            fails.append("lifecycle off-vocab: " +
+                         ", ".join(f"{e['company']['name']}={e['computed'].get('fluency_lifecycle_state')!r}" for e in bad_life))
+        bad_fp = []
+        for e in envs:
+            fp = (e["computed"] or {}).get("fluency_floor_plans") or ""
+            if fp:
+                toks = [t.strip() for t in fp.split(",") if t.strip()]
+                if any(t not in VALID_BR for t in toks):
+                    bad_fp.append(f"{e['company']['name']}={fp!r}")
+        if bad_fp:
+            fails.append("floor_plans bad tokens: " + ", ".join(bad_fp))
+        bad_rent = []
+        for e in envs:
+            v = (e["computed"] or {}).get("fluency_avg_rent")
+            if v is not None and not (isinstance(v, (int, float)) and v > 0):
+                bad_rent.append(f"{e['company']['name']}={v!r}")
+        if bad_rent:
+            fails.append("avg_rent invalid: " + ", ".join(bad_rent))
+        return (len(fails) == 0), fails
+
+    t0 = _t.time()
+    raw = _fetch_companies()
+    companies = [_normalize(r) for r in raw]
+    logger.info("fluency-tag-sync: %d companies in scope", len(companies))
+
+    if sample:
+        axis = [c for c in companies if c["name"].strip().lower().startswith("axis crossroads")]
+        rest = [c for c in companies if c not in axis]
+        companies = (axis + rest)[:sample]
+
+    # Apt IQ fetch + tag build for each
+    envs = []
+    for c in companies:
+        envs.append({"company": c, "apt_iq": apt_iq_reader.read_property(c), "computed": None})
+
+    # Peer rents index for percentile calc
+    peer_idx = defaultdict(list)
+    for e in envs:
+        ai = e["apt_iq"]
+        if ai.get("matched") and ai.get("avg_rent"):
+            mkt = ai.get("market_name") or e["company"].get("market") or "_unknown"
+            peer_idx[mkt].append(ai["avg_rent"])
+
+    # Tag-build per matched envelope
+    for e in envs:
+        if e["apt_iq"].get("matched"):
+            mkt = e["apt_iq"].get("market_name") or e["company"].get("market") or ""
+            peers = list(peer_idx.get(mkt, []))
+            if e["apt_iq"].get("avg_rent"):
+                peers = [r for r in peers if abs(r - e["apt_iq"]["avg_rent"]) > 0.01]
+            e["computed"] = build_tags(
+                e["apt_iq"],
+                market_peer_rents=peers,
+                voice_override=e["company"].get("voice_override") or None,
+                lifecycle_override=e["company"].get("lifecycle_override") or None,
+            )
+
+    matched   = [e for e in envs if e["apt_iq"].get("matched")]
+    unmatched = [e for e in envs if not e["apt_iq"].get("matched")]
+    gate_set  = matched if sample else matched[:5]
+    gate_ok, gate_fails = _gate(gate_set)
+
+    summary = {
+        "started_at":      _dt.datetime.utcnow().isoformat() + "Z",
+        "duration_s":      round(_t.time() - t0, 2),
+        "scope_count":     len(envs),
+        "matched_count":   len(matched),
+        "unmatched_count": len(unmatched),
+        "gate_ok":         gate_ok,
+        "gate_fails":      gate_fails,
+        "samples":         [
+            {
+                "name":              e["company"]["name"],
+                "id":                e["company"]["id"],
+                "aptiq_id":          e["company"]["aptiq_property_id"],
+                "matched":           e["apt_iq"].get("matched"),
+                "amenity_count":     len(e["apt_iq"].get("amenities") or []) if e["apt_iq"].get("matched") else 0,
+                "floor_plans":       e["computed"].get("fluency_floor_plans") if e["computed"] else None,
+                "voice_tier":        e["computed"].get("fluency_voice_tier") if e["computed"] else None,
+                "lifecycle":         e["computed"].get("fluency_lifecycle_state") if e["computed"] else None,
+                "avg_rent":          e["computed"].get("fluency_avg_rent") if e["computed"] else None,
+                "rent_percentile":   e["computed"].get("fluency_rent_percentile") if e["computed"] else None,
+                "concession_active": e["computed"].get("fluency_concession_active") if e["computed"] else None,
+                "year_built":        e["computed"].get("fluency_year_built") if e["computed"] else None,
+            } for e in (gate_set if sample else matched[:10])
+        ],
+    }
+
+    if dry_run:
+        summary["mode"] = "dry-run"
+        return jsonify(summary)
+
+    # Live write — gate first
+    if not gate_ok and not commit_override:
+        summary["mode"] = "blocked"
+        summary["reason"] = "autonomy gate failed; pass commit_override=true to force"
+        return jsonify(summary), 422
+
+    # Build batch updates
+    updates = [{"id": e["company"]["id"], "properties": e["computed"]}
+               for e in matched if e["computed"]]
+    summary["mode"] = "live"
+    summary["queued_writes"] = len(updates)
+
+    # Run in a background thread so the HTTP request returns quickly
+    def _bg_writer():
+        try:
+            res = update_companies_batch(updates)
+            logger.info("fluency-tag-sync background write: updated=%d failed=%d",
+                        res["updated"], res["failed"])
+        except Exception as e:
+            logger.error("fluency-tag-sync background write failed: %s", e, exc_info=True)
+
+    th = _th.Thread(target=_bg_writer, daemon=True)
+    th.start()
+    return jsonify(summary)
+
+
 def _prewarm_spend_cache():
     """Build the spend sheet cache in the background on startup."""
     import threading, time
