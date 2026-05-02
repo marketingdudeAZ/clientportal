@@ -8967,7 +8967,7 @@ setTimeout(loadPropertySwitcher, 1500);
             ageDays = d === 0 ? 'today' : d + 'd ago';
           }
           var deepLink = t.company_uuid
-            ? ('https://digital.rpmliving.com/portal-dashboard?uuid=' + encodeURIComponent(t.company_uuid))
+            ? ('https://digital.rpmliving.com/staging/portal-dashboard?uuid=' + encodeURIComponent(t.company_uuid))
             : null;
           return '<div class="my-ticket-row" ' + (deepLink ? ('onclick="window.location.href=\'' + deepLink + '\'"') : '') + '>' +
             '<div class="my-ticket-top">' +
@@ -9132,7 +9132,7 @@ setTimeout(loadPropertySwitcher, 1500);
     if (!others.length) { box.style.display = 'none'; return; }
     box.style.display = '';
     chips.innerHTML = others.map(function (r) {
-      var url = 'https://digital.rpmliving.com/portal-dashboard?uuid=' + encodeURIComponent(r.uuid);
+      var url = 'https://digital.rpmliving.com/staging/portal-dashboard?uuid=' + encodeURIComponent(r.uuid);
       return '<a class="pnb-recent-chip" href="' + url + '">' + escapeHtml(r.name) + '</a>';
     }).join('');
   };
@@ -9940,7 +9940,7 @@ function reloadTriage() {
 function setTri(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
 function triageRowHtml(r) {
   var url = r.uuid
-    ? 'https://digital.rpmliving.com/portal-dashboard?uuid=' + encodeURIComponent(r.uuid)
+    ? 'https://digital.rpmliving.com/staging/portal-dashboard?uuid=' + encodeURIComponent(r.uuid)
     : '#';
   var ctaLabel = (r.cta_section === 'tickets') ? 'Open ticket' :
                  (r.cta_section === 'performance') ? 'View report' :
@@ -10169,7 +10169,7 @@ loadPropList();
             ageDays = d === 0 ? 'today' : d + 'd ago';
           }
           var deepLink = t.company_uuid
-            ? ('https://digital.rpmliving.com/portal-dashboard?uuid=' + encodeURIComponent(t.company_uuid))
+            ? ('https://digital.rpmliving.com/staging/portal-dashboard?uuid=' + encodeURIComponent(t.company_uuid))
             : null;
           return '<div class="my-ticket-row" ' + (deepLink ? ('onclick="window.location.href=\'' + deepLink + '\'"') : '') + '>' +
             '<div class="my-ticket-top">' +
