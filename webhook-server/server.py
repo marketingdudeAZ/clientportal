@@ -4539,6 +4539,14 @@ def fluency_tag_sync():
         "scope_count":     len(envs),
         "matched_count":   len(matched),
         "unmatched_count": len(unmatched),
+        "unmatched":       [
+            {
+                "name":     e["company"]["name"],
+                "id":       e["company"]["id"],
+                "aptiq_id": e["company"]["aptiq_property_id"],
+                "reason":   e["apt_iq"].get("reason"),
+            } for e in unmatched[:20]
+        ],
         "gate_ok":         gate_ok,
         "gate_fails":      gate_fails,
         "samples":         [
