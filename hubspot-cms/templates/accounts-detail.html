@@ -1,0 +1,257 @@
+<!--
+  templateType: page
+  label: RPM Accounts — Property Detail
+  isAvailableForNewContent: true
+-->
+{# PRODUCTION: /accounts/property detail page (Track 1 of RPM_accounts_Build_Spec_v3.md) #}
+{# v1 deviation from spec section 2.5: company id is read from ?company_id= query
+   string instead of a path parameter. Same UX, no HubSpot dynamic-page CRM-object
+   binding required. Future: swap to /accounts/property/{companyId} once the page
+   is set up as a dynamic page in HubSpot UI.
+#}
+<!doctype html><html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>RPM | Property Detail</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --j:#53606C;--jd:#3D474F;--j1:#1A2530;--j2:#151F2B;
+  --cu:#C8964E;--cul:#D4A86A;--cug:rgba(200,150,78,0.12);
+  --sage:#8FA68E;--mint:#CDE3E0;--ml:#E8F4F2;
+  --red:#C94444;--amb:#D4910A;--amb-bg:#FEF7E6;--amb-bd:#F5D58F;
+  --rose:#FFF0F0;--rose-bd:#F2C8C8;
+  --white:#fff;--bg:#F0F2F5;
+  --tp:#1F2937;--ts:#6B7280;--tm:#9CA3AF;
+  --bd:#E5E7EB;--bdl:#F3F4F6;
+  --sh:0 1px 3px rgba(0,0,0,0.07),0 1px 2px rgba(0,0,0,0.04);
+  --r:12px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(--tp);background:var(--bg)}
+.wrap{max-width:1100px;margin:0 auto;padding:24px}
+.back{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--ts);text-decoration:none;text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px}
+.back:hover{color:var(--cu)}
+.hdr{background:var(--white);padding:28px 32px;border-radius:var(--r);box-shadow:var(--sh);margin-bottom:18px}
+.h-name{font-size:28px;font-weight:800;color:var(--j1);letter-spacing:-.02em}
+.h-sub{color:var(--ts);font-size:13px;margin-top:6px}
+.section{background:var(--white);padding:22px 28px;border-radius:var(--r);box-shadow:var(--sh);margin-bottom:14px}
+.section h2{font-size:13px;font-weight:800;color:var(--j1);text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--bdl)}
+.callout-warning{border:1.5px solid var(--amb-bd);background:var(--amb-bg)}
+.callout-warning .callout-banner{display:flex;align-items:center;gap:8px;background:var(--amb);color:var(--white);padding:8px 16px;margin:-22px -28px 16px -28px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;border-radius:var(--r) var(--r) 0 0}
+.callout-warning .callout-banner::before{content:'⚠'}
+dl.fields{display:grid;grid-template-columns:200px 1fr 160px;column-gap:14px;row-gap:0}
+dl.fields > div{display:contents}
+dl.fields .row{display:contents}
+dl.fields dt{padding:9px 0;font-size:12px;font-weight:700;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bdl)}
+dl.fields dd{padding:9px 0;border-bottom:1px solid var(--bdl);font-size:14px}
+dl.fields dd.value{color:var(--tp);font-weight:500;word-break:break-word}
+dl.fields dd.empty{color:var(--tm);font-style:italic;font-weight:400}
+dl.fields dd.source{color:var(--tm);font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;text-align:right}
+.chip{display:inline-block;background:var(--ml);color:var(--jd);padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;margin:2px 4px 2px 0}
+.loading,.error{text-align:center;padding:60px 24px;color:var(--tm)}
+.error{color:var(--red)}
+@media (max-width: 700px){
+  dl.fields{grid-template-columns:1fr}
+  dl.fields dt{padding-top:14px;border:none}
+  dl.fields dd{padding-bottom:14px}
+  dl.fields dd.source{text-align:left;padding-top:0}
+}
+</style>
+</head><body>
+<div class="wrap">
+  <a class="back" href="/accounts">← All accounts</a>
+  <div id="root">
+    <div class="loading">Loading property…</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var API_BASE = 'https://rpm-portal-server.onrender.com';
+  var EMAIL = (window.__PORTAL_EMAIL || 'portal@rpmliving.com');
+
+  function getQ(name){
+    var m = location.search.match(new RegExp('[?&]' + name + '=([^&]+)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+  // Source-label resolver: "Pipeline" if the field is fluency_* and populated;
+  // "HubSpot" for identity fields; "Pipeline pending" if a fluency_* is empty.
+  function srcLabel(key, val){
+    var has = val !== null && val !== undefined && String(val).trim() !== '';
+    if (key.startsWith('fluency_') && key.endsWith('_override')) return has ? 'Override' : 'Override pending';
+    if (key.startsWith('fluency_'))                                return has ? 'Pipeline' : 'Pipeline pending';
+    return 'HubSpot';
+  }
+
+  function fieldRow(label, val, key){
+    var has = val !== null && val !== undefined && String(val).trim() !== '';
+    var valHTML = has ? esc(val) : '<span>Not yet computed</span>';
+    var src     = srcLabel(key, val);
+    return '<dt>' + esc(label) + '</dt>' +
+           '<dd class="' + (has ? 'value' : 'empty') + '">' + valHTML + '</dd>' +
+           '<dd class="source">' + esc(src) + '</dd>';
+  }
+
+  // CSV-string field renderer — splits on comma, renders chips.
+  function chipsRow(label, val, key){
+    var has = val !== null && val !== undefined && String(val).trim() !== '';
+    if (!has) {
+      return '<dt>' + esc(label) + '</dt>' +
+             '<dd class="empty"><span>Not yet computed</span></dd>' +
+             '<dd class="source">' + esc(srcLabel(key, val)) + '</dd>';
+    }
+    var items = String(val).split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+    var html = items.map(function(s){ return '<span class="chip">' + esc(s) + '</span>'; }).join('');
+    return '<dt>' + esc(label) + '</dt>' +
+           '<dd class="value">' + html + '</dd>' +
+           '<dd class="source">' + esc(srcLabel(key, val)) + '</dd>';
+  }
+
+  // Section rendering: array of [label, propertyKey, kind] tuples.
+  function section(title, fields, p, opts){
+    var rows = fields.map(function(f){
+      var label = f[0], key = f[1], kind = f[2] || 'text';
+      var val = p[key];
+      return kind === 'chips' ? chipsRow(label, val, key) : fieldRow(label, val, key);
+    }).join('');
+    var classes = 'section' + (opts && opts.callout ? ' callout-warning' : '');
+    var banner  = opts && opts.banner ? '<div class="callout-banner">' + esc(opts.banner) + '</div>' : '';
+    return '<section class="' + classes + '">' + banner + '<h2>' + esc(title) + '</h2><dl class="fields">' + rows + '</dl></section>';
+  }
+
+  function render(p, companyId){
+    var name = p.name || 'Unnamed Property';
+    var addr = [p.address, p.city, p.state, p.zip].filter(Boolean).join(', ');
+
+    var html = '<div class="hdr">' +
+                 '<div class="h-name">' + esc(name) + '</div>' +
+                 (addr ? '<div class="h-sub">' + esc(addr) + '</div>' : '') +
+                 '<div class="h-sub">HubSpot ID: ' + esc(companyId) + '</div>' +
+               '</div>';
+
+    // 1. Identity (always populated where present)
+    html += section('Identity', [
+      ['Name',                   'name'],
+      ['Address',                'address'],
+      ['City',                   'city'],
+      ['State',                  'state'],
+      ['ZIP',                    'zip'],
+      ['Domain',                 'domain'],
+      ['Phone',                  'phone'],
+      ['Property Code',          'property_code'],
+      ['HubSpot UUID',           'uuid'],
+      ['SFID',                   'sfid'],
+      ['Apt IQ Property ID',     'aptiq_property_id'],
+      ['Apt IQ Market ID',       'aptiq_market_id'],
+      ['NinjaCat System ID',     'ninjacat_system_id'],
+    ], p);
+
+    // 2. Voice and Positioning
+    html += section('Voice and Positioning', [
+      ['Voice Tier',             'fluency_voice_tier'],
+      ['Unit Noun',              'fluency_unit_noun'],
+      ['Voice Tier (Override)',  'fluency_voice_tier_override'],
+      ['Unit Noun (Override)',   'fluency_unit_noun_override'],
+      ['Advertised Name',        'fluency_advertised_name_override'],
+      ['Short Name',             'fluency_short_name_override'],
+    ], p);
+
+    // 3. Lifecycle
+    html += section('Lifecycle', [
+      ['Lifecycle State',          'fluency_lifecycle_state'],
+      ['Lifecycle (Override)',     'fluency_lifecycle_state_override'],
+      ['Year Built',               'fluency_year_built'],
+      ['Year Renovated',           'fluency_year_renovated'],
+    ], p);
+
+    // 4. Inventory
+    html += section('Inventory', [
+      ['Floor Plans',              'fluency_floor_plans'],
+    ], p);
+
+    // 5. Pricing — locked callout per spec section 2.5
+    html += section('Pricing', [
+      ['Average Rent',             'fluency_avg_rent'],
+      ['Concession Active',        'fluency_concession_active'],
+      ['Concession Text',          'fluency_concession_text'],
+      ['Concession Value',         'fluency_concession_value'],
+      ['Rent Percentile',          'fluency_rent_percentile'],
+    ], p, { callout: true, banner: 'Internal reference only. Not pushed to Fluency.' });
+
+    // 6. Amenities
+    html += section('Amenities', [
+      ['Amenities',                       'fluency_amenities',                       'chips'],
+      ['Marketed Amenity Names',          'fluency_marketed_amenity_names',          'chips'],
+      ['Amenity Descriptions',            'fluency_amenities_descriptions'],
+      ['Amenities (Override)',            'fluency_amenities_override',              'chips'],
+      ['Marketed Amenity Names (Override)','fluency_marketed_amenity_names_override','chips'],
+    ], p);
+
+    // 7. Geography
+    html += section('Geography', [
+      ['Neighborhood',             'fluency_neighborhood'],
+      ['Neighborhood (Override)',  'fluency_neighborhood_override'],
+      ['Nearby Neighborhoods (Override)','fluency_nearby_neighborhoods_override','chips'],
+      ['Landmarks',                'fluency_landmarks',                         'chips'],
+      ['Landmarks (Override)',     'fluency_landmarks_override',                'chips'],
+      ['Nearby Employers',         'fluency_nearby_employers',                  'chips'],
+      ['Nearby Employers (Override)','fluency_nearby_employers_override',       'chips'],
+    ], p);
+
+    // 8. Competitors
+    html += section('Competitors', [
+      ['Competitors',              'fluency_competitors',          'chips'],
+      ['Competitors (Override)',   'fluency_competitors_override', 'chips'],
+    ], p);
+
+    // 9. Guardrails
+    html += section('Guardrails', [
+      ['Must Include',                  'fluency_must_include'],
+      ['Must Include (Override)',       'fluency_must_include_override'],
+      ['Forbidden Phrases',             'fluency_forbidden_phrases'],
+      ['Forbidden Phrases (Override)',  'fluency_forbidden_phrases_override'],
+    ], p);
+
+    // 10. PM Context — locked callout per spec section 2.5
+    html += section('PM Context', [
+      ['Lease Signal (Form 5)',         'fluency_lease_signal_text'],
+      ['Struggling Units (Form 7)',     'fluency_struggling_units'],
+      ['Insider Color (Form 9)',        'fluency_insider_color'],
+    ], p, { callout: true, banner: 'AM context only. Not used in ad copy.' });
+
+    // 11. Operational
+    html += section('Operational', [
+      ['Client Portfolio',          'client_portfolio'],
+      ['Packages Enrolled',         'packages_enrolled'],
+      ['Account Manager',           'account_manager_email'],
+      ['RM Email',                  'rm_email'],
+      ['Digital Region',            'digital_region'],
+      ['PLE Status',                'plestatus'],
+      ['RPM Market',                'rpmmarket'],
+      ['Last Sync At',              'fluency_last_sync_at'],
+      ['Sync Status',               'fluency_sync_status'],
+    ], p);
+
+    document.getElementById('root').innerHTML = html;
+    document.title = 'RPM | ' + name;
+  }
+
+  var cid = getQ('company_id');
+  if (!cid) {
+    document.getElementById('root').innerHTML = '<div class="error">Missing company_id query parameter. Try opening this page from the <a href="/accounts">accounts table</a>.</div>';
+    return;
+  }
+  fetch(API_BASE + '/api/accounts/property?company_id=' + encodeURIComponent(cid), { headers: { 'X-Portal-Email': EMAIL } })
+    .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function(d){ render(d.properties || {}, d.company_id || cid); })
+    .catch(function(err){
+      document.getElementById('root').innerHTML = '<div class="error">Failed to load property (' + err + ').</div>';
+    });
+})();
+</script>
+</body></html>

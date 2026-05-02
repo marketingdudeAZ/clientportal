@@ -4273,6 +4273,88 @@ def onboarding_generate_keywords():
 # Extracted to webhook-server/routes/paid.py — see Blueprint registration below.
 
 
+# ─── /accounts (RPM Accounts page — Track 1 of /accounts spec v3) ──────────
+
+# All HubSpot company properties the /accounts detail page reads.
+# Identity + operational pulled directly from existing CRM properties; the
+# fluency_* set is created by migrations/2026-05-create-fluency-properties.py.
+_ACCOUNTS_DETAIL_PROPERTIES = [
+    # Identity
+    "name", "address", "city", "state", "zip", "domain", "phone",
+    "property_code", "uuid", "sfid",
+    "aptiq_property_id", "aptiq_market_id", "ninjacat_system_id",
+    # Operational
+    "client_portfolio", "packages_enrolled", "account_manager_email",
+    "rm_email", "digital_region", "plestatus", "rpmmarket",
+    # Resolved fluency_* (populated by Track 2 pipeline)
+    "fluency_voice_tier", "fluency_lifecycle_state", "fluency_unit_noun",
+    "fluency_amenities", "fluency_marketed_amenity_names", "fluency_amenities_descriptions",
+    "fluency_floor_plans", "fluency_must_include", "fluency_forbidden_phrases",
+    "fluency_neighborhood", "fluency_landmarks", "fluency_nearby_employers",
+    "fluency_competitors", "fluency_year_built", "fluency_year_renovated",
+    "fluency_avg_rent", "fluency_concession_active", "fluency_concession_text",
+    "fluency_concession_value", "fluency_rent_percentile",
+    "fluency_lease_signal_text", "fluency_struggling_units", "fluency_insider_color",
+    "fluency_last_sync_at", "fluency_sync_status",
+    # Override mirrors (populated by /accounts v2 UI — not used in v1 read)
+    "fluency_voice_tier_override", "fluency_lifecycle_state_override",
+    "fluency_unit_noun_override", "fluency_amenities_override",
+    "fluency_amenities_descriptions_override", "fluency_marketed_amenity_names_override",
+    "fluency_competitors_override", "fluency_must_include_override",
+    "fluency_forbidden_phrases_override", "fluency_neighborhood_override",
+    "fluency_nearby_neighborhoods_override", "fluency_landmarks_override",
+    "fluency_nearby_employers_override", "fluency_advertised_name_override",
+    "fluency_short_name_override",
+]
+
+
+@app.route("/api/accounts/property", methods=["GET", "OPTIONS"])
+def accounts_property_detail():
+    """Return all HubSpot company properties read by the /accounts detail page.
+
+    Mirrors the Spend Tracker auth pattern (X-Portal-Email header). Used by the
+    HubL detail template to render all 11 sections per spec section 2.5. Empty
+    fields render as "Not yet computed" client-side; the API does not transform
+    nulls — it just relays whatever HubSpot has.
+
+    Query params:
+        company_id — HubSpot hs_object_id of the company (required)
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    company_id = (request.args.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id is required"}), 400
+
+    import requests as req
+    from config import HUBSPOT_API_KEY
+
+    props_param = "&".join(f"properties={p}" for p in _ACCOUNTS_DETAIL_PROPERTIES)
+    try:
+        r = req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?{props_param}",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"},
+            timeout=15,
+        )
+        if r.status_code == 404:
+            return jsonify({"error": "Company not found"}), 404
+        r.raise_for_status()
+    except Exception as e:
+        logger.error("/api/accounts/property fetch failed: %s", e, exc_info=True)
+        return jsonify({"error": "Failed to load property"}), 500
+
+    body = r.json()
+    return jsonify({
+        "company_id": body.get("id"),
+        "properties": body.get("properties") or {},
+    })
+
+
 def _prewarm_spend_cache():
     """Build the spend sheet cache in the background on startup."""
     import threading, time
