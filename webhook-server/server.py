@@ -4390,28 +4390,36 @@ def fluency_tag_sync():
     debug_mode      = bool(body.get("debug", False))
 
     if debug_mode:
-        # Diagnostic: show whether the Apt IQ token is loaded and what the
-        # /properties/bulk_details endpoint actually returns for AXIS Crossroads.
+        # Diagnostic: try several Apt IQ endpoint shapes to learn what works
+        # for property 99026134 (AXIS Crossroads).
         import apartmentiq_client as _aic
         import requests as _req
-        token_present = bool(_aic.APTIQ_TOKEN)
-        token_len     = len(_aic.APTIQ_TOKEN or "")
         info = {
-            "ApartmentIQ_Token_present": token_present,
-            "ApartmentIQ_Token_length":  token_len,
+            "ApartmentIQ_Token_present": bool(_aic.APTIQ_TOKEN),
+            "ApartmentIQ_Token_length":  len(_aic.APTIQ_TOKEN or ""),
+            "probes": {},
         }
-        if token_present:
-            try:
-                test_url = f"{_aic.BASE_URL}/properties/bulk_details"
-                r = _req.get(test_url, headers=_aic._headers(),
-                             params={"property_ids": "99026134"}, timeout=15)
-                info["test_status_code"] = r.status_code
-                info["test_response_keys"] = (
-                    list(r.json().keys())[:10] if r.headers.get("content-type", "").startswith("application/json") else []
-                )
-                info["test_body_head"] = r.text[:300]
-            except Exception as exc:
-                info["test_error"] = str(exc)
+        if _aic.APTIQ_TOKEN:
+            probes = [
+                ("GET bulk_details ?property_ids", "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99026134"}, None),
+                ("GET bulk_details ?property_id (singular)", "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_id": "99026134"}, None),
+                ("GET /properties/{id}",          "GET", f"{_aic.BASE_URL}/properties/99026134", None, None),
+                ("POST bulk_details body={ids:[]}","POST", f"{_aic.BASE_URL}/properties/bulk_details", None, {"property_ids": ["99026134"]}),
+                ("GET /properties (list)",        "GET", f"{_aic.BASE_URL}/properties", {"page": 1, "per_page": 1}, None),
+                ("GET /comp_sets list",           "GET", f"{_aic.BASE_URL}/comp_sets", {"page": 1, "per_page": 1}, None),
+            ]
+            for label, method, url, params, json_body in probes:
+                try:
+                    if method == "GET":
+                        r = _req.get(url, headers=_aic._headers(), params=params, timeout=12)
+                    else:
+                        r = _req.post(url, headers=_aic._headers(), params=params, json=json_body, timeout=12)
+                    info["probes"][label] = {
+                        "status": r.status_code,
+                        "head":   r.text[:200],
+                    }
+                except Exception as exc:
+                    info["probes"][label] = {"error": str(exc)}
         return jsonify(info)
 
     try:
