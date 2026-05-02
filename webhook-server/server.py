@@ -4387,6 +4387,32 @@ def fluency_tag_sync():
     sample          = int(body.get("sample") or 0)
     dry_run         = bool(body.get("dry_run", True))
     commit_override = bool(body.get("commit_override", False))
+    debug_mode      = bool(body.get("debug", False))
+
+    if debug_mode:
+        # Diagnostic: show whether the Apt IQ token is loaded and what the
+        # /properties/bulk_details endpoint actually returns for AXIS Crossroads.
+        import apartmentiq_client as _aic
+        import requests as _req
+        token_present = bool(_aic.APTIQ_TOKEN)
+        token_len     = len(_aic.APTIQ_TOKEN or "")
+        info = {
+            "ApartmentIQ_Token_present": token_present,
+            "ApartmentIQ_Token_length":  token_len,
+        }
+        if token_present:
+            try:
+                test_url = f"{_aic.BASE_URL}/properties/bulk_details"
+                r = _req.get(test_url, headers=_aic._headers(),
+                             params={"property_ids": "99026134"}, timeout=15)
+                info["test_status_code"] = r.status_code
+                info["test_response_keys"] = (
+                    list(r.json().keys())[:10] if r.headers.get("content-type", "").startswith("application/json") else []
+                )
+                info["test_body_head"] = r.text[:300]
+            except Exception as exc:
+                info["test_error"] = str(exc)
+        return jsonify(info)
 
     try:
         from services.fluency_ingestion import apt_iq_reader
