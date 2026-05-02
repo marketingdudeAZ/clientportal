@@ -4400,13 +4400,14 @@ def fluency_tag_sync():
             "probes": {},
         }
         if _aic.APTIQ_TOKEN:
+            # Try multiple property IDs to learn whether the 403 is per-property
+            # (token account scope) or universal (token deactivated).
             probes = [
-                ("GET bulk_details ?property_ids", "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99026134"}, None),
-                ("GET bulk_details ?property_id (singular)", "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_id": "99026134"}, None),
-                ("GET /properties/{id}",          "GET", f"{_aic.BASE_URL}/properties/99026134", None, None),
-                ("POST bulk_details body={ids:[]}","POST", f"{_aic.BASE_URL}/properties/bulk_details", None, {"property_ids": ["99026134"]}),
-                ("GET /properties (list)",        "GET", f"{_aic.BASE_URL}/properties", {"page": 1, "per_page": 1}, None),
-                ("GET /comp_sets list",           "GET", f"{_aic.BASE_URL}/comp_sets", {"page": 1, "per_page": 1}, None),
+                ("AXIS 99026134",            "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99026134"}, None),
+                ("Muse 99024347",            "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99024347"}, None),
+                ("10x Riverwalk 99040861",   "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99040861"}, None),
+                ("Arbor Crossing 99072950",  "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99072950"}, None),
+                ("Comma-list of 4 IDs",      "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99026134,99024347,99040861,99072950"}, None),
             ]
             for label, method, url, params, json_body in probes:
                 try:
