@@ -9,8 +9,10 @@ Per spec sections 4.3, 4.4, 4.5 of RPM_accounts_Build_Spec_v3.md:
     lease_signal_text (Form 5 raw, PM-context only).
 
 Sheet schema (column order matters; Fluency reads by column name):
-    account_id        | HubSpot company hs_object_id (stable identifier)
-    account_uuid      | HubSpot company `uuid` custom property (alt key)
+    account_id        | HubSpot company `uuid` custom property — THIS IS THE
+                        FLUENCY JOIN KEY. Per Kyle: this is what links the
+                        sheet row to the right Fluency account.
+    hubspot_company_id| HubSpot hs_object_id (internal cross-reference only)
     account_name      | Property name
     account_market    | RPM Market
     account_state     | US state
@@ -69,8 +71,12 @@ TAB_NAME = "rpm_property_tag_source"
 
 # Order locked: changing column order is a breaking change for Fluency.
 # Names follow the data: prefix convention from spec section 4.9.
+# `account_id` holds the HubSpot `uuid` custom property (Fluency's join key per
+# Kyle, 2026-05-03), NOT the hs_object_id — those values diverge for some
+# properties (Astra Avery Ranch is one). hubspot_company_id is the internal-only
+# hs_object_id, kept for cross-reference.
 COLUMNS = [
-    "account_id", "account_uuid", "account_name", "account_market", "account_state",
+    "account_id", "hubspot_company_id", "account_name", "account_market", "account_state",
     "data:voice_tier", "data:lifecycle_state", "data:unit_noun",
     "data:amenities", "data:marketed_amenity_names", "data:amenities_descriptions",
     "data:floor_plans", "data:year_built", "data:year_renovated",
@@ -156,11 +162,11 @@ def _build_row(record: dict, now_iso: str) -> tuple[list[Any], str]:
     fluency = {k: v for k, v in fluency.items() if k not in EXCLUDED_FIELDS}
 
     row_map: dict[str, Any] = {
-        "account_id":     str(record.get("account_id") or ""),
-        "account_uuid":   str(record.get("account_uuid") or ""),
-        "account_name":   str(record.get("account_name") or ""),
-        "account_market": str(record.get("account_market") or ""),
-        "account_state":  str(record.get("account_state") or ""),
+        "account_id":         str(record.get("account_id") or ""),
+        "hubspot_company_id": str(record.get("hubspot_company_id") or ""),
+        "account_name":       str(record.get("account_name") or ""),
+        "account_market":     str(record.get("account_market") or ""),
+        "account_state":      str(record.get("account_state") or ""),
     }
     for hubspot_prop, sheet_col in FLUENCY_TO_SHEET.items():
         v = fluency.get(hubspot_prop)

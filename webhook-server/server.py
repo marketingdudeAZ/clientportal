@@ -4642,16 +4642,24 @@ def fluency_tag_sync():
     # Build the Fluency-sheet records too (matched envelopes only, subset of fluency_*).
     # The pipeline_sheet_writer drops excluded fields for safety per spec 4.9.
     sheet_records = []
+    sheet_skipped_no_uuid = 0
     for e in matched:
         if not e["computed"]:
             continue
+        # Fluency join key is the HubSpot `uuid` custom property, NOT hs_object_id.
+        # If a company has no uuid set, skip the sheet write for that property
+        # (HubSpot fluency_* writes still happen normally).
+        company_uuid = (e["company"].get("uuid") or "").strip()
+        if not company_uuid:
+            sheet_skipped_no_uuid += 1
+            continue
         sheet_records.append({
-            "account_id":     e["company"]["id"],
-            "account_uuid":   e["company"].get("uuid", ""),
-            "account_name":   e["company"]["name"],
-            "account_market": e["company"].get("market", ""),
-            "account_state":  e["company"].get("state", ""),
-            "fluency":        e["computed"],
+            "account_id":         company_uuid,                 # Fluency join key
+            "hubspot_company_id": e["company"]["id"],            # internal cross-ref
+            "account_name":       e["company"]["name"],
+            "account_market":     e["company"].get("market", ""),
+            "account_state":      e["company"].get("state", ""),
+            "fluency":            e["computed"],
         })
 
     # Run both writes in a background thread so the HTTP request returns quickly
@@ -4678,8 +4686,9 @@ def fluency_tag_sync():
 
     th = _th.Thread(target=_bg_writer, daemon=True)
     th.start()
-    summary["sheet_write_queued"] = bool(os.environ.get("RPM_PIPELINE_SHEET_ID"))
-    summary["sheet_records"]      = len(sheet_records)
+    summary["sheet_write_queued"]      = bool(os.environ.get("RPM_PIPELINE_SHEET_ID"))
+    summary["sheet_records"]           = len(sheet_records)
+    summary["sheet_skipped_no_uuid"]   = sheet_skipped_no_uuid
     return jsonify(summary)
 
 
