@@ -4390,37 +4390,40 @@ def fluency_tag_sync():
     debug_mode      = bool(body.get("debug", False))
 
     if debug_mode:
-        # Diagnostic: try several Apt IQ endpoint shapes to learn what works
-        # for property 99026134 (AXIS Crossroads).
+        # Diagnostic: which Apt IQ env vars are set + try fetching the CSV
+        # link Kyle uploaded to Render.
         import apartmentiq_client as _aic
         import requests as _req
+        candidate_env_vars = [
+            "APT_IQ_DAILY_SHEET_URL", "APT_IQ_CSV_URL", "APT_IQ_SHEET_URL",
+            "APARTMENTIQ_CSV_URL", "APARTMENTIQ_SHEET_URL",
+            "APT_IQ_PROPERTY_DATA_URL", "PROPERTY_DATA_CSV_URL",
+            "APT_IQ_DAILY_CSV", "APT_IQ_URL",
+        ]
+        env_state = {name: {"set": bool(os.environ.get(name)),
+                            "length": len(os.environ.get(name) or ""),
+                            "starts_with": (os.environ.get(name) or "")[:40]}
+                     for name in candidate_env_vars}
         info = {
             "ApartmentIQ_Token_present": bool(_aic.APTIQ_TOKEN),
             "ApartmentIQ_Token_length":  len(_aic.APTIQ_TOKEN or ""),
+            "candidate_env_vars": {k: v for k, v in env_state.items() if v["set"]},
+            "candidate_env_vars_unset": [k for k, v in env_state.items() if not v["set"]],
             "probes": {},
         }
-        if _aic.APTIQ_TOKEN:
-            # Try multiple property IDs to learn whether the 403 is per-property
-            # (token account scope) or universal (token deactivated).
-            probes = [
-                ("AXIS 99026134",            "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99026134"}, None),
-                ("Muse 99024347",            "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99024347"}, None),
-                ("10x Riverwalk 99040861",   "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99040861"}, None),
-                ("Arbor Crossing 99072950",  "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99072950"}, None),
-                ("Comma-list of 4 IDs",      "GET", f"{_aic.BASE_URL}/properties/bulk_details", {"property_ids": "99026134,99024347,99040861,99072950"}, None),
-            ]
-            for label, method, url, params, json_body in probes:
+        # Try fetching whichever CSV-looking env var IS set
+        for name, state in env_state.items():
+            if state["set"]:
                 try:
-                    if method == "GET":
-                        r = _req.get(url, headers=_aic._headers(), params=params, timeout=12)
-                    else:
-                        r = _req.post(url, headers=_aic._headers(), params=params, json=json_body, timeout=12)
-                    info["probes"][label] = {
-                        "status": r.status_code,
-                        "head":   r.text[:200],
+                    r = _req.get(os.environ[name], timeout=20, allow_redirects=True)
+                    info["probes"][f"GET {name}"] = {
+                        "status":          r.status_code,
+                        "content_type":    r.headers.get("content-type", "")[:80],
+                        "bytes":           len(r.content),
+                        "first_line":      r.text.split("\n", 1)[0][:200] if r.text else "",
                     }
                 except Exception as exc:
-                    info["probes"][label] = {"error": str(exc)}
+                    info["probes"][f"GET {name}"] = {"error": str(exc)[:200]}
         return jsonify(info)
 
     try:
