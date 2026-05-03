@@ -1,17 +1,13 @@
-"""STAGING-ONLY: Apt IQ reader — pulls property facts via the existing API client.
+"""STAGING-ONLY: Apt IQ reader — pulls property facts from the daily CSV export.
 
-Reads Apt IQ data for one HubSpot company. v1 of Track 2 phase 2.0 uses the
-existing `apartmentiq_client.py` (REST API) per the user's Option β decision.
-A future iteration may swap to the daily Google Sheet (spec section 4.5).
+Per Kyle's confirmation on 2026-05-03, the Apt IQ data flow uses the
+APT_IQ_DAILY_SHEET_URL CSV (set on Render). The earlier API-based approach
+returned 403 across all property IDs; this CSV path bypasses the auth issue
+and reads the same underlying data Apt IQ exports daily.
 
-Returns a normalized dict with the fields the tag_builder + voice_tier_rules
-+ lifecycle_rules need:
-    - amenity flags (39 booleans, controlled vocabulary)
-    - floor plan availability (Studio / 0BR..4BR with Available Units > 0)
-    - year_built, year_renovated
-    - Avg Rent, Concession + Concession Details
-    - Occupancy %, Exposure 90d (lifecycle inputs)
-    - Market Name, Property ID, Property Class
+Reads APT_IQ_DAILY_SHEET_URL (cached in-process, see apt_iq_csv_client.py),
+matches HubSpot companies by `aptiq_property_id` ↔ CSV `Property ID`, and
+returns a normalized envelope used by tag_builder.py.
 
 Single public function: read_property(company)
 """
@@ -21,14 +17,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import apartmentiq_client
+from services.fluency_ingestion import apt_iq_csv_client
 
 logger = logging.getLogger(__name__)
 
-# 39 boolean amenity columns (controlled vocabulary). Spec section 6 locks
-# these as the canonical amenity list. Aligned with what the apartmentiq_client
-# bulk_details endpoint returns. Names below MUST match Apt IQ field names
-# verbatim (case-sensitive); read_property() copies them through to the output.
+# 39 boolean amenity columns (controlled vocabulary). Names match the Apt IQ
+# CSV header verbatim. If a header column has a slightly different casing or
+# label in the live CSV, _amenity_alias() below maps it. Spec section 6 locks
+# this list as canonical.
 AMENITY_COLS = [
     "Pool", "Spa", "Hot Tub", "Sauna",
     "Fitness Center", "Yoga Studio", "Cardio",
@@ -44,32 +40,41 @@ AMENITY_COLS = [
     "Walk-in Closets", "Private Balcony",
 ]
 
-# Floor plan bedroom keys we care about. Spec 4.2.1 mentions 0BR/1BR/2BR/3BR
-# as the lookup vocabulary; we add Studio + 4BR for completeness. The reader
-# checks Apt IQ's "Available Units" or per-bedroom inventory.
 FLOOR_PLAN_BUCKETS = ["Studio", "0BR", "1BR", "2BR", "3BR", "4BR"]
+
+# CSV column name aliases — Apt IQ may name a column slightly differently
+# from our internal vocab. _resolve_col looks for any of these.
+COLUMN_ALIASES = {
+    "year_built":        ["Year Built", "year_built"],
+    "year_renovated":    ["Year Renovated", "year_renovated"],
+    "avg_rent":          ["Avg Rent", "Average Rent", "avg_rent", "Asking Rent", "asking_rent"],
+    "concession_value":  ["Concessions", "Concession", "concession", "concessions"],
+    "concession_text":   ["Concession Details", "Concession Description", "concession_details"],
+    "occupancy_pct":     ["Occupancy %", "Advertised Occupancy %", "Occupancy", "occupancy"],
+    "exposure_90d_pct":  ["Exposure % (Next 90d)", "Exposure (Next 90d)", "Exposure %", "Exposure", "exposure"],
+    "available_units":   ["Available Units", "available_units", "Available Units Count", "available_units_count"],
+    "market_name":       ["Market Name", "market_name"],
+    "submarket_name":    ["Submarket", "Submarket Name", "submarket_name"],
+    "property_class":    ["Property Class", "Class", "property_class"],
+}
 
 
 def _to_bool(val: Any) -> bool:
-    """Apt IQ booleans come as True/False, "Y"/"N", "1"/"0", "true"/"false".
-    Empty / None / 0 / "" → False. Everything else truthy → True.
-    """
     if val is None or val == "" or val == 0 or val is False:
         return False
     if isinstance(val, str):
-        return val.strip().lower() in ("y", "yes", "true", "1", "t")
+        return val.strip().lower() in ("y", "yes", "true", "1", "t", "x")
     return bool(val)
 
 
 def _to_float(val: Any) -> float | None:
-    """Best-effort parse of a numeric Apt IQ field. Strips $ and commas."""
     if val is None or val == "":
         return None
     if isinstance(val, (int, float)):
         return float(val)
     if isinstance(val, str):
-        cleaned = val.replace("$", "").replace(",", "").strip()
-        if not cleaned:
+        cleaned = val.replace("$", "").replace(",", "").replace("%", "").strip()
+        if not cleaned or cleaned.lower() in ("n/a", "na", "none", "-"):
             return None
         try:
             return float(cleaned)
@@ -83,88 +88,108 @@ def _to_int(val: Any) -> int | None:
     return int(f) if f is not None else None
 
 
-def read_property(company: dict) -> dict | None:
-    """Fetch Apt IQ data for one HubSpot company record.
+def _resolve_col(row: dict, key: str) -> Any:
+    """Return row[<one of the aliases>] for our internal `key`, or None."""
+    for alias in COLUMN_ALIASES.get(key, [key]):
+        if alias in row:
+            return row[alias]
+    return None
 
-    `company` is the HubSpot company dict — must have at minimum:
-        id, name, aptiq_property_id (else we can't match Apt IQ),
-        aptiq_market_id (optional, used downstream)
 
-    Returns:
-        dict with keys: matched, property_id, market_id, market_name,
-        year_built, year_renovated, occupancy_pct, exposure_90d_pct,
-        avg_rent, concession_value, concession_text, available_units,
-        amenities (subset of AMENITY_COLS that are True), floor_plans (subset
-        of FLOOR_PLAN_BUCKETS that have Available Units > 0), property_class,
-        raw (the Apt IQ response body, for debug/audit).
+def _extract_amenities(row: dict) -> list[str]:
+    """Pull amenity bool columns from CSV row. Returns the subset that are True."""
+    out: list[str] = []
+    # Build a case-insensitive lookup so "Pool" matches "POOL" or "pool" CSV cols.
+    norm_lookup = {k.strip().lower(): k for k in row.keys()}
+    for amen in AMENITY_COLS:
+        col = norm_lookup.get(amen.lower())
+        if col and _to_bool(row.get(col)):
+            out.append(amen)
+    return out
 
-        OR {"matched": False, "reason": "..."} if Apt IQ has no record.
+
+def _extract_floor_plans(row: dict) -> list[str]:
+    """Pull floor plan availability. Two CSV shapes are supported:
+
+      A. Per-bedroom availability columns: "Studio Available Units", "1BR Available Units",
+         "0BR Available Units", etc.
+      B. A single CSV column listing available bedrooms (e.g. "Available Bedrooms").
+
+    Returns the subset of FLOOR_PLAN_BUCKETS that are available (>0 in shape A,
+    listed in shape B).
+    """
+    out: list[str] = []
+    norm_lookup = {k.strip().lower(): k for k in row.keys()}
+
+    # Shape A: per-bedroom availability columns
+    for bucket in FLOOR_PLAN_BUCKETS:
+        for variant in (
+            f"{bucket} Available Units", f"{bucket} Available", f"{bucket}_available",
+            f"{bucket} Avail", f"available_{bucket.lower()}",
+        ):
+            col = norm_lookup.get(variant.lower())
+            if col:
+                v = _to_int(row.get(col))
+                if v and v > 0 and bucket not in out:
+                    out.append(bucket)
+                break
+
+    # Shape B fallback: parse a "Available Bedrooms"/"Floor Plans" column
+    if not out:
+        for variant in ("Available Bedrooms", "Floor Plans Available", "floor_plans"):
+            col = norm_lookup.get(variant.lower())
+            if col:
+                raw = (row.get(col) or "")
+                # split on commas/slashes/semicolons
+                tokens = [t.strip().upper().replace(" ", "") for t in
+                          raw.replace("/", ",").replace(";", ",").split(",")]
+                for bucket in FLOOR_PLAN_BUCKETS:
+                    if bucket.upper() in tokens and bucket not in out:
+                        out.append(bucket)
+                break
+
+    return sorted(out, key=lambda b: FLOOR_PLAN_BUCKETS.index(b))
+
+
+def read_property(company: dict) -> dict:
+    """Match a HubSpot company to its Apt IQ CSV row and normalize.
+
+    Returns either:
+      - {matched: True, ...full envelope...} — successful match
+      - {matched: False, reason: "..."}      — when no row matched
     """
     aptiq_id = (company.get("aptiq_property_id") or "").strip()
     if not aptiq_id:
         return {"matched": False, "reason": "no aptiq_property_id on HubSpot record"}
 
-    raw = apartmentiq_client.get_property_details(aptiq_id)
-    if not raw:
-        return {"matched": False, "reason": f"Apt IQ returned no record for {aptiq_id}"}
+    row = apt_iq_csv_client.get_property_row(aptiq_id)
+    if row is None:
+        return {"matched": False, "reason": f"Property ID {aptiq_id} not in daily CSV"}
 
-    # Amenity boolean extraction. Apt IQ's bulk_details endpoint exposes
-    # amenities either as a flat dict of name→bool or under an "amenities" key.
-    # We normalize both shapes; missing keys default to False.
-    amenity_source: dict = {}
-    if isinstance(raw.get("amenities"), dict):
-        amenity_source = raw["amenities"]
+    avg_rent         = _to_float(_resolve_col(row, "avg_rent"))
+    concession_value = _to_float(_resolve_col(row, "concession_value"))
+    concession_text  = (_resolve_col(row, "concession_text") or "")
+    if isinstance(concession_text, str):
+        concession_text = concession_text.strip()
     else:
-        # Fall back: scan top-level for keys matching our controlled vocabulary.
-        amenity_source = {k: v for k, v in raw.items() if k in AMENITY_COLS}
-
-    amenities: list[str] = []
-    for col in AMENITY_COLS:
-        if _to_bool(amenity_source.get(col)):
-            amenities.append(col)
-
-    # Floor-plan availability. Apt IQ exposes per-bedroom inventory under
-    # `floor_plans` (list of {bedroom_count, available_units, ...}) or as
-    # flat fields like "0BR_available", "1BR_available", etc.
-    floor_plans: list[str] = []
-    fp_data = raw.get("floor_plans")
-    if isinstance(fp_data, list):
-        for fp in fp_data:
-            br = fp.get("bedroom_count")
-            avail = _to_int(fp.get("available_units") or fp.get("Available Units") or 0)
-            if avail and avail > 0:
-                if br == 0 or fp.get("bedroom_label") == "Studio":
-                    if "Studio" not in floor_plans:
-                        floor_plans.append("Studio")
-                elif br is not None:
-                    key = f"{br}BR"
-                    if key in FLOOR_PLAN_BUCKETS and key not in floor_plans:
-                        floor_plans.append(key)
-    else:
-        # Flat field fallback
-        for bucket in FLOOR_PLAN_BUCKETS:
-            for variant in (f"{bucket}_available", f"{bucket} Available", f"{bucket} Available Units"):
-                v = _to_int(raw.get(variant))
-                if v and v > 0 and bucket not in floor_plans:
-                    floor_plans.append(bucket)
-                    break
+        concession_text = ""
 
     return {
         "matched":           True,
         "property_id":       aptiq_id,
         "market_id":         (company.get("aptiq_market_id") or "").strip() or None,
-        "market_name":       raw.get("market_name") or raw.get("Market Name"),
-        "submarket_name":    raw.get("submarket_name"),
-        "property_class":    raw.get("property_class"),
-        "year_built":        _to_int(raw.get("year_built")),
-        "year_renovated":    _to_int(raw.get("year_renovated") or raw.get("Year Renovated")),
-        "occupancy_pct":     _to_float(raw.get("occupancy")),
-        "exposure_90d_pct":  _to_float(raw.get("exposure") or raw.get("Exposure % (Next 90d)")),
-        "avg_rent":          _to_float(raw.get("asking_rent") or raw.get("Avg Rent")),
-        "concession_value":  _to_float(raw.get("concession") or raw.get("Concessions")),
-        "concession_text":   (raw.get("concession_details") or raw.get("Concession Details") or "")[:80] or None,
-        "available_units":   _to_int(raw.get("available_units_count")),
-        "amenities":         amenities,
-        "floor_plans":       sorted(floor_plans, key=lambda b: FLOOR_PLAN_BUCKETS.index(b)),
-        "raw":               raw,
+        "market_name":       _resolve_col(row, "market_name"),
+        "submarket_name":    _resolve_col(row, "submarket_name"),
+        "property_class":    _resolve_col(row, "property_class"),
+        "year_built":        _to_int(_resolve_col(row, "year_built")),
+        "year_renovated":    _to_int(_resolve_col(row, "year_renovated")),
+        "occupancy_pct":     _to_float(_resolve_col(row, "occupancy_pct")),
+        "exposure_90d_pct":  _to_float(_resolve_col(row, "exposure_90d_pct")),
+        "avg_rent":          avg_rent,
+        "concession_value":  concession_value,
+        "concession_text":   concession_text[:80] or None,
+        "available_units":   _to_int(_resolve_col(row, "available_units")),
+        "amenities":         _extract_amenities(row),
+        "floor_plans":       _extract_floor_plans(row),
+        "raw":               row,
     }

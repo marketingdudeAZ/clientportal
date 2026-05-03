@@ -4390,8 +4390,24 @@ def fluency_tag_sync():
     debug_mode      = bool(body.get("debug", False))
 
     if debug_mode:
-        # Diagnostic: which Apt IQ env vars are set + try fetching the CSV
-        # link Kyle uploaded to Render.
+        # Diagnostic: parse the daily CSV + show the AXIS Crossroads row so we
+        # know exactly what column names + values to expect before the live run.
+        try:
+            from services.fluency_ingestion import apt_iq_csv_client
+            apt_iq_csv_client.invalidate_cache()  # force fresh on every debug call
+            cols  = apt_iq_csv_client.column_names()
+            rows  = apt_iq_csv_client.get_all_rows()
+            axis  = apt_iq_csv_client.get_property_row("99026134")
+            csv_diag = {
+                "row_count":       len(rows),
+                "column_count":    len(cols),
+                "columns":         cols[:60],
+                "axis_present":    bool(axis),
+                "axis_sample":     {k: axis.get(k) for k in (cols[:20] if axis else [])},
+            }
+        except Exception as e:
+            csv_diag = {"error": str(e)}
+
         import apartmentiq_client as _aic
         import requests as _req
         candidate_env_vars = [
@@ -4405,6 +4421,7 @@ def fluency_tag_sync():
                             "starts_with": (os.environ.get(name) or "")[:40]}
                      for name in candidate_env_vars}
         info = {
+            "csv": csv_diag,
             "ApartmentIQ_Token_present": bool(_aic.APTIQ_TOKEN),
             "ApartmentIQ_Token_length":  len(_aic.APTIQ_TOKEN or ""),
             "candidate_env_vars": {k: v for k, v in env_state.items() if v["set"]},
