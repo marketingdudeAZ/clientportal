@@ -4447,6 +4447,7 @@ def fluency_tag_sync():
         from services.fluency_ingestion import apt_iq_reader
         from services.fluency_ingestion.tag_builder import build_tags
         from services.fluency_ingestion.hubspot_writer import update_companies_batch
+        from services.fluency_ingestion import pipeline_sheet_writer as _psw
     except Exception as e:
         logger.error("fluency-tag-sync import failed: %s", e, exc_info=True)
         return jsonify({"error": f"import failed: {e}"}), 500
@@ -4638,17 +4639,47 @@ def fluency_tag_sync():
     summary["mode"] = "live"
     summary["queued_writes"] = len(updates)
 
-    # Run in a background thread so the HTTP request returns quickly
+    # Build the Fluency-sheet records too (matched envelopes only, subset of fluency_*).
+    # The pipeline_sheet_writer drops excluded fields for safety per spec 4.9.
+    sheet_records = []
+    for e in matched:
+        if not e["computed"]:
+            continue
+        sheet_records.append({
+            "account_id":     e["company"]["id"],
+            "account_uuid":   e["company"].get("uuid", ""),
+            "account_name":   e["company"]["name"],
+            "account_market": e["company"].get("market", ""),
+            "account_state":  e["company"].get("state", ""),
+            "fluency":        e["computed"],
+        })
+
+    # Run both writes in a background thread so the HTTP request returns quickly
     def _bg_writer():
         try:
             res = update_companies_batch(updates)
-            logger.info("fluency-tag-sync background write: updated=%d failed=%d",
+            logger.info("fluency-tag-sync HubSpot write: updated=%d failed=%d",
                         res["updated"], res["failed"])
         except Exception as e:
-            logger.error("fluency-tag-sync background write failed: %s", e, exc_info=True)
+            logger.error("fluency-tag-sync HubSpot write failed: %s", e, exc_info=True)
+
+        # Sheet write — only fires if RPM_PIPELINE_SHEET_ID is set; otherwise
+        # silently skipped so the HubSpot path is independent of the sheet
+        # provisioning being complete.
+        if os.environ.get("RPM_PIPELINE_SHEET_ID"):
+            try:
+                sres = _psw.write_rows(sheet_records)
+                logger.info("fluency-tag-sync Sheet write: written=%d skipped=%d errors=%d",
+                            sres.get("written", 0), sres.get("skipped_unchanged", 0), len(sres.get("errors", [])))
+            except Exception as e:
+                logger.error("fluency-tag-sync Sheet write failed: %s", e, exc_info=True)
+        else:
+            logger.info("fluency-tag-sync: RPM_PIPELINE_SHEET_ID not set; skipping sheet write")
 
     th = _th.Thread(target=_bg_writer, daemon=True)
     th.start()
+    summary["sheet_write_queued"] = bool(os.environ.get("RPM_PIPELINE_SHEET_ID"))
+    summary["sheet_records"]      = len(sheet_records)
     return jsonify(summary)
 
 
