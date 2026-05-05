@@ -89,11 +89,11 @@ table.accounts a.prop-link:hover{text-decoration:underline}
           <th class="num">Display</th><th class="num">Retargeting</th>
           <th class="num">CTV</th><th class="num">SEO</th>
           <th class="num">Social Content</th><th class="num">Eblasts</th>
-          <th class="num">Email Drips</th><th class="num">Total</th>
+          <th class="num">Email Drips</th><th class="num">Mgmt Fee</th><th class="num">Total</th>
         </tr>
       </thead>
       <tbody id="rows">
-        <tr><td colspan="16" class="loading">Loading accounts…</td></tr>
+        <tr><td colspan="17" class="loading">Loading accounts…</td></tr>
       </tbody>
     </table>
   </div>
@@ -118,8 +118,9 @@ table.accounts a.prop-link:hover{text-decoration:underline}
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
 
   function rowHTML(r){
-    // Total = sum of channel columns. Same logic Spend Tracker uses elsewhere.
-    var channels = ['search','pmax','paid_social','geofence','display','retargeting','ctv','seo','social_posting','eblast','email_drip'];
+    // Total = sum of all channel + service spend columns including Management Fee.
+    // mgmt_fee is in the /api/spend-sheet response shape from spend_sheet.py:_base_row.
+    var channels = ['search','pmax','paid_social','geofence','display','retargeting','ctv','seo','social_posting','eblast','email_drip','mgmt_fee'];
     var total = channels.reduce(function(s,k){ var v = Number(r[k]); return s + (isNaN(v) ? 0 : v); }, 0);
     return '<tr>'+
       '<td><a class="prop-link" href="/accounts/property?company_id=' + encodeURIComponent(r.company_id) + '">' + esc(r.property_name || '') + '</a></td>' +
@@ -137,6 +138,7 @@ table.accounts a.prop-link:hover{text-decoration:underline}
       '<td class="num">' + fmt$(r.social_posting) + '</td>' +
       '<td class="num">' + fmt$(r.eblast) + '</td>' +
       '<td class="num">' + fmt$(r.email_drip) + '</td>' +
+      '<td class="num">' + fmt$(r.mgmt_fee) + '</td>' +
       '<td class="num total-col">' + fmt$(total || null) + '</td>' +
     '</tr>';
   }
@@ -153,7 +155,7 @@ table.accounts a.prop-link:hover{text-decoration:underline}
     });
     document.getElementById('rows').innerHTML = rows.length
       ? rows.map(rowHTML).join('')
-      : '<tr><td colspan="16" class="loading">No properties match.</td></tr>';
+      : '<tr><td colspan="17" class="loading">No properties match.</td></tr>';
     document.getElementById('row-count').textContent = rows.length + ' / ' + ALL.length + ' properties';
   }
 
@@ -184,7 +186,7 @@ table.accounts a.prop-link:hover{text-decoration:underline}
         applyFilters();
       })
       .catch(function(err){
-        document.getElementById('rows').innerHTML = '<tr><td colspan="16" class="error">Failed to load accounts (' + err + '). The API needs you to have signed in once via the portal.</td></tr>';
+        document.getElementById('rows').innerHTML = '<tr><td colspan="17" class="error">Failed to load accounts (' + err + '). The API needs you to have signed in once via the portal.</td></tr>';
       });
   }
 
