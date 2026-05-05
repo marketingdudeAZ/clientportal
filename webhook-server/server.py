@@ -4591,23 +4591,43 @@ def fluency_tag_sync():
     # automated job. Cost: ~$0.02 per property in Anthropic Sonnet usage,
     # ~10–20s per property end-to-end.
     url_scrape_results: dict[str, dict] = {}
+    url_scrape_diag: list[dict] = []  # per-property scrape state for debugging
     if scrape_urls:
         try:
             from services.fluency_ingestion import url_scraper
             for c in companies:
                 # Use property domain from HubSpot if set, else Apt IQ's Property URL
                 url = (c.get("domain") or "").strip()
+                source = "hubspot.domain"
                 if not url:
                     raw = apt_iq_csv_client.get_property_row(c["aptiq_property_id"])
                     if raw:
                         url = (raw.get("Property URL") or "").strip()
+                        source = "apt_iq.PropertyURL"
                 if not url:
+                    url_scrape_diag.append({"name": c["name"], "id": c["id"], "url": "", "result": "no_url"})
+                    continue
+                t_scrape = _t.time()
+                page_text = url_scraper.fetch_page_text(url)
+                page_len = len(page_text)
+                if page_len < 200:
+                    url_scrape_diag.append({"name": c["name"], "id": c["id"], "url": url, "source": source,
+                                            "result": f"page_text_too_short ({page_len} chars)"})
                     continue
                 scraped = url_scraper.scrape_property(url)
+                elapsed = round(_t.time() - t_scrape, 2)
                 if scraped:
                     url_scrape_results[c["id"]] = scraped
+                    url_scrape_diag.append({"name": c["name"], "id": c["id"], "url": url, "source": source,
+                                            "result": "ok", "elapsed_s": elapsed,
+                                            "fields": list(scraped.keys())})
+                else:
+                    url_scrape_diag.append({"name": c["name"], "id": c["id"], "url": url, "source": source,
+                                            "result": "claude_returned_nothing", "elapsed_s": elapsed,
+                                            "page_len": page_len})
         except Exception as exc:
             logger.error("fluency-tag-sync: url_scraper batch failed: %s", exc, exc_info=True)
+            url_scrape_diag.append({"batch_error": str(exc)[:300]})
 
     # Tag-build per matched envelope
     for e in envs:
@@ -4739,6 +4759,12 @@ def fluency_tag_sync():
     summary["sheet_write_queued"]      = bool(os.environ.get("RPM_PIPELINE_SHEET_ID"))
     summary["sheet_records"]           = len(sheet_records)
     summary["sheet_skipped_no_uuid"]   = sheet_skipped_no_uuid
+    if scrape_urls:
+        summary["url_scrape"] = {
+            "attempted": len(url_scrape_diag),
+            "succeeded": sum(1 for x in url_scrape_diag if x.get("result") == "ok"),
+            "by_property": url_scrape_diag[:10],  # cap to avoid bloat
+        }
     return jsonify(summary)
 
 
