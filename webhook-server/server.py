@@ -4401,9 +4401,9 @@ def fluency_tag_sync():
             csv_diag = {
                 "row_count":       len(rows),
                 "column_count":    len(cols),
-                "columns":         cols[:60],
+                "columns":         cols,
                 "axis_present":    bool(axis),
-                "axis_sample":     {k: axis.get(k) for k in (cols[:20] if axis else [])},
+                "axis_sample":     {k: axis.get(k) for k in cols if axis and (axis.get(k) or "").strip()},
             }
         except Exception as e:
             csv_diag = {"error": str(e)}
