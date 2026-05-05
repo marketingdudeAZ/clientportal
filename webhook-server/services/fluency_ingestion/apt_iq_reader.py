@@ -21,23 +21,21 @@ from services.fluency_ingestion import apt_iq_csv_client
 
 logger = logging.getLogger(__name__)
 
-# 39 boolean amenity columns (controlled vocabulary). Names match the Apt IQ
-# CSV header verbatim. If a header column has a slightly different casing or
-# label in the live CSV, _amenity_alias() below maps it. Spec section 6 locks
-# this list as canonical.
+# 39 boolean amenity columns — names match Apt IQ CSV header verbatim
+# (verified 2026-05-03 by inspecting the live daily CSV). Spec section 6 locks
+# this set as the canonical amenity vocabulary; if Apt IQ adds/renames a column,
+# update both this list and any downstream consumers.
 AMENITY_COLS = [
-    "Pool", "Spa", "Hot Tub", "Sauna",
-    "Fitness Center", "Yoga Studio", "Cardio",
-    "Clubhouse", "Resident Lounge", "Coworking Space", "Conference Room", "Game Room",
-    "Pet Park", "Dog Wash", "Pet Spa",
-    "Coffee Bar", "Wine Bar", "Cafe", "Outdoor Kitchen", "BBQ Grill",
-    "Fire Pit", "Cabana",
-    "Rooftop Deck", "Sky Lounge",
-    "Concierge", "24/7 Maintenance", "Package Lockers", "Bike Storage",
-    "EV Charging", "Garage Parking", "Reserved Parking",
-    "Smart Home", "Keyless Entry",
-    "In-Unit Washer/Dryer", "Stainless Appliances", "Quartz Countertops", "Hardwood Floors",
-    "Walk-in Closets", "Private Balcony",
+    "24 Hour Maintenance", "Air Conditioning", "BBQ/Grill Area",
+    "Balcony/Patio", "Bicycle Storage", "Business Center",
+    "Carpet", "Ceiling Fans", "Clubhouse/Lounge", "Controlled Access",
+    "Dishwasher", "EV Charging", "Elevator", "Fireplace", "Fitness Center",
+    "Gameroom", "Garbage Disposal", "Hardwood Floors", "High Ceilings",
+    "Kitchen Island", "Laundry Facilities", "Linen Closet", "Online Payments",
+    "Package Service", "Pantry", "Pet Park", "Playground", "Pool",
+    "Rooftop Space", "SS Appliances", "Smart Technology", "Stone Countertops",
+    "Storage Space", "Tile", "Views", "Vinyl Flooring", "Walk-In Closets",
+    "Washer/Dryer", "Washer/Dryer Hookup",
 ]
 
 FLOOR_PLAN_BUCKETS = ["Studio", "0BR", "1BR", "2BR", "3BR", "4BR"]

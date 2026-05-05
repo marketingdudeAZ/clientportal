@@ -4384,10 +4384,12 @@ def fluency_tag_sync():
         return jsonify({"error": "Authentication required"}), 401
 
     body = request.get_json(silent=True) or {}
-    sample          = int(body.get("sample") or 0)
-    dry_run         = bool(body.get("dry_run", True))
-    commit_override = bool(body.get("commit_override", False))
-    debug_mode      = bool(body.get("debug", False))
+    sample            = int(body.get("sample") or 0)
+    dry_run           = bool(body.get("dry_run", True))
+    commit_override   = bool(body.get("commit_override", False))
+    debug_mode        = bool(body.get("debug", False))
+    scrape_urls       = bool(body.get("scrape_urls", False))
+    single_property   = (body.get("single_property") or "").strip()  # hs_object_id
 
     if debug_mode:
         # Diagnostic: parse the daily CSV + show the AXIS Crossroads row so we
@@ -4552,7 +4554,10 @@ def fluency_tag_sync():
     companies = [_normalize(r) for r in raw]
     logger.info("fluency-tag-sync: %d companies in scope", len(companies))
 
-    if sample:
+    if single_property:
+        # Trump card: limit to one specific company by hs_object_id (for testing)
+        companies = [c for c in companies if c["id"] == single_property]
+    elif sample:
         axis = [c for c in companies if c["name"].strip().lower().startswith("axis crossroads")]
         rest = [c for c in companies if c not in axis]
         companies = (axis + rest)[:sample]
@@ -4570,6 +4575,40 @@ def fluency_tag_sync():
             mkt = ai.get("market_name") or e["company"].get("market") or "_unknown"
             peer_idx[mkt].append(ai["avg_rent"])
 
+    # Same-Market-ID grouping for competitor extraction. Building this from
+    # the FULL CSV (not just our matched companies) gives us cross-portfolio
+    # comp candidates, including non-RPM properties Apt IQ tracks in the same
+    # market. Spec section 4.8 + 6.
+    from services.fluency_ingestion import apt_iq_csv_client
+    from services.fluency_ingestion.competitor_extractor import (
+        build_market_index, closest_competitors,
+    )
+    full_market_idx = build_market_index(apt_iq_csv_client.get_all_rows())
+
+    # URL scrape pass — runs sequentially per property when scrape_urls=true.
+    # Sequential is fine in a daemon thread; concurrent fetching of property
+    # marketing sites tends to draw more attention than I'd like for a daily
+    # automated job. Cost: ~$0.02 per property in Anthropic Sonnet usage,
+    # ~10–20s per property end-to-end.
+    url_scrape_results: dict[str, dict] = {}
+    if scrape_urls:
+        try:
+            from services.fluency_ingestion import url_scraper
+            for c in companies:
+                # Use property domain from HubSpot if set, else Apt IQ's Property URL
+                url = (c.get("domain") or "").strip()
+                if not url:
+                    raw = apt_iq_csv_client.get_property_row(c["aptiq_property_id"])
+                    if raw:
+                        url = (raw.get("Property URL") or "").strip()
+                if not url:
+                    continue
+                scraped = url_scraper.scrape_property(url)
+                if scraped:
+                    url_scrape_results[c["id"]] = scraped
+        except Exception as exc:
+            logger.error("fluency-tag-sync: url_scraper batch failed: %s", exc, exc_info=True)
+
     # Tag-build per matched envelope
     for e in envs:
         if e["apt_iq"].get("matched"):
@@ -4577,11 +4616,22 @@ def fluency_tag_sync():
             peers = list(peer_idx.get(mkt, []))
             if e["apt_iq"].get("avg_rent"):
                 peers = [r for r in peers if abs(r - e["apt_iq"]["avg_rent"]) > 0.01]
+
+            # Competitors: top-5 closest by Avg Rent in the same Apt IQ Market ID
+            cohort = closest_competitors(
+                self_property_id=e["apt_iq"]["property_id"],
+                market_id=(e["apt_iq"].get("raw") or {}).get("Market ID", ""),
+                market_index=full_market_idx,
+                top_n=5,
+            )
+
             e["computed"] = build_tags(
                 e["apt_iq"],
                 market_peer_rents=peers,
                 voice_override=e["company"].get("voice_override") or None,
                 lifecycle_override=e["company"].get("lifecycle_override") or None,
+                competitors=cohort,
+                url_scrape=url_scrape_results.get(e["company"]["id"]),
             )
 
     matched   = [e for e in envs if e["apt_iq"].get("matched")]

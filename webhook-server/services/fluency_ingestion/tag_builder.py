@@ -54,6 +54,8 @@ def build_tags(
     market_peer_rents: list[float] | None = None,
     voice_override: str | None = None,
     lifecycle_override: str | None = None,
+    competitors: list[str] | None = None,
+    url_scrape: dict | None = None,
 ) -> dict[str, Any]:
     """Compose the fluency_* property values for one property.
 
@@ -116,6 +118,40 @@ def build_tags(
         occupancy_pct=apt_iq.get("occupancy_pct"),
         exposure_90d_pct=apt_iq.get("exposure_90d_pct"),
     )
+
+    # ── Competitors (from same-Market-ID grouping in Apt IQ) ───────────
+    if competitors:
+        out["fluency_competitors"] = ", ".join(competitors[:8])
+
+    # ── URL scrape merge — overwrites where scrape returned a value ────
+    # URL scrape is authoritative for marketing-voice fields the CSV can't
+    # provide. We only set keys when the scrape gave a non-empty value;
+    # missing / empty scrape values leave HubSpot's existing value alone.
+    if url_scrape:
+        marketed = url_scrape.get("marketed_amenity_names") or []
+        if marketed:
+            out["fluency_marketed_amenity_names"] = ", ".join(marketed[:30])
+        descs = (url_scrape.get("amenities_descriptions") or "").strip()
+        if descs:
+            out["fluency_amenities_descriptions"] = descs[:1000]
+        unit_noun = (url_scrape.get("unit_noun") or "").strip().lower()
+        if unit_noun in {"apartment", "townhome", "loft", "home", "duplex"}:
+            out["fluency_unit_noun"] = unit_noun
+        nbhd = (url_scrape.get("neighborhood") or "").strip()
+        if nbhd:
+            out["fluency_neighborhood"] = nbhd
+        landmarks = url_scrape.get("landmarks") or []
+        if landmarks:
+            out["fluency_landmarks"] = ", ".join(landmarks[:10])
+        employers = url_scrape.get("nearby_employers") or []
+        if employers:
+            out["fluency_nearby_employers"] = ", ".join(employers[:10])
+        # The scrape's voice_signal is an INPUT to voice_tier, not a final
+        # write. Only override if there was no rent percentile (so the
+        # scrape becomes the fallback signal).
+        scrape_voice = (url_scrape.get("voice_signal") or "").strip().lower()
+        if pct is None and scrape_voice in {"luxury", "standard", "value", "lifestyle"} and not voice_override:
+            out["fluency_voice_tier"] = scrape_voice
 
     # ── Sync metadata ──────────────────────────────────────────────────
     out["fluency_last_sync_at"] = (
