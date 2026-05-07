@@ -4387,63 +4387,8 @@ def fluency_tag_sync():
     sample            = int(body.get("sample") or 0)
     dry_run           = bool(body.get("dry_run", True))
     commit_override   = bool(body.get("commit_override", False))
-    debug_mode        = bool(body.get("debug", False))
     scrape_urls       = bool(body.get("scrape_urls", False))
     single_property   = (body.get("single_property") or "").strip()  # hs_object_id
-
-    if debug_mode:
-        # Diagnostic: parse the daily CSV + show the AXIS Crossroads row so we
-        # know exactly what column names + values to expect before the live run.
-        try:
-            from services.fluency_ingestion import apt_iq_csv_client
-            apt_iq_csv_client.invalidate_cache()  # force fresh on every debug call
-            cols  = apt_iq_csv_client.column_names()
-            rows  = apt_iq_csv_client.get_all_rows()
-            axis  = apt_iq_csv_client.get_property_row("99026134")
-            csv_diag = {
-                "row_count":       len(rows),
-                "column_count":    len(cols),
-                "columns":         cols,
-                "axis_present":    bool(axis),
-                "axis_sample":     {k: axis.get(k) for k in cols if axis and (axis.get(k) or "").strip()},
-            }
-        except Exception as e:
-            csv_diag = {"error": str(e)}
-
-        import apartmentiq_client as _aic
-        import requests as _req
-        candidate_env_vars = [
-            "APT_IQ_DAILY_SHEET_URL", "APT_IQ_CSV_URL", "APT_IQ_SHEET_URL",
-            "APARTMENTIQ_CSV_URL", "APARTMENTIQ_SHEET_URL",
-            "APT_IQ_PROPERTY_DATA_URL", "PROPERTY_DATA_CSV_URL",
-            "APT_IQ_DAILY_CSV", "APT_IQ_URL",
-        ]
-        env_state = {name: {"set": bool(os.environ.get(name)),
-                            "length": len(os.environ.get(name) or ""),
-                            "starts_with": (os.environ.get(name) or "")[:40]}
-                     for name in candidate_env_vars}
-        info = {
-            "csv": csv_diag,
-            "ApartmentIQ_Token_present": bool(_aic.APTIQ_TOKEN),
-            "ApartmentIQ_Token_length":  len(_aic.APTIQ_TOKEN or ""),
-            "candidate_env_vars": {k: v for k, v in env_state.items() if v["set"]},
-            "candidate_env_vars_unset": [k for k, v in env_state.items() if not v["set"]],
-            "probes": {},
-        }
-        # Try fetching whichever CSV-looking env var IS set
-        for name, state in env_state.items():
-            if state["set"]:
-                try:
-                    r = _req.get(os.environ[name], timeout=20, allow_redirects=True)
-                    info["probes"][f"GET {name}"] = {
-                        "status":          r.status_code,
-                        "content_type":    r.headers.get("content-type", "")[:80],
-                        "bytes":           len(r.content),
-                        "first_line":      r.text.split("\n", 1)[0][:200] if r.text else "",
-                    }
-                except Exception as exc:
-                    info["probes"][f"GET {name}"] = {"error": str(exc)[:200]}
-        return jsonify(info)
 
     try:
         from services.fluency_ingestion import apt_iq_reader
