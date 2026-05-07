@@ -40,6 +40,13 @@ import os
 import sys
 from typing import Any
 
+# Load .env when running locally; on Render the env vars are already set.
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv()
+except ImportError:
+    pass
+
 # ─── Imports gated to runtime so the file imports cleanly without google-api-client ─
 def _build_gtm_service():
     try:
