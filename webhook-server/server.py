@@ -4428,6 +4428,20 @@ def fluency_tag_sync():
                     "aptiq_property_id", "aptiq_market_id",
                     "fluency_voice_tier_override", "fluency_lifecycle_state_override",
                     "plestatus",
+                    # URL-scrape-derived fields. We pull these so the sheet
+                    # writer can use HubSpot's stored values when the current
+                    # fluency-tag-sync run didn't scrape (default behavior).
+                    # Without this, the sheet shows empty cells for properties
+                    # that DO have data on their HubSpot company record.
+                    "fluency_marketed_amenity_names",
+                    "fluency_amenities_descriptions",
+                    "fluency_neighborhood",
+                    "fluency_landmarks",
+                    "fluency_nearby_employers",
+                    "fluency_unit_noun",
+                    # Form-derived fields (Phase 2.3) — same fallback pattern
+                    "fluency_must_include",
+                    "fluency_forbidden_phrases",
                 ],
                 "limit": 100,
             }
@@ -4458,6 +4472,20 @@ def fluency_tag_sync():
             "voice_override":     p.get("fluency_voice_tier_override") or "",
             "lifecycle_override": p.get("fluency_lifecycle_state_override") or "",
             "plestatus":          p.get("plestatus") or "",
+            # Existing HubSpot values for fields the URL scrape + Form readers
+            # populate. tag_builder fills these from fresh data when the run
+            # has it; otherwise we fall back to the stored HubSpot values so
+            # the Fluency sheet doesn't lose what's already there.
+            "stored_fluency": {
+                "fluency_marketed_amenity_names":  p.get("fluency_marketed_amenity_names") or "",
+                "fluency_amenities_descriptions":  p.get("fluency_amenities_descriptions") or "",
+                "fluency_neighborhood":            p.get("fluency_neighborhood") or "",
+                "fluency_landmarks":               p.get("fluency_landmarks") or "",
+                "fluency_nearby_employers":        p.get("fluency_nearby_employers") or "",
+                "fluency_unit_noun":               p.get("fluency_unit_noun") or "",
+                "fluency_must_include":            p.get("fluency_must_include") or "",
+                "fluency_forbidden_phrases":       p.get("fluency_forbidden_phrases") or "",
+            },
         }
 
     def _gate(envs):
@@ -4658,6 +4686,21 @@ def fluency_tag_sync():
     # The pipeline_sheet_writer drops excluded fields for safety per spec 4.9.
     sheet_records = []
     sheet_skipped_no_uuid = 0
+    # URL-scrape + Form-derived fields. tag_builder writes these only when the
+    # current run included a fresh URL scrape (scrape_urls=true) or Form pull;
+    # otherwise we fall back to whatever HubSpot already has stored on the
+    # company record. Without this fallback, sheet rows show empty cells for
+    # those fields even when the data exists on the property's HubSpot record.
+    FALLBACK_FIELDS = (
+        "fluency_marketed_amenity_names",
+        "fluency_amenities_descriptions",
+        "fluency_neighborhood",
+        "fluency_landmarks",
+        "fluency_nearby_employers",
+        "fluency_unit_noun",
+        "fluency_must_include",
+        "fluency_forbidden_phrases",
+    )
     for e in matched:
         if not e["computed"]:
             continue
@@ -4668,13 +4711,21 @@ def fluency_tag_sync():
         if not company_uuid:
             sheet_skipped_no_uuid += 1
             continue
+        # Merge stored HubSpot values for the fields where this run didn't
+        # produce fresh data. Fresh data (e.g. from a scrape_urls=true run)
+        # always wins over stored.
+        merged_fluency = dict(e["computed"])
+        stored = e["company"].get("stored_fluency") or {}
+        for k in FALLBACK_FIELDS:
+            if not (merged_fluency.get(k) or "").strip() and (stored.get(k) or "").strip():
+                merged_fluency[k] = stored[k]
         sheet_records.append({
             "account_id":         company_uuid,                 # Fluency join key
             "hubspot_company_id": e["company"]["id"],            # internal cross-ref
             "account_name":       e["company"]["name"],
             "account_market":     e["company"].get("market", ""),
             "account_state":      e["company"].get("state", ""),
-            "fluency":            e["computed"],
+            "fluency":            merged_fluency,
         })
 
     # Run both writes in a background thread so the HTTP request returns quickly
