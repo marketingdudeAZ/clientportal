@@ -409,7 +409,10 @@ def main() -> int:
     ap.add_argument("--workspace-name",     default=f"Consent Mode v2 Bridge - {dt.date.today().isoformat()}")
     ap.add_argument("--dry-run",            action="store_true", help="simulate; no API writes")
     ap.add_argument("--publish",            action="store_true", help="create + publish a version after applying changes")
-    ap.add_argument("--rate-limit",         type=float, default=4.0, help="QPS for write ops (default 4)")
+    # GTM API per-user-per-minute quota empirically caps near 200/min when
+    # multiple containers under the same account are touched in close
+    # succession. 1.5 QPS = 90/min keeps us well under.
+    ap.add_argument("--rate-limit",         type=float, default=1.5, help="QPS for write ops (default 1.5)")
     ap.add_argument("--out",                help="result JSON path (default /tmp/gtm_push_<ts>.json)")
     ap.add_argument("--limit",              type=int, default=0, help="cap to first N targets (testing)")
     args = ap.parse_args()
