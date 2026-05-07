@@ -70,7 +70,13 @@ TYPE_TO_CONSENT: dict[str, str] = {
     "cvt_5RM3Q": AD_STORAGE,
 }
 
-TRIGGER_CONSENT_INIT_ALL_PAGES = "2147479573"
+# Consent Initialization is a trigger of type 'consentInit'. It's NOT a
+# built-in with a fixed reserved ID — each workspace gets its own per the
+# GTM API. We create one named "Consent Initialization - All Pages" if
+# missing, and use its triggerId as firingTriggerId on the Default Consent
+# State tag.
+CONSENT_INIT_TRIGGER_NAME      = "Consent Initialization - All Pages"
+CONSENT_INIT_TRIGGER_TYPE      = "consentInit"
 
 DEFAULT_CONSENT_TAG_NAME       = "Default Consent State - All Pages"
 CONSENT_UPDATE_TRIGGER_NAME    = "Consent Update - CMP"
@@ -139,7 +145,7 @@ def _consent_settings_needed(consent_type_value: str) -> dict:
     }
 
 
-def _default_consent_tag_body() -> dict:
+def _default_consent_tag_body(consent_init_trigger_id: str) -> dict:
     return {
         "name": DEFAULT_CONSENT_TAG_NAME,
         "type": "html",
@@ -147,12 +153,37 @@ def _default_consent_tag_body() -> dict:
             {"type": "TEMPLATE", "key": "html",                  "value": DEFAULT_CONSENT_HTML},
             {"type": "BOOLEAN",  "key": "supportDocumentWrite",  "value": "false"},
         ],
-        "firingTriggerId": [TRIGGER_CONSENT_INIT_ALL_PAGES],
+        "firingTriggerId": [consent_init_trigger_id],
         "tagFiringOption": "ONCE_PER_LOAD",
         "priority": {"type": "INTEGER", "value": "100"},
         "consentSettings": {"consentStatus": "NOT_SET"},
         "monitoringMetadata": {"type": "MAP"},
     }
+
+
+def _get_or_create_consent_init_trigger(gtm, ws_path: str, dry_run: bool) -> str:
+    """Return the triggerId for a Consent Initialization trigger in this workspace.
+
+    GTM doesn't expose a fixed built-in ID for Consent Initialization; we
+    create a per-workspace user trigger of type='consentInit' (mimicking the
+    UI's "Consent Initialization - All Pages" built-in) and reuse it.
+    """
+    triggers = gtm.accounts().containers().workspaces().triggers().list(parent=ws_path).execute().get("trigger", [])
+    existing = next(
+        (t for t in triggers
+         if t.get("type") == CONSENT_INIT_TRIGGER_TYPE
+         or t.get("name") == CONSENT_INIT_TRIGGER_NAME),
+        None,
+    )
+    if existing:
+        return existing["triggerId"]
+    if dry_run:
+        return "DRY_RUN_CONSENT_INIT"
+    created = gtm.accounts().containers().workspaces().triggers().create(
+        parent=ws_path,
+        body={"name": CONSENT_INIT_TRIGGER_NAME, "type": CONSENT_INIT_TRIGGER_TYPE},
+    ).execute()
+    return created["triggerId"]
 
 
 def _consent_update_trigger_body() -> dict:
@@ -277,9 +308,16 @@ def push_container(
             result["tags_patched"] += 1
             time.sleep(sleep_between_writes)
 
-        # 4. Create or refresh the Default Consent State tag
+        # 4. Create or refresh the Default Consent State tag.
+        #    First ensure a Consent Initialization trigger exists in this workspace —
+        #    that's what guarantees the tag fires before any other tracking tag.
+        consent_init_trig_id = _get_or_create_consent_init_trigger(gtm, ws_path, dry_run)
+        result["consent_init_trigger_id"] = consent_init_trig_id
+        if not dry_run:
+            time.sleep(sleep_between_writes)
+
         existing_default = next((t for t in tags if t.get("name") == DEFAULT_CONSENT_TAG_NAME), None)
-        body = _default_consent_tag_body()
+        body = _default_consent_tag_body(consent_init_trig_id)
         if existing_default:
             if dry_run:
                 result["default_tag_action"] = "would_refresh"

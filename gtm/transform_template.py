@@ -52,12 +52,13 @@ TYPE_TO_CONSENT: dict[str, str] = {
     # "html" intentionally absent — spec calls for manual review per tag.
 }
 
-# Built-in GTM trigger IDs. Consent Initialization is the trigger fired
-# before any other tracking tag — the Default Consent State tag MUST fire
-# on this trigger (priority 100) so it sets defaults before tags execute.
-# After import, verify this resolves to "Consent Initialization - All Pages"
-# in the GTM UI before publishing the workspace.
-TRIGGER_CONSENT_INIT_ALL_PAGES = "2147479573"
+# Consent Initialization is a trigger of type='consentInit'. It is NOT a
+# built-in with a fixed reserved ID. We add a custom trigger of that type
+# to the export's trigger array and reference its ID on the Default Consent
+# State tag. After GTM imports the JSON, this trigger appears as
+# "Consent Initialization - All Pages" in the UI.
+CONSENT_INIT_TRIGGER_NAME    = "Consent Initialization - All Pages"
+CONSENT_INIT_TRIGGER_TYPE    = "consentInit"
 
 # Names we add — used as idempotency keys on re-runs.
 DEFAULT_CONSENT_TAG_NAME    = "Default Consent State - All Pages"
@@ -121,7 +122,8 @@ def _consent_settings_needed(consent_type_value: str) -> dict:
     }
 
 
-def _build_default_consent_tag(account_id: str, container_id: str, tag_id: str) -> dict:
+def _build_default_consent_tag(account_id: str, container_id: str, tag_id: str,
+                                consent_init_trigger_id: str) -> dict:
     """Build the Default Consent State - All Pages Custom HTML tag."""
     return {
         "accountId":   account_id,
@@ -134,7 +136,7 @@ def _build_default_consent_tag(account_id: str, container_id: str, tag_id: str) 
             {"type": "BOOLEAN",  "key": "supportDocumentWrite",  "value": "false"},
         ],
         "fingerprint":      "0",  # GTM regenerates on import
-        "firingTriggerId": [TRIGGER_CONSENT_INIT_ALL_PAGES],
+        "firingTriggerId": [consent_init_trigger_id],
         "tagFiringOption": "ONCE_PER_LOAD",
         "priority": {                          # spec: priority 100
             "type":  "INTEGER",
@@ -143,6 +145,18 @@ def _build_default_consent_tag(account_id: str, container_id: str, tag_id: str) 
         "monitoringMetadata": {"type": "MAP"},
         # This tag SETS defaults — it does NOT itself require consent.
         "consentSettings": {"consentStatus": "NOT_SET"},
+    }
+
+
+def _build_consent_init_trigger(account_id: str, container_id: str, trigger_id: str) -> dict:
+    """Build the 'Consent Initialization - All Pages' trigger (type=consentInit)."""
+    return {
+        "accountId":   account_id,
+        "containerId": container_id,
+        "triggerId":   trigger_id,
+        "name":        CONSENT_INIT_TRIGGER_NAME,
+        "type":        CONSENT_INIT_TRIGGER_TYPE,
+        "fingerprint": "0",
     }
 
 
@@ -211,18 +225,38 @@ def transform(container_json: dict) -> tuple[dict, dict]:
             summary["by_consent_type"].get(consent_kind, 0) + 1
         )
 
-    # 2.1: add (or refresh) the Default Consent State tag
+    # 2.1a: ensure a Consent Initialization trigger exists (per-export, not built-in)
+    existing_consent_init = next(
+        (t for t in triggers
+         if t.get("type") == CONSENT_INIT_TRIGGER_TYPE
+         or t.get("name") == CONSENT_INIT_TRIGGER_NAME),
+        None,
+    )
+    if existing_consent_init:
+        consent_init_trig_id = existing_consent_init["triggerId"]
+        # Refresh in case anyone hand-edited the type/name
+        new_trig = _build_consent_init_trigger(account_id, container_id, consent_init_trig_id)
+        for k, v in new_trig.items():
+            existing_consent_init[k] = v
+        summary["consent_init_trigger_action"] = f"refreshed (triggerId={consent_init_trig_id})"
+    else:
+        consent_init_trig_id = _next_id(triggers, "triggerId")
+        triggers.append(_build_consent_init_trigger(account_id, container_id, consent_init_trig_id))
+        summary["consent_init_trigger_action"] = f"added (triggerId={consent_init_trig_id})"
+
+    # 2.1b: add (or refresh) the Default Consent State tag, pointing at the
+    # consent-init trigger we just ensured
     existing_default = next((t for t in tags if t.get("name") == DEFAULT_CONSENT_TAG_NAME), None)
     if existing_default:
         # Idempotent refresh: keep the same tagId, replace contents
         tag_id = existing_default["tagId"]
-        new_tag = _build_default_consent_tag(account_id, container_id, tag_id)
+        new_tag = _build_default_consent_tag(account_id, container_id, tag_id, consent_init_trig_id)
         for k, v in new_tag.items():
             existing_default[k] = v
         summary["default_consent_action"] = f"refreshed (tagId={tag_id})"
     else:
         tag_id = _next_id(tags, "tagId")
-        tags.append(_build_default_consent_tag(account_id, container_id, tag_id))
+        tags.append(_build_default_consent_tag(account_id, container_id, tag_id, consent_init_trig_id))
         summary["default_consent_action"] = f"added (tagId={tag_id})"
 
     # 2.3: add (or refresh) the consent_update placeholder trigger
