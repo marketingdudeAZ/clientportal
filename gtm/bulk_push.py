@@ -455,8 +455,12 @@ def main() -> int:
     ap.add_argument("--limit",              type=int, default=0, help="cap to first N targets (testing)")
     args = ap.parse_args()
 
+    # GTM API needs separate scopes for: editing tags/triggers, editing
+    # versions (= create_version), and publishing. Missing any one of these
+    # causes a 403 "insufficient authentication scopes" mid-flight.
     scopes = ["https://www.googleapis.com/auth/tagmanager.edit.containers"]
     if args.publish:
+        scopes.append("https://www.googleapis.com/auth/tagmanager.edit.containerversions")
         scopes.append("https://www.googleapis.com/auth/tagmanager.publish")
     gtm = _build_gtm_service(scopes)
 
