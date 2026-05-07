@@ -8,19 +8,14 @@ If a tool/agent/PR proposes changing anything below, **stop and ask Kyle**.
 
 ---
 
-## R1 — Never write to the `uuid` HubSpot company custom property
+## R1 — Never write to the `uuid` HubSpot company custom property from code
 
-**The HubSpot company `uuid` property is set by a single authoritative
-HubSpot Workflow. Do not PATCH it, do not include it in a POST when
-creating a company, do not batch-update it. Every code path (portal
-endpoints, migration scripts, ad-hoc patch scripts, AI agents) reads `uuid`
-only — it never writes.**
+**The HubSpot company `uuid` property is a stable join key. Application
+code (webhooks, scripts, agents, integrations) MUST NEVER write to it —
+not on create, not on update, not via batch, not via PATCH. It is
+populated by a HubSpot workflow, not by us.**
 
-Strengthened 2026-05-07 by Kyle: previously this rule allowed setting
-`uuid` on company creation. Removed. Creation is now also forbidden so
-there is exactly ONE writer in the entire org and zero collision risk.
-
-### Where uuid actually gets set
+### How uuid actually gets set
 
 A HubSpot Workflow named **"Trigger enrollment for companies"** owns this:
 
@@ -29,17 +24,33 @@ A HubSpot Workflow named **"Trigger enrollment for companies"** owns this:
   Step 2:   Format data — Format `Do not use #1` from Enrolled company
   Step 3:   Edit record — Set `UUID` to `Do not use #1`
 
-This means:
-- Companies created without an associated deal will not have `uuid` until
-  a deal is associated.
-- The first associated deal triggers the workflow which sets `uuid =
-  hs_object_id` (formatted via the staging "Do not use #1" field).
-- Re-enrollment is OFF — the workflow runs once per company.
+Re-enrollment is OFF, so the workflow runs once per company. Once that
+workflow runs, the value is locked. The workflow is the single source of
+truth — anything we do in code that touches `uuid` either races the
+workflow or stomps an already-set value.
+
+This is a deliberate design choice owned by Kyle. Don't try to "help"
+by setting it earlier in code; you'll just create a window where the
+values disagree across systems.
+
+### What this means for new-company creation
+
+When code creates a company (e.g. `property_brief._create_company`,
+`scripts/test_enroll`, any future automation), the POST body MUST OMIT
+the `uuid` property. The lifecycle is:
+
+  1. Code POSTs `/crm/v3/objects/companies` — uuid not set
+  2. A deal is associated to the company (e.g. via `deal_creator`)
+  3. The HubSpot workflow fires and writes `uuid = Record ID`
+
+Until step 3 fires, the company is invisible to fluency-tag-sync, the
+asset library, video pipelines, SEO tracking, and the /accounts portal
+URL. That gap is expected and short — it closes the moment the deal
+gets associated. If a property urgently needs uuid before then, the
+right move is to associate a deal (which triggers the workflow), not to
+write the value in code.
 
 ### Why it's locked
-
-The `uuid` value is referenced by every system that needs to address a
-specific RPM property without using HubSpot's internal `hs_object_id`:
 
 The `uuid` value is referenced by every system that needs to address a
 specific RPM property without using HubSpot's internal `hs_object_id`:
@@ -70,29 +81,32 @@ Symptoms you might see:
   variants, SEO) renders empty even though it exists for the property
 - Fluency reports an account it can't link to a sheet row
 
-**The right response is to investigate why the upstream record-creation
-process didn't populate the uuid, NOT to fix it in place via API.** Common
-upstream sources: SFID-based ETL, NinjaCat sync, ApartmentIQ sync, manual
-HubSpot data entry. Talk to whoever owns the source.
+**The right response is to investigate why the workflow didn't populate
+the uuid, NOT to fix it in place via API.** Common causes: company has
+no associated deal yet (workflow trigger condition not met), workflow
+disabled, or upstream data-entry path skipped HubSpot entirely.
 
 ### Examples of operations that ARE allowed
 
 - **Reading** the uuid (every pipeline does this)
 - **PATCHing other** custom properties (`fluency_*`, `paid_media_*`,
   `seo_budget`, `ple_status`, etc.)
-- **Creating** companies WITHOUT setting `uuid` in the POST body. The
-  HubSpot Workflow handles uuid once a deal is associated.
+- **Creating** companies with `uuid` OMITTED — let the workflow set it
 - Logging that a property is missing a uuid and skipping it in downstream
   writes (current `fluency-tag-sync` behavior — correct)
 
 ### Examples of operations that are FORBIDDEN
 
-- Including `"uuid": ...` in any HubSpot company POST or PATCH body
+- POSTing `/crm/v3/objects/companies` with `uuid` in `properties`
+- PATCHing `/crm/v3/objects/companies/{id}` to set or change `uuid`
+- Batch-update calls that include `uuid` in any input row
+- Generating a UUIDv4 in code and writing it — the workflow uses
+  Record ID, not UUIDv4, so code-set values would permanently diverge
+  from workflow-set values across the fleet
 - Running a migration script that backfills uuid on legacy companies
-- Auto-generating UUIDv4 strings to fill missing uuids
 - Mirroring `hs_object_id` to `uuid` from a portal endpoint or cron job
-  (the HubSpot Workflow already does this — duplicating the logic in code
-  creates split-brain when the Workflow's formatting changes)
+  (the workflow already does this — duplicating the logic in code
+  creates split-brain when the workflow's formatting changes)
 
 ### Recorded blocking events
 

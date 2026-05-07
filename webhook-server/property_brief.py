@@ -21,15 +21,19 @@ comment) lives in dedicated single-purpose modules.
 
 Identity fields on the new company (R1 + downstream contracts):
 
-  * `uuid` — set in the initial POST (see _create_company). R1 in
-    /IMMUTABLE_RULES.md forbids modifying it after creation. Without
-    it, the company is invisible to fluency-tag-sync, the asset
-    library, video pipelines, SEO tracking, and the /accounts
-    portal URL.
+  * `uuid` — NEVER set by this module. R1 in /IMMUTABLE_RULES.md
+    forbids writing to uuid from code. A HubSpot workflow on
+    Companies (trigger: Associated Deals >= 1) copies Record ID
+    into uuid once the deal lands. Setting uuid here would race or
+    stomp that workflow, so the POST omits it entirely. The
+    company is invisible to fluency-tag-sync / assets / video /
+    SEO until the workflow fires, but that gap is short — Path A
+    associates a deal to the new company moments after creation,
+    which trips the workflow trigger.
   * `aptiq_property_id` — intentionally NOT set by this module.
     Apt IQ assigns it asynchronously and the daily pipeline in
     services/fluency_ingestion/apt_iq_reader.py joins it to the
-    HubSpot company by matching CSV "Property ID" → company
+    HubSpot company by matching CSV "Property ID" -> company
     `aptiq_property_id`. Until that join lands, /accounts/property
     will show fluency_* fields as "Not yet computed". This is the
     expected behaviour for ticket-created properties; AMs should
@@ -313,27 +317,30 @@ def _search_companies_by_name(name: str) -> list[dict]:
 def _create_company(*, name: str, domain: str = "") -> dict:
     """Create a new HubSpot company and return its core identity dict.
 
-    R1 (IMMUTABLE_RULES.md): the `uuid` custom property is the stable join
-    key for Fluency, asset library, video pipeline (Creatify/HeyGen), SEO
-    tracking, and portal URL routing. R1 forbids modifying uuid after
-    creation, so it MUST be set in this initial POST — otherwise every
-    company property_brief creates is invisible to those downstream
-    systems and shows up as `sheet_skipped_no_uuid` in fluency-tag-sync.
+    R1 (IMMUTABLE_RULES.md): we MUST NOT set `uuid` in the POST body.
+    A HubSpot workflow on Companies (trigger: Associated Deals >= 1)
+    copies Record ID -> uuid once a deal lands. Code that sets uuid
+    here would race or stomp the workflow.
 
-    `aptiq_property_id` is intentionally NOT set here. It is populated by
-    the upstream Apt IQ daily CSV pipeline (services/fluency_ingestion/
-    apt_iq_reader.py) once Apt IQ assigns one, OR by manual HubSpot data
-    entry. Until that lands, /accounts/property?company_id=… renders the
-    fluency_* fields as "Not yet computed" — that's expected.
+    The lifecycle is intentional: company is created without uuid ->
+    deal_creator associates a deal -> workflow fires -> uuid populated.
+    Until the workflow fires, the company is invisible to
+    fluency-tag-sync / asset library / video / SEO. That gap is short
+    (typically seconds, since the commercial path creates the deal
+    immediately after this call returns) and is the correct behaviour.
+
+    `aptiq_property_id` is also intentionally NOT set here. It is
+    populated by the upstream Apt IQ daily CSV pipeline
+    (services/fluency_ingestion/apt_iq_reader.py) once Apt IQ assigns
+    one, OR by manual HubSpot data entry. Until that lands,
+    /accounts/property renders fluency_* fields as "Not yet computed".
     """
-    import uuid as _uuid
     import requests
     from config import HUBSPOT_API_KEY
     if not HUBSPOT_API_KEY:
         raise RuntimeError("HUBSPOT_API_KEY not configured")
 
-    new_uuid = str(_uuid.uuid4())
-    properties = {"name": name, "uuid": new_uuid}
+    properties = {"name": name}
     if domain:
         properties["domain"] = domain
     r = requests.post(
@@ -344,7 +351,10 @@ def _create_company(*, name: str, domain: str = "") -> dict:
     )
     r.raise_for_status()
     body = r.json()
-    return {"id": body["id"], "name": name, "domain": domain, "uuid": new_uuid}
+    # uuid is intentionally absent from the response — see docstring.
+    # Caller addresses the new company by HubSpot id until the workflow
+    # fills uuid in after deal association.
+    return {"id": body["id"], "name": name, "domain": domain}
 
 
 def comment_commercial_result(parsed: dict[str, Any], result: dict[str, Any]) -> None:
