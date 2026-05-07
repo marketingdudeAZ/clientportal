@@ -177,6 +177,41 @@ class TestCreateDealWithLineItems(unittest.TestCase):
         # 2 monthly + 1 setup = 3 associations
         self.assertEqual(len(li_assoc), 3)
 
+    def test_line_items_carry_hs_sku_for_known_channels(self):
+        """spend_sheet.py rolls up by hs_sku — without it, /accounts Total is wrong."""
+        deal_creator.create_deal_with_line_items(
+            company_id="c1",
+            selections={
+                "seo":            {"tier": "Standard", "monthly": 800, "setup": 0},
+                "paid_search":    {"tier": "Google Ads", "monthly": 3500, "setup": 500},
+                "social_posting": {"tier": "Basic",    "monthly": 300, "setup": 500},
+            },
+            totals={"monthly": 4600, "setup": 1000},
+        )
+        line_item_posts = [c for c in self._post.call_args_list
+                           if "/line_items" in (c.args[0] if c.args else "")]
+        skus = [p.kwargs["json"]["properties"].get("hs_sku") for p in line_item_posts]
+        # Both monthly AND setup line items should carry the SKU.
+        self.assertIn("SEO_Package", skus)
+        self.assertIn("Paid_Search_Ads", skus)
+        self.assertIn("Social_Posting", skus)
+        # Setup-fee line items should also have the SKU.
+        self.assertEqual(skus.count("Paid_Search_Ads"), 2)   # monthly + setup
+        self.assertEqual(skus.count("Social_Posting"), 2)    # monthly + setup
+        self.assertEqual(skus.count("SEO_Package"), 1)       # no setup fee on SEO
+
+    def test_unknown_channel_skips_hs_sku(self):
+        """Unknown channels stay backward-compatible: no hs_sku, no breakage."""
+        deal_creator.create_deal_with_line_items(
+            company_id="c1",
+            selections={"mystery": {"tier": "Gold", "monthly": 100, "setup": 0}},
+            totals={"monthly": 100, "setup": 0},
+        )
+        line_item_posts = [c for c in self._post.call_args_list
+                           if "/line_items" in (c.args[0] if c.args else "")]
+        self.assertEqual(len(line_item_posts), 1)
+        self.assertNotIn("hs_sku", line_item_posts[0].kwargs["json"]["properties"])
+
 
 class TestProductMapLookup(unittest.TestCase):
     """When a product is in the catalog, the line item should include hs_product_id."""
