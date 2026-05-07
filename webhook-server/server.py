@@ -4768,6 +4768,208 @@ def fluency_tag_sync():
     return jsonify(summary)
 
 
+@app.route("/api/internal/fluency-url-scrape-bg", methods=["POST", "OPTIONS"])
+def fluency_url_scrape_bg():
+    """Run the URL-scrape pass for the matched portfolio in a daemon thread.
+
+    Why a separate endpoint: the inline scrape inside /api/internal/fluency-tag-sync
+    runs sequentially per-property at ~7s each. 782 properties = ~90 min, which
+    blows past Render's HTTP timeout. This endpoint kicks the scrape off in a
+    daemon thread and returns immediately. The thread:
+
+      1. Fetches the same companies as fluency-tag-sync (managed + aptiq_property_id set)
+      2. For each, scrape the property URL via url_scraper.scrape_property()
+      3. If the scrape returned data, PATCH the relevant fluency_* fields back
+         to HubSpot (marketed_amenity_names, amenities_descriptions, neighborhood,
+         landmarks, nearby_employers, unit_noun)
+      4. Log a per-property progress line and a final summary
+
+    After this thread finishes (~25-30 min), a follow-up call to
+    /api/internal/fluency-tag-sync (no scrape_urls) will pick up the freshly
+    patched HubSpot fields and push them into the rpm_property_tag_source sheet.
+
+    Body JSON: {
+        "single_property": "<hs_object_id>"  // optional — limit to one company
+        "limit": <int>                       // optional — cap to first N matches
+    }
+
+    Auth: X-Internal-Key = INTERNAL_API_KEY env var.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+
+    body = request.get_json(silent=True) or {}
+    single_property = (body.get("single_property") or "").strip()
+    limit_n         = int(body.get("limit") or 0)
+
+    try:
+        from services.fluency_ingestion import url_scraper, apt_iq_csv_client
+    except Exception as e:
+        return jsonify({"error": f"import failed: {e}"}), 500
+
+    import datetime as _dt
+    import time as _t
+    import threading as _th
+    import requests as _req
+    from config import HUBSPOT_API_KEY
+
+    PLE_INCLUDE = ["RPM Managed", "Onboarding", "Dispositioning"]
+    HS_HDRS = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+
+    # The HubSpot fields the URL scrape feeds. Order kept stable for log readability.
+    URL_DERIVED_FIELDS = [
+        "fluency_marketed_amenity_names",
+        "fluency_amenities_descriptions",
+        "fluency_neighborhood",
+        "fluency_landmarks",
+        "fluency_nearby_employers",
+        "fluency_unit_noun",
+    ]
+    UNIT_NOUNS = {"apartment", "townhome", "loft", "home", "duplex"}
+
+    def _fetch_companies():
+        url = "https://api.hubapi.com/crm/v3/objects/companies/search"
+        all_results = []
+        after = None
+        while True:
+            payload = {
+                "filterGroups": [{"filters": [
+                    {"propertyName": "plestatus",        "operator": "IN", "values": PLE_INCLUDE},
+                    {"propertyName": "aptiq_property_id","operator": "HAS_PROPERTY"},
+                ]}],
+                "properties": ["name", "domain", "uuid", "aptiq_property_id"],
+                "limit": 100,
+            }
+            if after:
+                payload["after"] = after
+            r = _req.post(url, headers=HS_HDRS, json=payload, timeout=30)
+            r.raise_for_status()
+            d = r.json()
+            all_results.extend(d.get("results", []))
+            after = (d.get("paging") or {}).get("next", {}).get("after")
+            if not after:
+                break
+            _t.sleep(0.15)
+        return all_results
+
+    def _bg_run():
+        """The slow work — runs in daemon thread."""
+        t0 = _t.time()
+        try:
+            raw = _fetch_companies()
+        except Exception as e:
+            logger.error("fluency-url-scrape-bg: company fetch failed: %s", e)
+            return
+        companies = []
+        for r in raw:
+            p = r.get("properties") or {}
+            companies.append({
+                "id":     r.get("id"),
+                "name":   p.get("name") or "",
+                "domain": (p.get("domain") or "").strip(),
+                "aptiq_property_id": (p.get("aptiq_property_id") or "").strip(),
+            })
+
+        if single_property:
+            companies = [c for c in companies if c["id"] == single_property]
+        if limit_n:
+            companies = companies[:limit_n]
+
+        logger.info("fluency-url-scrape-bg: starting on %d companies", len(companies))
+
+        ok = 0
+        cf_blocked = 0
+        no_url = 0
+        scrape_returned_nothing = 0
+        patch_failed = 0
+
+        for i, c in enumerate(companies, 1):
+            url = c["domain"]
+            if not url:
+                # Apt IQ Property URL fallback
+                row = apt_iq_csv_client.get_property_row(c["aptiq_property_id"])
+                if row:
+                    url = (row.get("Property URL") or "").strip()
+            if not url:
+                no_url += 1
+                continue
+
+            page_text = url_scraper.fetch_page_text(url)
+            if len(page_text) < 200:
+                cf_blocked += 1
+                continue
+            scraped = url_scraper.scrape_property(url)
+            if not scraped:
+                scrape_returned_nothing += 1
+                continue
+
+            # Build the HubSpot PATCH payload from the scrape result. Only set
+            # fields that have non-empty values (preserves existing data).
+            props: dict = {}
+            marketed = scraped.get("marketed_amenity_names") or []
+            if marketed:
+                props["fluency_marketed_amenity_names"] = ", ".join(marketed[:30])
+            descs = (scraped.get("amenities_descriptions") or "").strip()
+            if descs:
+                props["fluency_amenities_descriptions"] = descs[:1000]
+            unit_noun = (scraped.get("unit_noun") or "").strip().lower()
+            if unit_noun in UNIT_NOUNS:
+                props["fluency_unit_noun"] = unit_noun
+            nbhd = (scraped.get("neighborhood") or "").strip()
+            if nbhd:
+                props["fluency_neighborhood"] = nbhd
+            landmarks = scraped.get("landmarks") or []
+            if landmarks:
+                props["fluency_landmarks"] = ", ".join(landmarks[:10])
+            employers = scraped.get("nearby_employers") or []
+            if employers:
+                props["fluency_nearby_employers"] = ", ".join(employers[:10])
+
+            if not props:
+                # Scrape succeeded but extracted nothing useful (generic copy)
+                continue
+
+            try:
+                pr = _req.patch(
+                    f"https://api.hubapi.com/crm/v3/objects/companies/{c['id']}",
+                    headers=HS_HDRS, json={"properties": props}, timeout=20,
+                )
+                pr.raise_for_status()
+                ok += 1
+            except Exception as e:
+                patch_failed += 1
+                logger.warning("fluency-url-scrape-bg: PATCH failed for %s: %s", c["id"], str(e)[:200])
+
+            if i % 25 == 0:
+                logger.info("fluency-url-scrape-bg progress: %d / %d (ok=%d, cf_blocked=%d, no_url=%d) %.0fs elapsed",
+                            i, len(companies), ok, cf_blocked, no_url, _t.time() - t0)
+
+        elapsed = round(_t.time() - t0, 1)
+        logger.info(
+            "fluency-url-scrape-bg DONE: scope=%d ok=%d cf_blocked=%d no_url=%d "
+            "scrape_empty=%d patch_failed=%d elapsed_s=%s",
+            len(companies), ok, cf_blocked, no_url, scrape_returned_nothing, patch_failed, elapsed,
+        )
+
+    # Kick off the bg thread + return immediately
+    th = _th.Thread(target=_bg_run, daemon=True)
+    th.start()
+    return jsonify({
+        "mode": "scrape_queued",
+        "started_at": _dt.datetime.utcnow().isoformat() + "Z",
+        "single_property": single_property or None,
+        "limit": limit_n or None,
+        "expected_duration_min": "25-35",
+        "next_step":
+            "After ~30 min, call /api/internal/fluency-tag-sync with "
+            "{\"dry_run\": false} to push the freshly-scraped HubSpot fields "
+            "into rpm_property_tag_source.",
+    })
+
+
 def _prewarm_spend_cache():
     """Build the spend sheet cache in the background on startup."""
     import threading, time
