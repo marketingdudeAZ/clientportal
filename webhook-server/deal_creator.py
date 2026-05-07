@@ -1,6 +1,8 @@
 """Phase 7: HubSpot Deal + Line Items creation."""
 
 import logging
+import os
+
 import requests
 
 from config import HUBSPOT_API_KEY
@@ -59,6 +61,21 @@ def create_deal_with_line_items(
         "amount": str(totals.get("monthly", 0)),
         "description": f"Submitted via client portal configurator. Monthly: ${totals.get('monthly', 0)}, Setup: ${totals.get('setup', 0)}",
     }
+
+    # Test-mode override: route deals into the "Property Brief Testing"
+    # pipeline so prod revenue reporting stays clean while we validate the
+    # ClickUp -> HubSpot flow end-to-end. When PROPERTY_BRIEF_TEST_MODE is
+    # not "true", behaviour is unchanged.
+    if os.getenv("PROPERTY_BRIEF_TEST_MODE", "").strip().lower() == "true":
+        test_pipeline = os.getenv("HUBSPOT_TEST_PIPELINE_ID", "").strip()
+        if test_pipeline:
+            deal_properties["pipeline"] = test_pipeline
+            # First stage of the test pipeline. Default matches the stage we
+            # provisioned at create time; override only if you reorder stages.
+            deal_properties["dealstage"] = os.getenv(
+                "HUBSPOT_TEST_PIPELINE_FIRST_STAGE_ID", "1356833043"
+            ).strip()
+            deal_properties["dealname"] = f"[TEST] {deal_properties['dealname']}"
 
     deal_resp = requests.post(
         f"{API_BASE}/crm/v3/objects/deals",

@@ -213,6 +213,57 @@ class TestCreateDealWithLineItems(unittest.TestCase):
         self.assertNotIn("hs_sku", line_item_posts[0].kwargs["json"]["properties"])
 
 
+class TestPropertyBriefTestMode(unittest.TestCase):
+    """When PROPERTY_BRIEF_TEST_MODE=true, deals route to the test pipeline.
+
+    This keeps prod revenue reporting clean during ClickUp -> HubSpot
+    end-to-end validation. Without the env var, behaviour is unchanged.
+    """
+
+    def _run_with_env(self, env: dict) -> dict:
+        with mock.patch.dict(os.environ, env, clear=False), \
+             mock.patch("deal_creator.requests.post") as post, \
+             mock.patch("deal_creator.requests.put") as put:
+            post.side_effect = [_resp({"id": "deal-1"}), _resp({"id": "li-1"})]
+            put.return_value = _resp({})
+            deal_creator.create_deal_with_line_items(
+                company_id="c1",
+                selections={"seo": {"tier": "Standard", "monthly": 800, "setup": 0}},
+                totals={"monthly": 800, "setup": 0},
+            )
+            return post.call_args_list[0].kwargs["json"]["properties"]
+
+    def test_default_pipeline_when_test_mode_absent(self):
+        # Strip any inherited test-mode env var so the default path is exercised.
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PROPERTY_BRIEF_TEST_MODE", None)
+            props = self._run_with_env({})
+        self.assertEqual(props["pipeline"], "default")
+        self.assertEqual(props["dealstage"], "appointmentscheduled")
+        self.assertNotIn("[TEST]", props["dealname"])
+
+    def test_test_pipeline_when_test_mode_on(self):
+        props = self._run_with_env({
+            "PROPERTY_BRIEF_TEST_MODE": "true",
+            "HUBSPOT_TEST_PIPELINE_ID": "898123078",
+            "HUBSPOT_TEST_PIPELINE_FIRST_STAGE_ID": "1356833043",
+        })
+        self.assertEqual(props["pipeline"], "898123078")
+        self.assertEqual(props["dealstage"], "1356833043")
+        self.assertIn("[TEST]", props["dealname"])
+
+    def test_test_mode_falls_back_to_default_when_pipeline_id_missing(self):
+        # Defensive: PROPERTY_BRIEF_TEST_MODE=true but no pipeline id set
+        # should NOT silently route to a non-existent pipeline. We keep the
+        # default so deals still land somewhere reachable.
+        props = self._run_with_env({
+            "PROPERTY_BRIEF_TEST_MODE": "true",
+            "HUBSPOT_TEST_PIPELINE_ID": "",
+        })
+        self.assertEqual(props["pipeline"], "default")
+        self.assertEqual(props["dealstage"], "appointmentscheduled")
+
+
 class TestProductMapLookup(unittest.TestCase):
     """When a product is in the catalog, the line item should include hs_product_id."""
 
