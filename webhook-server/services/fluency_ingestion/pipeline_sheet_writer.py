@@ -239,15 +239,25 @@ def write_rows(records: list[dict]) -> dict:
         else:
             appends.append(row_values)
 
-    # Apply updates first (per-row writes — gspread doesn't support
-    # vectorized batch updates by row index without the values API)
-    for row_num, values in updates:
+    # Apply updates as ONE batched API call. Per-row sequential writes hit
+    # Google Sheets' 60-writes-per-minute-per-user quota when there are
+    # many changed rows (we saw ~20 updates per sync, then throttled). The
+    # values batch API accepts a list of (range, values) tuples and bills
+    # as a single request.
+    if updates:
         try:
-            cell_range = f"A{row_num}:{chr(ord('A') + len(COLUMNS) - 1)}{row_num}"
-            ws.update(cell_range, [values])
-            written += 1
+            last_col_letter = chr(ord("A") + len(COLUMNS) - 1)
+            batch_data = [
+                {
+                    "range": f"A{row_num}:{last_col_letter}{row_num}",
+                    "values": [values],
+                }
+                for row_num, values in updates
+            ]
+            ws.batch_update(batch_data, value_input_option="RAW")
+            written += len(updates)
         except Exception as e:
-            errors.append({"reason": str(e), "row_num": row_num})
+            errors.append({"reason": str(e), "updates_in_batch": len(updates)})
 
     # Append new rows in a single batch
     if appends:
