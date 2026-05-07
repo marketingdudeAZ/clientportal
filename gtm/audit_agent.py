@@ -72,7 +72,7 @@ def _build_gtm_service():
 # ─── Acceptance criteria ───────────────────────────────────────────────────
 
 DEFAULT_CONSENT_TAG_NAME       = "Default Consent State - All Pages"
-TRIGGER_CONSENT_INIT_ALL_PAGES = "2147479573"
+CONSENT_INIT_TRIGGER_TYPE      = "consentInit"
 
 EEA_REGIONS = [
     "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE",
@@ -120,6 +120,7 @@ def audit_container(account_id: str, container_id: str, gtm_service) -> dict:
 
     tags     = live_version.get("tag") or []
     triggers = live_version.get("trigger") or []
+    triggers_by_id = {str(t.get("triggerId")): t for t in triggers}
 
     failures: list[str] = []
     info: dict[str, Any] = {
@@ -135,22 +136,29 @@ def audit_container(account_id: str, container_id: str, gtm_service) -> dict:
         failures.append(f"missing tag: {DEFAULT_CONSENT_TAG_NAME!r}")
     else:
         info["default_tag_id"] = default_tag.get("tagId")
-        # Trigger
-        if TRIGGER_CONSENT_INIT_ALL_PAGES not in (default_tag.get("firingTriggerId") or []):
+        # Trigger: must reference a trigger of type='consentInit' in this
+        # workspace (no hardcoded built-in ID — it's per-workspace)
+        firing_ids = default_tag.get("firingTriggerId") or []
+        consent_init_match = any(
+            triggers_by_id.get(str(tid), {}).get("type") == CONSENT_INIT_TRIGGER_TYPE
+            for tid in firing_ids
+        )
+        if not consent_init_match:
+            firing_types = [triggers_by_id.get(str(tid), {}).get("type") for tid in firing_ids]
             failures.append(
-                f"Default Consent State tag does not fire on Consent Initialization "
-                f"(expected triggerId {TRIGGER_CONSENT_INIT_ALL_PAGES}, "
-                f"found {default_tag.get('firingTriggerId')})"
+                f"Default Consent State tag does not fire on a Consent Initialization "
+                f"trigger (firingTriggerId={firing_ids}, types={firing_types})"
             )
         # Priority
         prio = default_tag.get("priority", {})
         if not (isinstance(prio, dict) and str(prio.get("value")) == "100"):
             failures.append(f"Default Consent State tag priority != 100 (got {prio})")
-        # Once-per-page
-        if default_tag.get("tagFiringOption") != "ONCE_PER_LOAD":
+        # Once-per-page (GTM stores as camelCase 'oncePerLoad')
+        firing_opt = (default_tag.get("tagFiringOption") or "").lower().replace("_", "")
+        if firing_opt != "onceperload":
             failures.append(
                 f"Default Consent State tag fires {default_tag.get('tagFiringOption')!r}, "
-                f"expected ONCE_PER_LOAD"
+                f"expected oncePerLoad"
             )
         # HTML body must contain all 4 consent params + region overrides
         params = default_tag.get("parameter") or []
@@ -179,7 +187,9 @@ def audit_container(account_id: str, container_id: str, gtm_service) -> dict:
         if name == DEFAULT_CONSENT_TAG_NAME:
             continue
         cs = t.get("consentSettings", {}) or {}
-        status = cs.get("consentStatus")
+        # GTM API returns lowercase ('needed'); JSON exports use uppercase
+        # ('NEEDED'). Normalize before comparing.
+        status = (cs.get("consentStatus") or "").upper()
         types  = _consent_type_values(t)
         if ttype in ANALYTICS_TAG_TYPES:
             if status != "NEEDED" or "analytics_storage" not in types:
