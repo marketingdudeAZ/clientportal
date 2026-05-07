@@ -18,6 +18,24 @@ The HubSpot quote-signed webhook is a separate trigger handled here too.
 This module is the coordinator only — the heavy lifting (HubSpot company
 match, deal/line-item creation, quote generation, LLM call, ClickUp
 comment) lives in dedicated single-purpose modules.
+
+Identity fields on the new company (R1 + downstream contracts):
+
+  * `uuid` — set in the initial POST (see _create_company). R1 in
+    /IMMUTABLE_RULES.md forbids modifying it after creation. Without
+    it, the company is invisible to fluency-tag-sync, the asset
+    library, video pipelines, SEO tracking, and the /accounts
+    portal URL.
+  * `aptiq_property_id` — intentionally NOT set by this module.
+    Apt IQ assigns it asynchronously and the daily pipeline in
+    services/fluency_ingestion/apt_iq_reader.py joins it to the
+    HubSpot company by matching CSV "Property ID" → company
+    `aptiq_property_id`. Until that join lands, /accounts/property
+    will show fluency_* fields as "Not yet computed". This is the
+    expected behaviour for ticket-created properties; AMs should
+    fill in the Apt IQ ID on the company record once Apt IQ
+    onboards the property, after which the daily pipeline picks
+    it up automatically.
 """
 
 from __future__ import annotations
@@ -293,11 +311,29 @@ def _search_companies_by_name(name: str) -> list[dict]:
 
 
 def _create_company(*, name: str, domain: str = "") -> dict:
+    """Create a new HubSpot company and return its core identity dict.
+
+    R1 (IMMUTABLE_RULES.md): the `uuid` custom property is the stable join
+    key for Fluency, asset library, video pipeline (Creatify/HeyGen), SEO
+    tracking, and portal URL routing. R1 forbids modifying uuid after
+    creation, so it MUST be set in this initial POST — otherwise every
+    company property_brief creates is invisible to those downstream
+    systems and shows up as `sheet_skipped_no_uuid` in fluency-tag-sync.
+
+    `aptiq_property_id` is intentionally NOT set here. It is populated by
+    the upstream Apt IQ daily CSV pipeline (services/fluency_ingestion/
+    apt_iq_reader.py) once Apt IQ assigns one, OR by manual HubSpot data
+    entry. Until that lands, /accounts/property?company_id=… renders the
+    fluency_* fields as "Not yet computed" — that's expected.
+    """
+    import uuid as _uuid
     import requests
     from config import HUBSPOT_API_KEY
     if not HUBSPOT_API_KEY:
         raise RuntimeError("HUBSPOT_API_KEY not configured")
-    properties = {"name": name}
+
+    new_uuid = str(_uuid.uuid4())
+    properties = {"name": name, "uuid": new_uuid}
     if domain:
         properties["domain"] = domain
     r = requests.post(
@@ -308,7 +344,7 @@ def _create_company(*, name: str, domain: str = "") -> dict:
     )
     r.raise_for_status()
     body = r.json()
-    return {"id": body["id"], "name": name, "domain": domain}
+    return {"id": body["id"], "name": name, "domain": domain, "uuid": new_uuid}
 
 
 def comment_commercial_result(parsed: dict[str, Any], result: dict[str, Any]) -> None:

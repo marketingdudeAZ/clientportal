@@ -248,11 +248,39 @@ class TestCommercialPath(unittest.TestCase):
         self.drafter.resolve_company_by_domain.return_value = None
         with mock.patch.object(property_brief, "_search_companies_by_name", return_value=[]), \
              mock.patch.object(property_brief, "_create_company",
-                               return_value={"id": "new-1", "name": "Maple Court", "domain": "maplecourtaustin.com"}) as create:
+                               return_value={"id": "new-1", "name": "Maple Court", "domain": "maplecourtaustin.com", "uuid": "u-1"}) as create:
             parsed = property_brief.parse_ticket(_task())
             result = property_brief.run_commercial_path(parsed)
             self.assertEqual(result["company_id"], "new-1")
             create.assert_called_once()
+
+    def test_create_company_sets_uuid_on_initial_post(self):
+        """R1: uuid is the stable join key for Fluency / assets / video /
+        SEO. It MUST be set in the initial POST or downstream systems
+        treat the new company as invisible."""
+        captured = {}
+
+        def fake_post(url, headers=None, json=None, timeout=None):
+            captured["url"] = url
+            captured["body"] = json
+            resp = mock.MagicMock()
+            resp.status_code = 201
+            resp.json.return_value = {"id": "co-100"}
+            resp.raise_for_status = mock.MagicMock()
+            return resp
+
+        with mock.patch("property_brief.requests.post", side_effect=fake_post) if False else \
+             mock.patch("requests.post", side_effect=fake_post):
+            result = property_brief._create_company(name="Maple Court", domain="maplecourtaustin.com")
+
+        self.assertEqual(captured["url"], "https://api.hubapi.com/crm/v3/objects/companies")
+        props = captured["body"]["properties"]
+        self.assertEqual(props["name"], "Maple Court")
+        self.assertEqual(props["domain"], "maplecourtaustin.com")
+        self.assertIn("uuid", props, "R1: uuid must be set in initial POST")
+        # uuid4 — 36 chars with hyphens.
+        self.assertEqual(len(props["uuid"]), 36)
+        self.assertEqual(result["uuid"], props["uuid"])
 
 
 # ── 4. Brief path ──────────────────────────────────────────────────────────
