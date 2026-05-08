@@ -110,11 +110,16 @@ def parse_ticket(task: dict[str, Any]) -> dict[str, Any]:
             or cf(task, "Domain")
             or cf(task, "Property URL")
         ),
-        # Submitter email: portal "Submitter Email", then RPM "Requester Email".
+        # Submitter email: portal "Submitter Email", then RPM "Requester
+        # Email", then the ClickUp ticket assignee. RPM intake forms in
+        # production don't capture a separate submitter field — the AM
+        # (ticket assignee) IS the submitter. Falling back to that
+        # avoids requiring AMs to type their own email twice.
         "submitter_email": _str(
             cf(task, "Submitter Email")
             or cf(task, "Submitter")
             or cf(task, "Requester Email")
+            or _primary_assignee_email(task)
         ),
         "submitter_id":    _str(cf(task, "Submitter ClickUp ID")),
         # RM email: portal "RM Email", then RPM "RM's Email" (apostrophe).
