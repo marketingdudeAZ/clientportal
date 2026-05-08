@@ -9,6 +9,12 @@ This module is the contract between:
   - The daily fluency-tag-sync cron (which respects override values
     when merging Apt IQ + URL scrape derived data)
 
+Display model — card per section. Each row shows EITHER the pipeline
+value (auto-derived, badge "PIPELINE" / "PIPELINE PENDING") OR the
+override value (human-set, badge "OVERRIDE" / "OVERRIDE PENDING").
+Override rows are only shown when the field is editable on this brief
+(i.e., the field has a corresponding fluency_*_override column).
+
 Three rules govern this surface:
 
   1. Override wins. When a reviewer edits a field, we write to the
@@ -17,9 +23,11 @@ Three rules govern this surface:
   2. Apt IQ-sourced fields are read-only here. They're filled by the
      daily cron once Apt IQ assigns a property id. The brief shows
      "Pending" until then.
-  3. Backend identifiers (uuid, hs_object_id, deal id, AptIQ id) are
-     never displayed — this is a property stakeholder's view, not
-     an internal tool.
+  3. Fair Housing first. Audience / motivation language must focus on
+     LIFESTYLE / NEEDS / AMENITY preferences, not protected categories
+     (age, family status, race, religion, national origin, disability).
+     The LLM prompt enforces this and the captured "Primary Motivations
+     & Considerations" field is intentionally framed psychographically.
 """
 
 from __future__ import annotations
@@ -36,25 +44,13 @@ API_BASE = "https://api.hubapi.com"
 
 
 # ── Field map ──────────────────────────────────────────────────────────────
-#
-# Each row defines one row on the brief. The keys map to:
-#
-#   key          internal handle the UI/PATCH endpoint refers to
-#   label        human label on the page
-#   section      which page section this row belongs in
-#   type         "text" | "textarea" | "dropdown" | "readonly"
-#   hint         placeholder / helper copy under the label
-#   hs_resolved  the HubSpot property holding the AUTO-DERIVED value
-#                (read at display time when no override is set)
-#   hs_override  the HubSpot property to PATCH on edit (None = not editable)
-#   options      list of allowed values for "dropdown" type
 
 class BriefField:
     __slots__ = ("key", "label", "section", "type", "hint",
                  "hs_resolved", "hs_override", "options")
 
     def __init__(self, key, label, section, type,
-                 hs_resolved, hs_override=None, hint="", options=None):
+                 hs_resolved=None, hs_override=None, hint="", options=None):
         self.key = key
         self.label = label
         self.section = section
@@ -65,101 +61,145 @@ class BriefField:
         self.options = options or []
 
 
-# Sections in display order; each yields its label + list of BriefField rows.
+# Sections + fields — modeled after the /accounts/property dashboard.
+# Each section will render BOTH the pipeline row (auto-derived value)
+# AND the override row (editable) when an override field exists.
+
 SECTIONS: list[tuple[str, list[BriefField]]] = [
-    ("Property Identity", [
-        BriefField("name",        "Property Name",   "Property Identity", "readonly", "name"),
-        BriefField("domain",      "Website",         "Property Identity", "readonly", "domain"),
-        BriefField("address",     "Address",         "Property Identity", "readonly", "address"),
-        BriefField("market",      "RPM Market",      "Property Identity", "readonly", "rpmmarket"),
+    # ─── Identity (read-only — core HubSpot company props) ────────────
+    ("Identity", [
+        BriefField("name",     "Name",     "Identity", "readonly", hs_resolved="name"),
+        BriefField("address",  "Address",  "Identity", "readonly", hs_resolved="address"),
+        BriefField("city",     "City",     "Identity", "readonly", hs_resolved="city"),
+        BriefField("state",    "State",    "Identity", "readonly", hs_resolved="state"),
+        BriefField("zip",      "Zip",      "Identity", "readonly", hs_resolved="zip"),
+        BriefField("domain",   "Domain",   "Identity", "readonly", hs_resolved="domain"),
     ]),
-    ("Voice & Tier", [
-        BriefField("voice_tier", "Voice Tier",       "Voice & Tier", "dropdown",
+
+    # ─── Voice & Positioning ──────────────────────────────────────────
+    ("Voice & Positioning", [
+        BriefField("voice_tier", "Voice Tier", "Voice & Positioning", "dropdown",
                    hs_resolved="fluency_voice_tier",
                    hs_override="fluency_voice_tier_override",
                    hint="How copy should feel for this property's price point.",
                    options=["value", "standard", "lifestyle", "luxury"]),
-        BriefField("lifecycle_state", "Lifecycle State", "Voice & Tier", "dropdown",
-                   hs_resolved="fluency_lifecycle_state",
-                   hs_override="fluency_lifecycle_state_override",
-                   hint="Where the property is in its leasing arc.",
-                   options=["pre_lease", "lease_up", "stabilized", "renovated"]),
-        BriefField("unit_noun", "Unit Type",        "Voice & Tier", "dropdown",
+        BriefField("unit_noun", "Unit Noun", "Voice & Positioning", "dropdown",
                    hs_resolved="fluency_unit_noun",
                    hs_override="fluency_unit_noun_override",
                    hint="What we call a unit in copy.",
                    options=["apartments", "homes", "residences", "lofts", "studios", "townhomes"]),
+        BriefField("advertised_name", "Advertised Name", "Voice & Positioning", "text",
+                   hs_override="fluency_advertised_name_override",
+                   hint="The full name used in headlines."),
+        BriefField("short_name", "Short Name", "Voice & Positioning", "text",
+                   hs_override="fluency_short_name_override",
+                   hint="The shortened name used in tight UI / social copy."),
     ]),
-    ("Place — locations to mention", [
-        BriefField("neighborhood", "Neighborhood",  "Place — locations to mention", "text",
-                   hs_resolved="fluency_neighborhood",
-                   hs_override="fluency_neighborhood_override",
-                   hint="The official-feeling name (e.g., 'South Congress', not 'Austin')."),
-        BriefField("nearby_neighborhoods", "Nearby neighborhoods worth name-dropping",
-                   "Place — locations to mention", "textarea",
-                   hs_resolved="",  # no resolved field today; show override only
-                   hs_override="fluency_nearby_neighborhoods_override",
-                   hint="One per line."),
-        BriefField("landmarks", "Landmarks",        "Place — locations to mention", "textarea",
-                   hs_resolved="fluency_landmarks",
-                   hs_override="fluency_landmarks_override",
-                   hint="Specific places / institutions / parks. One per line."),
-        BriefField("nearby_employers", "Nearby employers",
-                   "Place — locations to mention", "textarea",
-                   hs_resolved="fluency_nearby_employers",
-                   hs_override="fluency_nearby_employers_override",
-                   hint="Anchor employers that drive renter demand. One per line."),
+
+    # ─── Lifecycle ─────────────────────────────────────────────────────
+    ("Lifecycle", [
+        BriefField("lifecycle_state", "Lifecycle State", "Lifecycle", "dropdown",
+                   hs_resolved="fluency_lifecycle_state",
+                   hs_override="fluency_lifecycle_state_override",
+                   options=["pre_lease", "lease_up", "stabilized", "renovated"]),
+        BriefField("year_built", "Year Built", "Lifecycle", "readonly",
+                   hs_resolved="fluency_year_built",
+                   hint="From Apt IQ."),
+        BriefField("year_renovated", "Year Renovated", "Lifecycle", "readonly",
+                   hs_resolved="fluency_year_renovated",
+                   hint="From Apt IQ."),
     ]),
-    ("What to say — amenities & differentiators", [
-        BriefField("amenities", "Amenities (canonical)", "What to say — amenities & differentiators", "textarea",
+
+    # ─── Inventory ─────────────────────────────────────────────────────
+    ("Inventory", [
+        BriefField("floor_plans", "Floor Plans", "Inventory", "readonly",
+                   hs_resolved="fluency_floor_plans",
+                   hint="Pulled from Apt IQ. Pending until your property is onboarded."),
+    ]),
+
+    # ─── Amenities ─────────────────────────────────────────────────────
+    ("Amenities", [
+        BriefField("amenities", "Amenities", "Amenities", "textarea",
                    hs_resolved="fluency_amenities",
                    hs_override="fluency_amenities_override",
                    hint="Normalized list — used for Fluency tag matching. One per line."),
-        BriefField("marketed_amenity_names", "Marketed amenity names",
-                   "What to say — amenities & differentiators", "textarea",
+        BriefField("marketed_amenity_names", "Marketed Amenity Names",
+                   "Amenities", "textarea",
                    hs_resolved="fluency_marketed_amenity_names",
                    hs_override="fluency_marketed_amenity_names_override",
                    hint="Property-specific names from the marketing site. One per line."),
-        BriefField("amenities_descriptions", "Amenity descriptions",
-                   "What to say — amenities & differentiators", "textarea",
+        BriefField("amenities_descriptions", "Amenity Descriptions",
+                   "Amenities", "textarea",
                    hs_resolved="fluency_amenities_descriptions",
                    hs_override="fluency_amenities_descriptions_override",
                    hint="Short prose Fluency can pull from. Optional."),
     ]),
-    ("Voice guardrails", [
-        BriefField("must_include", "Must include / key messages",
-                   "Voice guardrails", "textarea",
+
+    # ─── Geography ─────────────────────────────────────────────────────
+    ("Geography", [
+        BriefField("neighborhood", "Neighborhood", "Geography", "text",
+                   hs_resolved="fluency_neighborhood",
+                   hs_override="fluency_neighborhood_override",
+                   hint="The official-feeling name (e.g., 'South Congress', not 'Austin')."),
+        BriefField("nearby_neighborhoods", "Nearby Neighborhoods",
+                   "Geography", "textarea",
+                   hs_override="fluency_nearby_neighborhoods_override",
+                   hint="Worth name-dropping in copy. One per line."),
+        BriefField("landmarks", "Landmarks", "Geography", "textarea",
+                   hs_resolved="fluency_landmarks",
+                   hs_override="fluency_landmarks_override",
+                   hint="Specific places / institutions / parks. One per line."),
+        BriefField("nearby_employers", "Nearby Employers",
+                   "Geography", "textarea",
+                   hs_resolved="fluency_nearby_employers",
+                   hs_override="fluency_nearby_employers_override",
+                   hint="Anchor employers that drive renter demand. One per line."),
+    ]),
+
+    # ─── Competitors ───────────────────────────────────────────────────
+    ("Competitors", [
+        BriefField("competitors", "Competitors", "Competitors", "textarea",
+                   hs_resolved="fluency_competitors",
+                   hs_override="fluency_competitors_override",
+                   hint="Same-market rent peers. One per line."),
+    ]),
+
+    # ─── Guardrails ────────────────────────────────────────────────────
+    ("Guardrails", [
+        BriefField("must_include", "Must Include / Key Messages",
+                   "Guardrails", "textarea",
                    hs_resolved="fluency_must_include",
                    hs_override="fluency_must_include_override",
                    hint="Phrases / themes copy MUST work in. One per line."),
-        BriefField("forbidden_phrases", "Things NOT to say",
-                   "Voice guardrails", "textarea",
+        BriefField("forbidden_phrases", "Things NOT to Say",
+                   "Guardrails", "textarea",
                    hs_resolved="fluency_forbidden_phrases",
                    hs_override="fluency_forbidden_phrases_override",
                    hint="Phrases / topics to avoid. One per line. Anything sensitive (litigation, PR risk, fair housing) goes here."),
-    ]),
-    ("Floor plans & pricing", [
-        BriefField("floor_plans", "Floor plans",   "Floor plans & pricing", "readonly",
-                   hs_resolved="fluency_floor_plans",
-                   hint="Pulled from Apt IQ. Pending until your property is onboarded there."),
-        BriefField("year_built", "Year built",    "Floor plans & pricing", "readonly",
-                   hs_resolved="fluency_year_built"),
-        BriefField("year_renovated", "Year renovated","Floor plans & pricing", "readonly",
-                   hs_resolved="fluency_year_renovated"),
-    ]),
-    ("Competitive set", [
-        BriefField("competitors", "Competitors",  "Competitive set", "textarea",
-                   hs_resolved="fluency_competitors",
-                   hs_override="fluency_competitors_override",
-                   hint="One per line. Auto-suggestions from same-market rent peers will populate when Apt IQ data lands."),
+        BriefField("motivations_considerations", "Primary Motivations & Considerations",
+                   "Guardrails", "textarea",
+                   hs_override="fluency_must_include_override",  # piggyback on must_include for now
+                   hint="WHAT motivates renters at this property — lifestyle, amenities, commute, walkability. "
+                        "Fair Housing safe: focus on needs/preferences, NOT demographics (no age, family status, race, religion, national origin, disability, or schools)."),
     ]),
 ]
 
 
-# Flat lookup: key -> BriefField
 FIELDS: dict[str, BriefField] = {
     f.key: f for _, rows in SECTIONS for f in rows
 }
+
+
+# Topics that are fair-housing risk if mentioned in audience targeting.
+# Used by the LLM prompt to avoid generating non-compliant copy AND to
+# flag any forbidden-phrases overrides that might mistakenly include
+# protected-class references (caller can lint).
+FAIR_HOUSING_PROTECTED_TOPICS = (
+    "age", "race", "color", "ethnicity", "religion", "national origin",
+    "family status", "children", "kids", "families", "no kids",
+    "disability", "wheelchair", "adult community", "adults only",
+    "schools", "school district",
+)
 
 
 # ── HubSpot helpers ────────────────────────────────────────────────────────
@@ -178,7 +218,10 @@ def _headers() -> dict:
 
 def _all_property_names() -> list[str]:
     """Every HubSpot property the page reads from in one batch."""
-    out: set[str] = set(["name", "domain", "address", "rpmmarket"])
+    out: set[str] = set([
+        "name", "domain", "address", "city", "state", "zip", "phone",
+        "rpmmarket",
+    ])
     for f in FIELDS.values():
         if f.hs_resolved:
             out.add(f.hs_resolved)
@@ -188,11 +231,7 @@ def _all_property_names() -> list[str]:
 
 
 def load_company_state(company_id: str) -> dict[str, Any]:
-    """Read every property the brief page needs in one round-trip.
-
-    Returns the raw HubSpot company `properties` dict. Empty dict on
-    error so callers can render a partial page rather than crashing.
-    """
+    """Read every property the brief page needs in one round-trip."""
     if not company_id or not _api_key():
         return {}
     try:
@@ -212,79 +251,90 @@ def load_company_state(company_id: str) -> dict[str, Any]:
         return {}
 
 
-def effective_value(field: BriefField, company_props: dict) -> str:
-    """Override beats resolved. Empty string when neither is set."""
-    if field.hs_override:
-        v = company_props.get(field.hs_override)
-        if v not in (None, ""):
-            return str(v)
-    if field.hs_resolved:
-        v = company_props.get(field.hs_resolved)
-        if v not in (None, ""):
-            return str(v)
-    return ""
+# ── Render context ─────────────────────────────────────────────────────────
+
+
+def _split_for_pills(value: str) -> list[str]:
+    """Break a multi-line / comma-separated value into pill items."""
+    if not value:
+        return []
+    s = str(value)
+    if "\n" in s:
+        items = [x.strip() for x in s.split("\n")]
+    elif "," in s and ";" not in s:
+        items = [x.strip() for x in s.split(",")]
+    else:
+        items = [x.strip() for x in s.split(";")]
+    return [x for x in items if x]
 
 
 def build_render_context(company_props: dict) -> list[dict]:
     """Shape data for the page template.
 
-    Returns a list of section dicts, each with rows[]. Each row carries
-    enough state for the template to render value + edit affordances:
+    Each section yields a list of "rows". A row is one of:
 
-      {
-        section: "Place — locations to mention",
-        rows: [
-          {key, label, type, hint, value, has_override, editable, source}
-        ]
-      }
+      - kind="pipeline":  value sourced from auto-derivation / Apt IQ /
+                          URL scrape. Read-only on this page.
+      - kind="override":  the human override field. Editable.
+
+    For fields that have BOTH a resolved AND an override, we emit two
+    rows back-to-back so the reviewer sees the auto-derived value (or
+    "Pipeline pending") next to their override (or "Override pending").
+    For read-only fields we emit just the pipeline row.
     """
     out = []
-    for section_label, rows in SECTIONS:
-        rendered_rows = []
-        for f in rows:
-            override_set = bool(f.hs_override and company_props.get(f.hs_override))
-            resolved_set = bool(f.hs_resolved and company_props.get(f.hs_resolved))
-            value = effective_value(f, company_props)
-            # Floor plans / year-built come from Apt IQ. When they're
-            # blank, label them "Pending" instead of an empty box.
-            pending = (f.type == "readonly" and not value)
-            rendered_rows.append({
-                "key":          f.key,
-                "label":        f.label,
-                "type":         f.type,
-                "hint":         f.hint,
-                "value":        value,
-                "options":      f.options,
-                "has_override": override_set,
-                "editable":     bool(f.hs_override),
-                "source":       _source_label(f, override_set, resolved_set, value),
-                "pending":      pending,
-            })
-        out.append({"section": section_label, "rows": rendered_rows})
+    seen_keys = set()  # avoid double-rendering when two BriefFields share an override
+    for section_label, fields in SECTIONS:
+        rows = []
+        for f in fields:
+            # PIPELINE row (auto-derived). Always shown when there's a
+            # resolved property; for editable-only fields (e.g., advertised
+            # name), skip the pipeline row.
+            if f.hs_resolved:
+                pipe_value = company_props.get(f.hs_resolved) or ""
+                rows.append({
+                    "kind":     "pipeline",
+                    "key":      f.key + "__pipeline",
+                    "label":    f.label,
+                    "type":     f.type,
+                    "hint":     f.hint,
+                    "value":    str(pipe_value) if pipe_value not in (None, "") else "",
+                    "pills":    _split_for_pills(pipe_value),
+                    "options":  f.options,
+                    "editable": False,
+                    "badge":    "PIPELINE" if pipe_value else "PIPELINE PENDING",
+                    "badge_kind": "pipeline" if pipe_value else "pending",
+                })
+
+            # OVERRIDE row (editable). Only when an override property exists.
+            if f.hs_override and f.key not in seen_keys:
+                seen_keys.add(f.key)
+                ov_value = company_props.get(f.hs_override) or ""
+                # If pipeline row was suppressed (no hs_resolved), the
+                # override label stands alone. Otherwise prefix " (Override)".
+                label = f.label if not f.hs_resolved else f"{f.label} (Override)"
+                rows.append({
+                    "kind":     "override",
+                    "key":      f.key,
+                    "label":    label,
+                    "type":     f.type,
+                    "hint":     f.hint if not f.hs_resolved else "",
+                    "value":    str(ov_value) if ov_value not in (None, "") else "",
+                    "pills":    _split_for_pills(ov_value),
+                    "options":  f.options,
+                    "editable": True,
+                    "badge":    "OVERRIDE" if ov_value else "OVERRIDE PENDING",
+                    "badge_kind": "override" if ov_value else "pending",
+                })
+        out.append({"section": section_label, "rows": rows})
     return out
-
-
-def _source_label(field: BriefField, has_override: bool, has_resolved: bool, value: str) -> str:
-    if has_override:
-        return "Edited"
-    if not value:
-        return "Pending" if field.type == "readonly" else "Not set"
-    if "fluency_floor_plans" in (field.hs_resolved or "") or "fluency_year" in (field.hs_resolved or ""):
-        return "From Apt IQ"
-    if field.hs_resolved:
-        return "Auto-derived"
-    return ""
 
 
 # ── Write path ─────────────────────────────────────────────────────────────
 
 
 def write_field(company_id: str, field_key: str, value: str) -> tuple[bool, str]:
-    """PATCH the override property for a single field.
-
-    Returns (ok, message). On success, message is the new effective
-    value; on failure, message is a short error string for the UI.
-    """
+    """PATCH the override property for a single field."""
     if not company_id:
         return False, "missing company id"
     field = FIELDS.get(field_key)
@@ -315,13 +365,82 @@ def write_field(company_id: str, field_key: str, value: str) -> tuple[bool, str]
 # ── On-demand prose preview ────────────────────────────────────────────────
 
 
-def generate_prose_preview(company_props: dict, property_name: str) -> str:
-    """LLM-generated narrative summary built from the current structured fields.
+def _effective(field: BriefField, props: dict) -> str:
+    """Override > resolved > empty."""
+    if field.hs_override:
+        v = props.get(field.hs_override)
+        if v not in (None, ""):
+            return str(v)
+    if field.hs_resolved:
+        v = props.get(field.hs_resolved)
+        if v not in (None, ""):
+            return str(v)
+    return ""
 
-    On-demand only — not stored. Reviewer hits "Preview as document"
-    when they want to see the brief as a shareable narrative. Always
-    reflects the latest field values because we read them fresh.
+
+def generate_summary(company_props: dict, property_name: str) -> str:
+    """2-3 sentence executive summary of the community.
+
+    Rendered at the top of the brief. Always Fair Housing safe — the
+    prompt explicitly forbids demographic targeting language.
     """
+    return _llm_call(
+        company_props=company_props,
+        property_name=property_name,
+        system=(
+            "You are summarizing a multifamily property in 2-3 sentences for a "
+            "property marketing brief.\n\n"
+            "Cover: what the property is (luxury/standard/value tier + unit type), "
+            "where it's positioned (neighborhood + key proximity), what makes it "
+            "distinctive (top amenities or differentiators).\n\n"
+            "FAIR HOUSING — STRICT. Do not reference age, family status (children, "
+            "families, no kids, adult community), race, ethnicity, religion, national "
+            "origin, disability, schools, or school districts. Focus on lifestyle, "
+            "amenities, location, and price tier.\n\n"
+            "Ground every claim in the facts. If facts are thin, write a shorter "
+            "summary rather than inventing detail."
+        ),
+        max_tokens=400,
+    )
+
+
+def generate_prose_preview(company_props: dict, property_name: str) -> str:
+    """Long-form narrative preview built from the current structured fields.
+
+    Sections:
+      1. Property Overview (identity + place + voice tier)
+      2. Voice + Tier guidance
+      3. What to say (amenities + differentiators)
+      4. Guardrails (must include + things NOT to say)
+
+    Channel Strategy + Success Metrics are NOT included — those are
+    commercial / measurement concerns that don't belong in a community
+    qualitative brief.
+    """
+    return _llm_call(
+        company_props=company_props,
+        property_name=property_name,
+        system=(
+            "You are summarizing a multifamily property's marketing brief as a "
+            "one-page narrative. Write 4 short paragraphs:\n"
+            "  1. Property Overview — identity + place + voice tier\n"
+            "  2. Voice + Tier guidance — how copy should feel\n"
+            "  3. What to say — top amenities, marketed names, differentiators\n"
+            "  4. Guardrails — must-include themes and things NOT to say\n\n"
+            "FAIR HOUSING — STRICT. Do not reference age, family status (children, "
+            "families, no kids, adult community), race, ethnicity, religion, national "
+            "origin, disability, schools, or school districts. Audience framing must "
+            "stay psychographic (lifestyle, needs, amenity preferences, commute).\n\n"
+            "Ground every claim in the facts below. If a section's facts are empty, "
+            "skip it rather than inventing copy."
+        ),
+        max_tokens=1500,
+    )
+
+
+def _llm_call(*, company_props: dict, property_name: str,
+              system: str, max_tokens: int) -> str:
+    """Shared LLM invocation for both summary and full prose preview."""
     try:
         import anthropic
         from config import ANTHROPIC_API_KEY, CLAUDE_AGENT_MODEL
@@ -330,12 +449,11 @@ def generate_prose_preview(company_props: dict, property_name: str) -> str:
     if not ANTHROPIC_API_KEY:
         return "Preview unavailable: ANTHROPIC_API_KEY not set."
 
-    # Render the current effective values as a structured prompt input.
     facts = []
-    for section_label, rows in SECTIONS:
+    for section_label, fields in SECTIONS:
         section_lines = []
-        for f in rows:
-            v = effective_value(f, company_props)
+        for f in fields:
+            v = _effective(f, company_props)
             if v:
                 section_lines.append(f"  - {f.label}: {v}")
         if section_lines:
@@ -345,29 +463,17 @@ def generate_prose_preview(company_props: dict, property_name: str) -> str:
     if not facts:
         return "Not enough field data to draft a preview yet."
 
-    system = (
-        "You are summarizing a property's marketing brief as a one-page narrative. "
-        "Write 4-6 short paragraphs:\n"
-        "  1. Property overview (identity + place)\n"
-        "  2. Voice + tier guidance\n"
-        "  3. What to say (amenities + differentiators)\n"
-        "  4. Guardrails (must include + things NOT to say)\n"
-        "  5. Competitive context\n"
-        "Ground every claim in the facts below. If a section's facts are empty, "
-        "skip it rather than inventing copy."
-    )
-
     user_input = f"PROPERTY: {property_name}\n\n" + "\n".join(facts)
 
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         message = client.messages.create(
             model=CLAUDE_AGENT_MODEL,
-            max_tokens=1500,
+            max_tokens=max_tokens,
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": [{"type": "text", "text": user_input}]}],
         )
         return next((b.text for b in message.content if b.type == "text"), "").strip()
     except Exception as e:
-        logger.warning("generate_prose_preview failed: %s", e)
+        logger.warning("LLM call failed: %s", e)
         return f"Preview generation failed: {e}"

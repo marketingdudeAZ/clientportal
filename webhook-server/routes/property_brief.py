@@ -236,84 +236,121 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RPM Community Brief — Review</title>
+  <title>RPM Community Brief — {{ property_name or "Review" }}</title>
   <style>
     :root {
-      --ink: #1a1f2c;
-      --muted: #5f6776;
-      --line: #e3e6ec;
-      --bg: #f6f7fa;
-      --accent: #1a6b1a;
-      --accent-warm: #b07000;
-      --pill-edited: #e6f0ff;
-      --pill-edited-ink: #1d4faa;
-      --pill-pending: #f6efe1;
-      --pill-pending-ink: #8a6312;
-      --pill-auto: #eef2f7;
-      --pill-auto-ink: #4a5567;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --accent: #2563eb;
+      --accent-deep: #1d4ed8;
+      --green: #16803d;
+      --warn: #b07000;
+      --pill-pipe-bg: #eef2ff;
+      --pill-pipe-ink: #3730a3;
+      --pill-over-bg: #ecfeff;
+      --pill-over-ink: #155e75;
+      --pill-pending-bg: #f3f4f6;
+      --pill-pending-ink: #6b7280;
+      --pill-tag-bg: #f0fdfa;
+      --pill-tag-ink: #115e59;
     }
     * { box-sizing: border-box; }
-    body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-           max-width: 880px; margin: 0 auto; padding: 2rem 1.25rem 6rem;
-           color: var(--ink); background: white; }
-    header h1 { font-size: 1.6rem; margin: 0 0 .15rem; }
-    header .lede { color: var(--muted); font-size: .95rem; }
-    header .meta { color: var(--muted); font-size: .85rem; margin-top: .35rem; }
-    section { margin-top: 2rem; border: 1px solid var(--line); border-radius: 10px;
-              background: white; overflow: hidden; }
-    section h2 { font-size: 1.05rem; margin: 0; padding: .85rem 1.1rem;
-                 background: var(--bg); border-bottom: 1px solid var(--line); }
-    .row { display: grid; grid-template-columns: 200px 1fr auto;
-           gap: 1rem; align-items: start;
-           padding: .8rem 1.1rem; border-bottom: 1px solid var(--line); }
+    body { font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+           margin: 0; padding: 2rem 1.25rem 7rem; color: var(--ink); background: var(--bg); }
+    .wrap { max-width: 1080px; margin: 0 auto; }
+    header h1 { font-size: 1.65rem; margin: 0 0 .25rem; letter-spacing: -0.01em; }
+    header .lede { color: var(--muted); font-size: .95rem; max-width: 640px; }
+    header .meta { color: var(--muted); font-size: .82rem; margin-top: .4rem; }
+
+    .summary-card { background: var(--card); border: 1px solid var(--line);
+                    border-radius: 12px; padding: 1.1rem 1.25rem; margin-top: 1.5rem;
+                    box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+    .summary-card .summary-head { display: flex; justify-content: space-between; align-items: center;
+                                  margin-bottom: .55rem; }
+    .summary-card h3 { font-size: .78rem; letter-spacing: .08em; text-transform: uppercase;
+                       color: var(--muted); margin: 0; font-weight: 700; }
+    .summary-card .summary-body { font-size: 1rem; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
+    .summary-card .summary-body.loading { color: var(--muted); font-style: italic; }
+    .summary-card .btn { padding: .35rem .7rem; font-size: .78rem; }
+
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            margin-top: 1rem; overflow: hidden;
+            box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+    .card .card-head { padding: .75rem 1.25rem; border-bottom: 1px solid var(--line);
+                       background: var(--card); }
+    .card .card-head h2 { font-size: .78rem; letter-spacing: .08em; text-transform: uppercase;
+                          margin: 0; color: var(--ink); font-weight: 700; }
+
+    .row { display: grid; grid-template-columns: 200px 1fr 130px;
+           gap: 1.25rem; align-items: start;
+           padding: .9rem 1.25rem; border-bottom: 1px solid var(--line); }
     .row:last-child { border-bottom: 0; }
-    .row .label { font-weight: 600; color: var(--ink); }
-    .row .label .hint { display:block; font-weight: 400; color: var(--muted);
-                        font-size: .8rem; margin-top: .15rem; line-height: 1.35; }
-    .row .value { white-space: pre-wrap; word-break: break-word; min-height: 1.4em;
-                  color: var(--ink); padding: .15rem 0; }
+    .row .label { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase;
+                  color: var(--muted); font-weight: 700; padding-top: .15rem; }
+    .row .label .hint { display: block; font-weight: 500; color: var(--muted);
+                        font-size: .7rem; letter-spacing: 0; text-transform: none;
+                        margin-top: .35rem; line-height: 1.45; }
+    .row .value { color: var(--ink); white-space: pre-wrap; word-break: break-word; min-height: 1.45em; }
     .row .value.empty { color: var(--muted); font-style: italic; }
-    .row .src { display: inline-block; font-size: .7rem; padding: .15rem .55rem;
-                border-radius: 999px; white-space: nowrap; }
-    .src-edited { background: var(--pill-edited); color: var(--pill-edited-ink); }
-    .src-pending { background: var(--pill-pending); color: var(--pill-pending-ink); }
-    .src-auto { background: var(--pill-auto); color: var(--pill-auto-ink); }
-    .src-notset { background: var(--pill-auto); color: var(--pill-auto-ink); }
-    .editable .value { cursor: pointer; }
-    .editable .value:hover { background: #fafbfd; }
-    .edit-input { width: 100%; padding: .45rem .55rem; font: inherit;
-                  border: 1px solid #c2c8d0; border-radius: 6px; }
-    textarea.edit-input { min-height: 6em; }
-    .row.editing .value { display: none; }
-    .row.editing .src { display: none; }
-    .edit-form { display: none; flex-direction: column; gap: .45rem; width: 100%; grid-column: 2; }
+    .row .badge-cell { text-align: right; }
+    .badge { display: inline-block; font-size: .65rem; letter-spacing: .08em;
+             text-transform: uppercase; font-weight: 600;
+             padding: .25rem .55rem; border-radius: 999px; white-space: nowrap; }
+    .badge-pipeline { background: var(--pill-pipe-bg); color: var(--pill-pipe-ink); }
+    .badge-override { background: var(--pill-over-bg); color: var(--pill-over-ink); }
+    .badge-pending  { background: var(--pill-pending-bg); color: var(--pill-pending-ink); }
+
+    .pills { display: flex; flex-wrap: wrap; gap: .35rem .4rem; }
+    .pill { display: inline-block; padding: .2rem .65rem; font-size: .82rem;
+            border-radius: 999px; background: var(--pill-tag-bg);
+            color: var(--pill-tag-ink); white-space: nowrap; }
+
+    .row.editable .value { cursor: pointer; border-bottom: 1px dashed transparent;
+                           transition: border-color .15s; }
+    .row.editable .value:hover { border-bottom-color: var(--accent); }
+    .row.editing .value, .row.editing .badge-cell { display: none; }
+    .edit-form { display: none; flex-direction: column; gap: .45rem;
+                 grid-column: 2 / span 2; }
     .row.editing .edit-form { display: flex; }
+    .edit-input { width: 100%; padding: .5rem .65rem; font: inherit;
+                  border: 1px solid #cbd5e1; border-radius: 6px;
+                  background: #fff; color: var(--ink); }
+    textarea.edit-input { min-height: 6em; resize: vertical; }
     .edit-actions { display: flex; gap: .5rem; }
-    .btn { padding: .45rem .9rem; font-size: .9rem; font-weight: 500;
-           border: 1px solid var(--line); background: white; border-radius: 6px;
-           cursor: pointer; color: var(--ink); }
+    .btn { padding: .45rem .9rem; font-size: .85rem; font-weight: 500;
+           border: 1px solid var(--line); background: var(--card);
+           border-radius: 6px; cursor: pointer; color: var(--ink); }
+    .btn:hover { background: #fafbfd; }
     .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
-    .btn-warn { background: var(--accent-warm); color: white; border-color: var(--accent-warm); }
+    .btn-primary:hover { background: var(--accent-deep); }
     .save-pulse { animation: savep 1.4s ease-out; }
-    @keyframes savep { 0% { background: #e7f5e8; } 100% { background: white; } }
+    @keyframes savep { 0% { background: #ecfdf5; } 100% { background: var(--card); } }
     .footer-bar { position: fixed; left: 0; right: 0; bottom: 0;
-                  background: white; border-top: 1px solid var(--line);
-                  padding: .85rem 1.25rem; display: flex; gap: .9rem;
-                  align-items: center; justify-content: space-between; }
-    .footer-bar .syncline { color: var(--muted); font-size: .82rem; }
+                  background: var(--card); border-top: 1px solid var(--line);
+                  padding: .9rem 1.5rem; display: flex; gap: .9rem;
+                  align-items: center; justify-content: space-between;
+                  box-shadow: 0 -2px 10px rgba(15,23,42,.05); }
+    .footer-bar .syncline { color: var(--muted); font-size: .82rem; max-width: 600px; }
     .footer-bar .actions { display: flex; gap: .55rem; }
-    .err { color: #b00020; padding: 1rem; border: 1px solid #b00020; border-radius: 8px; }
-    .ok  { color: var(--accent); padding: 1rem; border: 1px solid var(--accent); border-radius: 8px; }
-    .preview-pane { background: var(--bg); border: 1px solid var(--line);
-                    border-radius: 8px; padding: 1rem 1.1rem; margin-top: 1rem;
-                    white-space: pre-wrap; font-size: .94rem; max-height: 22rem; overflow: auto; }
-    @media (max-width: 700px) {
+    .err { color: #b00020; padding: 1rem; border: 1px solid #b00020; border-radius: 8px; background: #fff; }
+    .ok  { color: var(--green); padding: 1rem; border: 1px solid var(--green); border-radius: 8px; background: #fff; }
+    .preview-pane { background: var(--card); border: 1px solid var(--line);
+                    border-radius: 12px; padding: 1.1rem 1.25rem; margin-top: 1rem;
+                    white-space: pre-wrap; font-size: .95rem; line-height: 1.55;
+                    max-height: 28rem; overflow: auto;
+                    box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+    @media (max-width: 740px) {
       .row { grid-template-columns: 1fr; }
-      .row .src { justify-self: start; }
+      .row .badge-cell { text-align: left; }
+      .edit-form { grid-column: 1; }
     }
   </style>
 </head>
 <body>
+<div class="wrap">
 {% if error %}
   <header><h1>This link is no longer valid</h1></header>
   <div class="err">{{ error }}</div>
@@ -323,16 +360,24 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
   <div class="ok">Edits sync to Fluency on the next daily run (6 AM Central).</div>
 {% else %}
   <header>
-    <h1>Community Brief — {{ property_name or "Property" }}</h1>
+    <h1>{{ property_name or "Community Brief" }}</h1>
     <div class="lede">Confirm what's right, edit what isn't. Each save updates HubSpot — Fluency picks it up at the next daily sync.</div>
     {% if last_reviewed_iso %}
       <div class="meta">Last reviewed clean: {{ last_reviewed_iso }}</div>
     {% endif %}
   </header>
 
+  <div class="summary-card">
+    <div class="summary-head">
+      <h3>Summary</h3>
+      <button class="btn" onclick="loadSummary(true)">Refresh</button>
+    </div>
+    <div id="summary-body" class="summary-body loading">Generating summary from your brief data…</div>
+  </div>
+
   {% for sec in sections %}
-  <section data-section="{{ sec.section }}">
-    <h2>{{ sec.section }}</h2>
+  <div class="card" data-section="{{ sec.section }}">
+    <div class="card-head"><h2>{{ sec.section }}</h2></div>
     {% for r in sec.rows %}
       <div class="row {% if r.editable %}editable{% endif %}" data-key="{{ r.key }}" data-type="{{ r.type }}">
         <div class="label">
@@ -341,31 +386,33 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
         </div>
         <div class="value {% if not r.value %}empty{% endif %}"
              data-value="{{ r.value }}"
-             onclick="{% if r.editable %}startEdit(this){% endif %}">{{ r.value if r.value else (r.pending and "Pending — fills in once Apt IQ data lands" or "Not set — click to add") }}</div>
-        <div>
-          {% if r.has_override %}
-            <span class="src src-edited">Edited</span>
-          {% elif r.pending %}
-            <span class="src src-pending">Pending</span>
-          {% elif not r.value %}
-            <span class="src src-notset">Not set</span>
+             onclick="{% if r.editable %}startEdit(this){% endif %}">
+          {% if r.pills and r.pills|length > 1 %}
+            <div class="pills">
+              {% for p in r.pills %}<span class="pill">{{ p }}</span>{% endfor %}
+            </div>
+          {% elif r.value %}
+            {{ r.value }}
           {% else %}
-            <span class="src src-auto">{{ r.source or "Auto" }}</span>
+            Not yet computed
           {% endif %}
+        </div>
+        <div class="badge-cell">
+          <span class="badge badge-{{ r.badge_kind }}">{{ r.badge }}</span>
         </div>
         {% if r.editable %}
           <div class="edit-form">
             {% if r.type == 'dropdown' %}
-              <select class="edit-input" data-key="{{ r.key }}">
+              <select class="edit-input">
                 <option value="">— not set —</option>
                 {% for opt in r.options %}
                   <option value="{{ opt }}" {% if opt == r.value %}selected{% endif %}>{{ opt }}</option>
                 {% endfor %}
               </select>
             {% elif r.type == 'textarea' %}
-              <textarea class="edit-input" data-key="{{ r.key }}">{{ r.value }}</textarea>
+              <textarea class="edit-input" placeholder="One per line">{{ r.value }}</textarea>
             {% else %}
-              <input type="text" class="edit-input" data-key="{{ r.key }}" value="{{ r.value }}">
+              <input type="text" class="edit-input" value="{{ r.value }}">
             {% endif %}
             <div class="edit-actions">
               <button type="button" class="btn btn-primary" onclick="saveEdit(this)">Save</button>
@@ -375,7 +422,7 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
         {% endif %}
       </div>
     {% endfor %}
-  </section>
+  </div>
   {% endfor %}
 
   <div id="preview-area"></div>
@@ -388,9 +435,28 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
     </div>
   </div>
 {% endif %}
+</div>
 
 <script>
 const TOKEN = {{ token | tojson }};
+
+async function loadSummary(forceRefresh) {
+  const el = document.getElementById('summary-body');
+  if (!el) return;
+  el.classList.add('loading');
+  el.textContent = 'Generating summary from your brief data…';
+  try {
+    const r = await fetch(`/api/community-brief/${TOKEN}/summary` +
+                          (forceRefresh ? '?refresh=1' : ''),
+                          {method: 'POST'});
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
+    el.classList.remove('loading');
+    el.textContent = d.summary || 'No summary available yet.';
+  } catch (e) {
+    el.textContent = 'Summary unavailable right now: ' + e.message;
+  }
+}
 
 function startEdit(valueEl) {
   const row = valueEl.closest('.row');
@@ -416,14 +482,23 @@ async function saveEdit(btn) {
     });
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
-    // Update the row UI in place.
+    // Re-render the value cell with pills if there are multiple lines.
     const valueEl = row.querySelector('.value');
-    valueEl.textContent = value || 'Not set — click to add';
+    const pieces = (value || '').split(/\\r?\\n|,/).map(s=>s.trim()).filter(Boolean);
+    if (pieces.length > 1) {
+      valueEl.innerHTML = '<div class="pills">' +
+        pieces.map(p => '<span class="pill">' + p.replace(/</g,'&lt;') + '</span>').join('') +
+        '</div>';
+    } else {
+      valueEl.textContent = value || 'Not yet computed';
+    }
     valueEl.classList.toggle('empty', !value);
     valueEl.setAttribute('data-value', value);
-    const src = row.querySelector('.src');
-    if (src) { src.className = value ? 'src src-edited' : 'src src-notset';
-               src.textContent = value ? 'Edited' : 'Not set'; }
+    const badge = row.querySelector('.badge');
+    if (badge) {
+      badge.className = 'badge ' + (value ? 'badge-override' : 'badge-pending');
+      badge.textContent = value ? 'OVERRIDE' : 'OVERRIDE PENDING';
+    }
     row.classList.remove('editing');
     row.classList.add('save-pulse');
     setTimeout(() => row.classList.remove('save-pulse'), 1400);
@@ -456,6 +531,9 @@ async function markReviewed() {
     alert('Mark-reviewed failed: ' + e.message);
   }
 }
+
+// Auto-load the summary on page load.
+window.addEventListener('DOMContentLoaded', () => loadSummary(false));
 </script>
 </body>
 </html>
@@ -533,6 +611,10 @@ def preview_brief(token):
     """Render an LLM-narrative preview from the current structured fields.
 
     On-demand only — not persisted. Always reflects current values.
+    Sections covered: Property Overview, Voice + Tier, What to Say,
+    Guardrails. Channel Strategy + Success Metrics intentionally
+    excluded — those are commercial / measurement concerns that don't
+    belong in the qualitative community brief.
     """
     record = store.get(token)
     if not record:
@@ -542,6 +624,34 @@ def preview_brief(token):
         company_props, company_props.get("name", "")
     )
     return jsonify({"status": "ok", "prose": prose})
+
+
+@property_brief_bp.route("/api/community-brief/<token>/summary", methods=["POST"])
+def brief_summary(token):
+    """Return a 2-3 sentence executive summary for the brief header.
+
+    Cached on the brief record after first generation; pass ?refresh=1
+    to regenerate after edits land. Fair-Housing-safe by construction
+    (the prompt forbids demographic targeting language).
+    """
+    record = store.get(token)
+    if not record:
+        return jsonify({"error": "invalid token"}), 410
+    refresh = request.args.get("refresh") == "1"
+    cached = (record.get("summary_text") or "").strip()
+    if cached and not refresh:
+        return jsonify({"status": "ok", "summary": cached, "cached": True})
+
+    company_props = community_brief.load_company_state(record.get("company_id") or "")
+    summary = community_brief.generate_summary(
+        company_props, company_props.get("name", "")
+    )
+    record["summary_text"] = summary
+    try:
+        store._backend().put(record)  # noqa: SLF001
+    except Exception:
+        logger.exception("summary cache write failed for %s", token)
+    return jsonify({"status": "ok", "summary": summary, "cached": False})
 
 
 @property_brief_bp.route("/api/community-brief/<token>/approve", methods=["POST"])

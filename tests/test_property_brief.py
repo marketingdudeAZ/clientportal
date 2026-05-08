@@ -617,11 +617,16 @@ class TestApprovalPortalHTTP(unittest.TestCase):
                           return_value={"name": "Maple Court", "rpmmarket": "Austin"}):
             resp = self.client.get(f"/property-brief/approve/{rec['token']}")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b"Community Brief", resp.data)
         self.assertIn(b"Maple Court", resp.data)
-        self.assertIn(b"Voice &amp; Tier", resp.data)
+        # New section card titles (matching /accounts/property design)
+        self.assertIn(b"Voice &amp; Positioning", resp.data)
+        self.assertIn(b"Geography", resp.data)
+        self.assertIn(b"Guardrails", resp.data)
+        # Action buttons in footer
         self.assertIn(b"Looks good", resp.data)
         self.assertIn(b"Preview as document", resp.data)
+        # Top-of-page summary card
+        self.assertIn(b"Summary", resp.data)
 
     def test_get_unknown_token_returns_410(self):
         resp = self.client.get("/property-brief/approve/nope")
@@ -730,6 +735,32 @@ class TestCommunityBriefEndpoints(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 410)
 
+    def test_summary_endpoint_returns_summary_and_caches(self):
+        rec = store.create(
+            ticket_id="t", company_id="comp-1", deal_id="d",
+            submitter_email="s@x", rm_email="r@x", brief_markdown="",
+        )
+        import community_brief as cb
+        with mock.patch.object(cb, "load_company_state",
+                               return_value={"name": "Maple Court"}), \
+             mock.patch.object(cb, "generate_summary",
+                               return_value="Maple Court is a standard community in Austin.") as gen:
+            r1 = self.client.post(f"/api/community-brief/{rec['token']}/summary")
+            self.assertEqual(r1.status_code, 200)
+            d1 = r1.get_json()
+            self.assertEqual(d1["summary"], "Maple Court is a standard community in Austin.")
+            self.assertFalse(d1["cached"])
+            # Second call without ?refresh=1 returns cached value, no LLM regen.
+            r2 = self.client.post(f"/api/community-brief/{rec['token']}/summary")
+            d2 = r2.get_json()
+            self.assertTrue(d2["cached"])
+            self.assertEqual(gen.call_count, 1)
+            # ?refresh=1 forces a re-call.
+            r3 = self.client.post(f"/api/community-brief/{rec['token']}/summary?refresh=1")
+            d3 = r3.get_json()
+            self.assertFalse(d3["cached"])
+            self.assertEqual(gen.call_count, 2)
+
     def test_preview_endpoint_returns_prose(self):
         rec = store.create(
             ticket_id="t", company_id="comp-1", deal_id="d",
@@ -769,49 +800,76 @@ class TestCommunityBriefEndpoints(unittest.TestCase):
 # ── Community Brief: field map + helpers ──────────────────────────────────
 
 class TestCommunityBriefHelpers(unittest.TestCase):
-    """Pure-function unit tests for community_brief.py's render helpers."""
+    """Pure-function unit tests for community_brief.py's render helpers.
 
-    def test_field_map_includes_every_section(self):
+    Sections are the cards on the brief page and mirror the
+    /accounts/property dashboard layout. Each editable row renders as
+    a "pipeline" pseudo-row (auto-derived value, read-only) PLUS an
+    "override" row (human-set, editable) — the badge column shows
+    PIPELINE / PIPELINE PENDING / OVERRIDE / OVERRIDE PENDING.
+    """
+
+    def test_field_map_includes_every_canonical_section(self):
         import community_brief as cb
         section_names = [s for s, _ in cb.SECTIONS]
-        # Spot-check that the canonical sections are present.
-        for required in ("Property Identity", "Voice & Tier",
-                         "Place — locations to mention", "Voice guardrails"):
+        for required in ("Identity", "Voice & Positioning", "Lifecycle",
+                         "Inventory", "Amenities", "Geography",
+                         "Competitors", "Guardrails"):
             self.assertIn(required, section_names)
 
     def test_effective_value_prefers_override(self):
         import community_brief as cb
         f = cb.FIELDS["neighborhood"]
         props = {f.hs_resolved: "Downtown", f.hs_override: "South Congress"}
-        self.assertEqual(cb.effective_value(f, props), "South Congress")
+        self.assertEqual(cb._effective(f, props), "South Congress")
 
     def test_effective_value_falls_back_to_resolved(self):
         import community_brief as cb
         f = cb.FIELDS["neighborhood"]
-        props = {f.hs_resolved: "Downtown"}  # no override
-        self.assertEqual(cb.effective_value(f, props), "Downtown")
+        self.assertEqual(cb._effective(f, {f.hs_resolved: "Downtown"}), "Downtown")
 
     def test_effective_value_empty_when_neither_set(self):
         import community_brief as cb
-        f = cb.FIELDS["neighborhood"]
-        self.assertEqual(cb.effective_value(f, {}), "")
+        self.assertEqual(cb._effective(cb.FIELDS["neighborhood"], {}), "")
 
-    def test_render_context_marks_apt_iq_fields_pending_when_empty(self):
+    def test_render_context_marks_apt_iq_fields_pipeline_pending(self):
+        # Floor Plans is a read-only Apt IQ field. With no data, the
+        # row's badge should read "PIPELINE PENDING".
         import community_brief as cb
-        ctx = cb.build_render_context({})  # no data
-        floor_plans_section = next(s for s in ctx if s["section"] == "Floor plans & pricing")
-        floor_plans_row = next(r for r in floor_plans_section["rows"] if r["key"] == "floor_plans")
-        self.assertTrue(floor_plans_row["pending"])
+        ctx = cb.build_render_context({})
+        inventory = next(s for s in ctx if s["section"] == "Inventory")
+        floor_plans_row = next(r for r in inventory["rows"]
+                               if r["key"] == "floor_plans__pipeline")
+        self.assertEqual(floor_plans_row["badge"], "PIPELINE PENDING")
         self.assertFalse(floor_plans_row["editable"])
 
-    def test_render_context_marks_override_fields_edited(self):
+    def test_render_context_emits_override_badge_when_set(self):
+        # When the override property has a value, the override row
+        # should render with badge="OVERRIDE" (not "OVERRIDE PENDING").
         import community_brief as cb
         f = cb.FIELDS["neighborhood"]
         ctx = cb.build_render_context({f.hs_override: "South Congress"})
-        place_section = next(s for s in ctx if s["section"] == "Place — locations to mention")
-        nb_row = next(r for r in place_section["rows"] if r["key"] == "neighborhood")
-        self.assertTrue(nb_row["has_override"])
-        self.assertEqual(nb_row["value"], "South Congress")
+        geo = next(s for s in ctx if s["section"] == "Geography")
+        # The override row has key == "neighborhood" (no __pipeline suffix).
+        override_row = next(r for r in geo["rows"] if r["key"] == "neighborhood")
+        self.assertEqual(override_row["badge"], "OVERRIDE")
+        self.assertEqual(override_row["value"], "South Congress")
+        self.assertTrue(override_row["editable"])
+
+    def test_render_context_emits_pipeline_and_override_rows_for_editable_fields(self):
+        # An editable field with both resolved and override props should
+        # produce TWO rows — pipeline first, override second.
+        import community_brief as cb
+        ctx = cb.build_render_context({"fluency_neighborhood": "Downtown"})
+        geo = next(s for s in ctx if s["section"] == "Geography")
+        nb_rows = [r for r in geo["rows"] if r["key"].startswith("neighborhood")]
+        self.assertEqual(len(nb_rows), 2)
+        # Pipeline row first, then override row.
+        self.assertEqual(nb_rows[0]["kind"], "pipeline")
+        self.assertEqual(nb_rows[0]["value"], "Downtown")
+        self.assertEqual(nb_rows[0]["badge"], "PIPELINE")
+        self.assertEqual(nb_rows[1]["kind"], "override")
+        self.assertEqual(nb_rows[1]["badge"], "OVERRIDE PENDING")  # no override yet
 
 
 # ── 9. ClickUp webhook ────────────────────────────────────────────────────
