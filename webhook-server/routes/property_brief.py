@@ -286,9 +286,17 @@ def _verify_clickup_signature(raw: bytes, signature: str) -> bool:
         return True
     if not signature:
         return False
-    expected = hmac.new(CLICKUP_WEBHOOK_SECRET.encode(), raw, hashlib.sha256).hexdigest()
-    # ClickUp delivers the hex digest with no prefix.
-    return hmac.compare_digest(expected, signature)
+    # ClickUp generates a server-side secret per webhook — there's no API
+    # to set them all to the same value. Support a comma-separated list
+    # so multiple webhooks (one per list) can verify against the same
+    # env var. Whitespace around individual secrets is tolerated.
+    candidates = [s.strip() for s in CLICKUP_WEBHOOK_SECRET.split(",") if s.strip()]
+    for secret in candidates:
+        expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+        # ClickUp delivers the hex digest with no prefix.
+        if hmac.compare_digest(expected, signature):
+            return True
+    return False
 
 
 def _verify_hubspot_signature(raw: bytes, signature: str) -> bool:

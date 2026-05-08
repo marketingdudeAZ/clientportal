@@ -710,6 +710,40 @@ class TestClickUpWebhook(unittest.TestCase):
         self.assertEqual(resp.get_json()["status"], "blocked")
         comment.assert_called_once()
 
+    def test_signature_verifies_against_any_secret_in_csv(self):
+        # ClickUp generates a unique secret per webhook. We support a
+        # comma-separated CLICKUP_WEBHOOK_SECRET so multiple webhooks
+        # (one per list) can verify against the same env var.
+        from routes import property_brief as routes_pb
+        third = "third-list-secret"
+        with mock.patch.object(routes_pb, "CLICKUP_WEBHOOK_SECRET",
+                               f"first-secret , {self.SECRET} , {third}"):
+            body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
+            sig = hmac.new(third.encode(), body, hashlib.sha256).hexdigest()
+            with mock.patch.object(clickup_client, "get_task", return_value=_task()), \
+                 mock.patch.object(property_brief, "run_commercial_path",
+                                   return_value={"company_id": "c", "deal_id": "d",
+                                                 "quote_id": "q", "deal_url": "", "quote_url": ""}), \
+                 mock.patch.object(property_brief, "comment_commercial_result"), \
+                 mock.patch.object(property_brief, "run_brief_path",
+                                   return_value={"token": "T", "revision_count": 0}):
+                resp = self.client.post(
+                    "/webhooks/clickup/property-brief", data=body,
+                    headers={"X-Signature": sig, "Content-Type": "application/json"},
+                )
+            self.assertEqual(resp.status_code, 200)
+
+    def test_signature_rejected_when_no_secret_matches(self):
+        from routes import property_brief as routes_pb
+        with mock.patch.object(routes_pb, "CLICKUP_WEBHOOK_SECRET", "a,b,c"):
+            body = json.dumps({"event": "taskCreated", "task_id": "x"}).encode()
+            sig = hmac.new(b"unrelated-secret", body, hashlib.sha256).hexdigest()
+            resp = self.client.post(
+                "/webhooks/clickup/property-brief", data=body,
+                headers={"X-Signature": sig, "Content-Type": "application/json"},
+            )
+            self.assertEqual(resp.status_code, 401)
+
     def test_missing_field_comments_and_blocks(self):
         # Strip RM Email so parse_ticket raises.
         broken = _task()
