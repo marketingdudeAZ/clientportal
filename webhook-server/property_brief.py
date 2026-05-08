@@ -767,9 +767,9 @@ def post_approval_url(*, parsed: dict[str, Any], record: dict[str, Any]) -> None
     """Drop the approval URL into ClickUp, tag submitter, update status."""
     url = approval_url(record["token"])
     text = (
-        f"Brief draft ready for review.\n"
-        f"Approve or request edits: {url}\n"
-        f"Revision: {record['revision_count']}"
+        f"Community Brief is ready for review.\n"
+        f"Confirm what's right, edit what isn't: {url}\n"
+        f"(Revision {record['revision_count']})"
     )
     if parsed.get("submitter_id"):
         clickup_client.tag_user_in_comment(parsed["ticket_id"], parsed["submitter_id"], text)
@@ -808,7 +808,7 @@ def handle_approval(record: dict[str, Any]) -> dict[str, Any]:
     update_spend_sheet_row(company_id=company_id, brief_url=brief_url)
 
     text_lines = [
-        f"Brief approved by {approver}.",
+        f"Community Brief approved by {approver}.",
     ]
     if brief_url:
         text_lines.append(f"Final brief: {brief_url}")
@@ -861,7 +861,7 @@ def escalate_to_ops(record: dict[str, Any], *, reason: str) -> dict[str, Any]:
     store._backend().put(record)  # explicit override of normal lifecycle
 
     msg = (
-        f"Property brief escalated for manual handling. Reason: {reason}. "
+        f"Community Brief escalated for manual handling. Reason: {reason}. "
         f"Revision count: {record.get('revision_count')}."
     )
     if PROPERTY_BRIEF_FAILURE_CHANNEL == "clickup":
@@ -923,7 +923,7 @@ def generate_brief_doc(record: dict[str, Any]) -> str:
         try:
             result = _legacy(
                 ticket_id=record.get("ticket_id") or "",
-                title=f"Property Brief — {record.get('company_id', '')}",
+                title=f"Community Brief — {record.get('company_id', '')}",
                 description=record.get("brief_markdown", ""),
                 thread_messages=[],
                 category="Property Brief",
@@ -938,7 +938,7 @@ def generate_brief_doc(record: dict[str, Any]) -> str:
     try:
         result = create_brief_doc(  # type: ignore[misc]
             company_id=record["company_id"],
-            title=f"Property Brief — {record.get('company_id', '')}",
+            title=f"Community Brief — {record.get('company_id', '')}",
             markdown=record.get("brief_markdown") or "",
         )
         return (result or {}).get("doc_url") or ""

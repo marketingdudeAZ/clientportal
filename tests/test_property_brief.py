@@ -600,17 +600,28 @@ class TestApprovalPortalHTTP(unittest.TestCase):
         self.app.register_blueprint(property_brief_bp)
         self.client = self.app.test_client()
 
-    def test_get_renders_brief_for_valid_token(self):
+    def test_get_renders_community_brief_for_valid_token(self):
+        # The new portal renders a structured Community Brief form
+        # rather than echoing the markdown blob. We assert the page
+        # title + the section headers + the action buttons land.
         rec = store.create(
             ticket_id="t1", company_id="c1", deal_id="d1",
             submitter_email="s@x", rm_email="r@x",
             brief_markdown="# My Brief\n\nThe content.",
         )
-        resp = self.client.get(f"/property-brief/approve/{rec['token']}")
+        # community_brief.load_company_state hits HubSpot — mock it
+        # to a known shape so the template has data to render.
+        from unittest.mock import patch
+        import community_brief as cb
+        with patch.object(cb, "load_company_state",
+                          return_value={"name": "Maple Court", "rpmmarket": "Austin"}):
+            resp = self.client.get(f"/property-brief/approve/{rec['token']}")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b"My Brief", resp.data)
-        self.assertIn(b"Approve", resp.data)
-        self.assertIn(b"Needs edits", resp.data)
+        self.assertIn(b"Community Brief", resp.data)
+        self.assertIn(b"Maple Court", resp.data)
+        self.assertIn(b"Voice &amp; Tier", resp.data)
+        self.assertIn(b"Looks good", resp.data)
+        self.assertIn(b"Preview as document", resp.data)
 
     def test_get_unknown_token_returns_410(self):
         resp = self.client.get("/property-brief/approve/nope")
@@ -662,6 +673,145 @@ class TestApprovalPortalHTTP(unittest.TestCase):
             data={"decision": "maybe"},
         )
         self.assertEqual(resp.status_code, 400)
+
+
+# ── Community Brief: per-field editing endpoints ──────────────────────────
+
+class TestCommunityBriefEndpoints(unittest.TestCase):
+    """The new /api/community-brief/<token>/* endpoints — inline edits,
+    on-demand preview, and the 'Looks good' (mark reviewed) action.
+    """
+
+    def setUp(self):
+        store.set_backend(store._MemoryBackend())
+        from flask import Flask
+        from routes.property_brief import property_brief_bp
+        self.app = Flask(__name__)
+        self.app.register_blueprint(property_brief_bp)
+        self.client = self.app.test_client()
+
+    def test_patch_field_writes_to_hubspot_override(self):
+        rec = store.create(
+            ticket_id="t", company_id="comp-1", deal_id="d",
+            submitter_email="s@x", rm_email="r@x", brief_markdown="",
+        )
+        import community_brief as cb
+        with mock.patch.object(cb, "write_field",
+                               return_value=(True, "South Congress")) as wf:
+            resp = self.client.patch(
+                f"/api/community-brief/{rec['token']}/field",
+                json={"key": "neighborhood", "value": "South Congress"},
+            )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertEqual(body["status"], "ok")
+        self.assertEqual(body["value"], "South Congress")
+        wf.assert_called_once_with("comp-1", "neighborhood", "South Congress")
+
+    def test_patch_field_propagates_validation_error(self):
+        rec = store.create(
+            ticket_id="t", company_id="comp-1", deal_id="d",
+            submitter_email="s@x", rm_email="r@x", brief_markdown="",
+        )
+        import community_brief as cb
+        with mock.patch.object(cb, "write_field",
+                               return_value=(False, "unknown field: bogus")):
+            resp = self.client.patch(
+                f"/api/community-brief/{rec['token']}/field",
+                json={"key": "bogus", "value": "x"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("unknown field", resp.get_json()["error"])
+
+    def test_patch_field_invalid_token_returns_410(self):
+        resp = self.client.patch(
+            "/api/community-brief/nope/field",
+            json={"key": "neighborhood", "value": "x"},
+        )
+        self.assertEqual(resp.status_code, 410)
+
+    def test_preview_endpoint_returns_prose(self):
+        rec = store.create(
+            ticket_id="t", company_id="comp-1", deal_id="d",
+            submitter_email="s@x", rm_email="r@x", brief_markdown="",
+        )
+        import community_brief as cb
+        with mock.patch.object(cb, "load_company_state",
+                               return_value={"name": "X"}), \
+             mock.patch.object(cb, "generate_prose_preview",
+                               return_value="Here is the brief narrative."):
+            resp = self.client.post(f"/api/community-brief/{rec['token']}/preview")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertEqual(body["status"], "ok")
+        self.assertIn("narrative", body["prose"])
+
+    def test_mark_reviewed_stamps_last_reviewed_at(self):
+        rec = store.create(
+            ticket_id="t", company_id="comp-1", deal_id="d",
+            submitter_email="s@x", rm_email="r@x", brief_markdown="",
+        )
+        with mock.patch.object(property_brief, "handle_approval",
+                               return_value={"brief_url": "", "approver": "s@x"}):
+            resp = self.client.post(
+                f"/api/community-brief/{rec['token']}/approve",
+                headers={"X-Portal-Email": "kyle@rpmliving.com"},
+            )
+        self.assertEqual(resp.status_code, 200)
+        # Token MUST still resolve afterwards — the new model keeps the
+        # brief editable post-review (we just stamp last_reviewed_at).
+        after = store.get(rec["token"])
+        self.assertIsNotNone(after)
+        self.assertGreater(after.get("last_reviewed_at_ms") or 0, 0)
+        self.assertEqual(after.get("last_reviewed_by"), "kyle@rpmliving.com")
+
+
+# ── Community Brief: field map + helpers ──────────────────────────────────
+
+class TestCommunityBriefHelpers(unittest.TestCase):
+    """Pure-function unit tests for community_brief.py's render helpers."""
+
+    def test_field_map_includes_every_section(self):
+        import community_brief as cb
+        section_names = [s for s, _ in cb.SECTIONS]
+        # Spot-check that the canonical sections are present.
+        for required in ("Property Identity", "Voice & Tier",
+                         "Place — locations to mention", "Voice guardrails"):
+            self.assertIn(required, section_names)
+
+    def test_effective_value_prefers_override(self):
+        import community_brief as cb
+        f = cb.FIELDS["neighborhood"]
+        props = {f.hs_resolved: "Downtown", f.hs_override: "South Congress"}
+        self.assertEqual(cb.effective_value(f, props), "South Congress")
+
+    def test_effective_value_falls_back_to_resolved(self):
+        import community_brief as cb
+        f = cb.FIELDS["neighborhood"]
+        props = {f.hs_resolved: "Downtown"}  # no override
+        self.assertEqual(cb.effective_value(f, props), "Downtown")
+
+    def test_effective_value_empty_when_neither_set(self):
+        import community_brief as cb
+        f = cb.FIELDS["neighborhood"]
+        self.assertEqual(cb.effective_value(f, {}), "")
+
+    def test_render_context_marks_apt_iq_fields_pending_when_empty(self):
+        import community_brief as cb
+        ctx = cb.build_render_context({})  # no data
+        floor_plans_section = next(s for s in ctx if s["section"] == "Floor plans & pricing")
+        floor_plans_row = next(r for r in floor_plans_section["rows"] if r["key"] == "floor_plans")
+        self.assertTrue(floor_plans_row["pending"])
+        self.assertFalse(floor_plans_row["editable"])
+
+    def test_render_context_marks_override_fields_edited(self):
+        import community_brief as cb
+        f = cb.FIELDS["neighborhood"]
+        ctx = cb.build_render_context({f.hs_override: "South Congress"})
+        place_section = next(s for s in ctx if s["section"] == "Place — locations to mention")
+        nb_row = next(r for r in place_section["rows"] if r["key"] == "neighborhood")
+        self.assertTrue(nb_row["has_override"])
+        self.assertEqual(nb_row["value"], "South Congress")
 
 
 # ── 9. ClickUp webhook ────────────────────────────────────────────────────
