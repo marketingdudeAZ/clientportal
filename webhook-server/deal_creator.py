@@ -89,14 +89,27 @@ def create_deal_with_line_items(
     pretty_name = property_name.strip() if property_name else "Unnamed Property"
     dealname = f"{pretty_name} - {deal_type} - {today_str}"
 
+    # Compute deal amount from the canonical 13-line-item list rather
+    # than the pre-computed `totals` from parse_ticket. The two diverge
+    # because (a) SEO Package's price comes from the tier label, not
+    # from a currency field on the form, so totals.monthly understates
+    # by the SEO amount; (b) Management Fee is computed downstream so
+    # totals.monthly doesn't include it either. Summing the line items
+    # we're about to create is the only honest amount.
+    line_items = product_catalog.build_default_line_items(selections)
+    deal_amount = sum(item["price"] for item in line_items)
+    setup_amount_total = sum(
+        float((sel or {}).get("setup") or 0) for sel in (selections or {}).values()
+    )
+
     deal_properties = {
         "dealname":    dealname,
         "pipeline":    "default",
         "dealstage":   "appointmentscheduled",  # first stage in default pipeline
-        "amount":      str(totals.get("monthly", 0)),
+        "amount":      str(deal_amount),
         "description": (
             f"Auto-created from ClickUp ticket {clickup_ticket_id or '(unknown)'}. "
-            f"Monthly: ${totals.get('monthly', 0)}, Setup: ${totals.get('setup', 0)}."
+            f"Monthly: ${deal_amount:.2f}, Setup: ${setup_amount_total:.2f}."
         ),
     }
     if clickup_ticket_id:
@@ -130,9 +143,11 @@ def create_deal_with_line_items(
 
     # Step 3: create the 13 default line items, all referenced by
     # hs_product_id. HubSpot resolves name/SKU/description from the
-    # product. We only carry the per-property monthly price.
+    # product. We only carry the per-property monthly price. We
+    # already computed `line_items` above for the deal amount —
+    # reuse the same list.
     line_item_ids: list[str] = []
-    for entry in product_catalog.build_default_line_items(selections):
+    for entry in line_items:
         channel = entry["channel"]
         line_props = {
             "hs_product_id": entry["hs_product_id"],

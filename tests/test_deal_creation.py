@@ -54,6 +54,45 @@ class TestProductCatalog(unittest.TestCase):
         self.assertEqual(product_catalog._seo_price("None"), 0.0)
         self.assertEqual(product_catalog._seo_price("New Channel"), 0.0)
 
+    def test_management_fee_is_20_percent_of_asterisked(self):
+        # Premier-at-Morton-Ranch shape: $4000 search + $2000 pmax + $500 social
+        sel = {
+            "paid_search": {"tier": "x", "monthly": 4000, "setup": 0},
+            "pmax":        {"tier": "x", "monthly": 2000, "setup": 0},
+            "paid_social": {"tier": "x", "monthly":  500, "setup": 0},
+        }
+        # 6500 * 0.20 = 1300
+        self.assertEqual(product_catalog.compute_management_fee(sel), 1300.0)
+
+    def test_management_fee_zero_when_no_paid_spend(self):
+        self.assertEqual(product_catalog.compute_management_fee({}), 0.0)
+        self.assertEqual(
+            product_catalog.compute_management_fee(
+                {"seo": {"tier": "Standard - $800", "monthly": 0, "setup": 0}}
+            ),
+            0.0,
+        )
+
+    def test_management_fee_excludes_seo_from_calc(self):
+        # SEO is NOT asterisked — its $800 must NOT be in the mgmt fee base.
+        sel = {
+            "paid_search": {"tier": "x", "monthly": 1000, "setup": 0},
+            "seo":         {"tier": "Standard - $800", "monthly": 0, "setup": 0},
+        }
+        # 1000 * 0.20 = 200 (NOT (1000+800) * 0.20 = 360)
+        self.assertEqual(product_catalog.compute_management_fee(sel), 200.0)
+
+    def test_default_line_items_include_management_fee_in_position(self):
+        sel = {
+            "paid_search": {"tier": "x", "monthly": 3500, "setup": 0},
+            "pmax":        {"tier": "x", "monthly": 2000, "setup": 0},
+        }
+        items = product_catalog.build_default_line_items(sel)
+        mgmt_items = [i for i in items if i["channel"] == "management_fee"]
+        self.assertEqual(len(mgmt_items), 1)
+        # 5500 * 0.20 = 1100
+        self.assertEqual(mgmt_items[0]["price"], 1100.0)
+
     def test_default_line_items_includes_all_13(self):
         items = product_catalog.build_default_line_items({})
         # 12 SKUs + management_fee = 13 line items
@@ -84,7 +123,8 @@ class TestProductCatalog(unittest.TestCase):
         self.assertEqual(by_channel["pmax"], 2000.0)
         self.assertEqual(by_channel["seo"], 800.0)         # parsed from tier label
         self.assertEqual(by_channel["paid_social"], 0.0)   # not in selections
-        self.assertEqual(by_channel["management_fee"], 0.0)  # stub returns 0
+        # 5500 paid spend (3500 + 2000) * 20% = 1100 mgmt fee.
+        self.assertEqual(by_channel["management_fee"], 1100.0)
 
 
 class TestCreateDealWithLineItems(unittest.TestCase):
@@ -199,9 +239,29 @@ class TestCreateDealWithLineItems(unittest.TestCase):
         self.assertEqual(prices_by_pid["1992302863"], "2000.0")
         # SEO Package (29987927375) = 800 (parsed from "Standard - $800")
         self.assertEqual(prices_by_pid["29987927375"], "800.0")
+        # Management Fee (3995554730) = 1100 (20% of 5500 paid)
+        self.assertEqual(prices_by_pid["3995554730"], "1100.0")
         # Inactive channels at 0
         # Geofence (1828397328)
         self.assertEqual(prices_by_pid["1828397328"], "0.0")
+
+    def test_deal_amount_equals_line_item_sum(self):
+        # Bug we shipped earlier: deal.amount was set from totals.monthly,
+        # which excluded SEO and Mgmt Fee. Now amount must equal the
+        # sum of every line item price.
+        deal_creator.create_deal_with_line_items(
+            company_id="c",
+            selections={
+                "paid_search": {"tier": "x", "monthly": 3500, "setup": 0},
+                "pmax":        {"tier": "x", "monthly": 2000, "setup": 0},
+                "seo":         {"tier": "Standard - $800", "monthly": 0, "setup": 0},
+            },
+            totals={"monthly": 5500, "setup": 0},
+            property_name="X",
+        )
+        deal_body = self._post.call_args_list[0].kwargs["json"]
+        # 3500 paid_search + 2000 pmax + 800 seo + 1100 mgmt = 7400
+        self.assertEqual(deal_body["properties"]["amount"], "7400.0")
 
     def test_each_line_item_associated_to_deal(self):
         deal_creator.create_deal_with_line_items(

@@ -18,6 +18,7 @@ import hashlib
 import hmac
 import json
 import logging
+import threading
 
 from flask import Blueprint, jsonify, render_template_string, request
 
@@ -86,21 +87,58 @@ def clickup_webhook():
 
     property_brief.comment_commercial_result(parsed, commercial)
 
-    # Path B — brief. Failures here only fail the brief path; the deal still
-    # exists and the RM still has a quote to chase.
-    brief_record = None
-    try:
-        brief_record = property_brief.run_brief_path(parsed, commercial)
-    except Exception as e:
-        logger.exception("Brief path failed for ticket %s", task_id)
-        clickup_client.post_comment(task_id, f"Brief generation failed: {e}. Will retry on next ticket update.")
+    # Path B — brief. Runs in a daemon thread because the LLM call
+    # takes 15-30s, longer than ClickUp's webhook timeout. If we held
+    # the response synchronously, ClickUp would mark delivery failed
+    # and retry — and each retry would (a) re-run the LLM (paid call),
+    # (b) potentially re-create downstream deals when the idempotency
+    # check races HubSpot's search index. Returning 200 fast eliminates
+    # that whole class of bug.
+    #
+    # Idempotency on Path B itself: skip if a brief record already
+    # exists for this ticket. Covers the rare case where a retry
+    # sneaks in before the daemon thread's first store.create() lands.
+    existing = store.find_by_ticket(parsed.get("ticket_id") or "")
+    if existing:
+        logger.info("Brief already exists for ticket %s — skipping Path B re-run",
+                    parsed.get("ticket_id"))
+    else:
+        threading.Thread(
+            target=_run_brief_path_async,
+            args=(parsed, commercial),
+            daemon=True,
+            name=f"brief-{task_id}",
+        ).start()
 
     return jsonify({
         "status":   "ok",
         "deal_id":  commercial.get("deal_id"),
         "quote_id": commercial.get("quote_id"),
-        "brief_token": (brief_record or {}).get("token"),
+        "brief_dispatched": not existing,
     }), 200
+
+
+def _run_brief_path_async(parsed: dict, commercial: dict) -> None:
+    """Daemon-thread wrapper around run_brief_path with error surfacing.
+
+    Posts a ClickUp comment on failure since the synchronous handler
+    has already returned by the time we get here. No retry — the
+    re-fire mechanism (rpm_brief_reprocess checkbox) is the user's
+    way to trigger another attempt.
+    """
+    try:
+        property_brief.run_brief_path(parsed, commercial)
+    except Exception as e:
+        logger.exception("Async brief path failed for ticket %s",
+                         parsed.get("ticket_id"))
+        try:
+            clickup_client.post_comment(
+                parsed.get("ticket_id", ""),
+                f"Brief generation failed in background: {e}. "
+                f"Toggle the re-fire flag to retry."
+            )
+        except Exception:
+            pass
 
 
 # ── Webhook: HubSpot quote signed ──────────────────────────────────────────

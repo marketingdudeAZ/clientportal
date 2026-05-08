@@ -679,6 +679,40 @@ class TestClickUpWebhook(unittest.TestCase):
         self.assertEqual(resp.status_code, 401)
 
     def test_signed_creation_runs_full_flow(self):
+        # Path B is dispatched async (daemon thread). The synchronous
+        # handler returns 200 with brief_dispatched=True; the actual
+        # run_brief_path call happens in a background thread we don't
+        # wait on here.
+        from routes import property_brief as routes_pb
+        body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
+        store.reset_for_tests()  # ensure no prior brief record
+        with mock.patch.object(clickup_client, "get_task", return_value=_task()), \
+             mock.patch.object(property_brief, "run_commercial_path",
+                               return_value={
+                                   "company_id": "c-7", "deal_id": "d-42",
+                                   "quote_id": "q-99", "deal_url": "", "quote_url": "",
+                               }), \
+             mock.patch.object(property_brief, "comment_commercial_result"), \
+             mock.patch.object(routes_pb, "_run_brief_path_async") as bg:
+            resp = self.client.post(
+                "/webhooks/clickup/property-brief", data=body, headers=self._signed(body),
+            )
+        self.assertEqual(resp.status_code, 200)
+        body_json = resp.get_json()
+        self.assertEqual(body_json["deal_id"], "d-42")
+        self.assertTrue(body_json["brief_dispatched"])
+
+    def test_brief_skipped_when_record_already_exists(self):
+        # Idempotency: second webhook delivery for the same ticket must
+        # NOT re-spawn the brief generator (would burn a redundant LLM
+        # call). _run_brief_path_async should not be invoked.
+        from routes import property_brief as routes_pb
+        store.reset_for_tests()
+        store.create(
+            ticket_id="abc123", company_id="c-7", deal_id="d-42",
+            submitter_email="x@y.com", rm_email="rm@y.com",
+            brief_markdown="prior brief",
+        )
         body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
         with mock.patch.object(clickup_client, "get_task", return_value=_task()), \
              mock.patch.object(property_brief, "run_commercial_path",
@@ -687,15 +721,13 @@ class TestClickUpWebhook(unittest.TestCase):
                                    "quote_id": "q-99", "deal_url": "", "quote_url": "",
                                }), \
              mock.patch.object(property_brief, "comment_commercial_result"), \
-             mock.patch.object(property_brief, "run_brief_path",
-                               return_value={"token": "TKN", "revision_count": 0}):
+             mock.patch.object(routes_pb, "_run_brief_path_async") as bg:
             resp = self.client.post(
                 "/webhooks/clickup/property-brief", data=body, headers=self._signed(body),
             )
         self.assertEqual(resp.status_code, 200)
-        body_json = resp.get_json()
-        self.assertEqual(body_json["deal_id"], "d-42")
-        self.assertEqual(body_json["brief_token"], "TKN")
+        self.assertFalse(resp.get_json()["brief_dispatched"])
+        bg.assert_not_called()
 
     def test_ambiguous_match_blocks_with_comment(self):
         body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
@@ -716,6 +748,7 @@ class TestClickUpWebhook(unittest.TestCase):
         # (one per list) can verify against the same env var.
         from routes import property_brief as routes_pb
         third = "third-list-secret"
+        store.reset_for_tests()
         with mock.patch.object(routes_pb, "CLICKUP_WEBHOOK_SECRET",
                                f"first-secret , {self.SECRET} , {third}"):
             body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
@@ -725,8 +758,7 @@ class TestClickUpWebhook(unittest.TestCase):
                                    return_value={"company_id": "c", "deal_id": "d",
                                                  "quote_id": "q", "deal_url": "", "quote_url": ""}), \
                  mock.patch.object(property_brief, "comment_commercial_result"), \
-                 mock.patch.object(property_brief, "run_brief_path",
-                                   return_value={"token": "T", "revision_count": 0}):
+                 mock.patch.object(routes_pb, "_run_brief_path_async"):
                 resp = self.client.post(
                     "/webhooks/clickup/property-brief", data=body,
                     headers={"X-Signature": sig, "Content-Type": "application/json"},

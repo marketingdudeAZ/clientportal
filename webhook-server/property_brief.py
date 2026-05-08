@@ -372,12 +372,34 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
 def _find_existing_deal(ticket_id: str) -> str:
     """Return the HubSpot deal ID linked to this ClickUp ticket, or "" if none.
 
-    Looks for the custom property `clickup_ticket_id` on deals. If the
-    property doesn't exist on the portal yet, this is best-effort —
-    returns "" on any error so the caller falls through to create.
+    Two-step lookup. The first one — the brief store — is the trump card
+    against HubSpot's search-index lag (which can be 30+ seconds on a
+    fresh deal create and was the cause of the duplicate-deal bug we
+    saw on test ticket 868jjhk37):
+
+      1. Check the local brief store (HubDB-backed in prod, memory in
+         tests). If a brief record already references this ticket, we
+         already created a deal for it — return that deal_id directly.
+         This is instant-consistent.
+
+      2. Fall back to HubSpot deal search by the `clickup_ticket_id`
+         custom property. Slower (and lossy on retries inside the
+         search-index window) but covers the case where Path A
+         created the deal but Path B never wrote a brief record.
     """
     if not ticket_id:
         return ""
+    # Step 1: brief store lookup — instant consistency.
+    try:
+        records = store.find_by_ticket(ticket_id)
+        for rec in records or []:
+            did = rec.get("deal_id")
+            if did:
+                return str(did)
+    except Exception as e:
+        logger.warning("brief-store deal lookup failed: %s", e)
+
+    # Step 2: HubSpot search fallback.
     import requests
     from config import HUBSPOT_API_KEY
     if not HUBSPOT_API_KEY:

@@ -118,19 +118,29 @@ def _seo_price(tier_label: str) -> float:
         return 0.0
 
 
+MANAGEMENT_FEE_RATE = 0.20  # 20% of asterisked-products total
+
+
 def compute_management_fee(selections: dict[str, dict]) -> float:
     """Return the Management Fee dollar amount given current selections.
 
-    Stub: returns 0.0 today. Kyle's deck shows Management Fee as an
-    asterisked-products surcharge but doesn't lock the percentage. AMs
-    can override the line-item price after the deal is created. When
-    we get a percentage rule, replace this with:
+    Formula derived 2026-05-08 from sampling recent prod deals:
 
-        rate = 0.15  # or whatever
-        return rate * sum(selections[c]["monthly"] for c in ASTERISKED_PAID_CHANNELS
-                          if selections.get(c))
+      Deal "Premier at Morton Ranch":   $6,500 paid -> $1,300 mgmt   (20.0%)
+      Deal "The Ranch at Champions":    $2,597 paid -> $519.40 mgmt  (20.0%)
+
+    (One outlier "Relaunch Campaigns" deal at 50% appears to be a
+    special category — different deal type, not new-build.)
+
+    AMs can override the line-item price after creation if a property
+    has a custom rate. Adjust MANAGEMENT_FEE_RATE here if RPM rolls
+    out a tier-based or volume-based formula.
     """
-    return 0.0
+    paid_total = sum(
+        float((selections.get(c) or {}).get("monthly", 0) or 0)
+        for c in ASTERISKED_PAID_CHANNELS
+    )
+    return round(MANAGEMENT_FEE_RATE * paid_total, 2)
 
 
 def build_default_line_items(
