@@ -69,6 +69,7 @@ def create_deal_with_line_items(
     clickup_ticket_id: str = "",
     property_name: str = "",
     deal_type: str = "New Account Build",
+    owner_id: str = "",
 ) -> str:
     """Create a HubSpot Deal + the 13 default digital SKU line items.
 
@@ -82,6 +83,10 @@ def create_deal_with_line_items(
     Change", "Dispo", "Cancellation of All Services", or COOP variants.
     Drives the deal name format. Defaults to "New Account Build" since
     that's the only intake list wired today.
+
+    `owner_id` is the HubSpot user id of the AM (resolved from the
+    ClickUp ticket's assignee). When set, becomes the deal owner.
+    Empty -> deal has no owner; AM picks one manually in the UI.
 
     Returns the Deal ID.
     """
@@ -114,6 +119,8 @@ def create_deal_with_line_items(
     }
     if clickup_ticket_id:
         deal_properties["clickup_ticket_id"] = clickup_ticket_id
+    if owner_id:
+        deal_properties["hubspot_owner_id"] = owner_id
 
     # Test-mode override — keeps prod revenue reporting clean while we
     # validate the flow end-to-end.

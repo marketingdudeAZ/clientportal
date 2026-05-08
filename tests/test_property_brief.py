@@ -53,6 +53,9 @@ def _task(**overrides):
         "name": "Maple Court — New Property Brief",
         "url":  "https://app.clickup.com/t/abc123",
         "description": "New property launching Q3 in Austin.",
+        "assignees": [
+            {"id": 999, "username": "Test AM", "email": "am@rpmliving.com"},
+        ],
         "custom_fields": [
             {"name": "Property Name",    "value": "Maple Court"},
             {"name": "Property Domain",  "value": "https://maplecourtaustin.com"},
@@ -178,6 +181,22 @@ class TestParseTicketRPMShape(unittest.TestCase):
     def test_parses_rm_from_rm_apostrophe_email(self):
         parsed = property_brief.parse_ticket(_rpm_task())
         self.assertEqual(parsed["rm_email"], "rm@rpmliving.com")
+
+    def test_parses_assignee_email_from_first_assignee(self):
+        task = _rpm_task()
+        task["assignees"] = [
+            {"id": 1, "username": "Jane Doe", "email": "jane@rpmliving.com"},
+            {"id": 2, "username": "Other", "email": "other@rpmliving.com"},
+        ]
+        parsed = property_brief.parse_ticket(task)
+        self.assertEqual(parsed["assignee_email"], "jane@rpmliving.com")
+        self.assertEqual(parsed["assignee_name"], "Jane Doe")
+
+    def test_assignee_email_empty_when_no_assignees(self):
+        task = _rpm_task()
+        task["assignees"] = []
+        parsed = property_brief.parse_ticket(task)
+        self.assertEqual(parsed["assignee_email"], "")
 
     def test_extracts_paid_channels_with_currency_and_tier(self):
         parsed = property_brief.parse_ticket(_rpm_task())

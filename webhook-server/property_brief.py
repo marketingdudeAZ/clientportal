@@ -129,6 +129,12 @@ def parse_ticket(task: dict[str, Any]) -> dict[str, Any]:
         # RVP as a regular contact on the quote so they're visible
         # alongside the signer.
         "rvp_email":       _str(cf(task, "RVP Email") or cf(task, "RVP's Email")),
+        # Assignee = the ClickUp ticket's owner = the AM. We look this
+        # email up in HubSpot's owners table and assign the resulting
+        # owner id to both the deal and the quote so the right person
+        # owns the record (and is the quote's "from" name when sent).
+        "assignee_email":  _primary_assignee_email(task),
+        "assignee_name":   _primary_assignee_name(task),
         # Notes: prefer task description, then portal "Notes",
         # then RPM "Additional Details from Requester" / "Other Info".
         "notes":           _str(
@@ -150,6 +156,61 @@ def parse_ticket(task: dict[str, Any]) -> dict[str, Any]:
 
 def _str(value: Any) -> str:
     return str(value).strip() if value not in (None, "") else ""
+
+
+def _primary_assignee_email(task: dict[str, Any]) -> str:
+    """Return the email of the first ClickUp assignee, or "".
+
+    The "assignee at the top of the ticket" maps to the FIRST entry in
+    ClickUp's `assignees` list. ClickUp returns the list in display
+    order, so the primary AM lands at index 0.
+    """
+    assignees = task.get("assignees") or []
+    for a in assignees:
+        em = _str(a.get("email"))
+        if em:
+            return em
+    return ""
+
+
+def _primary_assignee_name(task: dict[str, Any]) -> str:
+    assignees = task.get("assignees") or []
+    for a in assignees:
+        nm = _str(a.get("username") or a.get("name"))
+        if nm:
+            return nm
+    return ""
+
+
+def lookup_hubspot_owner_id(email: str) -> str:
+    """Resolve an RPM employee's email to a HubSpot owner id.
+
+    Returns "" when the email isn't a HubSpot user (e.g., the AM hasn't
+    been added to the portal yet) or when the API call fails. Caller
+    soft-fails: deal/quote still get created, just without an owner —
+    the AM picks one manually in the UI.
+    """
+    if not email:
+        return ""
+    import requests
+    from config import HUBSPOT_API_KEY
+    if not HUBSPOT_API_KEY:
+        return ""
+    try:
+        r = requests.get(
+            "https://api.hubapi.com/crm/v3/owners/",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"},
+            params={"email": email.strip().lower()},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            logger.warning("Owner lookup %s -> %s %s", email, r.status_code, r.text[:200])
+            return ""
+        results = r.json().get("results") or []
+        return str(results[0]["id"]) if results else ""
+    except Exception as e:
+        logger.warning("Owner lookup failed for %s: %s", email, e)
+        return ""
 
 
 def _coerce_selections(value: Any) -> dict[str, dict]:
@@ -322,6 +383,11 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
     # error downstream (e.g., quote API 400) creates a new deal on every
     # retry. The ticket id is stored on the deal as `clickup_ticket_id` —
     # search HubSpot for that before creating a fresh deal.
+    # Resolve the ClickUp assignee -> HubSpot owner id ONCE per delivery.
+    # Both the deal and the quote get this owner so the AM is the
+    # record owner + the quote's "from" name when sent.
+    owner_id = lookup_hubspot_owner_id(parsed.get("assignee_email") or "")
+
     existing_deal_id = _find_existing_deal(parsed.get("ticket_id") or "")
     if existing_deal_id:
         logger.info("Reusing existing deal %s for ClickUp ticket %s",
@@ -335,6 +401,7 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
             clickup_ticket_id=parsed.get("ticket_id") or "",
             property_name=parsed.get("property_name") or "",
             deal_type="New Account Build",
+            owner_id=owner_id,
         )
 
     # Quote step is soft-fail. The HubSpot Quotes V3 API has tight
@@ -352,6 +419,7 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
             additional_contact_emails=[
                 e for e in [parsed.get("rvp_email")] if e
             ],
+            owner_id=owner_id,
         )
     except Exception as e:
         logger.warning("Quote generation failed for deal %s (continuing): %s", deal_id, e)

@@ -51,6 +51,7 @@ def generate_and_send_quote(
     company_id: str,
     signer_email: str = "",
     additional_contact_emails: list[str] | None = None,
+    owner_id: str = "",
 ) -> str:
     """Create a HubSpot Quote in DRAFT, attach line items + signer + contacts.
 
@@ -62,6 +63,10 @@ def generate_and_send_quote(
     `additional_contact_emails` — typically the RVP. Each is
     found-or-created as a contact and attached to the quote with the
     default contact association so they're visible on the record.
+
+    `owner_id` — HubSpot user id of the AM (resolved upstream from
+    the ClickUp ticket's assignee). Becomes the quote owner so when
+    the AM publishes + sends, the quote shows them as the sender.
 
     Does NOT publish. Returns the quote ID.
     """
@@ -77,6 +82,8 @@ def generate_and_send_quote(
         "hs_language":        "en",
         "hs_terms":           "Terms apply per RPM Living's standard MSA.",
     }
+    if owner_id:
+        quote_props["hubspot_owner_id"] = owner_id
     quote_resp = requests.post(
         f"{API_BASE}/crm/v3/objects/quotes",
         headers=HEADERS,

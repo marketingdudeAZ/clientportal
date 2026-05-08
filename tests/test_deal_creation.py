@@ -194,6 +194,22 @@ class TestCreateDealWithLineItems(unittest.TestCase):
         body = self._post.call_args_list[0].kwargs["json"]
         self.assertEqual(body["properties"]["clickup_ticket_id"], "abc123")
 
+    def test_owner_id_set_on_deal_when_provided(self):
+        deal_creator.create_deal_with_line_items(
+            company_id="c", selections={}, totals={"monthly": 0, "setup": 0},
+            property_name="X", owner_id="71900211",
+        )
+        body = self._post.call_args_list[0].kwargs["json"]
+        self.assertEqual(body["properties"]["hubspot_owner_id"], "71900211")
+
+    def test_owner_id_omitted_when_empty(self):
+        deal_creator.create_deal_with_line_items(
+            company_id="c", selections={}, totals={"monthly": 0, "setup": 0},
+            property_name="X", owner_id="",
+        )
+        body = self._post.call_args_list[0].kwargs["json"]
+        self.assertNotIn("hubspot_owner_id", body["properties"])
+
     def test_associates_deal_with_company(self):
         deal_creator.create_deal_with_line_items(
             company_id="comp-1", selections={}, totals={"monthly": 0, "setup": 0},
