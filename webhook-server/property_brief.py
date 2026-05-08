@@ -124,6 +124,11 @@ def parse_ticket(task: dict[str, Any]) -> dict[str, Any]:
             or cf(task, "RM's Email")
         ),
         "rm_id":           _str(cf(task, "RM ClickUp ID")),
+        # RVP email: RPM "RVP's Email" with apostrophe. Optional —
+        # not all forms capture it. quote_generator associates the
+        # RVP as a regular contact on the quote so they're visible
+        # alongside the signer.
+        "rvp_email":       _str(cf(task, "RVP Email") or cf(task, "RVP's Email")),
         # Notes: prefer task description, then portal "Notes",
         # then RPM "Additional Details from Requester" / "Other Info".
         "notes":           _str(
@@ -343,6 +348,10 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
         quote_id = quote_generator.generate_and_send_quote(
             deal_id=deal_id,
             company_id=company["id"],
+            signer_email=parsed.get("rm_email") or "",
+            additional_contact_emails=[
+                e for e in [parsed.get("rvp_email")] if e
+            ],
         )
     except Exception as e:
         logger.warning("Quote generation failed for deal %s (continuing): %s", deal_id, e)

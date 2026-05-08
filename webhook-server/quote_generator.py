@@ -1,29 +1,23 @@
 """HubSpot Quote generation for the property-brief automation.
 
-The new IO process (per Kyle's training docs, 2026-05-08) requires:
+Per Kyle's training docs (2026-05-08) plus the live-test feedback:
 
-  1. ONE quote per deal.
-  2. ALL digital SKUs already on the deal as line items.
-  3. Quote left in DRAFT — AM picks the template + signs / sends from
-     the HubSpot UI. We don't try to publish from code because publish
-     requires a quote template path which is portal-portal-specific
-     and the AM owns the "send" decision.
+  1. ONE quote per deal in DRAFT status.
+  2. ALL digital SKUs already on the deal as line items (deal_creator
+     handles that — we just associate them to the quote here).
+  3. RM email -> a contact tagged as "Contact Signer" on the quote
+     (HubSpot V4 association type 702). When the AM picks a quote
+     template + sends, this contact is who gets the e-sign email.
+  4. RVP email -> a regular contact association on the quote so the
+     RVP is visible alongside the signer on the deal/quote record.
 
-What we do here:
+Quote stays in DRAFT — AM picks the template + signs/sends from the
+HubSpot UI. Code doesn't try to publish (publish requires a portal-
+specific template path).
 
-  - POST a quote in DRAFT status with the minimum properties HubSpot's
-    V3 quotes API actually requires (title, expiration, status,
-    currency, language, terms — empirically the 400 we hit before came
-    from leaving terms/currency off).
-  - Associate quote <-> deal.
-  - Walk the deal's existing line items and associate each to the
-    quote (line items on the deal got created by deal_creator already).
-  - Return the quote id. The link the AM clicks is built upstream from
-    HUBSPOT_PORTAL_ID + quote_id.
-
-Returns "" (not raises) on quote creation failure. The caller — Path A
-in property_brief.run_commercial_path — wraps this in try/except and
-treats failure as soft so the brief flow keeps running.
+Returns "" (or partial state) on failure rather than raising. The
+caller wraps this in try/except and treats failure as soft so the
+brief flow keeps running.
 """
 
 from __future__ import annotations
@@ -43,18 +37,34 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
+# HubSpot V4 association type IDs for quote -> contact, discovered via
+# GET /crm/v4/associations/quote/contact/labels (2026-05-08):
+#   typeId 69   = standard quote -> contact (no label)
+#   typeId 702  = "Contact Signer"   <-- e-sign target
+#   typeId 1226 = "Billing Contact"
+ASSOC_QUOTE_TO_CONTACT_DEFAULT = 69
+ASSOC_QUOTE_TO_CONTACT_SIGNER = 702
 
-def generate_and_send_quote(deal_id: str, company_id: str) -> str:
-    """Create a HubSpot Quote in DRAFT, associate the deal's line items.
 
-    Does NOT publish or send. Returns the quote ID.
+def generate_and_send_quote(
+    deal_id: str,
+    company_id: str,
+    signer_email: str = "",
+    additional_contact_emails: list[str] | None = None,
+) -> str:
+    """Create a HubSpot Quote in DRAFT, attach line items + signer + contacts.
 
-    Quote name follows the doc's naming guidance for the new-build flow:
-    "<Property Name> – New Account Build (<Month YYYY>)". For the test
-    loop we don't have the property name here — we use the deal's name
-    as a fallback so the quote is recognizable in HubSpot UI.
+    `signer_email` — the RM. Becomes the "Contact Signer" on the quote.
+    When the AM publishes + sends, this is who gets the sign request.
+    Email is looked up; if no contact exists, one is created with
+    just the email so HubSpot has somewhere to attach the association.
+
+    `additional_contact_emails` — typically the RVP. Each is
+    found-or-created as a contact and attached to the quote with the
+    default contact association so they're visible on the record.
+
+    Does NOT publish. Returns the quote ID.
     """
-    # Pull dealname so the quote title matches the deal's naming convention.
     deal_name = _fetch_deal_name(deal_id) or "Property Brief Quote"
     today = _dt.date.today()
 
@@ -65,8 +75,6 @@ def generate_and_send_quote(deal_id: str, company_id: str) -> str:
         "hs_status":          "DRAFT",
         "hs_currency":        "USD",
         "hs_language":        "en",
-        # The v3 API rejects quotes without `hs_terms`. Empty string is
-        # accepted; AMs fill in terms via the template chooser at send time.
         "hs_terms":           "Terms apply per RPM Living's standard MSA.",
     }
     quote_resp = requests.post(
@@ -75,24 +83,62 @@ def generate_and_send_quote(deal_id: str, company_id: str) -> str:
         json={"properties": quote_props},
     )
     if quote_resp.status_code >= 400:
-        logger.warning("Quote create failed: %s %s", quote_resp.status_code, quote_resp.text[:300])
-        quote_resp.raise_for_status()  # let caller decide soft vs hard
+        logger.warning("Quote create failed: %s %s",
+                       quote_resp.status_code, quote_resp.text[:300])
+        quote_resp.raise_for_status()
     quote_id = quote_resp.json()["id"]
 
-    # Step 2: quote <-> deal association.
+    # Step 2: quote <-> deal.
     _safe_put(
         f"{API_BASE}/crm/v3/objects/quotes/{quote_id}/associations/deals/{deal_id}/quote_to_deal"
     )
 
-    # Step 3: walk the deal's line items, associate each to the quote.
+    # Step 3: attach every line item already on the deal.
     line_item_ids = _fetch_deal_line_items(deal_id)
     for li_id in line_item_ids:
         _safe_put(
             f"{API_BASE}/crm/v3/objects/quotes/{quote_id}/associations/line_items/{li_id}/quote_to_line_item"
         )
 
-    logger.info("Quote %s created in DRAFT for deal %s with %d line items",
-                quote_id, deal_id, len(line_item_ids))
+    # Step 4: signer (RM). Find-or-create the contact, then label-associate.
+    if signer_email:
+        try:
+            contact_id = _find_or_create_contact(signer_email)
+            if contact_id:
+                _associate_quote_to_contact(quote_id, contact_id, ASSOC_QUOTE_TO_CONTACT_SIGNER)
+                # Also associate the contact with the deal so they appear
+                # in the deal's "Contacts" sidebar in HubSpot UI.
+                _safe_put(
+                    f"{API_BASE}/crm/v3/objects/deals/{deal_id}/associations/contacts/{contact_id}/deal_to_contact"
+                )
+                logger.info("Quote %s: attached signer %s as contact %s",
+                            quote_id, signer_email, contact_id)
+        except Exception as e:
+            logger.warning("Quote %s: failed to attach signer %s: %s",
+                           quote_id, signer_email, e)
+
+    # Step 5: RVP / other contacts. Default association (no signer label).
+    for email in (additional_contact_emails or []):
+        if not email or email == signer_email:
+            continue  # skip empties + dedupe with signer
+        try:
+            contact_id = _find_or_create_contact(email)
+            if contact_id:
+                _associate_quote_to_contact(quote_id, contact_id, ASSOC_QUOTE_TO_CONTACT_DEFAULT)
+                _safe_put(
+                    f"{API_BASE}/crm/v3/objects/deals/{deal_id}/associations/contacts/{contact_id}/deal_to_contact"
+                )
+                logger.info("Quote %s: attached additional contact %s (id=%s)",
+                            quote_id, email, contact_id)
+        except Exception as e:
+            logger.warning("Quote %s: failed to attach contact %s: %s",
+                           quote_id, email, e)
+
+    logger.info(
+        "Quote %s created in DRAFT for deal %s with %d line items, signer=%r, extras=%d",
+        quote_id, deal_id, len(line_item_ids), signer_email,
+        len([e for e in (additional_contact_emails or []) if e and e != signer_email]),
+    )
     return quote_id
 
 
@@ -129,13 +175,92 @@ def _fetch_deal_line_items(deal_id: str) -> list[str]:
         return []
 
 
-def _safe_put(url: str) -> None:
-    """PUT that logs failures but doesn't raise.
+def _find_or_create_contact(email: str) -> str:
+    """Return the HubSpot contact id for a given email, creating one if absent.
 
-    Quote-association calls can 409 if the same association already
-    exists (idempotent retries). We don't want a single association
-    issue to abort the whole quote step.
+    Returns "" on any error so the caller can soft-fail. Creating with
+    just `email` is enough — HubSpot will fill in name/lifecycle stage
+    on the first inbound interaction (or the AM can edit manually).
     """
+    if not email:
+        return ""
+    email_norm = email.strip().lower()
+
+    # Search first.
+    try:
+        r = requests.post(
+            f"{API_BASE}/crm/v3/objects/contacts/search",
+            headers=HEADERS,
+            json={
+                "filterGroups": [{"filters": [
+                    {"propertyName": "email", "operator": "EQ", "value": email_norm}
+                ]}],
+                "properties": ["email"],
+                "limit": 1,
+            },
+            timeout=10,
+        )
+        if r.status_code == 200:
+            results = r.json().get("results") or []
+            if results:
+                return str(results[0]["id"])
+    except requests.RequestException as e:
+        logger.warning("Contact search failed for %s: %s", email_norm, e)
+
+    # Not found — create.
+    try:
+        r = requests.post(
+            f"{API_BASE}/crm/v3/objects/contacts",
+            headers=HEADERS,
+            json={"properties": {"email": email_norm}},
+            timeout=10,
+        )
+        if r.status_code in (200, 201):
+            return str(r.json()["id"])
+        # 409 = already exists (race with another caller); search again.
+        if r.status_code == 409:
+            r2 = requests.post(
+                f"{API_BASE}/crm/v3/objects/contacts/search",
+                headers=HEADERS,
+                json={"filterGroups": [{"filters": [
+                    {"propertyName": "email", "operator": "EQ", "value": email_norm}
+                ]}], "limit": 1},
+                timeout=10,
+            )
+            if r2.status_code == 200:
+                results = r2.json().get("results") or []
+                if results:
+                    return str(results[0]["id"])
+        logger.warning("Contact create %s -> %s %s", email_norm, r.status_code, r.text[:200])
+    except requests.RequestException as e:
+        logger.warning("Contact create failed for %s: %s", email_norm, e)
+    return ""
+
+
+def _associate_quote_to_contact(quote_id: str, contact_id: str, type_id: int) -> None:
+    """V4 labeled association: quote -> contact with a specific role.
+
+    type_id:
+      702  = Contact Signer (e-sign target)
+      69   = default (regular contact)
+      1226 = Billing Contact
+    """
+    try:
+        r = requests.put(
+            f"{API_BASE}/crm/v4/objects/quote/{quote_id}/associations/contact/{contact_id}",
+            headers=HEADERS,
+            json=[{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": type_id}],
+            timeout=10,
+        )
+        if r.status_code >= 400 and r.status_code != 409:
+            logger.warning("Quote-contact assoc %s -> %s (type=%d): %s %s",
+                           quote_id, contact_id, type_id, r.status_code, r.text[:200])
+    except requests.RequestException as e:
+        logger.warning("Quote-contact assoc network error: %s", e)
+
+
+def _safe_put(url: str) -> None:
+    """PUT that logs failures but doesn't raise (idempotent retries)."""
     try:
         r = requests.put(url, headers=HEADERS, timeout=10)
         if r.status_code >= 400 and r.status_code != 409:
