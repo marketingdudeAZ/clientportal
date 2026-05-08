@@ -662,9 +662,14 @@ class TestClickUpWebhook(unittest.TestCase):
         # this file runs, so env-var setdefault wouldn't take effect.
         self._secret_patch = mock.patch.object(routes_pb, "CLICKUP_WEBHOOK_SECRET", self.SECRET)
         self._secret_patch.start()
+        # Clear in-flight mutex between tests so cross-test contamination
+        # doesn't cause false "in_flight" skips.
+        routes_pb._in_flight.clear()
 
     def tearDown(self):
         self._secret_patch.stop()
+        from routes import property_brief as routes_pb
+        routes_pb._in_flight.clear()
 
     def _signed(self, payload: bytes) -> dict:
         sig = hmac.new(self.SECRET.encode(), payload, hashlib.sha256).hexdigest()
@@ -678,34 +683,28 @@ class TestClickUpWebhook(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 401)
 
-    def test_signed_creation_runs_full_flow(self):
-        # Path B is dispatched async (daemon thread). The synchronous
-        # handler returns 200 with brief_dispatched=True; the actual
-        # run_brief_path call happens in a background thread we don't
-        # wait on here.
+    def test_signed_creation_dispatches_async_pipeline(self):
+        # The whole pipeline (Path A + Path B) runs in a daemon thread so
+        # ClickUp gets a 200 in under a second. The handler should
+        # return status="dispatched" and not have called the pipeline
+        # synchronously yet.
         from routes import property_brief as routes_pb
         body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
-        store.reset_for_tests()  # ensure no prior brief record
+        store.reset_for_tests()
         with mock.patch.object(clickup_client, "get_task", return_value=_task()), \
-             mock.patch.object(property_brief, "run_commercial_path",
-                               return_value={
-                                   "company_id": "c-7", "deal_id": "d-42",
-                                   "quote_id": "q-99", "deal_url": "", "quote_url": "",
-                               }), \
-             mock.patch.object(property_brief, "comment_commercial_result"), \
-             mock.patch.object(routes_pb, "_run_brief_path_async") as bg:
+             mock.patch.object(routes_pb, "_run_pipeline_async") as bg:
             resp = self.client.post(
                 "/webhooks/clickup/property-brief", data=body, headers=self._signed(body),
             )
         self.assertEqual(resp.status_code, 200)
         body_json = resp.get_json()
-        self.assertEqual(body_json["deal_id"], "d-42")
-        self.assertTrue(body_json["brief_dispatched"])
+        self.assertEqual(body_json["status"], "dispatched")
+        self.assertEqual(body_json["ticket_id"], "abc123")
+        bg.assert_called_once()
 
-    def test_brief_skipped_when_record_already_exists(self):
-        # Idempotency: second webhook delivery for the same ticket must
-        # NOT re-spawn the brief generator (would burn a redundant LLM
-        # call). _run_brief_path_async should not be invoked.
+    def test_pipeline_skipped_when_brief_already_exists(self):
+        # Cross-process idempotency: a brief record from a prior webhook
+        # delivery means the pipeline already ran. Don't re-dispatch.
         from routes import property_brief as routes_pb
         store.reset_for_tests()
         store.create(
@@ -715,32 +714,62 @@ class TestClickUpWebhook(unittest.TestCase):
         )
         body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
         with mock.patch.object(clickup_client, "get_task", return_value=_task()), \
-             mock.patch.object(property_brief, "run_commercial_path",
-                               return_value={
-                                   "company_id": "c-7", "deal_id": "d-42",
-                                   "quote_id": "q-99", "deal_url": "", "quote_url": "",
-                               }), \
-             mock.patch.object(property_brief, "comment_commercial_result"), \
-             mock.patch.object(routes_pb, "_run_brief_path_async") as bg:
+             mock.patch.object(routes_pb, "_run_pipeline_async") as bg:
             resp = self.client.post(
                 "/webhooks/clickup/property-brief", data=body, headers=self._signed(body),
             )
         self.assertEqual(resp.status_code, 200)
-        self.assertFalse(resp.get_json()["brief_dispatched"])
+        self.assertEqual(resp.get_json()["status"], "skipped")
+        self.assertEqual(resp.get_json()["reason"], "already_processed")
         bg.assert_not_called()
 
-    def test_ambiguous_match_blocks_with_comment(self):
+    def test_pipeline_skipped_when_in_flight(self):
+        # In-process mutex: a retry that arrives while the daemon thread
+        # is still running for this ticket should be 200'd without
+        # re-dispatching.
+        from routes import property_brief as routes_pb
+        store.reset_for_tests()
+        # Manually claim the ticket as if a daemon thread is mid-pipeline
+        routes_pb._in_flight.add("abc123")
+        try:
+            body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
+            with mock.patch.object(clickup_client, "get_task", return_value=_task()), \
+                 mock.patch.object(routes_pb, "_run_pipeline_async") as bg:
+                resp = self.client.post(
+                    "/webhooks/clickup/property-brief", data=body, headers=self._signed(body),
+                )
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.get_json()["reason"], "in_flight")
+            bg.assert_not_called()
+        finally:
+            routes_pb._in_flight.discard("abc123")
+
+    def test_ambiguous_match_handled_inside_daemon(self):
+        # The handler dispatches the pipeline async and returns 200
+        # immediately. The CompanyMatchAmbiguous error gets caught
+        # inside _run_pipeline_async, which posts a ClickUp comment
+        # and bails. Run the pipeline synchronously here (skip the
+        # threading) so we can assert on the resulting comment.
+        from routes import property_brief as routes_pb
         body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
         with mock.patch.object(clickup_client, "get_task", return_value=_task()), \
              mock.patch.object(property_brief, "run_commercial_path",
                                side_effect=property_brief.CompanyMatchAmbiguous("2 matches")), \
-             mock.patch.object(clickup_client, "post_comment", return_value=True) as comment:
+             mock.patch.object(clickup_client, "post_comment", return_value=True) as comment, \
+             mock.patch("threading.Thread") as Thread:
+            # Make the "Thread" instance run synchronously so we can
+            # observe the daemon's side effects.
+            Thread.side_effect = lambda target, args=(), **kw: type(
+                "_FakeThread", (), {"start": lambda self: target(*args)}
+            )()
             resp = self.client.post(
                 "/webhooks/clickup/property-brief", data=body, headers=self._signed(body),
             )
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.get_json()["status"], "blocked")
+        self.assertEqual(resp.get_json()["status"], "dispatched")
+        # The daemon called post_comment with the ambiguous-match message.
         comment.assert_called_once()
+        self.assertIn("2 matches", comment.call_args.args[1])
 
     def test_signature_verifies_against_any_secret_in_csv(self):
         # ClickUp generates a unique secret per webhook. We support a
@@ -754,11 +783,7 @@ class TestClickUpWebhook(unittest.TestCase):
             body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
             sig = hmac.new(third.encode(), body, hashlib.sha256).hexdigest()
             with mock.patch.object(clickup_client, "get_task", return_value=_task()), \
-                 mock.patch.object(property_brief, "run_commercial_path",
-                                   return_value={"company_id": "c", "deal_id": "d",
-                                                 "quote_id": "q", "deal_url": "", "quote_url": ""}), \
-                 mock.patch.object(property_brief, "comment_commercial_result"), \
-                 mock.patch.object(routes_pb, "_run_brief_path_async"):
+                 mock.patch.object(routes_pb, "_run_pipeline_async"):
                 resp = self.client.post(
                     "/webhooks/clickup/property-brief", data=body,
                     headers={"X-Signature": sig, "Content-Type": "application/json"},

@@ -35,6 +35,46 @@ logger = logging.getLogger(__name__)
 property_brief_bp = Blueprint("property_brief", __name__)
 
 
+# ── In-process retry mutex ─────────────────────────────────────────────────
+#
+# ClickUp retries any webhook delivery that takes longer than ~15s. Path A
+# alone (13 line-item creates + quote create + signer/RVP find-or-create
+# + ~30 association PUTs) routinely exceeds that. Without a mutex, a single
+# ClickUp ticket fires 5-7 retries before our async daemon completes and
+# the brief-store idempotency takes over — and during that window we
+# create duplicate deals + duplicate briefs.
+#
+# This in-memory set is the first line of defence: the FIRST webhook
+# delivery for a given ticket_id holds the slot until its daemon thread
+# finishes. Any retry that arrives during that window sees the slot and
+# 200s immediately without doing work.
+#
+# Survives within a single worker process. Cross-restart and cross-worker
+# retries fall back to the brief-store check (slower-consistent but still
+# correct — duplicate briefs would just no-op).
+
+_in_flight: set[str] = set()
+_in_flight_lock = threading.Lock()
+
+
+def _try_claim(ticket_id: str) -> bool:
+    """Return True if this caller is now the owner of `ticket_id` work.
+
+    False means another worker thread is already processing this ticket;
+    the caller should drop the request.
+    """
+    with _in_flight_lock:
+        if ticket_id in _in_flight:
+            return False
+        _in_flight.add(ticket_id)
+        return True
+
+
+def _release_claim(ticket_id: str) -> None:
+    with _in_flight_lock:
+        _in_flight.discard(ticket_id)
+
+
 # ── Webhook: ClickUp ticket created/updated ────────────────────────────────
 
 @property_brief_bp.route("/webhooks/clickup/property-brief", methods=["POST"])
@@ -69,76 +109,90 @@ def clickup_webhook():
         )
         return jsonify({"status": "blocked", "error": str(e)}), 200
 
-    # Path A — commercial. Hard failures stop both paths and surface in ClickUp.
-    # IMPORTANT: always return 200 on commercial errors. ClickUp retries 5xx
-    # responses up to several times, and each retry would re-create deals
-    # if our idempotency check misses (HubSpot search-index lag). Surfacing
-    # the error in the response body without a 5xx keeps ClickUp from
-    # turning a single ticket into a retry storm.
-    try:
-        commercial = property_brief.run_commercial_path(parsed)
-    except property_brief.CompanyMatchAmbiguous as e:
-        clickup_client.post_comment(task_id, f"{e}. Stopped automation; please pick the correct HubSpot company manually.")
-        return jsonify({"status": "blocked", "error": "company_match_ambiguous"}), 200
-    except Exception as e:
-        logger.exception("Commercial path failed for ticket %s", task_id)
-        clickup_client.post_comment(task_id, f"Property brief automation hit a HubSpot error: {e}")
-        return jsonify({"status": "error", "error": str(e)}), 200
+    # Idempotency layer 1: brief store. If we already finished a prior
+    # delivery for this ticket, the brief record sticks around — short
+    # circuit fast.
+    if store.find_by_ticket(parsed.get("ticket_id") or ""):
+        logger.info("Ticket %s already has a brief record — skipping pipeline", task_id)
+        return jsonify({"status": "skipped", "reason": "already_processed"}), 200
 
-    property_brief.comment_commercial_result(parsed, commercial)
+    # Idempotency layer 2: in-process mutex. The brief store check loses
+    # to retries that arrive while the FIRST delivery's daemon thread
+    # is mid-pipeline (record not written yet). The mutex covers that
+    # window — first claimer wins, others 200 immediately.
+    if not _try_claim(task_id):
+        logger.info("Ticket %s already in-flight — skipping retry", task_id)
+        return jsonify({"status": "skipped", "reason": "in_flight"}), 200
 
-    # Path B — brief. Runs in a daemon thread because the LLM call
-    # takes 15-30s, longer than ClickUp's webhook timeout. If we held
-    # the response synchronously, ClickUp would mark delivery failed
-    # and retry — and each retry would (a) re-run the LLM (paid call),
-    # (b) potentially re-create downstream deals when the idempotency
-    # check races HubSpot's search index. Returning 200 fast eliminates
-    # that whole class of bug.
-    #
-    # Idempotency on Path B itself: skip if a brief record already
-    # exists for this ticket. Covers the rare case where a retry
-    # sneaks in before the daemon thread's first store.create() lands.
-    existing = store.find_by_ticket(parsed.get("ticket_id") or "")
-    if existing:
-        logger.info("Brief already exists for ticket %s — skipping Path B re-run",
-                    parsed.get("ticket_id"))
-    else:
-        threading.Thread(
-            target=_run_brief_path_async,
-            args=(parsed, commercial),
-            daemon=True,
-            name=f"brief-{task_id}",
-        ).start()
+    # Whole pipeline — Path A (commercial) + Path B (brief) — runs async.
+    # Path A alone takes 15-25s with 13 line-item creates + 13 quote-line
+    # associations + signer/RVP find-or-create + associations. That's
+    # already past ClickUp's webhook timeout (~15s), even before the LLM.
+    # Returning 200 in under a second is the only way to keep ClickUp
+    # from retrying mid-pipeline and creating duplicate deals/briefs.
+    threading.Thread(
+        target=_run_pipeline_async,
+        args=(parsed,),
+        daemon=True,
+        name=f"pipeline-{task_id}",
+    ).start()
 
     return jsonify({
-        "status":   "ok",
-        "deal_id":  commercial.get("deal_id"),
-        "quote_id": commercial.get("quote_id"),
-        "brief_dispatched": not existing,
+        "status":     "dispatched",
+        "ticket_id":  task_id,
     }), 200
 
 
-def _run_brief_path_async(parsed: dict, commercial: dict) -> None:
-    """Daemon-thread wrapper around run_brief_path with error surfacing.
+def _run_pipeline_async(parsed: dict) -> None:
+    """Daemon-thread wrapper for the whole post-parse pipeline.
 
-    Posts a ClickUp comment on failure since the synchronous handler
-    has already returned by the time we get here. No retry — the
-    re-fire mechanism (rpm_brief_reprocess checkbox) is the user's
-    way to trigger another attempt.
+    Runs Path A (commercial) → comment in ClickUp → Path B (brief). The
+    in-flight claim is released no matter what so a future taskUpdated
+    re-fire can re-enter. Per-step errors are surfaced as ClickUp
+    comments since the synchronous handler has already returned.
     """
+    task_id = parsed.get("ticket_id") or ""
     try:
-        property_brief.run_brief_path(parsed, commercial)
-    except Exception as e:
-        logger.exception("Async brief path failed for ticket %s",
-                         parsed.get("ticket_id"))
+        # Path A — commercial.
         try:
+            commercial = property_brief.run_commercial_path(parsed)
+        except property_brief.CompanyMatchAmbiguous as e:
             clickup_client.post_comment(
-                parsed.get("ticket_id", ""),
-                f"Brief generation failed in background: {e}. "
-                f"Toggle the re-fire flag to retry."
+                task_id,
+                f"{e}. Stopped automation; please pick the correct HubSpot company manually.",
             )
+            return
+        except Exception as e:
+            logger.exception("Commercial path failed for ticket %s", task_id)
+            try:
+                clickup_client.post_comment(
+                    task_id, f"Property brief automation hit a HubSpot error: {e}"
+                )
+            except Exception:
+                pass
+            return
+
+        try:
+            property_brief.comment_commercial_result(parsed, commercial)
         except Exception:
-            pass
+            logger.exception("Failed to post commercial comment for %s", task_id)
+
+        # Path B — brief. Uses its own internal idempotency: if a record
+        # already exists for this ticket (e.g., another worker raced us
+        # past the in-process mutex), run_brief_path just no-ops.
+        try:
+            property_brief.run_brief_path(parsed, commercial)
+        except Exception as e:
+            logger.exception("Async brief path failed for ticket %s", task_id)
+            try:
+                clickup_client.post_comment(
+                    task_id,
+                    f"Brief generation failed: {e}. Toggle the re-fire flag to retry.",
+                )
+            except Exception:
+                pass
+    finally:
+        _release_claim(task_id)
 
 
 # ── Webhook: HubSpot quote signed ──────────────────────────────────────────

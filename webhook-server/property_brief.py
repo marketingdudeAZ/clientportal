@@ -561,8 +561,27 @@ def run_brief_path(parsed: dict[str, Any], commercial: dict[str, Any]) -> dict[s
     """Generate the brief, persist it with a token, post approval URL.
 
     Returns the persisted record so the caller can log the token + URL.
+
+    Idempotent: if a brief record already exists for this ClickUp ticket,
+    re-uses it without re-running the LLM. This protects against the
+    cross-worker race where two daemons end up running this for the
+    same ticket — one wins the LLM call, the others see the record on
+    their store.find_by_ticket() check.
     """
+    ticket_id = parsed.get("ticket_id") or ""
+    if ticket_id:
+        existing = store.find_by_ticket(ticket_id)
+        if existing:
+            logger.info("Brief already exists for ticket %s — reusing record", ticket_id)
+            return existing[0]
     brief = generate_brief(parsed=parsed, company_id=commercial["company_id"])
+    # Re-check after the slow LLM call — another worker may have written
+    # a record while we were waiting on Anthropic. If so, abandon ours.
+    if ticket_id:
+        existing = store.find_by_ticket(ticket_id)
+        if existing:
+            logger.info("Brief race for ticket %s — abandoning duplicate generation", ticket_id)
+            return existing[0]
     record = store.create(
         ticket_id=parsed["ticket_id"],
         company_id=commercial["company_id"],
