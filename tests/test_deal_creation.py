@@ -1,9 +1,11 @@
 """Deal creation tests — exercise the real deal_creator module.
 
-Previous version of this file mocked the module under test and imported a
-fake `webhook_server_helper` that doesn't exist. These tests hit the actual
-`deal_creator.create_deal_with_line_items` and `deal_creator._channel_product_name`
-with `requests` mocked out so we assert the HubSpot wire format.
+Aligned to the new IO process Kyle's docs lock in (2026-05-08):
+  - Deal name format:  "<Property> - <Type> - MM/DD/YYYY"
+  - All 13 default digital SKUs on every deal (driven by product_catalog)
+  - Line items reference catalog products by hs_product_id, not by
+    invented name. HubSpot resolves name/SKU from the product itself.
+  - Setup-fee line items still get created when selections include setup.
 """
 
 import os
@@ -18,6 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 # deal_creator reads HUBSPOT_API_KEY from config at import time.
 with mock.patch.dict(os.environ, {"HUBSPOT_API_KEY": "test-key"}):
     import deal_creator  # noqa: E402
+    import product_catalog  # noqa: E402
 
 
 def _resp(body, status_code=200):
@@ -28,213 +31,232 @@ def _resp(body, status_code=200):
     return m
 
 
-class TestChannelProductName(unittest.TestCase):
-    def test_seo_tier(self):
-        self.assertEqual(deal_creator._channel_product_name("seo", "Standard"),
-                         "SEO — Standard")
+class TestProductCatalog(unittest.TestCase):
+    """The catalog lookup + SEO tier price parser."""
 
-    def test_social_posting_tier(self):
-        self.assertEqual(deal_creator._channel_product_name("social_posting", "Premium"),
-                         "Social Posting — Premium")
+    def test_known_channel_returns_product_id(self):
+        self.assertEqual(product_catalog.hs_product_id("paid_search"), "1828410484")
+        self.assertEqual(product_catalog.hs_product_id("seo"), "29987927375")
+        self.assertEqual(product_catalog.hs_product_id("management_fee"), "3995554730")
 
-    def test_reputation_tier(self):
-        self.assertEqual(deal_creator._channel_product_name("reputation", "Response Only"),
-                         "Reputation — Response Only")
+    def test_unknown_channel_returns_empty(self):
+        self.assertEqual(product_catalog.hs_product_id("nonexistent"), "")
 
-    def test_paid_search_ignores_tier(self):
-        self.assertEqual(deal_creator._channel_product_name("paid_search", ""),
-                         "Paid Search — Google Ads")
+    def test_seo_price_parsed_from_tier_label(self):
+        self.assertEqual(product_catalog._seo_price("Local - $100"), 100.0)
+        self.assertEqual(product_catalog._seo_price("Lite - $300"), 300.0)
+        self.assertEqual(product_catalog._seo_price("Basic - $500"), 500.0)
+        self.assertEqual(product_catalog._seo_price("Standard - $800"), 800.0)
+        self.assertEqual(product_catalog._seo_price("Premium - $1,300"), 1300.0)
 
-    def test_paid_social_ignores_tier(self):
-        self.assertEqual(deal_creator._channel_product_name("paid_social", "anything"),
-                         "Paid Social — Meta/Facebook")
+    def test_seo_price_zero_for_empty_or_unparseable(self):
+        self.assertEqual(product_catalog._seo_price(""), 0.0)
+        self.assertEqual(product_catalog._seo_price("None"), 0.0)
+        self.assertEqual(product_catalog._seo_price("New Channel"), 0.0)
 
-    def test_unknown_channel_falls_back(self):
-        self.assertEqual(deal_creator._channel_product_name("mystery", "Gold"),
-                         "mystery — Gold")
+    def test_default_line_items_includes_all_13(self):
+        items = product_catalog.build_default_line_items({})
+        # 12 SKUs + management_fee = 13 line items
+        self.assertEqual(len(items), 13)
+        channels = {i["channel"] for i in items}
+        for required in ("seo", "paid_search", "paid_social", "pmax", "display",
+                         "geofence", "retargeting", "tiktok", "programmatic",
+                         "demand_gen", "youtube", "ctv", "management_fee"):
+            self.assertIn(required, channels)
+        # Every entry has a product id
+        for i in items:
+            self.assertTrue(i["hs_product_id"], f"missing pid for {i['channel']}")
+
+    def test_default_line_items_zero_for_inactive_channels(self):
+        items = product_catalog.build_default_line_items({})
+        for i in items:
+            self.assertEqual(i["price"], 0.0)
+
+    def test_default_line_items_uses_selection_prices(self):
+        sel = {
+            "paid_search": {"tier": "New Channel", "monthly": 3500, "setup": 0},
+            "pmax":        {"tier": "New Channel", "monthly": 2000, "setup": 0},
+            "seo":         {"tier": "Standard - $800", "monthly": 0, "setup": 0},
+        }
+        items = product_catalog.build_default_line_items(sel)
+        by_channel = {i["channel"]: i["price"] for i in items}
+        self.assertEqual(by_channel["paid_search"], 3500.0)
+        self.assertEqual(by_channel["pmax"], 2000.0)
+        self.assertEqual(by_channel["seo"], 800.0)         # parsed from tier label
+        self.assertEqual(by_channel["paid_social"], 0.0)   # not in selections
+        self.assertEqual(by_channel["management_fee"], 0.0)  # stub returns 0
 
 
 class TestCreateDealWithLineItems(unittest.TestCase):
     """End-to-end exercise of the real deal_creator with requests mocked."""
 
     def setUp(self):
-        # Map of endpoint suffix -> response body, so each HTTP call resolves
-        # deterministically.
         self._post = mock.patch("deal_creator.requests.post").start()
         self._put = mock.patch("deal_creator.requests.put").start()
-
-        # Counter so each line-item POST gets a unique id.
-        self._line_item_counter = iter(range(1000, 2000))
+        self._line_item_counter = iter(range(1000, 9999))
 
         def post_side_effect(url, **kwargs):
-            if "/deals" in url:
+            if "/deals" in url and "/associations" not in url:
                 return _resp({"id": "deal-42"})
             if "/line_items" in url:
                 return _resp({"id": f"li-{next(self._line_item_counter)}"})
             return _resp({})
 
-        def put_side_effect(url, **kwargs):
-            return _resp({})
-
         self._post.side_effect = post_side_effect
-        self._put.side_effect = put_side_effect
+        self._put.return_value = _resp({})
+
+        # Strip test-mode so default-pipeline assertions pass.
+        os.environ.pop("PROPERTY_BRIEF_TEST_MODE", None)
 
     def tearDown(self):
         mock.patch.stopall()
 
+    def _line_item_post_calls(self):
+        return [c for c in self._post.call_args_list
+                if "/line_items" in (c.args[0] if c.args else "")]
+
     def test_returns_deal_id(self):
         deal_id = deal_creator.create_deal_with_line_items(
             company_id="comp-1",
-            selections={
-                "seo": {"tier": "Standard", "monthly": 800, "setup": 0},
-            },
+            selections={"seo": {"tier": "Standard - $800", "monthly": 0, "setup": 0}},
             totals={"monthly": 800, "setup": 0},
+            property_name="Test Property",
         )
         self.assertEqual(deal_id, "deal-42")
 
-    def test_deal_body_shape(self):
+    def test_deal_name_format(self):
         deal_creator.create_deal_with_line_items(
             company_id="comp-1",
-            selections={"seo": {"tier": "Standard", "monthly": 800, "setup": 0}},
+            selections={},
             totals={"monthly": 800, "setup": 0},
+            property_name="Vitri",
+            deal_type="New Account Build",
         )
-        # First POST is the deal itself
-        deal_call = self._post.call_args_list[0]
-        url = deal_call.args[0] if deal_call.args else deal_call.kwargs.get("url")
-        body = deal_call.kwargs["json"]
-        self.assertIn("/crm/v3/objects/deals", url)
-        self.assertEqual(body["properties"]["dealname"],
-                         "Client Portal — Budget Configurator Submission")
-        self.assertEqual(body["properties"]["pipeline"], "default")
-        self.assertEqual(body["properties"]["dealstage"], "appointmentscheduled")
-        self.assertEqual(body["properties"]["amount"], "800")
+        body = self._post.call_args_list[0].kwargs["json"]
+        # Format: "Vitri - New Account Build - MM/DD/YYYY"
+        name = body["properties"]["dealname"]
+        self.assertTrue(name.startswith("Vitri - New Account Build - "), f"got {name!r}")
+        # date suffix is MM/DD/YYYY (10 chars after the dash-space)
+        self.assertRegex(name, r"^Vitri - New Account Build - \d{2}/\d{2}/\d{4}$")
+
+    def test_deal_name_falls_back_when_property_name_missing(self):
+        deal_creator.create_deal_with_line_items(
+            company_id="c", selections={}, totals={"monthly": 0, "setup": 0},
+        )
+        body = self._post.call_args_list[0].kwargs["json"]
+        self.assertIn("Unnamed Property", body["properties"]["dealname"])
+
+    def test_clickup_ticket_id_stamped_on_deal(self):
+        deal_creator.create_deal_with_line_items(
+            company_id="c", selections={}, totals={"monthly": 0, "setup": 0},
+            clickup_ticket_id="abc123", property_name="X",
+        )
+        body = self._post.call_args_list[0].kwargs["json"]
+        self.assertEqual(body["properties"]["clickup_ticket_id"], "abc123")
 
     def test_associates_deal_with_company(self):
         deal_creator.create_deal_with_line_items(
-            company_id="comp-1",
-            selections={"seo": {"tier": "Standard", "monthly": 800, "setup": 0}},
-            totals={"monthly": 800, "setup": 0},
+            company_id="comp-1", selections={}, totals={"monthly": 0, "setup": 0},
+            property_name="X",
         )
-        # First PUT is the deal->company association
         assoc_url = self._put.call_args_list[0].args[0]
         self.assertIn("/deals/deal-42/associations/companies/comp-1", assoc_url)
         self.assertIn("deal_to_company", assoc_url)
 
-    def test_monthly_only_produces_one_line_item(self):
+    def test_creates_all_13_default_line_items_even_when_selections_empty(self):
         deal_creator.create_deal_with_line_items(
-            company_id="c1",
-            selections={"seo": {"tier": "Standard", "monthly": 800, "setup": 0}},
-            totals={"monthly": 800, "setup": 0},
+            company_id="c", selections={}, totals={"monthly": 0, "setup": 0},
+            property_name="X",
         )
-        line_item_posts = [c for c in self._post.call_args_list
-                           if "/line_items" in (c.args[0] if c.args else "")]
-        self.assertEqual(len(line_item_posts), 1)
-        props = line_item_posts[0].kwargs["json"]["properties"]
-        self.assertEqual(props["name"], "SEO — Standard")
-        self.assertEqual(props["price"], "800")
-        self.assertEqual(props["recurringbillingfrequency"], "monthly")
+        line_items = self._line_item_post_calls()
+        self.assertEqual(len(line_items), 13)
+        # Every line item references a product by hs_product_id
+        for c in line_items:
+            props = c.kwargs["json"]["properties"]
+            self.assertTrue(props.get("hs_product_id"), "line item missing hs_product_id")
+            self.assertNotIn("name", props, "line item should NOT carry an invented name")
 
-    def test_setup_fee_adds_second_line_item(self):
+    def test_line_item_prices_match_selections(self):
         deal_creator.create_deal_with_line_items(
-            company_id="c1",
-            selections={"social_posting": {"tier": "Basic", "monthly": 300, "setup": 500}},
-            totals={"monthly": 300, "setup": 500},
-        )
-        line_item_posts = [c for c in self._post.call_args_list
-                           if "/line_items" in (c.args[0] if c.args else "")]
-        self.assertEqual(len(line_item_posts), 2)
-        names = [p.kwargs["json"]["properties"]["name"] for p in line_item_posts]
-        self.assertIn("Social Posting — Basic", names)
-        self.assertIn("Social Posting — Basic — Setup Fee", names)
-
-    def test_multiple_selections_each_get_line_items(self):
-        deal_creator.create_deal_with_line_items(
-            company_id="c1",
+            company_id="c",
             selections={
-                "seo":             {"tier": "Standard",      "monthly": 800, "setup": 0},
-                "social_posting":  {"tier": "Basic",         "monthly": 300, "setup": 500},
-                "reputation":      {"tier": "Response Only", "monthly": 190, "setup": 50},
+                "paid_search": {"tier": "New Channel", "monthly": 3500, "setup": 0},
+                "pmax":        {"tier": "New Channel", "monthly": 2000, "setup": 0},
+                "seo":         {"tier": "Standard - $800", "monthly": 0, "setup": 0},
             },
-            totals={"monthly": 1290, "setup": 550},
+            totals={"monthly": 5500, "setup": 0},
+            property_name="X",
         )
-        line_item_posts = [c for c in self._post.call_args_list
-                           if "/line_items" in (c.args[0] if c.args else "")]
-        # 3 monthly + 2 setup (seo has no setup fee)
-        self.assertEqual(len(line_item_posts), 5)
+        line_items = self._line_item_post_calls()
+        prices_by_pid = {
+            c.kwargs["json"]["properties"]["hs_product_id"]:
+                c.kwargs["json"]["properties"]["price"]
+            for c in line_items
+        }
+        # Paid Search Ads (1828410484) = 3500
+        self.assertEqual(prices_by_pid["1828410484"], "3500.0")
+        # Google Ads Performance Max (1992302863) = 2000
+        self.assertEqual(prices_by_pid["1992302863"], "2000.0")
+        # SEO Package (29987927375) = 800 (parsed from "Standard - $800")
+        self.assertEqual(prices_by_pid["29987927375"], "800.0")
+        # Inactive channels at 0
+        # Geofence (1828397328)
+        self.assertEqual(prices_by_pid["1828397328"], "0.0")
 
-    def test_each_line_item_is_associated_to_deal(self):
+    def test_each_line_item_associated_to_deal(self):
         deal_creator.create_deal_with_line_items(
-            company_id="c1",
-            selections={
-                "seo":            {"tier": "Standard", "monthly": 800, "setup": 0},
-                "social_posting": {"tier": "Basic",    "monthly": 300, "setup": 500},
-            },
-            totals={"monthly": 1100, "setup": 500},
+            company_id="c", selections={}, totals={"monthly": 0, "setup": 0},
+            property_name="X",
         )
-        # line_item -> deal associations go through PUT. Skip the deal->company one.
         li_assoc = [c for c in self._put.call_args_list
                     if "/line_items/" in c.args[0] and "line_item_to_deal" in c.args[0]]
-        # 2 monthly + 1 setup = 3 associations
-        self.assertEqual(len(li_assoc), 3)
+        self.assertEqual(len(li_assoc), 13)
 
-    def test_line_items_carry_hs_sku_for_known_channels(self):
-        """spend_sheet.py rolls up by hs_sku — without it, /accounts Total is wrong."""
+    def test_setup_fee_creates_extra_line_items(self):
         deal_creator.create_deal_with_line_items(
-            company_id="c1",
+            company_id="c",
             selections={
-                "seo":            {"tier": "Standard", "monthly": 800, "setup": 0},
-                "paid_search":    {"tier": "Google Ads", "monthly": 3500, "setup": 500},
-                "social_posting": {"tier": "Basic",    "monthly": 300, "setup": 500},
+                "paid_search": {"tier": "New Channel", "monthly": 3500, "setup": 500},
             },
-            totals={"monthly": 4600, "setup": 1000},
+            totals={"monthly": 3500, "setup": 500},
+            property_name="X",
         )
-        line_item_posts = [c for c in self._post.call_args_list
-                           if "/line_items" in (c.args[0] if c.args else "")]
-        skus = [p.kwargs["json"]["properties"].get("hs_sku") for p in line_item_posts]
-        # Both monthly AND setup line items should carry the SKU.
-        self.assertIn("SEO_Package", skus)
-        self.assertIn("Paid_Search_Ads", skus)
-        self.assertIn("Social_Posting", skus)
-        # Setup-fee line items should also have the SKU.
-        self.assertEqual(skus.count("Paid_Search_Ads"), 2)   # monthly + setup
-        self.assertEqual(skus.count("Social_Posting"), 2)    # monthly + setup
-        self.assertEqual(skus.count("SEO_Package"), 1)       # no setup fee on SEO
-
-    def test_unknown_channel_skips_hs_sku(self):
-        """Unknown channels stay backward-compatible: no hs_sku, no breakage."""
-        deal_creator.create_deal_with_line_items(
-            company_id="c1",
-            selections={"mystery": {"tier": "Gold", "monthly": 100, "setup": 0}},
-            totals={"monthly": 100, "setup": 0},
-        )
-        line_item_posts = [c for c in self._post.call_args_list
-                           if "/line_items" in (c.args[0] if c.args else "")]
-        self.assertEqual(len(line_item_posts), 1)
-        self.assertNotIn("hs_sku", line_item_posts[0].kwargs["json"]["properties"])
+        line_items = self._line_item_post_calls()
+        # 13 default + 1 setup
+        self.assertEqual(len(line_items), 14)
+        # Last one should be the setup item — has a `name` instead of hs_product_id
+        last = line_items[-1].kwargs["json"]["properties"]
+        self.assertIn("Setup Fee", last["name"])
+        self.assertEqual(last["price"], "500.0")
+        self.assertEqual(last["hs_sku"], "Paid_Search_Ads")
 
 
 class TestPropertyBriefTestMode(unittest.TestCase):
-    """When PROPERTY_BRIEF_TEST_MODE=true, deals route to the test pipeline.
-
-    This keeps prod revenue reporting clean during ClickUp -> HubSpot
-    end-to-end validation. Without the env var, behaviour is unchanged.
-    """
+    """When PROPERTY_BRIEF_TEST_MODE=true, deals route to the test pipeline."""
 
     def _run_with_env(self, env: dict) -> dict:
         with mock.patch.dict(os.environ, env, clear=False), \
              mock.patch("deal_creator.requests.post") as post, \
              mock.patch("deal_creator.requests.put") as put:
-            post.side_effect = [_resp({"id": "deal-1"}), _resp({"id": "li-1"})]
+            counter = iter(range(1000, 9999))
+
+            def post_side_effect(url, **kwargs):
+                if "/deals" in url and "/associations" not in url:
+                    return _resp({"id": "deal-1"})
+                if "/line_items" in url:
+                    return _resp({"id": f"li-{next(counter)}"})
+                return _resp({})
+            post.side_effect = post_side_effect
             put.return_value = _resp({})
             deal_creator.create_deal_with_line_items(
                 company_id="c1",
-                selections={"seo": {"tier": "Standard", "monthly": 800, "setup": 0}},
+                selections={"seo": {"tier": "Standard - $800", "monthly": 0, "setup": 0}},
                 totals={"monthly": 800, "setup": 0},
+                property_name="Test Property",
             )
             return post.call_args_list[0].kwargs["json"]["properties"]
 
     def test_default_pipeline_when_test_mode_absent(self):
-        # Strip any inherited test-mode env var so the default path is exercised.
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("PROPERTY_BRIEF_TEST_MODE", None)
             props = self._run_with_env({})
@@ -253,36 +275,12 @@ class TestPropertyBriefTestMode(unittest.TestCase):
         self.assertIn("[TEST]", props["dealname"])
 
     def test_test_mode_falls_back_to_default_when_pipeline_id_missing(self):
-        # Defensive: PROPERTY_BRIEF_TEST_MODE=true but no pipeline id set
-        # should NOT silently route to a non-existent pipeline. We keep the
-        # default so deals still land somewhere reachable.
         props = self._run_with_env({
             "PROPERTY_BRIEF_TEST_MODE": "true",
             "HUBSPOT_TEST_PIPELINE_ID": "",
         })
         self.assertEqual(props["pipeline"], "default")
         self.assertEqual(props["dealstage"], "appointmentscheduled")
-
-
-class TestProductMapLookup(unittest.TestCase):
-    """When a product is in the catalog, the line item should include hs_product_id."""
-
-    def test_hs_product_id_attached_when_mapped(self):
-        with mock.patch("deal_creator.requests.post") as post, \
-             mock.patch("deal_creator.requests.put") as put, \
-             mock.patch.dict(deal_creator.PRODUCT_MAP, {"SEO — Standard": "prod-999"}):
-            post.side_effect = [
-                _resp({"id": "deal-1"}),
-                _resp({"id": "li-1"}),
-            ]
-            put.return_value = _resp({})
-            deal_creator.create_deal_with_line_items(
-                company_id="c1",
-                selections={"seo": {"tier": "Standard", "monthly": 800, "setup": 0}},
-                totals={"monthly": 800, "setup": 0},
-            )
-            line_item_body = post.call_args_list[1].kwargs["json"]
-            self.assertEqual(line_item_body["properties"]["hs_product_id"], "prod-999")
 
 
 if __name__ == "__main__":

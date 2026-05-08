@@ -328,6 +328,8 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
             selections=parsed["selections"],
             totals=parsed["totals"],
             clickup_ticket_id=parsed.get("ticket_id") or "",
+            property_name=parsed.get("property_name") or "",
+            deal_type="New Account Build",
         )
 
     # Quote step is soft-fail. The HubSpot Quotes V3 API has tight

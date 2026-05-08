@@ -1,10 +1,31 @@
-"""Phase 7: HubSpot Deal + Line Items creation."""
+"""HubSpot Deal + Line Items creation for the property-brief automation.
 
+Aligned with the new IO process Kyle's docs lock in:
+
+  - Deal name format:  "<Property Name> - <Type> - MM/DD/YYYY"
+  - All 13 digital SKUs on every IO. Channels not running -> $0.
+  - Line items reference catalog products by `hs_product_id`. We do NOT
+    invent line-item names; HubSpot fills name/SKU/description from the
+    product itself.
+
+The `selections` dict keeps its existing shape (channel -> {tier, monthly,
+setup}) for backwards compatibility — what changes is what we DO with it:
+the function now walks `product_catalog.DEFAULT_DIGITAL_LINE_ITEMS` (the
+fixed 13) and looks up each channel's price from selections, defaulting
+to $0 for the slots not in the form. The pre-doc behavior of "one line
+item per selection" only is gone.
+"""
+
+from __future__ import annotations
+
+import datetime as _dt
 import logging
 import os
+from typing import Any
 
 import requests
 
+import product_catalog
 from config import HUBSPOT_API_KEY
 
 logger = logging.getLogger(__name__)
@@ -14,10 +35,6 @@ HEADERS = {
     "Authorization": f"Bearer {HUBSPOT_API_KEY}",
     "Content-Type": "application/json",
 }
-
-# Product name → HubSpot Product ID mapping
-# Populated by seed_product_catalog.py
-PRODUCT_MAP = {}
 
 # Channel → HubSpot `hs_sku` value. Source of truth for the spend-sheet
 # rollup is webhook-server/spend_sheet.py SKU_COLUMN_MAP — these strings
@@ -41,6 +58,7 @@ CHANNEL_SKU_MAP = {
     "website_hosting": "Website_Hosting",
     "eblast":          "Eblast",
     "email_drip":      "Email_Drip_Campaign",
+    "management_fee":  "Management_Fee",
 }
 
 
@@ -49,42 +67,53 @@ def create_deal_with_line_items(
     selections: dict,
     totals: dict,
     clickup_ticket_id: str = "",
+    property_name: str = "",
+    deal_type: str = "New Account Build",
 ) -> str:
-    """Create a HubSpot Deal associated with a company, with line items for each selection.
+    """Create a HubSpot Deal + the 13 default digital SKU line items.
 
     `clickup_ticket_id` is stamped onto the deal as a custom property so
-    property_brief._find_existing_deal can dedupe on retry. Falls back
-    silently if the portal doesn't have the property defined yet (the
-    POST will reject the unknown field, which we tolerate).
+    property_brief._find_existing_deal can dedupe on retry.
+
+    `property_name` is the property's display name (from ClickUp task
+    title). Used in the deal name. Falls back to a generic if missing.
+
+    `deal_type` is the change category — "New Account Build", "Budget
+    Change", "Dispo", "Cancellation of All Services", or COOP variants.
+    Drives the deal name format. Defaults to "New Account Build" since
+    that's the only intake list wired today.
 
     Returns the Deal ID.
     """
-    # Step 1: Create Deal
+    today_str = _dt.date.today().strftime("%m/%d/%Y")
+    pretty_name = property_name.strip() if property_name else "Unnamed Property"
+    dealname = f"{pretty_name} - {deal_type} - {today_str}"
+
     deal_properties = {
-        "dealname": f"Client Portal — Budget Configurator Submission",
-        "pipeline": "default",
-        "dealstage": "appointmentscheduled",  # First stage in default pipeline
-        "amount": str(totals.get("monthly", 0)),
-        "description": f"Submitted via client portal configurator. Monthly: ${totals.get('monthly', 0)}, Setup: ${totals.get('setup', 0)}",
+        "dealname":    dealname,
+        "pipeline":    "default",
+        "dealstage":   "appointmentscheduled",  # first stage in default pipeline
+        "amount":      str(totals.get("monthly", 0)),
+        "description": (
+            f"Auto-created from ClickUp ticket {clickup_ticket_id or '(unknown)'}. "
+            f"Monthly: ${totals.get('monthly', 0)}, Setup: ${totals.get('setup', 0)}."
+        ),
     }
     if clickup_ticket_id:
         deal_properties["clickup_ticket_id"] = clickup_ticket_id
 
-    # Test-mode override: route deals into the "Property Brief Testing"
-    # pipeline so prod revenue reporting stays clean while we validate the
-    # ClickUp -> HubSpot flow end-to-end. When PROPERTY_BRIEF_TEST_MODE is
-    # not "true", behaviour is unchanged.
+    # Test-mode override — keeps prod revenue reporting clean while we
+    # validate the flow end-to-end.
     if os.getenv("PROPERTY_BRIEF_TEST_MODE", "").strip().lower() == "true":
         test_pipeline = os.getenv("HUBSPOT_TEST_PIPELINE_ID", "").strip()
         if test_pipeline:
-            deal_properties["pipeline"] = test_pipeline
-            # First stage of the test pipeline. Default matches the stage we
-            # provisioned at create time; override only if you reorder stages.
+            deal_properties["pipeline"]  = test_pipeline
             deal_properties["dealstage"] = os.getenv(
                 "HUBSPOT_TEST_PIPELINE_FIRST_STAGE_ID", "1356833043"
             ).strip()
-            deal_properties["dealname"] = f"[TEST] {deal_properties['dealname']}"
+            deal_properties["dealname"]  = f"[TEST] {deal_properties['dealname']}"
 
+    # Step 1: create the deal
     deal_resp = requests.post(
         f"{API_BASE}/crm/v3/objects/deals",
         headers=HEADERS,
@@ -93,90 +122,70 @@ def create_deal_with_line_items(
     deal_resp.raise_for_status()
     deal_id = deal_resp.json()["id"]
 
-    # Step 2: Associate Deal with Company
+    # Step 2: associate deal -> company
     requests.put(
         f"{API_BASE}/crm/v3/objects/deals/{deal_id}/associations/companies/{company_id}/deal_to_company",
         headers=HEADERS,
     ).raise_for_status()
 
-    # Step 3: Create line items for each selection
-    for channel, selection in selections.items():
-        tier = selection.get("tier", "")
-        monthly = selection.get("monthly", 0)
-        setup = selection.get("setup", 0)
-
-        # Monthly recurring line item
-        product_name = _channel_product_name(channel, tier)
-        line_item = {
-            "properties": {
-                "name": product_name,
-                "quantity": "1",
-                "price": str(monthly),
-                "recurringbillingfrequency": "monthly",
-            }
+    # Step 3: create the 13 default line items, all referenced by
+    # hs_product_id. HubSpot resolves name/SKU/description from the
+    # product. We only carry the per-property monthly price.
+    line_item_ids: list[str] = []
+    for entry in product_catalog.build_default_line_items(selections):
+        channel = entry["channel"]
+        line_props = {
+            "hs_product_id": entry["hs_product_id"],
+            "quantity":      "1",
+            "price":         str(entry["price"]),
+            "recurringbillingfrequency": "monthly",
         }
-
-        # SKU is what spend_sheet.py rolls up by — set it whenever the
-        # channel is in CHANNEL_SKU_MAP. Without it, deal spend is
-        # invisible to the /accounts Total column.
         sku = CHANNEL_SKU_MAP.get(channel)
         if sku:
-            line_item["properties"]["hs_sku"] = sku
-
-        # Try to associate with Product from catalog
-        product_id = PRODUCT_MAP.get(product_name)
-        if product_id:
-            line_item["properties"]["hs_product_id"] = product_id
+            line_props["hs_sku"] = sku
 
         li_resp = requests.post(
             f"{API_BASE}/crm/v3/objects/line_items",
             headers=HEADERS,
-            json=line_item,
+            json={"properties": line_props},
         )
         li_resp.raise_for_status()
         li_id = li_resp.json()["id"]
+        line_item_ids.append(li_id)
 
-        # Associate line item with deal
         requests.put(
             f"{API_BASE}/crm/v3/objects/line_items/{li_id}/associations/deals/{deal_id}/line_item_to_deal",
             headers=HEADERS,
         ).raise_for_status()
 
-        # One-time setup fee line item
-        if setup > 0:
-            setup_item = {
-                "properties": {
-                    "name": f"{product_name} — Setup Fee",
-                    "quantity": "1",
-                    "price": str(setup),
-                }
-            }
-            if sku:
-                setup_item["properties"]["hs_sku"] = sku
-            si_resp = requests.post(
-                f"{API_BASE}/crm/v3/objects/line_items",
-                headers=HEADERS,
-                json=setup_item,
-            )
-            si_resp.raise_for_status()
-            si_id = si_resp.json()["id"]
+    # Step 4: optional one-time setup line items per selection. Setup is
+    # not on the new-build form so this typically no-ops; kept for the
+    # configurator-driven path that does pass setup amounts.
+    for channel, sel in (selections or {}).items():
+        setup_amount = float(sel.get("setup") or 0)
+        if setup_amount <= 0:
+            continue
+        setup_props = {
+            "name":     f"{channel} — Setup Fee",
+            "quantity": "1",
+            "price":    str(setup_amount),
+        }
+        sku = CHANNEL_SKU_MAP.get(channel)
+        if sku:
+            setup_props["hs_sku"] = sku
+        si_resp = requests.post(
+            f"{API_BASE}/crm/v3/objects/line_items",
+            headers=HEADERS,
+            json={"properties": setup_props},
+        )
+        si_resp.raise_for_status()
+        si_id = si_resp.json()["id"]
+        line_item_ids.append(si_id)
+        requests.put(
+            f"{API_BASE}/crm/v3/objects/line_items/{si_id}/associations/deals/{deal_id}/line_item_to_deal",
+            headers=HEADERS,
+        ).raise_for_status()
 
-            requests.put(
-                f"{API_BASE}/crm/v3/objects/line_items/{si_id}/associations/deals/{deal_id}/line_item_to_deal",
-                headers=HEADERS,
-            ).raise_for_status()
-
-    logger.info("Created deal %s with %d line items", deal_id, len(selections))
+    logger.info("Created deal %s (%s) with %d line items",
+                deal_id, dealname, len(line_item_ids))
     return deal_id
-
-
-def _channel_product_name(channel: str, tier: str) -> str:
-    """Map channel + tier to product catalog name."""
-    names = {
-        "seo": f"SEO — {tier}",
-        "social_posting": f"Social Posting — {tier}",
-        "reputation": f"Reputation — {tier}",
-        "paid_search": "Paid Search — Google Ads",
-        "paid_social": "Paid Social — Meta/Facebook",
-    }
-    return names.get(channel, f"{channel} — {tier}")
