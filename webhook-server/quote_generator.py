@@ -84,6 +84,25 @@ def generate_and_send_quote(
     }
     if owner_id:
         quote_props["hubspot_owner_id"] = owner_id
+
+    # Sender info on the quote. HubSpot does NOT auto-derive these from
+    # hubspot_owner_id — without them, the QUOTE SENDER pane in the
+    # quote editor reads "No name / No email / No phone number" and
+    # the AM has to fill them in manually before sending. Pull the
+    # owner's profile and stamp the relevant hs_sender_* fields here.
+    if owner_id:
+        sender = _fetch_owner_profile(owner_id)
+        if sender.get("firstName"):
+            quote_props["hs_sender_firstname"] = sender["firstName"]
+        if sender.get("lastName"):
+            quote_props["hs_sender_lastname"] = sender["lastName"]
+        if sender.get("email"):
+            quote_props["hs_sender_email"] = sender["email"]
+
+    # Sender company. RPM Living info is constant across every quote so
+    # we hard-code it here. Override per-portal by pulling from a config
+    # if RPM ever needs different sender companies.
+    quote_props.setdefault("hs_sender_company_name", "RPM Living")
     quote_resp = requests.post(
         f"{API_BASE}/crm/v3/objects/quotes",
         headers=HEADERS,
@@ -147,6 +166,29 @@ def generate_and_send_quote(
         len([e for e in (additional_contact_emails or []) if e and e != signer_email]),
     )
     return quote_id
+
+
+def _fetch_owner_profile(owner_id: str) -> dict:
+    """Pull firstName / lastName / email for a HubSpot owner.
+
+    Used to populate hs_sender_* on quotes so the QUOTE SENDER pane in
+    the HubSpot UI shows the AM's name and email instead of the
+    "No name / No email" placeholder. Returns an empty dict on failure
+    so the caller can fall through cleanly.
+    """
+    if not owner_id:
+        return {}
+    try:
+        r = requests.get(
+            f"{API_BASE}/crm/v3/owners/{owner_id}",
+            headers=HEADERS,
+            timeout=10,
+        )
+        if r.status_code == 200:
+            return r.json() or {}
+    except requests.RequestException as e:
+        logger.warning("Owner profile fetch failed for %s: %s", owner_id, e)
+    return {}
 
 
 def _fetch_deal_name(deal_id: str) -> str:
