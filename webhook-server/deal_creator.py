@@ -48,8 +48,14 @@ def create_deal_with_line_items(
     company_id: str,
     selections: dict,
     totals: dict,
+    clickup_ticket_id: str = "",
 ) -> str:
     """Create a HubSpot Deal associated with a company, with line items for each selection.
+
+    `clickup_ticket_id` is stamped onto the deal as a custom property so
+    property_brief._find_existing_deal can dedupe on retry. Falls back
+    silently if the portal doesn't have the property defined yet (the
+    POST will reject the unknown field, which we tolerate).
 
     Returns the Deal ID.
     """
@@ -61,6 +67,8 @@ def create_deal_with_line_items(
         "amount": str(totals.get("monthly", 0)),
         "description": f"Submitted via client portal configurator. Monthly: ${totals.get('monthly', 0)}, Setup: ${totals.get('setup', 0)}",
     }
+    if clickup_ticket_id:
+        deal_properties["clickup_ticket_id"] = clickup_ticket_id
 
     # Test-mode override: route deals into the "Property Brief Testing"
     # pipeline so prod revenue reporting stays clean while we validate the

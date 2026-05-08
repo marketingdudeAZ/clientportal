@@ -312,20 +312,44 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
     deal_creator = _import("deal_creator")
     quote_generator = _import("quote_generator")
 
-    deal_id = deal_creator.create_deal_with_line_items(
-        company_id=company["id"],
-        selections=parsed["selections"],
-        totals=parsed["totals"],
-    )
-    quote_id = quote_generator.generate_and_send_quote(
-        deal_id=deal_id,
-        company_id=company["id"],
-    )
+    # Idempotency: if a deal already exists for this ClickUp ticket, reuse
+    # it. ClickUp retries failed webhooks; without this check, a transient
+    # error downstream (e.g., quote API 400) creates a new deal on every
+    # retry. The ticket id is stored on the deal as `clickup_ticket_id` —
+    # search HubSpot for that before creating a fresh deal.
+    existing_deal_id = _find_existing_deal(parsed.get("ticket_id") or "")
+    if existing_deal_id:
+        logger.info("Reusing existing deal %s for ClickUp ticket %s",
+                    existing_deal_id, parsed.get("ticket_id"))
+        deal_id = existing_deal_id
+    else:
+        deal_id = deal_creator.create_deal_with_line_items(
+            company_id=company["id"],
+            selections=parsed["selections"],
+            totals=parsed["totals"],
+            clickup_ticket_id=parsed.get("ticket_id") or "",
+        )
+
+    # Quote step is soft-fail. The HubSpot Quotes V3 API has tight
+    # validation (template path, deal owner, company address) that's
+    # easy to miss — and even when it 400s, the deal + line items
+    # already exist and the RM can generate a quote manually. Don't
+    # let a quote error abort the whole flow or trigger ClickUp retries.
+    quote_id = ""
+    quote_error = ""
+    try:
+        quote_id = quote_generator.generate_and_send_quote(
+            deal_id=deal_id,
+            company_id=company["id"],
+        )
+    except Exception as e:
+        logger.warning("Quote generation failed for deal %s (continuing): %s", deal_id, e)
+        quote_error = str(e)
 
     portal_id = _hs_portal_id()
     quote_url = (
         f"https://app.hubspot.com/contacts/{portal_id}/quote/{quote_id}"
-        if portal_id else ""
+        if quote_id and portal_id else ""
     )
     deal_url = (
         f"https://app.hubspot.com/contacts/{portal_id}/deal/{deal_id}"
@@ -333,13 +357,51 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
     )
 
     return {
-        "company_id": company["id"],
+        "company_id":   company["id"],
         "company_name": company.get("name") or parsed["property_name"],
-        "deal_id":    deal_id,
-        "deal_url":   deal_url,
-        "quote_id":   quote_id,
-        "quote_url":  quote_url,
+        "deal_id":      deal_id,
+        "deal_url":     deal_url,
+        "quote_id":     quote_id,
+        "quote_url":    quote_url,
+        "quote_error":  quote_error,
     }
+
+
+def _find_existing_deal(ticket_id: str) -> str:
+    """Return the HubSpot deal ID linked to this ClickUp ticket, or "" if none.
+
+    Looks for the custom property `clickup_ticket_id` on deals. If the
+    property doesn't exist on the portal yet, this is best-effort —
+    returns "" on any error so the caller falls through to create.
+    """
+    if not ticket_id:
+        return ""
+    import requests
+    from config import HUBSPOT_API_KEY
+    if not HUBSPOT_API_KEY:
+        return ""
+    try:
+        r = requests.post(
+            "https://api.hubapi.com/crm/v3/objects/deals/search",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}",
+                     "Content-Type": "application/json"},
+            json={
+                "filterGroups": [{"filters": [{
+                    "propertyName": "clickup_ticket_id",
+                    "operator": "EQ",
+                    "value": ticket_id,
+                }]}],
+                "properties": ["dealname", "clickup_ticket_id"],
+                "limit": 1,
+            },
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return ""
+        results = r.json().get("results") or []
+        return results[0]["id"] if results else ""
+    except Exception:
+        return ""
 
 
 def match_or_create_company(parsed: dict[str, Any]) -> dict[str, Any]:

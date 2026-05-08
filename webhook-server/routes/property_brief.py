@@ -69,6 +69,11 @@ def clickup_webhook():
         return jsonify({"status": "blocked", "error": str(e)}), 200
 
     # Path A — commercial. Hard failures stop both paths and surface in ClickUp.
+    # IMPORTANT: always return 200 on commercial errors. ClickUp retries 5xx
+    # responses up to several times, and each retry would re-create deals
+    # if our idempotency check misses (HubSpot search-index lag). Surfacing
+    # the error in the response body without a 5xx keeps ClickUp from
+    # turning a single ticket into a retry storm.
     try:
         commercial = property_brief.run_commercial_path(parsed)
     except property_brief.CompanyMatchAmbiguous as e:
@@ -77,7 +82,7 @@ def clickup_webhook():
     except Exception as e:
         logger.exception("Commercial path failed for ticket %s", task_id)
         clickup_client.post_comment(task_id, f"Property brief automation hit a HubSpot error: {e}")
-        return jsonify({"status": "error", "error": str(e)}), 500
+        return jsonify({"status": "error", "error": str(e)}), 200
 
     property_brief.comment_commercial_result(parsed, commercial)
 
