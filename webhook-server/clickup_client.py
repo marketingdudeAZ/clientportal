@@ -67,6 +67,68 @@ def custom_field_value(task: dict, name: str) -> Any:
     return None
 
 
+def custom_field_value_typed(task: dict, name: str, *, of_type: Any = None) -> Any:
+    """Like `custom_field_value` but disambiguates by field type AND resolves
+    drop_down / labels / currency values to human-readable form.
+
+    ClickUp lists allow duplicate field names if their types differ. RPM
+    intake forms exploit this — e.g., "Paid Search" exists as both a
+    currency (the dollar amount) and a drop_down (the tier). Pass
+    `of_type="currency"` or `of_type="drop_down"` to disambiguate.
+
+    Returns:
+      - drop_down: the option name (resolved from option id / orderindex)
+      - labels:    list of label names
+      - currency:  float
+      - checkbox:  bool
+      - everything else: the raw stored value
+    """
+    fields = task.get("custom_fields") or []
+    needle = name.strip().lower()
+    types = None
+    if isinstance(of_type, str):
+        types = {of_type}
+    elif of_type:
+        types = set(of_type)
+    for field in fields:
+        if (field.get("name") or "").strip().lower() != needle:
+            continue
+        if types and field.get("type") not in types:
+            continue
+        return _resolve_field_value(field)
+    return None
+
+
+def _resolve_field_value(field: dict) -> Any:
+    """Return the human-readable value for a custom field regardless of type."""
+    raw = field.get("value")
+    ftype = field.get("type")
+    if raw in (None, ""):
+        return None
+    if ftype == "drop_down":
+        options = ((field.get("type_config") or {}).get("options")) or []
+        for opt in options:
+            # ClickUp drop_down values arrive as either the option `id`
+            # (uuid) or the `orderindex` (int) depending on API version.
+            if opt.get("id") == raw or str(opt.get("orderindex")) == str(raw):
+                return opt.get("name")
+        return raw
+    if ftype == "labels":
+        options = ((field.get("type_config") or {}).get("options")) or []
+        by_id = {o.get("id"): (o.get("label") or o.get("name")) for o in options}
+        if isinstance(raw, list):
+            return [by_id.get(v, v) for v in raw]
+        return raw
+    if ftype == "currency":
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+    if ftype == "checkbox":
+        return bool(raw)
+    return raw
+
+
 # ── Writes ─────────────────────────────────────────────────────────────────
 
 def post_comment(task_id: str, text: str, notify_all: bool = False) -> bool:

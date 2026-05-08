@@ -90,19 +90,48 @@ def parse_ticket(task: dict[str, Any]) -> dict[str, Any]:
         raise TicketParseError("Empty ClickUp task payload")
 
     cf = clickup_client.custom_field_value
+    # First try an explicit "Selections" JSON field (portal-driven flow).
+    # If absent, fall back to RPM intake-form shape (currency-per-channel
+    # + tier dropdowns) — that's how the live ClickUp lists are wired.
     selections_raw = cf(task, "Selections") or cf(task, "selections")
     selections = _coerce_selections(selections_raw)
+    if not selections:
+        selections = _extract_rpm_selections(task)
 
     parsed = {
         "ticket_id":       str(task.get("id") or ""),
         "ticket_url":      task.get("url") or "",
+        # Property name: explicit field, then the task title (RPM lists
+        # use the title as the property name in the existing workflow).
         "property_name":   _str(cf(task, "Property Name")) or _str(task.get("name")),
-        "property_domain": _str(cf(task, "Property Domain") or cf(task, "Domain")),
-        "submitter_email": _str(cf(task, "Submitter Email") or cf(task, "Submitter")),
+        # Domain: portal field, then RPM-form field "Property URL".
+        "property_domain": _str(
+            cf(task, "Property Domain")
+            or cf(task, "Domain")
+            or cf(task, "Property URL")
+        ),
+        # Submitter email: portal "Submitter Email", then RPM "Requester Email".
+        "submitter_email": _str(
+            cf(task, "Submitter Email")
+            or cf(task, "Submitter")
+            or cf(task, "Requester Email")
+        ),
         "submitter_id":    _str(cf(task, "Submitter ClickUp ID")),
-        "rm_email":        _str(cf(task, "RM Email") or cf(task, "Relationship Manager")),
+        # RM email: portal "RM Email", then RPM "RM's Email" (apostrophe).
+        "rm_email":        _str(
+            cf(task, "RM Email")
+            or cf(task, "Relationship Manager")
+            or cf(task, "RM's Email")
+        ),
         "rm_id":           _str(cf(task, "RM ClickUp ID")),
-        "notes":           _str(task.get("description") or cf(task, "Notes")),
+        # Notes: prefer task description, then portal "Notes",
+        # then RPM "Additional Details from Requester" / "Other Info".
+        "notes":           _str(
+            task.get("description")
+            or cf(task, "Notes")
+            or cf(task, "Additional Details from Requester")
+            or cf(task, "Other Info")
+        ),
         "selections":      selections,
         "totals":          _totals_from_selections(selections),
     }
@@ -170,6 +199,69 @@ def _totals_from_selections(selections: dict[str, dict]) -> dict[str, float]:
     monthly = sum(s.get("monthly", 0) for s in selections.values())
     setup = sum(s.get("setup", 0) for s in selections.values())
     return {"monthly": monthly, "setup": setup}
+
+
+# Map the RPM intake-form shape onto deal_creator.CHANNEL_SKU_MAP keys.
+# Each tuple: (channel_key, currency_field_name_or_None, tier_field_name_or_None).
+# Channels with no currency field on the form are tier-only — line items
+# get created at $0 and the actual price comes from the product catalog
+# / tier table downstream. Channels with no tier field use a constant
+# tier label so the line item product name resolves cleanly.
+_RPM_CHANNEL_FIELDS: list[tuple[str, str | None, str | None]] = [
+    # Paid channels: have both currency + tier on the RPM form.
+    ("paid_search",   "Paid Search",     "Paid Search"),
+    ("paid_social",   "Paid Social",     "Paid Social"),
+    ("pmax",          "PMax",            "P Max"),
+    ("geofence",      "Geofence",        "Geofence"),
+    ("display",       "Google Display",  "Google Display"),
+    ("retargeting",   "Retargeting",     "Retargeting"),
+    ("tiktok",        "TikTok",          "TikTok"),
+    ("programmatic",  "Programmatic",    "Programmatic"),
+    # Tier-only channels (no currency on the RPM form):
+    ("seo",           None, "SEO - Onboard"),
+    ("social_posting", None, "Organic Social"),
+    ("email_drip",    None, "Email Drip Campaign - New Build"),
+]
+
+# Tier dropdown values that mean "no, skip this channel". Case-insensitive.
+_RPM_TIER_SKIP = {"", "none", "n/a", "no", "not requested", "do not include"}
+
+
+def _extract_rpm_selections(task: dict[str, Any]) -> dict[str, dict]:
+    """Build selections from the RPM intake-form custom-field shape.
+
+    Returns the same {channel: {tier, monthly, setup}} dict the portal
+    flow produces, so downstream Path A code is shape-agnostic.
+
+    Skips channels whose currency is empty/zero AND whose tier is empty
+    or one of the "no" sentinel values. Setup is always 0 here — RPM
+    forms don't capture setup separately; deal_creator adds the $0
+    line item which is fine for the test loop and gets adjusted in
+    HubSpot if real setup applies.
+    """
+    cfv = clickup_client.custom_field_value_typed
+    selections: dict[str, dict] = {}
+    for channel_key, currency_name, tier_name in _RPM_CHANNEL_FIELDS:
+        monthly_raw = cfv(task, currency_name, of_type="currency") if currency_name else None
+        tier_raw = cfv(task, tier_name, of_type="drop_down") if tier_name else None
+
+        tier_clean = ""
+        if tier_raw is not None:
+            tier_clean = _str(tier_raw)
+            if tier_clean.lower() in _RPM_TIER_SKIP:
+                tier_clean = ""
+
+        monthly = _num(monthly_raw) if monthly_raw is not None else 0.0
+        # Skip when both the currency and the tier indicate no spend.
+        if monthly <= 0 and not tier_clean:
+            continue
+
+        selections[channel_key] = {
+            "tier":    tier_clean,
+            "monthly": monthly,
+            "setup":   0.0,
+        }
+    return selections
 
 
 # ── Trigger gating ─────────────────────────────────────────────────────────

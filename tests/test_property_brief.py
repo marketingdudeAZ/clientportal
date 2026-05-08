@@ -111,6 +111,152 @@ class TestParseTicket(unittest.TestCase):
             property_brief.parse_ticket(task)
 
 
+def _rpm_dropdown(name, selected_label, options=None):
+    """Build a fake ClickUp drop_down field where `selected_label` is chosen."""
+    options = options or [
+        {"id": "opt-none",     "name": "None",     "orderindex": 0},
+        {"id": "opt-standard", "name": "Standard", "orderindex": 1},
+        {"id": "opt-premium",  "name": "Premium",  "orderindex": 2},
+    ]
+    chosen_id = None
+    for o in options:
+        if o["name"].lower() == selected_label.lower():
+            chosen_id = o["id"]
+            break
+    return {
+        "name": name,
+        "type": "drop_down",
+        "value": chosen_id,
+        "type_config": {"options": options},
+    }
+
+
+def _rpm_currency(name, amount):
+    return {"name": name, "type": "currency", "value": amount}
+
+
+def _rpm_task():
+    """A task shaped like the live RPM "New Account Build" intake list."""
+    return {
+        "id":   "rpm-task-1",
+        "name": "AXIS Crossroads",
+        "url":  "https://app.clickup.com/t/rpm-task-1",
+        "description": "New build going live in May 2026.",
+        "custom_fields": [
+            {"name": "Property URL",     "type": "url",         "value": "https://axiscrossroads.com"},
+            {"name": "Requester Email",  "type": "email",       "value": "kyle@rpmliving.com"},
+            {"name": "RM's Email",       "type": "email",       "value": "rm@rpmliving.com"},
+            _rpm_currency("Paid Search",  3500),
+            _rpm_dropdown("Paid Search",  "Standard"),
+            _rpm_currency("Paid Social",  0),
+            _rpm_dropdown("Paid Social",  "None"),
+            _rpm_currency("PMax",         2000),
+            _rpm_dropdown("P Max",        "Premium"),
+            _rpm_dropdown("SEO - Onboard","Standard"),
+            _rpm_dropdown("Organic Social","None"),
+        ],
+    }
+
+
+class TestParseTicketRPMShape(unittest.TestCase):
+    """The RPM intake lists don't have a 'Selections' JSON field — selections
+    come from per-channel currency + tier dropdowns. parse_ticket must fall
+    back to the RPM extractor when explicit Selections is absent."""
+
+    def test_parses_property_name_from_task_title(self):
+        parsed = property_brief.parse_ticket(_rpm_task())
+        self.assertEqual(parsed["property_name"], "AXIS Crossroads")
+
+    def test_parses_domain_from_property_url_field(self):
+        parsed = property_brief.parse_ticket(_rpm_task())
+        self.assertEqual(parsed["property_domain"], "https://axiscrossroads.com")
+
+    def test_parses_submitter_from_requester_email(self):
+        parsed = property_brief.parse_ticket(_rpm_task())
+        self.assertEqual(parsed["submitter_email"], "kyle@rpmliving.com")
+
+    def test_parses_rm_from_rm_apostrophe_email(self):
+        parsed = property_brief.parse_ticket(_rpm_task())
+        self.assertEqual(parsed["rm_email"], "rm@rpmliving.com")
+
+    def test_extracts_paid_channels_with_currency_and_tier(self):
+        parsed = property_brief.parse_ticket(_rpm_task())
+        self.assertIn("paid_search", parsed["selections"])
+        self.assertEqual(parsed["selections"]["paid_search"]["monthly"], 3500.0)
+        self.assertEqual(parsed["selections"]["paid_search"]["tier"], "Standard")
+        self.assertIn("pmax", parsed["selections"])
+        self.assertEqual(parsed["selections"]["pmax"]["monthly"], 2000.0)
+        self.assertEqual(parsed["selections"]["pmax"]["tier"], "Premium")
+
+    def test_extracts_tier_only_channels_with_zero_monthly(self):
+        # SEO has no currency field on the RPM form — line item still gets
+        # created so the brief mentions it; pricing comes from elsewhere.
+        parsed = property_brief.parse_ticket(_rpm_task())
+        self.assertIn("seo", parsed["selections"])
+        self.assertEqual(parsed["selections"]["seo"]["tier"], "Standard")
+        self.assertEqual(parsed["selections"]["seo"]["monthly"], 0.0)
+
+    def test_skips_channels_with_no_amount_and_no_tier(self):
+        # Paid Social has $0 + tier="None" → skip
+        # Organic Social has no currency + tier="None" → skip
+        parsed = property_brief.parse_ticket(_rpm_task())
+        self.assertNotIn("paid_social", parsed["selections"])
+        self.assertNotIn("social_posting", parsed["selections"])
+
+    def test_totals_sum_only_included_channels(self):
+        parsed = property_brief.parse_ticket(_rpm_task())
+        # paid_search 3500 + pmax 2000 + seo 0 = 5500
+        self.assertEqual(parsed["totals"]["monthly"], 5500.0)
+        self.assertEqual(parsed["totals"]["setup"], 0.0)
+
+    def test_explicit_selections_takes_priority_over_rpm_shape(self):
+        # If a task has BOTH an explicit Selections JSON AND RPM-shape
+        # fields, the explicit JSON wins (lets us migrate gradually).
+        task = _rpm_task()
+        task["custom_fields"].append({
+            "name": "Selections", "type": "text",
+            "value": json.dumps({"reputation": {"tier": "Plus", "monthly": 250, "setup": 0}}),
+        })
+        parsed = property_brief.parse_ticket(task)
+        self.assertIn("reputation", parsed["selections"])
+        self.assertNotIn("paid_search", parsed["selections"])
+
+
+class TestTypedCustomFieldLookup(unittest.TestCase):
+    """The typed-field helper is what disambiguates 'Paid Search' currency
+    vs 'Paid Search' drop_down on the same task."""
+
+    def test_currency_returns_float_not_dropdown(self):
+        task = {
+            "custom_fields": [
+                _rpm_dropdown("Paid Search", "Standard"),
+                _rpm_currency("Paid Search", 3500),
+            ],
+        }
+        self.assertEqual(
+            clickup_client.custom_field_value_typed(task, "Paid Search", of_type="currency"),
+            3500.0,
+        )
+
+    def test_dropdown_returns_resolved_option_name(self):
+        task = {
+            "custom_fields": [
+                _rpm_dropdown("Paid Search", "Standard"),
+                _rpm_currency("Paid Search", 3500),
+            ],
+        }
+        self.assertEqual(
+            clickup_client.custom_field_value_typed(task, "Paid Search", of_type="drop_down"),
+            "Standard",
+        )
+
+    def test_returns_none_when_type_filter_excludes_all(self):
+        task = {"custom_fields": [_rpm_currency("Paid Search", 3500)]}
+        self.assertIsNone(
+            clickup_client.custom_field_value_typed(task, "Paid Search", of_type="drop_down")
+        )
+
+
 class TestShouldFire(unittest.TestCase):
     def test_creation_always_fires(self):
         self.assertTrue(property_brief.should_fire({"event": "taskCreated"}, _task()))
