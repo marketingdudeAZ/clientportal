@@ -45,6 +45,18 @@ HEADERS = {
 ASSOC_QUOTE_TO_CONTACT_DEFAULT = 69
 ASSOC_QUOTE_TO_CONTACT_SIGNER = 702
 
+# Quote -> quote_template default association type (the only one HubSpot
+# defines for this pair). Discovered 2026-05-08 via
+# GET /crm/v4/associations/quote/quote_template/labels.
+ASSOC_QUOTE_TO_TEMPLATE_DEFAULT = 286
+
+# RPM's standard quote template, the "Marketing Services Insertion Order"
+# template (object id discovered 2026-05-08 via the quote_template list).
+# Pinning it on every quote we create means AMs don't see "Your template
+# is no longer available" in the editor — the right template + branding
+# are pre-selected. Move to env var if RPM ever spins up multiple.
+RPM_QUOTE_TEMPLATE_ID = "214235171237"
+
 
 def generate_and_send_quote(
     deal_id: str,
@@ -118,6 +130,23 @@ def generate_and_send_quote(
     _safe_put(
         f"{API_BASE}/crm/v3/objects/quotes/{quote_id}/associations/deals/{deal_id}/quote_to_deal"
     )
+
+    # Step 2b: pin the RPM default quote template. Without this, the
+    # quote editor flags "Your template is no longer available" and
+    # the AM has to pick one manually.
+    try:
+        rt = requests.put(
+            f"{API_BASE}/crm/v4/objects/quote/{quote_id}/associations/quote_template/{RPM_QUOTE_TEMPLATE_ID}",
+            headers=HEADERS,
+            json=[{"associationCategory": "HUBSPOT_DEFINED",
+                   "associationTypeId":   ASSOC_QUOTE_TO_TEMPLATE_DEFAULT}],
+            timeout=10,
+        )
+        if rt.status_code >= 400 and rt.status_code != 409:
+            logger.warning("Quote-template association %s -> %s: %s %s",
+                           quote_id, RPM_QUOTE_TEMPLATE_ID, rt.status_code, rt.text[:200])
+    except requests.RequestException as e:
+        logger.warning("Quote-template association network error: %s", e)
 
     # Step 3: attach every line item already on the deal.
     line_item_ids = _fetch_deal_line_items(deal_id)
