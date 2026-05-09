@@ -179,7 +179,7 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
                    hint="Phrases / topics to avoid. One per line. Anything sensitive (litigation, PR risk, fair housing) goes here."),
         BriefField("motivations_considerations", "Primary Motivations & Considerations",
                    "Guardrails", "textarea",
-                   hs_override="fluency_must_include_override",  # piggyback on must_include for now
+                   hs_override="fluency_motivations_considerations_override",
                    hint="WHAT motivates renters at this property — lifestyle, amenities, commute, walkability. "
                         "Fair Housing safe: focus on needs/preferences, NOT demographics (no age, family status, race, religion, national origin, disability, or schools)."),
     ]),
