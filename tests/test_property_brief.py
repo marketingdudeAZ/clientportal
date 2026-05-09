@@ -832,44 +832,49 @@ class TestCommunityBriefHelpers(unittest.TestCase):
         import community_brief as cb
         self.assertEqual(cb._effective(cb.FIELDS["neighborhood"], {}), "")
 
-    def test_render_context_marks_apt_iq_fields_pipeline_pending(self):
+    def test_render_context_marks_apt_iq_fields_pending(self):
         # Floor Plans is a read-only Apt IQ field. With no data, the
-        # row's badge should read "PIPELINE PENDING".
+        # row's badge should read "Pending" (not editable, no source).
         import community_brief as cb
         ctx = cb.build_render_context({})
         inventory = next(s for s in ctx if s["section"] == "Inventory")
-        floor_plans_row = next(r for r in inventory["rows"]
-                               if r["key"] == "floor_plans__pipeline")
-        self.assertEqual(floor_plans_row["badge"], "PIPELINE PENDING")
-        self.assertFalse(floor_plans_row["editable"])
+        floor_plans = next(r for r in inventory["rows"] if r["key"] == "floor_plans")
+        self.assertEqual(floor_plans["badge"], "Pending")
+        self.assertFalse(floor_plans["editable"])
 
-    def test_render_context_emits_override_badge_when_set(self):
-        # When the override property has a value, the override row
-        # should render with badge="OVERRIDE" (not "OVERRIDE PENDING").
+    def test_render_context_one_row_per_field_with_override_winning(self):
+        # Single-row model: when override is set, it wins. Badge says
+        # "Edited", value is the override value, editable=True.
         import community_brief as cb
         f = cb.FIELDS["neighborhood"]
-        ctx = cb.build_render_context({f.hs_override: "South Congress"})
+        ctx = cb.build_render_context({f.hs_override: "South Congress",
+                                       f.hs_resolved: "Downtown"})
         geo = next(s for s in ctx if s["section"] == "Geography")
-        # The override row has key == "neighborhood" (no __pipeline suffix).
-        override_row = next(r for r in geo["rows"] if r["key"] == "neighborhood")
-        self.assertEqual(override_row["badge"], "OVERRIDE")
-        self.assertEqual(override_row["value"], "South Congress")
-        self.assertTrue(override_row["editable"])
+        nb_rows = [r for r in geo["rows"] if r["key"] == "neighborhood"]
+        self.assertEqual(len(nb_rows), 1)  # ONE row, not pipeline+override
+        self.assertEqual(nb_rows[0]["badge"], "Edited")
+        self.assertEqual(nb_rows[0]["value"], "South Congress")
+        self.assertTrue(nb_rows[0]["editable"])
 
-    def test_render_context_emits_pipeline_and_override_rows_for_editable_fields(self):
-        # An editable field with both resolved and override props should
-        # produce TWO rows — pipeline first, override second.
+    def test_render_context_falls_back_to_pipeline_when_no_override(self):
+        # When only the pipeline is set, badge says "Pipeline" and the
+        # row is still editable (because the field has an override prop).
         import community_brief as cb
         ctx = cb.build_render_context({"fluency_neighborhood": "Downtown"})
         geo = next(s for s in ctx if s["section"] == "Geography")
-        nb_rows = [r for r in geo["rows"] if r["key"].startswith("neighborhood")]
-        self.assertEqual(len(nb_rows), 2)
-        # Pipeline row first, then override row.
-        self.assertEqual(nb_rows[0]["kind"], "pipeline")
+        nb_rows = [r for r in geo["rows"] if r["key"] == "neighborhood"]
+        self.assertEqual(len(nb_rows), 1)
+        self.assertEqual(nb_rows[0]["badge"], "Pipeline")
         self.assertEqual(nb_rows[0]["value"], "Downtown")
-        self.assertEqual(nb_rows[0]["badge"], "PIPELINE")
-        self.assertEqual(nb_rows[1]["kind"], "override")
-        self.assertEqual(nb_rows[1]["badge"], "OVERRIDE PENDING")  # no override yet
+
+    def test_render_context_editable_field_unset_says_not_set(self):
+        # Editable field with neither override nor pipeline -> "Not set".
+        import community_brief as cb
+        ctx = cb.build_render_context({})
+        geo = next(s for s in ctx if s["section"] == "Geography")
+        nb_rows = [r for r in geo["rows"] if r["key"] == "neighborhood"]
+        self.assertEqual(nb_rows[0]["badge"], "Not set")
+        self.assertEqual(nb_rows[0]["value"], "")
 
 
 # ── 9. ClickUp webhook ────────────────────────────────────────────────────

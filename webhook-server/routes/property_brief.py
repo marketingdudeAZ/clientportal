@@ -234,140 +234,102 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RPM Community Brief — {{ property_name or "Review" }}</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>RPM | Community Brief — {{ property_name or "Review" }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --ink: #1f2937;
-      --muted: #6b7280;
-      --line: #e5e7eb;
-      --bg: #f3f4f6;
-      --card: #ffffff;
-      --accent: #2563eb;
-      --accent-deep: #1d4ed8;
-      --green: #16803d;
-      --warn: #b07000;
-      --pill-pipe-bg: #eef2ff;
-      --pill-pipe-ink: #3730a3;
-      --pill-over-bg: #ecfeff;
-      --pill-over-ink: #155e75;
-      --pill-pending-bg: #f3f4f6;
-      --pill-pending-ink: #6b7280;
-      --pill-tag-bg: #f0fdfa;
-      --pill-tag-ink: #115e59;
+    /* Match /accounts/property aesthetic 1:1 (jasper navy, copper, sage). */
+    :root{
+      --j:#53606C;--jd:#3D474F;--j1:#1A2530;--j2:#151F2B;
+      --cu:#C8964E;--cul:#D4A86A;--cug:rgba(200,150,78,0.12);
+      --sage:#8FA68E;--mint:#CDE3E0;--ml:#E8F4F2;
+      --red:#C94444;--amb:#D4910A;--amb-bg:#FEF7E6;--amb-bd:#F5D58F;
+      --rose:#FFF0F0;--rose-bd:#F2C8C8;
+      --white:#fff;--bg:#F0F2F5;
+      --tp:#1F2937;--ts:#6B7280;--tm:#9CA3AF;
+      --bd:#E5E7EB;--bdl:#F3F4F6;
+      --sh:0 1px 3px rgba(0,0,0,0.07),0 1px 2px rgba(0,0,0,0.04);
+      --r:12px;
     }
-    * { box-sizing: border-box; }
-    body { font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-           margin: 0; padding: 2rem 1.25rem 7rem; color: var(--ink); background: var(--bg); }
-    .wrap { max-width: 1080px; margin: 0 auto; }
-    header h1 { font-size: 1.65rem; margin: 0 0 .25rem; letter-spacing: -0.01em; }
-    header .lede { color: var(--muted); font-size: .95rem; max-width: 640px; }
-    header .meta { color: var(--muted); font-size: .82rem; margin-top: .4rem; }
-
-    .summary-card { background: var(--card); border: 1px solid var(--line);
-                    border-radius: 12px; padding: 1.1rem 1.25rem; margin-top: 1.5rem;
-                    box-shadow: 0 1px 2px rgba(15,23,42,.04); }
-    .summary-card .summary-head { display: flex; justify-content: space-between; align-items: center;
-                                  margin-bottom: .55rem; }
-    .summary-card h3 { font-size: .78rem; letter-spacing: .08em; text-transform: uppercase;
-                       color: var(--muted); margin: 0; font-weight: 700; }
-    .summary-card .summary-body { font-size: 1rem; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
-    .summary-card .summary-body.loading { color: var(--muted); font-style: italic; }
-    .summary-card .btn { padding: .35rem .7rem; font-size: .78rem; }
-
-    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-            margin-top: 1rem; overflow: hidden;
-            box-shadow: 0 1px 2px rgba(15,23,42,.04); }
-    .card .card-head { padding: .75rem 1.25rem; border-bottom: 1px solid var(--line);
-                       background: var(--card); }
-    .card .card-head h2 { font-size: .78rem; letter-spacing: .08em; text-transform: uppercase;
-                          margin: 0; color: var(--ink); font-weight: 700; }
-
-    .row { display: grid; grid-template-columns: 200px 1fr 130px;
-           gap: 1.25rem; align-items: start;
-           padding: .9rem 1.25rem; border-bottom: 1px solid var(--line); }
-    .row:last-child { border-bottom: 0; }
-    .row .label { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase;
-                  color: var(--muted); font-weight: 700; padding-top: .15rem; }
-    .row .label .hint { display: block; font-weight: 500; color: var(--muted);
-                        font-size: .7rem; letter-spacing: 0; text-transform: none;
-                        margin-top: .35rem; line-height: 1.45; }
-    .row .value { color: var(--ink); white-space: pre-wrap; word-break: break-word; min-height: 1.45em; }
-    .row .value.empty { color: var(--muted); font-style: italic; }
-    .row .badge-cell { text-align: right; }
-    .badge { display: inline-block; font-size: .65rem; letter-spacing: .08em;
-             text-transform: uppercase; font-weight: 600;
-             padding: .25rem .55rem; border-radius: 999px; white-space: nowrap; }
-    .badge-pipeline { background: var(--pill-pipe-bg); color: var(--pill-pipe-ink); }
-    .badge-override { background: var(--pill-over-bg); color: var(--pill-over-ink); }
-    .badge-pending  { background: var(--pill-pending-bg); color: var(--pill-pending-ink); }
-
-    .pills { display: flex; flex-wrap: wrap; gap: .35rem .4rem; }
-    .pill { display: inline-block; padding: .2rem .65rem; font-size: .82rem;
-            border-radius: 999px; background: var(--pill-tag-bg);
-            color: var(--pill-tag-ink); white-space: nowrap; }
-
-    .row.editable .value { cursor: pointer; border-bottom: 1px dashed transparent;
-                           transition: border-color .15s; }
-    .row.editable .value:hover { border-bottom-color: var(--accent); }
-    .row.editing .value, .row.editing .badge-cell { display: none; }
-    .edit-form { display: none; flex-direction: column; gap: .45rem;
-                 grid-column: 2 / span 2; }
-    .row.editing .edit-form { display: flex; }
-    .edit-input { width: 100%; padding: .5rem .65rem; font: inherit;
-                  border: 1px solid #cbd5e1; border-radius: 6px;
-                  background: #fff; color: var(--ink); }
-    textarea.edit-input { min-height: 6em; resize: vertical; }
-    .edit-actions { display: flex; gap: .5rem; }
-    .btn { padding: .45rem .9rem; font-size: .85rem; font-weight: 500;
-           border: 1px solid var(--line); background: var(--card);
-           border-radius: 6px; cursor: pointer; color: var(--ink); }
-    .btn:hover { background: #fafbfd; }
-    .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
-    .btn-primary:hover { background: var(--accent-deep); }
-    .save-pulse { animation: savep 1.4s ease-out; }
-    @keyframes savep { 0% { background: #ecfdf5; } 100% { background: var(--card); } }
-    .footer-bar { position: fixed; left: 0; right: 0; bottom: 0;
-                  background: var(--card); border-top: 1px solid var(--line);
-                  padding: .9rem 1.5rem; display: flex; gap: .9rem;
-                  align-items: center; justify-content: space-between;
-                  box-shadow: 0 -2px 10px rgba(15,23,42,.05); }
-    .footer-bar .syncline { color: var(--muted); font-size: .82rem; max-width: 600px; }
-    .footer-bar .actions { display: flex; gap: .55rem; }
-    .err { color: #b00020; padding: 1rem; border: 1px solid #b00020; border-radius: 8px; background: #fff; }
-    .ok  { color: var(--green); padding: 1rem; border: 1px solid var(--green); border-radius: 8px; background: #fff; }
-    .preview-pane { background: var(--card); border: 1px solid var(--line);
-                    border-radius: 12px; padding: 1.1rem 1.25rem; margin-top: 1rem;
-                    white-space: pre-wrap; font-size: .95rem; line-height: 1.55;
-                    max-height: 28rem; overflow: auto;
-                    box-shadow: 0 1px 2px rgba(15,23,42,.04); }
-    @media (max-width: 740px) {
-      .row { grid-template-columns: 1fr; }
-      .row .badge-cell { text-align: left; }
-      .edit-form { grid-column: 1; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(--tp);background:var(--bg);padding-bottom:96px}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .hdr{background:var(--white);padding:28px 32px;border-radius:var(--r);box-shadow:var(--sh);margin-bottom:18px}
+    .h-name{font-size:28px;font-weight:800;color:var(--j1);letter-spacing:-.02em}
+    .h-sub{color:var(--ts);font-size:13px;margin-top:6px}
+    .summary{background:var(--white);padding:22px 28px;border-radius:var(--r);box-shadow:var(--sh);margin-bottom:14px;border-left:3px solid var(--cu)}
+    .summary-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .summary-head h3{font-size:11px;font-weight:800;color:var(--ts);text-transform:uppercase;letter-spacing:.08em}
+    .summary-body{font-size:15px;line-height:1.6;color:var(--tp);white-space:pre-wrap}
+    .summary-body.loading{color:var(--tm);font-style:italic;font-size:14px}
+    .section{background:var(--white);padding:22px 28px;border-radius:var(--r);box-shadow:var(--sh);margin-bottom:14px}
+    .section h2{font-size:13px;font-weight:800;color:var(--j1);text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--bdl)}
+    .callout-warning{border:1.5px solid var(--amb-bd);background:var(--amb-bg)}
+    .callout-warning .callout-banner{display:flex;align-items:center;gap:8px;background:var(--amb);color:var(--white);padding:8px 16px;margin:-22px -28px 16px -28px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;border-radius:var(--r) var(--r) 0 0}
+    .callout-warning .callout-banner::before{content:'⚠'}
+    dl.fields{display:grid;grid-template-columns:200px 1fr 160px;column-gap:14px;row-gap:0}
+    dl.fields .row{display:contents}
+    dl.fields dt{padding:9px 0;font-size:12px;font-weight:700;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bdl);align-self:start}
+    dl.fields dt .hint{display:block;font-weight:500;color:var(--tm);font-size:11px;letter-spacing:0;text-transform:none;margin-top:5px;line-height:1.45}
+    dl.fields dd{padding:9px 0;border-bottom:1px solid var(--bdl);font-size:14px;align-self:start}
+    dl.fields dd.value{color:var(--tp);font-weight:500;word-break:break-word;white-space:pre-wrap}
+    dl.fields dd.value.editable{cursor:pointer;border-radius:6px;margin:5px -8px;padding:4px 8px}
+    dl.fields dd.value.editable:hover{background:var(--ml)}
+    dl.fields dd.empty{color:var(--tm);font-style:italic;font-weight:400}
+    dl.fields dd.source{color:var(--tm);font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;text-align:right}
+    .src-edited{color:var(--sage)}
+    .src-pipeline{color:var(--cu)}
+    .src-pending{color:var(--tm)}
+    .chip{display:inline-block;background:var(--ml);color:var(--jd);padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;margin:2px 4px 2px 0}
+    .row.editing dd.value, .row.editing dd.source{display:none}
+    .edit-cell{display:none;padding:9px 0;border-bottom:1px solid var(--bdl);grid-column:2 / span 2;align-self:start}
+    .row.editing .edit-cell{display:flex;flex-direction:column;gap:8px}
+    .edit-input{width:100%;padding:8px 12px;font-family:inherit;font-size:14px;border:1px solid var(--bd);border-radius:8px;background:var(--white);color:var(--tp)}
+    textarea.edit-input{min-height:96px;resize:vertical;line-height:1.5}
+    .edit-actions{display:flex;gap:8px}
+    .btn{padding:8px 18px;font-family:inherit;font-size:13px;font-weight:600;border:1px solid var(--bd);background:var(--white);border-radius:8px;cursor:pointer;color:var(--tp);transition:all .15s}
+    .btn:hover{background:var(--bdl)}
+    .btn-primary{background:var(--j1);color:var(--white);border-color:var(--j1)}
+    .btn-primary:hover{background:var(--j2)}
+    .btn-cu{background:var(--cu);color:var(--white);border-color:var(--cu)}
+    .btn-cu:hover{background:var(--cul)}
+    .save-pulse{animation:savep 1.4s ease-out}
+    @keyframes savep{0%{background:rgba(143,166,142,0.18)}100%{background:transparent}}
+    .footer-bar{position:fixed;left:0;right:0;bottom:0;background:var(--white);border-top:1px solid var(--bd);padding:14px 24px;display:flex;gap:14px;align-items:center;justify-content:space-between;box-shadow:0 -2px 10px rgba(0,0,0,0.06);z-index:10}
+    .footer-bar .syncline{color:var(--ts);font-size:12px;max-width:680px}
+    .footer-bar .actions{display:flex;gap:8px}
+    .err{color:var(--red);padding:14px 18px;border:1.5px solid var(--rose-bd);background:var(--rose);border-radius:var(--r);margin-top:12px}
+    .ok{color:var(--sage);padding:14px 18px;border:1.5px solid var(--mint);background:var(--ml);border-radius:var(--r);margin-top:12px}
+    .preview-pane{background:var(--white);padding:22px 28px;border-radius:var(--r);box-shadow:var(--sh);margin-top:14px;font-size:14px;line-height:1.6;white-space:pre-wrap;max-height:32rem;overflow:auto;color:var(--tp)}
+    @media (max-width:760px){
+      dl.fields{grid-template-columns:1fr}
+      dl.fields dt{padding-top:14px;border:none}
+      dl.fields dd{padding-bottom:14px}
+      dl.fields dd.source{text-align:left;padding-top:0}
+      .edit-cell{grid-column:1}
     }
   </style>
 </head>
 <body>
 <div class="wrap">
 {% if error %}
-  <header><h1>This link is no longer valid</h1></header>
+  <div class="hdr"><div class="h-name">This link is no longer valid</div></div>
   <div class="err">{{ error }}</div>
-  <p>If you reached this in error, the original ClickUp ticket has the latest link.</p>
 {% elif reviewed_just_now %}
-  <header><h1>Thanks — marked as reviewed.</h1></header>
+  <div class="hdr"><div class="h-name">Thanks — marked as reviewed.</div></div>
   <div class="ok">Edits sync to Fluency on the next daily run (6 AM Central).</div>
 {% else %}
-  <header>
-    <h1>{{ property_name or "Community Brief" }}</h1>
-    <div class="lede">Confirm what's right, edit what isn't. Each save updates HubSpot — Fluency picks it up at the next daily sync.</div>
+  <div class="hdr">
+    <div class="h-name">{{ property_name or "Community Brief" }}</div>
+    <div class="h-sub">Community Brief · Confirm what's right, edit what isn't. Each save updates HubSpot — Fluency picks it up at the next daily sync.</div>
     {% if last_reviewed_iso %}
-      <div class="meta">Last reviewed clean: {{ last_reviewed_iso }}</div>
+      <div class="h-sub">Last reviewed clean: {{ last_reviewed_iso }}</div>
     {% endif %}
-  </header>
+  </div>
 
-  <div class="summary-card">
+  <div class="summary">
     <div class="summary-head">
       <h3>Summary</h3>
       <button class="btn" onclick="loadSummary(true)">Refresh</button>
@@ -376,53 +338,48 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
   </div>
 
   {% for sec in sections %}
-  <div class="card" data-section="{{ sec.section }}">
-    <div class="card-head"><h2>{{ sec.section }}</h2></div>
-    {% for r in sec.rows %}
-      <div class="row {% if r.editable %}editable{% endif %}" data-key="{{ r.key }}" data-type="{{ r.type }}">
-        <div class="label">
+  <section class="section{% if sec.section == 'Guardrails' %} callout-warning{% endif %}" data-section="{{ sec.section }}">
+    {% if sec.section == 'Guardrails' %}<div class="callout-banner">Voice guardrails — these shape what Fluency does and doesn't say</div>{% endif %}
+    <h2>{{ sec.section }}</h2>
+    <dl class="fields">
+      {% for r in sec.rows %}
+      <div class="row {% if r.editable %}has-edit{% endif %}" data-key="{{ r.key }}" data-type="{{ r.type }}">
+        <dt>
           {{ r.label }}
           {% if r.hint %}<span class="hint">{{ r.hint }}</span>{% endif %}
-        </div>
-        <div class="value {% if not r.value %}empty{% endif %}"
-             data-value="{{ r.value }}"
-             onclick="{% if r.editable %}startEdit(this){% endif %}">
+        </dt>
+        <dd class="value {% if r.editable %}editable{% endif %} {% if not r.value %}empty{% endif %}"
+            data-value="{{ r.value }}"
+            onclick="{% if r.editable %}startEdit(this){% endif %}">
           {% if r.pills and r.pills|length > 1 %}
-            <div class="pills">
-              {% for p in r.pills %}<span class="pill">{{ p }}</span>{% endfor %}
-            </div>
-          {% elif r.value %}
-            {{ r.value }}
-          {% else %}
-            Not yet computed
-          {% endif %}
-        </div>
-        <div class="badge-cell">
-          <span class="badge badge-{{ r.badge_kind }}">{{ r.badge }}</span>
-        </div>
+            {% for p in r.pills %}<span class="chip">{{ p }}</span>{% endfor %}
+          {% elif r.value %}{{ r.value }}{% else %}Not yet computed{% endif %}
+        </dd>
+        <dd class="source src-{{ r.badge_kind }}">{{ r.badge }}</dd>
         {% if r.editable %}
-          <div class="edit-form">
-            {% if r.type == 'dropdown' %}
-              <select class="edit-input">
-                <option value="">— not set —</option>
-                {% for opt in r.options %}
-                  <option value="{{ opt }}" {% if opt == r.value %}selected{% endif %}>{{ opt }}</option>
-                {% endfor %}
-              </select>
-            {% elif r.type == 'textarea' %}
-              <textarea class="edit-input" placeholder="One per line">{{ r.value }}</textarea>
-            {% else %}
-              <input type="text" class="edit-input" value="{{ r.value }}">
-            {% endif %}
-            <div class="edit-actions">
-              <button type="button" class="btn btn-primary" onclick="saveEdit(this)">Save</button>
-              <button type="button" class="btn" onclick="cancelEdit(this)">Cancel</button>
-            </div>
+        <dd class="edit-cell">
+          {% if r.type == 'dropdown' %}
+            <select class="edit-input">
+              <option value="">— not set —</option>
+              {% for opt in r.options %}
+                <option value="{{ opt }}" {% if opt == r.value %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          {% elif r.type == 'textarea' %}
+            <textarea class="edit-input" placeholder="One per line">{{ r.value }}</textarea>
+          {% else %}
+            <input type="text" class="edit-input" value="{{ r.value }}">
+          {% endif %}
+          <div class="edit-actions">
+            <button type="button" class="btn btn-primary" onclick="saveEdit(this)">Save</button>
+            <button type="button" class="btn" onclick="cancelEdit(this)">Cancel</button>
           </div>
+        </dd>
         {% endif %}
       </div>
-    {% endfor %}
-  </div>
+      {% endfor %}
+    </dl>
+  </section>
   {% endfor %}
 
   <div id="preview-area"></div>
@@ -431,7 +388,7 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
     <div class="syncline">Edits land in HubSpot immediately. They sync to Fluency at the next daily run (6 AM Central).</div>
     <div class="actions">
       <button class="btn" onclick="loadPreview()">Preview as document</button>
-      <button class="btn btn-primary" onclick="markReviewed()">Looks good</button>
+      <button class="btn btn-cu" onclick="markReviewed()">Looks good</button>
     </div>
   </div>
 {% endif %}
@@ -446,8 +403,7 @@ async function loadSummary(forceRefresh) {
   el.classList.add('loading');
   el.textContent = 'Generating summary from your brief data…';
   try {
-    const r = await fetch(`/api/community-brief/${TOKEN}/summary` +
-                          (forceRefresh ? '?refresh=1' : ''),
+    const r = await fetch(`/api/community-brief/${TOKEN}/summary` + (forceRefresh ? '?refresh=1' : ''),
                           {method: 'POST'});
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
@@ -460,14 +416,13 @@ async function loadSummary(forceRefresh) {
 
 function startEdit(valueEl) {
   const row = valueEl.closest('.row');
-  if (!row.classList.contains('editable')) return;
+  if (!row) return;
   row.classList.add('editing');
   const input = row.querySelector('.edit-input');
   if (input) input.focus();
 }
-function cancelEdit(btn) {
-  btn.closest('.row').classList.remove('editing');
-}
+function cancelEdit(btn) { btn.closest('.row').classList.remove('editing'); }
+
 async function saveEdit(btn) {
   const row = btn.closest('.row');
   const input = row.querySelector('.edit-input');
@@ -482,32 +437,28 @@ async function saveEdit(btn) {
     });
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
-    // Re-render the value cell with pills if there are multiple lines.
-    const valueEl = row.querySelector('.value');
+    const valueEl = row.querySelector('dd.value');
     const pieces = (value || '').split(/\\r?\\n|,/).map(s=>s.trim()).filter(Boolean);
     if (pieces.length > 1) {
-      valueEl.innerHTML = '<div class="pills">' +
-        pieces.map(p => '<span class="pill">' + p.replace(/</g,'&lt;') + '</span>').join('') +
-        '</div>';
+      valueEl.innerHTML = pieces.map(p => '<span class="chip">' + p.replace(/</g,'&lt;') + '</span>').join('');
     } else {
       valueEl.textContent = value || 'Not yet computed';
     }
     valueEl.classList.toggle('empty', !value);
     valueEl.setAttribute('data-value', value);
-    const badge = row.querySelector('.badge');
-    if (badge) {
-      badge.className = 'badge ' + (value ? 'badge-override' : 'badge-pending');
-      badge.textContent = value ? 'OVERRIDE' : 'OVERRIDE PENDING';
+    const src = row.querySelector('dd.source');
+    if (src) {
+      src.className = 'source ' + (value ? 'src-edited' : 'src-pending');
+      src.textContent = value ? 'Edited' : 'Not set';
     }
     row.classList.remove('editing');
     row.classList.add('save-pulse');
     setTimeout(() => row.classList.remove('save-pulse'), 1400);
   } catch (e) {
     alert('Save failed: ' + e.message);
-  } finally {
-    btn.disabled = false; btn.textContent = 'Save';
-  }
+  } finally { btn.disabled = false; btn.textContent = 'Save'; }
 }
+
 async function loadPreview() {
   const area = document.getElementById('preview-area');
   area.innerHTML = '<div class="preview-pane">Generating preview…</div>';
@@ -516,12 +467,14 @@ async function loadPreview() {
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     area.innerHTML = '<div class="preview-pane">' + (d.prose || '').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+    area.scrollIntoView({behavior: 'smooth', block: 'start'});
   } catch (e) {
     area.innerHTML = '<div class="err">Preview failed: ' + e.message + '</div>';
   }
 }
+
 async function markReviewed() {
-  if (!confirm('Mark this community brief as reviewed clean? You can keep editing afterwards.')) return;
+  if (!confirm('Mark this Community Brief as reviewed clean? You can keep editing afterwards.')) return;
   try {
     const r = await fetch(`/api/community-brief/${TOKEN}/approve`, {method: 'POST'});
     const d = await r.json();
@@ -532,7 +485,6 @@ async function markReviewed() {
   }
 }
 
-// Auto-load the summary on page load.
 window.addEventListener('DOMContentLoaded', () => loadSummary(false));
 </script>
 </body>

@@ -272,61 +272,60 @@ def _split_for_pills(value: str) -> list[str]:
 def build_render_context(company_props: dict) -> list[dict]:
     """Shape data for the page template.
 
-    Each section yields a list of "rows". A row is one of:
+    ONE row per field. The reviewer sees only what would be live —
+    override beats resolved beats empty. The source badge tells them
+    WHERE the value came from:
 
-      - kind="pipeline":  value sourced from auto-derivation / Apt IQ /
-                          URL scrape. Read-only on this page.
-      - kind="override":  the human override field. Editable.
+      - "Override"          : human edit is set (override beats pipeline)
+      - "Pipeline"          : auto-derived value from Apt IQ / URL scrape
+      - "Override pending"  : editable field, no human edit, no pipeline
+      - "Pipeline pending"  : auto field that hasn't been computed yet
 
-    For fields that have BOTH a resolved AND an override, we emit two
-    rows back-to-back so the reviewer sees the auto-derived value (or
-    "Pipeline pending") next to their override (or "Override pending").
-    For read-only fields we emit just the pipeline row.
+    A row is editable iff the field has an override property (i.e., the
+    reviewer has somewhere to write to). Read-only fields (Apt IQ year
+    built, floor plans) render with the pipeline value or "Pending."
     """
     out = []
-    seen_keys = set()  # avoid double-rendering when two BriefFields share an override
     for section_label, fields in SECTIONS:
         rows = []
         for f in fields:
-            # PIPELINE row (auto-derived). Always shown when there's a
-            # resolved property; for editable-only fields (e.g., advertised
-            # name), skip the pipeline row.
-            if f.hs_resolved:
-                pipe_value = company_props.get(f.hs_resolved) or ""
-                rows.append({
-                    "kind":     "pipeline",
-                    "key":      f.key + "__pipeline",
-                    "label":    f.label,
-                    "type":     f.type,
-                    "hint":     f.hint,
-                    "value":    str(pipe_value) if pipe_value not in (None, "") else "",
-                    "pills":    _split_for_pills(pipe_value),
-                    "options":  f.options,
-                    "editable": False,
-                    "badge":    "PIPELINE" if pipe_value else "PIPELINE PENDING",
-                    "badge_kind": "pipeline" if pipe_value else "pending",
-                })
+            override_val = company_props.get(f.hs_override) if f.hs_override else None
+            resolved_val = company_props.get(f.hs_resolved) if f.hs_resolved else None
 
-            # OVERRIDE row (editable). Only when an override property exists.
-            if f.hs_override and f.key not in seen_keys:
-                seen_keys.add(f.key)
-                ov_value = company_props.get(f.hs_override) or ""
-                # If pipeline row was suppressed (no hs_resolved), the
-                # override label stands alone. Otherwise prefix " (Override)".
-                label = f.label if not f.hs_resolved else f"{f.label} (Override)"
-                rows.append({
-                    "kind":     "override",
-                    "key":      f.key,
-                    "label":    label,
-                    "type":     f.type,
-                    "hint":     f.hint if not f.hs_resolved else "",
-                    "value":    str(ov_value) if ov_value not in (None, "") else "",
-                    "pills":    _split_for_pills(ov_value),
-                    "options":  f.options,
-                    "editable": True,
-                    "badge":    "OVERRIDE" if ov_value else "OVERRIDE PENDING",
-                    "badge_kind": "override" if ov_value else "pending",
-                })
+            has_override = override_val not in (None, "")
+            has_resolved = resolved_val not in (None, "")
+
+            # Effective value — what would be live in Fluency.
+            value = ""
+            if has_override:
+                value = str(override_val)
+            elif has_resolved:
+                value = str(resolved_val)
+
+            editable = bool(f.hs_override)
+
+            # Source badge resolution.
+            if has_override:
+                badge, badge_kind = "Edited", "override"
+            elif has_resolved:
+                badge, badge_kind = "Pipeline", "pipeline"
+            elif editable:
+                badge, badge_kind = "Not set", "pending"
+            else:
+                badge, badge_kind = "Pending", "pending"
+
+            rows.append({
+                "key":        f.key,
+                "label":      f.label,
+                "type":       f.type,
+                "hint":       f.hint,
+                "value":      value,
+                "pills":      _split_for_pills(value),
+                "options":    f.options,
+                "editable":   editable,
+                "badge":      badge,
+                "badge_kind": badge_kind,
+            })
         out.append({"section": section_label, "rows": rows})
     return out
 
