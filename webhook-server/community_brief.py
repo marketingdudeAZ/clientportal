@@ -87,7 +87,8 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
                    hs_resolved="fluency_unit_noun",
                    hs_override="fluency_unit_noun_override",
                    hint="What we call a unit in copy.",
-                   options=["apartments", "homes", "residences", "lofts", "studios", "townhomes"]),
+                   # HubSpot's fluency_unit_noun_override enum — singular form.
+                   options=["apartment", "townhome", "loft", "home", "duplex"]),
         BriefField("advertised_name", "Advertised Name", "Voice & Positioning", "text",
                    hs_override="fluency_advertised_name_override",
                    hint="The full name used in headlines."),
