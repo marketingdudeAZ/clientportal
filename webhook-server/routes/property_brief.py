@@ -279,7 +279,7 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
     dl.fields dd.value.editable:hover{background:var(--ml)}
     dl.fields dd.empty{color:var(--tm);font-style:italic;font-weight:400}
     dl.fields dd.source{color:var(--tm);font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;text-align:right}
-    .src-edited{color:var(--sage)}
+    .src-override{color:var(--sage)}
     .src-pipeline{color:var(--cu)}
     .src-pending{color:var(--tm)}
     .chip{display:inline-block;background:var(--ml);color:var(--jd);padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;margin:2px 4px 2px 0}
@@ -448,7 +448,7 @@ async function saveEdit(btn) {
     valueEl.setAttribute('data-value', value);
     const src = row.querySelector('dd.source');
     if (src) {
-      src.className = 'source ' + (value ? 'src-edited' : 'src-pending');
+      src.className = 'source ' + (value ? 'src-override' : 'src-pending');
       src.textContent = value ? 'Edited' : 'Not set';
     }
     row.classList.remove('editing');
