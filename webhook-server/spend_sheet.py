@@ -193,48 +193,61 @@ def _rows_no_deal(companies: list) -> list[dict]:
 # ── HubSpot fetchers ────────────────────────────────────────────────────────────
 
 def _get_managed_companies() -> list[dict]:
-    """CRM Search for all companies with the target PLE statuses."""
-    filter_groups = [{"filters": [
-        {"propertyName": "plestatus", "operator": "IN", "values": PLE_STATUSES}
-    ]}]
+    """Enumerate every company in HubSpot and keep the ones whose plestatus
+    is in PLE_STATUSES.
+
+    Why not the Search API: HubSpot's /companies/search endpoint has known
+    eventual-consistency + early-pagination issues at our portfolio size
+    (~1,800 total companies). Back-to-back identical calls were returning
+    700 / 800 / 1,200 rows — pagination stops short and the safety cap of
+    20 pages never gets hit because each page's `paging.next.after` comes
+    back null prematurely. The LIST endpoint (/crm/v3/objects/companies)
+    is fully consistent and reliably enumerates every record; we filter
+    client-side. Net: one extra round-trip's worth of latency in exchange
+    for accurate, repeatable counts.
+    """
     companies: list[dict] = []
     after = None
+    props = ["name", "rpmmarket", "marketing_manager",
+             "marketing_manager_email", "plestatus"]
 
-    for _ in range(20):  # safety: max 2,000 companies
-        body = {
-            "filterGroups": filter_groups,
-            "properties": ["name", "rpmmarket", "marketing_manager", "marketing_manager_email", "plestatus"],
+    for _ in range(50):  # safety: max 5,000 companies
+        params = {
             "limit": 100,
-            "sorts": [{"propertyName": "name", "direction": "ASCENDING"}],
+            "properties": ",".join(props),
         }
         if after:
-            body["after"] = after
+            params["after"] = after
 
         try:
-            r = requests.post(
-                f"{HS_BASE}/crm/v3/objects/companies/search",
-                headers=HS_HDRS, json=body, timeout=20,
+            r = requests.get(
+                f"{HS_BASE}/crm/v3/objects/companies",
+                headers=HS_HDRS, params=params, timeout=20,
             )
             r.raise_for_status()
         except Exception as e:
-            logger.error("Company search failed: %s", e)
+            logger.error("Company list failed at after=%s: %s", after, e)
             break
 
         data = r.json()
         for c in data.get("results", []):
-            props = c.get("properties", {})
+            cp = c.get("properties", {})
+            status = cp.get("plestatus", "")
+            if status not in PLE_STATUSES:
+                continue
             companies.append({
                 "id":         c["id"],
-                "name":       props.get("name", ""),
-                "market":     props.get("rpmmarket", ""),
-                "manager":    props.get("marketing_manager") or props.get("marketing_manager_email", ""),
-                "ple_status": props.get("plestatus", ""),
+                "name":       cp.get("name", ""),
+                "market":     cp.get("rpmmarket", ""),
+                "manager":    cp.get("marketing_manager") or cp.get("marketing_manager_email", ""),
+                "ple_status": status,
             })
 
         after = data.get("paging", {}).get("next", {}).get("after")
         if not after:
             break
 
+    logger.info("_get_managed_companies: %d companies after client-side plestatus filter", len(companies))
     return companies
 
 
