@@ -69,15 +69,21 @@ def get_spend_sheet_data(force: bool = False) -> list[dict]:
         logger.debug("Spend sheet cache hit — %d rows", len(cached[1]))
         return cached[1]
 
-    SKU_COLS = [
-        "search", "pmax", "paid_social", "geofence", "display", "retargeting",
-        "ctv", "seo", "social_posting", "eblast", "email_drip",
-    ]
-    raw = _build_spend_sheet()
-    # Only show properties that have at least one active SKU spend
-    data = [r for r in raw if any(r.get(col) for col in SKU_COLS)]
+    # Show every in-scope property regardless of current digital spend.
+    # The old "only properties with at least one active SKU" filter was
+    # designed before the new IO process Kyle rolled out 2026-05-08:
+    # cancellations and dispositions now KEEP all SKUs at $0 instead of
+    # removing line items, so the active-spend filter hid 1,200+
+    # legitimate portfolio properties — including the entire dispo /
+    # cancellation tracking surface the new process is explicitly meant
+    # to preserve ("Tracks lost revenue accurately, Preserves service
+    # history", per the New HubSpot Deal/IO Process doc).
+    #
+    # If anyone needs the "active spend only" cut, layer a filter chip
+    # in the table UI — keep the data source full.
+    data = _build_spend_sheet()
     _cache["data"] = (now, data)
-    logger.info("Spend sheet built — %d rows (%d filtered, no spend)", len(data), len(raw) - len(data))
+    logger.info("Spend sheet built — %d rows (full portfolio, no spend-based filtering)", len(data))
     return data
 
 
