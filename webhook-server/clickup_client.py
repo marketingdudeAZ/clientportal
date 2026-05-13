@@ -175,6 +175,46 @@ def update_status(task_id: str, status: str) -> bool:
     return True
 
 
+def create_task(
+    list_id: str,
+    name: str,
+    *,
+    description: str | None = None,
+    tags: list[str] | None = None,
+    status: str | None = None,
+    priority: int | None = None,
+    assignees: list[int] | None = None,
+) -> dict[str, Any] | None:
+    """Create a task in a ClickUp list. Returns the new task dict on success."""
+    if not CLICKUP_API_KEY or not list_id or not name:
+        return None
+    payload: dict[str, Any] = {"name": name}
+    if description:
+        payload["description"] = description
+    if tags:
+        payload["tags"] = tags
+    if status:
+        payload["status"] = status
+    if priority is not None:
+        payload["priority"] = priority
+    if assignees:
+        payload["assignees"] = assignees
+    try:
+        r = requests.post(
+            f"{CU_BASE}/list/{list_id}/task",
+            headers=_headers(),
+            json=payload,
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp create_task network error for list %s: %s", list_id, e)
+        return None
+    if not _ok(r):
+        logger.warning("ClickUp create_task list=%s -> %s %s", list_id, r.status_code, r.text[:200])
+        return None
+    return r.json()
+
+
 def tag_user_in_comment(task_id: str, user_id: str | int, text: str) -> bool:
     """Post a comment that @-mentions a ClickUp user.
 
