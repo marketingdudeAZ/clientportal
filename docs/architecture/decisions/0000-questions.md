@@ -7,35 +7,34 @@ this folder and mark the question closed below.
 
 ## A. Reality-check against what exists
 
-**A1. Flask/Render service: keep or rebuild?** ⏳
+**A1. Flask/Render service: keep or rebuild?** ✅ RESOLVED 2026-05-11
 The spec says "Frontend: React, Backend: Node.js". Today we have a
 Flask service on Render carrying 30+ endpoints, the ClickUp webhook,
-the property-brief automation, the fluency cron, GTM bridge. Options:
-- **Keep** Flask as the Layer 2 services layer, put React on top
-- **Rebuild** in Node.js to match spec literally
-- **Hybrid** — new Layer 1/2 in Node, old Flask routes stay until
-  they're refactored one at a time
+the property-brief automation, the fluency cron, GTM bridge.
 
-→ ADR: `0001-backend-language.md` (TBD)
+→ **Decision: Keep Flask.** ADR `0001-backend-language.md`.
 
-**A2. /portal-dashboard: migrate or replace?** ⏳
-Currently a HubSpot CMS page with token-in-URL "auth." The spec
-calls for proper multi-tenant Auth0/Clerk login. Migration would
-mean moving the rendering logic + adding real auth. Replacement
-means new React app, old page deprecates.
+**A2. /portal-dashboard: migrate or replace?** ✅ RESOLVED 2026-05-11
+→ **Decision: Migrate in place.** ADR `0003-client-portal-frontend.md`.
 
-→ ADR: `0003-client-portal-frontend.md` (TBD)
+**A3. What's load-bearing vs iterative?** ✅ RESOLVED 2026-05-11
+Kyle confirmed the table I drafted in the 2026-05-11 chat thread.
+Load-bearing (do not break):
+- `/accounts` (portfolio table — replaces the Excel budget sheet)
+- `/api/spend-sheet` (data source for /accounts)
+- Daily Fluency Tag Sync cron (once scheduled)
+- HubSpot company `uuid` (R1 — already protected by
+  IMMUTABLE_RULES.md)
 
-**A3. What's load-bearing vs iterative?** ⏳
-Need an explicit list from Kyle of "do not break under any
-circumstance" surfaces. Best guesses:
-- `/accounts` (replaces Excel budget sheet, AMs depend on it)
-- The community-brief approval URLs already shared with stakeholders
-- The daily Fluency tag-sync cron (when it ships)
-- The GTM bridge audit + bulk push (when ungated)
+Iterative (safer to refactor):
+- `/webhooks/clickup/property-brief`
+- `/api/community-brief/*`
+- `/portal-dashboard` (no clients on it yet)
+- HubDB tables (no pages reading them yet)
+- GTM Consent Mode v2 bulk push (paused)
+- Astra HeyGen videos (pending review)
 
-→ Captured directly in `docs/architecture/audit.md` Risky-refactor
-list, not a standalone ADR.
+→ Captured in `docs/architecture/audit.md` Risky-refactor list.
 
 ## B. Layer boundaries
 
@@ -70,11 +69,8 @@ as-is until Phase 1?
 
 ## C. Auth + multi-tenant
 
-**C7. Auth provider** ⏳ — BLOCKS Phase 2
-Auth0 / Clerk / HubSpot-as-identity. Until resolved, no client-facing
-multi-tenant work can ship.
-
-→ ADR: `0002-auth-provider.md` (TBD)
+**C7. Auth provider** ✅ RESOLVED 2026-05-11
+→ **Decision: Clerk.** ADR `0002-auth-provider.md`.
 
 **C8. Tenancy granularity in BigQuery** ⏳
 UUID-scoped views per tenant. At 700 properties:
@@ -84,11 +80,9 @@ UUID-scoped views per tenant. At 700 properties:
 
 → Captured in `0005-bigquery-migration.md`.
 
-**C9. Internal vs external view today** ⏳
-Is the external view a parallel page (`/client/accounts?uuid=X`),
-or the same template with auth-driven scope filtering?
-
-→ Captured in `0003-client-portal-frontend.md`.
+**C9. Internal vs external view today** ✅ RESOLVED 2026-05-11
+→ **Decision: Same /portal-dashboard URL, filter by Clerk session's
+UUID list.** Captured in ADR `0003-client-portal-frontend.md`.
 
 ## D. NinjaCat replacement
 
@@ -126,11 +120,9 @@ with target path. Land before any code moves.
 
 ## F. Practical
 
-**F14. Repo layout** ⏳
-Two repos (client-portal stays + new agent framework lives apart)
-or one monorepo with `/connectors`, `/skills`, `/apps`, `/agents`?
-
-→ ADR: `0008-repo-layout.md` (TBD)
+**F14. Repo layout** ✅ RESOLVED 2026-05-11
+→ **Decision: Monorepo, keep `clientportal` as the name.** ADR
+`0008-repo-layout.md`.
 
 **F15. Spec location in repo** — RESOLVED ✓
 - Spec at `docs/SPEC.md`
@@ -143,4 +135,21 @@ or one monorepo with `/connectors`, `/skills`, `/apps`, `/agents`?
 
 | Date | Question | Decision | ADR |
 |---|---|---|---|
-| 2026-05-11 | F15 spec location | This layout | (no ADR, structural) |
+| 2026-05-11 | F15 spec location | docs/SPEC.md + ADRs + CLAUDE.md at root | (structural) |
+| 2026-05-11 | A1 backend language | Keep Flask | 0001 |
+| 2026-05-11 | A2 portal-dashboard | Migrate in place | 0003 |
+| 2026-05-11 | A3 load-bearing list | Confirmed (see entry) | (in audit) |
+| 2026-05-11 | C7 auth provider | Clerk | 0002 |
+| 2026-05-11 | C9 internal vs external view | Same URL, Clerk scopes UUID list | 0003 |
+| 2026-05-11 | F14 repo layout | Monorepo, `clientportal` | 0008 |
+
+## Audit unblocked
+
+With A1 / A2 / A3 / C7 / F14 resolved, `docs/architecture/audit.md`
+can be produced as the next Phase 0 deliverable.
+
+Still open (not blocking audit, scheduled into later Phase 0
+chunks): B4 (Property Resolver fuzzy match scope), B5 (BigQuery
+migration vs greenfield), B6 (LLM Gateway timing), D10/D11
+(NinjaCat replacement evaluation), E12 (Phase 0 task order
+confirmation).

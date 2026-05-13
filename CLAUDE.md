@@ -65,9 +65,10 @@ live on that record.
 ## Current Phase
 
 **Phase 0 — Foundation.** Building Layer 1 connectors + Layer 2 skills
-before any new Layer 3 apps. See `docs/architecture/audit.md` for the
-keep/refactor/replace verdict on existing code (in progress) and
-`docs/architecture/decisions/` for ADRs.
+before any new Layer 3 apps. Five blocking decisions resolved
+2026-05-11 (Flask, migrate-in-place, Clerk, monorepo, load-bearing
+list). The audit deliverable at `docs/architecture/audit.md` is next.
+See `docs/architecture/decisions/` for ADR log.
 
 Phase milestones (from `docs/SPEC.md`):
 - Phase 0 (now → 60 days): foundation, Property Resolver, HubSpot +
@@ -77,19 +78,27 @@ Phase milestones (from `docs/SPEC.md`):
 - Phase 2 (120 → 180 days): client portal MVP, first external users
 - Phase 3 (180 → EOY): full agent suite, 700+ property rollout
 
-## Stack
+## Stack — locked Phase 0 decisions
 
-- **Frontend:** React (existing build experience from AirOps)
-- **Backend:** Currently Flask on Render. Phase 0 decision: keep as
-  Layer 2 service or rebuild in Node.js. See
-  `docs/architecture/decisions/0001-backend-language.md` (TBD).
-- **DB:** BigQuery (analytics) + HubSpot (identity)
-- **Auth:** TBD — Auth0 vs Clerk vs HubSpot-as-identity. See
-  `docs/architecture/decisions/0002-auth-provider.md` (TBD).
-- **Agents:** Claude Code + Anthropic API (claude-sonnet-4 / opus
-  for complex reasoning)
+- **Backend:** Flask on Render. (ADR 0001 — chose to keep over
+  rebuilding in Node.js per the spec.)
+- **Frontend:** HubSpot CMS templates for the existing portal,
+  migrate in place. React components embedded inside the template
+  as needed; no separate React app yet. (ADR 0003.)
+- **DB:** BigQuery (analytics) + HubSpot (identity). HubSpot is
+  always live API, NEVER synced into BigQuery.
+- **Auth:** Clerk for the client portal. Maps to HubSpot Contact
+  via email. (ADR 0002.)
+- **Repo layout:** Monorepo. This repo (`marketingdudeAZ/clientportal`)
+  is the single home. New top-level folders added as the rebuild
+  progresses: `connectors/`, `skills/`, `apps/`, `agents/`. (ADR 0008.)
+- **Agents:** Claude Code + Anthropic API (claude-sonnet-4-5 default,
+  Opus for complex reasoning). All calls go through the LLM Gateway
+  once built.
 - **Automation:** n8n for scheduled pipelines, Render Cron Jobs for
   daemon-threaded long jobs.
+
+See `docs/architecture/decisions/` for the full ADR log.
 
 ## What's already built (high level)
 
