@@ -91,6 +91,64 @@ def invalidate_cache():
     _cache.clear()
 
 
+# SKU column keys that represent media + adjacent services billed to the
+# property. Used by Red Light v2 cost-per-lease. Management fee is included
+# because the user defined "cost of the deal for the company for my services"
+# as the denominator — the full client invoice, not media-only.
+_SPEND_COLUMN_KEYS = (
+    "seo", "search", "pmax", "paid_social", "tiktok", "geofence",
+    "mgmt_fee", "social_posting", "reputation", "display", "youtube",
+    "ctv", "demand_gen", "retargeting", "website_hosting", "eblast",
+    "email_drip",
+)
+
+
+def get_company_monthly_spend(company_id: str) -> dict:
+    """Return monthly service spend breakdown for a single HubSpot company.
+
+    Returns:
+        {
+            "company_id":   str,
+            "total":        float,   # sum across all SKU columns
+            "by_sku":       dict,    # column_key -> amount (only non-null)
+            "deal_id":      str | None,
+            "deal_name":    str | None,
+        }
+
+    Reuses the 30-min spend sheet cache. Returns zeros if the company is
+    not present in the spend sheet (e.g. not in PLE_STATUSES).
+    """
+    rows = get_spend_sheet_data()
+    cid = str(company_id)
+    row = next((r for r in rows if str(r.get("company_id")) == cid), None)
+
+    if not row:
+        return {"company_id": cid, "total": 0.0, "by_sku": {},
+                "deal_id": None, "deal_name": None}
+
+    by_sku: dict[str, float] = {}
+    total = 0.0
+    for key in _SPEND_COLUMN_KEYS:
+        val = row.get(key)
+        if val is None:
+            continue
+        try:
+            amt = float(val)
+        except (TypeError, ValueError):
+            continue
+        if amt > 0:
+            by_sku[key] = amt
+            total += amt
+
+    return {
+        "company_id": cid,
+        "total":      round(total, 2),
+        "by_sku":     by_sku,
+        "deal_id":    row.get("deal_id"),
+        "deal_name":  row.get("deal_name"),
+    }
+
+
 # ── Build pipeline ──────────────────────────────────────────────────────────────
 
 def _build_spend_sheet() -> list[dict]:

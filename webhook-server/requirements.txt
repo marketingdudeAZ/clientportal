@@ -10,3 +10,4 @@ gspread==6.1.2
 google-auth==2.29.0
 google-api-python-client==2.128.0
 google-cloud-bigquery>=3.25.0
+reportlab>=4.0.0
