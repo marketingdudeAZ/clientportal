@@ -823,6 +823,52 @@ def red_light_ingest_csv():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+# ─── Red Light Report v2 (ApartmentIQ-anchored, 5-section PDF) ──────────────
+
+
+@app.route("/api/red-light-v2/run", methods=["POST", "OPTIONS"])
+def red_light_v2_run():
+    """Generate the ApartmentIQ-anchored Red Light v2 PDF and attach to a company.
+
+    Auth: portal user (X-Portal-Email) OR server-to-server (X-Internal-Key).
+
+    Body JSON (provide one of):
+        company_id     — HubSpot company record id
+        property_uuid  — RPM UUID (resolves to company_id via search)
+
+    Returns:
+        { status, company_id, property_uuid, pdf_url, report_date,
+          warnings, payload }
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    import hmac as _hmac
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    internal_key = request.headers.get("X-Internal-Key", "")
+    expected_key = os.getenv("INTERNAL_API_KEY", "")
+    key_ok = bool(expected_key and internal_key and _hmac.compare_digest(expected_key, internal_key))
+    if not email and not key_ok:
+        return jsonify({"error": "Authentication required"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    company_id    = payload.get("company_id")
+    property_uuid = payload.get("property_uuid")
+
+    if not company_id and not property_uuid:
+        return jsonify({"error": "Provide company_id or property_uuid"}), 400
+
+    try:
+        from redlight_v2_run import run as run_v2
+        result = run_v2(company_id=company_id, property_uuid=property_uuid)
+        status = result.get("status", "ok")
+        http_code = 200 if status in ("ok", "partial") else 500
+        return jsonify(result), http_code
+    except Exception as e:
+        logger.error("Red Light v2 run failed: %s", e, exc_info=True)
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
 # ─── Internal sync + cron triggers (@require_internal_key) ──────────────────
 
 

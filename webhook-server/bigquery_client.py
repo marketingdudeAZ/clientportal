@@ -379,6 +379,77 @@ def get_ninjacat_benchmarks(market, size_band):
     return out
 
 
+# ── ApartmentIQ snapshots (Red Light v2) ───────────────────────────────────
+
+def write_aptiq_snapshot(snapshot: dict):
+    """Insert a monthly ApartmentIQ snapshot row.
+
+    `snapshot` must include property_uuid and snapshot_month ("YYYY-MM-01").
+    Numeric fields are optional and pass through as None when missing.
+    """
+    from datetime import datetime
+    row = dict(snapshot)
+    row.setdefault("snapshotted_at", datetime.utcnow().isoformat() + "Z")
+    insert_rows("aptiq_snapshots", [row])
+    logger.info(
+        "Wrote aptiq_snapshots for %s %s",
+        snapshot.get("property_uuid"), snapshot.get("snapshot_month"),
+    )
+
+
+def get_aptiq_snapshot_at(property_uuid: str, snapshot_month: str) -> dict | None:
+    """Return the most recent aptiq_snapshots row at-or-before the given month.
+
+    `snapshot_month` is "YYYY-MM-01". Returns None if no row exists.
+    """
+    from google.cloud import bigquery
+    dataset = _dataset()
+    sql = f"""
+        SELECT
+            property_uuid, hubspot_company_id, aptiq_property_id, snapshot_month,
+            occupancy, leased_percent, exposure, available_units,
+            leases_last_30, applications_last_30,
+            asking_rent, ner, rent_psf,
+            monthly_service_cost, cost_per_lease,
+            snapshotted_at
+        FROM `{BIGQUERY_PROJECT_ID}.{dataset}.aptiq_snapshots`
+        WHERE property_uuid = @uuid
+          AND snapshot_month <= @month
+        ORDER BY snapshot_month DESC
+        LIMIT 1
+    """
+    params = [
+        bigquery.ScalarQueryParameter("uuid", "STRING", property_uuid),
+        bigquery.ScalarQueryParameter("month", "DATE", snapshot_month),
+    ]
+    rows = query(sql, params)
+    return rows[0] if rows else None
+
+
+def get_aptiq_snapshot_trend(property_uuid: str, months: int = 13) -> list[dict]:
+    """Return up to `months` most recent snapshots, newest first.
+
+    Used by the 'where you are going' projection — needs a few months of
+    trailing data to compute trajectory.
+    """
+    from google.cloud import bigquery
+    dataset = _dataset()
+    sql = f"""
+        SELECT
+            snapshot_month, occupancy, leased_percent, exposure,
+            available_units, leases_last_30, monthly_service_cost, cost_per_lease
+        FROM `{BIGQUERY_PROJECT_ID}.{dataset}.aptiq_snapshots`
+        WHERE property_uuid = @uuid
+        ORDER BY snapshot_month DESC
+        LIMIT @lim
+    """
+    params = [
+        bigquery.ScalarQueryParameter("uuid", "STRING", property_uuid),
+        bigquery.ScalarQueryParameter("lim", "INT64", months),
+    ]
+    return query(sql, params)
+
+
 # ── SEO rank history (daily time series) ───────────────────────────────────
 
 def write_seo_rank_snapshot(property_uuid, rows):

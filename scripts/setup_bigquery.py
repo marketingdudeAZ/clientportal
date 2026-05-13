@@ -66,6 +66,29 @@ RED_LIGHT_HISTORY_SCHEMA = [
     bigquery.SchemaField("scored_at", "TIMESTAMP", description="When scoring ran"),
 ]
 
+# Used by Red Light v2: monthly snapshot of ApartmentIQ property data so we can
+# reconstruct prior-month and prior-year comparisons even when ApartmentIQ
+# doesn't expose a time-series endpoint we can hit directly.
+APTIQ_SNAPSHOTS_SCHEMA = [
+    bigquery.SchemaField("property_uuid", "STRING", description="RPM UUID — join key"),
+    bigquery.SchemaField("hubspot_company_id", "STRING", description="HubSpot company record ID"),
+    bigquery.SchemaField("aptiq_property_id", "STRING", description="ApartmentIQ property ID used to fetch the snapshot"),
+    bigquery.SchemaField("snapshot_month", "DATE", description="First day of the snapshot month — partition key"),
+    bigquery.SchemaField("occupancy", "FLOAT64", mode="NULLABLE"),
+    bigquery.SchemaField("leased_percent", "FLOAT64", mode="NULLABLE"),
+    bigquery.SchemaField("exposure", "FLOAT64", mode="NULLABLE"),
+    bigquery.SchemaField("available_units", "INT64", mode="NULLABLE", description="ATR — Available To Rent count"),
+    bigquery.SchemaField("leases_last_30", "INT64", mode="NULLABLE"),
+    bigquery.SchemaField("applications_last_30", "INT64", mode="NULLABLE"),
+    bigquery.SchemaField("asking_rent", "FLOAT64", mode="NULLABLE"),
+    bigquery.SchemaField("ner", "FLOAT64", mode="NULLABLE"),
+    bigquery.SchemaField("rent_psf", "FLOAT64", mode="NULLABLE"),
+    bigquery.SchemaField("monthly_service_cost", "FLOAT64", mode="NULLABLE", description="Sum of HubSpot line-item spend on the active deal for the month"),
+    bigquery.SchemaField("cost_per_lease", "FLOAT64", mode="NULLABLE", description="monthly_service_cost / leases_last_30"),
+    bigquery.SchemaField("raw_payload", "STRING", mode="NULLABLE", description="JSON of the full ApartmentIQ response for forward compatibility"),
+    bigquery.SchemaField("snapshotted_at", "TIMESTAMP"),
+]
+
 TABLES = {
     "ninjacat_metrics": {
         "schema": NINJACAT_METRICS_SCHEMA,
@@ -81,6 +104,11 @@ TABLES = {
         "schema": RED_LIGHT_HISTORY_SCHEMA,
         "partition_field": "report_month",
         "description": "Red Light scores over time per property — used for trend analysis and AM priority queue.",
+    },
+    "aptiq_snapshots": {
+        "schema": APTIQ_SNAPSHOTS_SCHEMA,
+        "partition_field": "snapshot_month",
+        "description": "Monthly ApartmentIQ property snapshots — feeds Red Light v2 report MoM / YoY comparisons.",
     },
 }
 

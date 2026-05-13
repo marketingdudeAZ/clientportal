@@ -122,6 +122,101 @@ def get_market_narrative(market_id: str) -> dict | None:
         return None
 
 
+# ─── Property snapshot (for Red Light v2) ────────────────────────────────────
+
+# Keys we want on the snapshot dict. ApartmentIQ field names vary in casing
+# across endpoints; we accept the common variants and normalize.
+_SNAPSHOT_FIELD_ALIASES = {
+    "occupancy":         ("occupancy", "occupancy_percent", "occupied_percent"),
+    "leased_percent":    ("leased_percent", "leased", "leased_pct"),
+    "exposure":          ("exposure", "exposure_percent", "exposure_pct"),
+    "available_units":   ("available_units_count", "available_units", "atr"),
+    "leases_last_30":    ("leases_last_30", "leases_30d", "leases_last_30_days"),
+    "applications_last_30": ("applications_last_30", "applications_30d"),
+    "asking_rent":       ("asking_rent",),
+    "ner":               ("ner", "net_effective_rent"),
+    "rent_psf":          ("rent_psf",),
+    "total_units":       ("total_units", "unit_count"),
+    "year_built":        ("year_built",),
+    "property_class":    ("property_class",),
+    "submarket_name":    ("submarket_name", "submarket"),
+    "market_name":       ("market_name", "market"),
+}
+
+
+def _normalize_snapshot(raw: dict) -> dict:
+    """Map an ApartmentIQ raw property response into our snapshot schema."""
+    out: dict = {}
+    for key, aliases in _SNAPSHOT_FIELD_ALIASES.items():
+        for alias in aliases:
+            if alias in raw and raw[alias] is not None:
+                out[key] = raw[alias]
+                break
+    return out
+
+
+def get_property_snapshot(aptiq_property_id: str) -> dict | None:
+    """Fetch current property snapshot normalized for Red Light v2.
+
+    Returns dict with occupancy, leased_percent, exposure, available_units (ATR),
+    leases_last_30, plus property characteristics — or None if unavailable.
+    """
+    raw = get_property_details(aptiq_property_id)
+    if not raw:
+        return None
+    snapshot = _normalize_snapshot(raw)
+    snapshot["_raw"] = raw  # keep full payload for BigQuery archival
+    return snapshot
+
+
+def get_property_history(aptiq_property_id: str, as_of_date: str) -> dict | None:
+    """Fetch a historical property snapshot at a given date.
+
+    `as_of_date` is "YYYY-MM-DD". ApartmentIQ does not publicly document a REST
+    time-series endpoint in our client today, but their platform retains 4+
+    years of daily history. This function attempts the plausible endpoint
+    shapes and returns None on miss. Callers should fall back to the BigQuery
+    aptiq_snapshots table (which is the long-term source of truth once we
+    accumulate history).
+
+    TODO: Confirm exact endpoint with ApartmentIQ support and tighten the
+    attempted URLs / params.
+    """
+    if not APTIQ_TOKEN or not aptiq_property_id:
+        return None
+
+    candidates = [
+        # Most likely patterns based on ApartmentIQ's URL style
+        (f"{BASE_URL}/properties/bulk_details",
+         {"property_ids": aptiq_property_id, "as_of": as_of_date}),
+        (f"{BASE_URL}/properties/{aptiq_property_id}/history",
+         {"date": as_of_date}),
+        (f"{BASE_URL}/properties/{aptiq_property_id}/snapshots",
+         {"date": as_of_date}),
+    ]
+
+    for url, params in candidates:
+        try:
+            resp = requests.get(url, headers=_headers(), params=params, timeout=15)
+            if resp.status_code in (200, 201):
+                data = resp.json()
+                results = data if isinstance(data, list) else data.get("data", data.get("properties", []))
+                if isinstance(results, list) and results:
+                    return _normalize_snapshot(results[0])
+                if isinstance(results, dict) and results:
+                    return _normalize_snapshot(results)
+            # 4xx → try the next candidate silently
+        except Exception as exc:
+            logger.debug("ApartmentIQ history attempt %s failed: %s", url, exc)
+
+    logger.info(
+        "No ApartmentIQ historical endpoint accepted property=%s as_of=%s — "
+        "callers should fall back to the aptiq_snapshots table",
+        aptiq_property_id, as_of_date,
+    )
+    return None
+
+
 # ─── Aggregated context for script generation ────────────────────────────────
 
 def get_comp_context(aptiq_property_id: str, aptiq_market_id: str) -> dict:
