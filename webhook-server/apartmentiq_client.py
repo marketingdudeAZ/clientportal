@@ -160,13 +160,92 @@ def get_property_snapshot(aptiq_property_id: str) -> dict | None:
 
     Returns dict with occupancy, leased_percent, exposure, available_units (ATR),
     leases_last_30, plus property characteristics — or None if unavailable.
+
+    Resolution order:
+      1. ApartmentIQ REST API (preferred — richer fields, real-time)
+      2. Daily AptIQ CSV (fallback — populated by the fluency cron, lags by
+         up to 24h but always available if APT_IQ_DAILY_SHEET_URL is set)
     """
+    fallback_used = False
     raw = get_property_details(aptiq_property_id)
     if not raw:
-        return None
+        # API unavailable (bad token, rate limit, property not in account).
+        # Fall back to the daily CSV we already pull for the fluency pipeline.
+        raw = _csv_snapshot_fallback(aptiq_property_id)
+        if not raw:
+            return None
+        fallback_used = True
+        logger.info("AptIQ snapshot for %s sourced from daily CSV (API unavailable)",
+                    aptiq_property_id)
     snapshot = _normalize_snapshot(raw)
-    snapshot["_raw"] = raw  # keep full payload for BigQuery archival
+    snapshot["_raw"] = raw                          # keep full payload for BQ archival
+    snapshot["_source"] = "csv" if fallback_used else "api"
     return snapshot
+
+
+def _csv_snapshot_fallback(aptiq_property_id: str) -> dict | None:
+    """Build a snapshot from the daily AptIQ CSV (APT_IQ_DAILY_SHEET_URL).
+
+    Reuses the existing CSV client + column-alias map from the
+    fluency_ingestion package. The returned dict is shaped like the
+    API's raw response — same alias keys _SNAPSHOT_FIELD_ALIASES already
+    knows — so the fallback is transparent to _normalize_snapshot.
+
+    Returns None when:
+      - aptiq_property_id is empty
+      - the CSV module can't be imported (env without fluency stack)
+      - the property id isn't in the CSV
+    """
+    if not aptiq_property_id:
+        return None
+    try:
+        from services.fluency_ingestion import apt_iq_csv_client, apt_iq_reader
+    except ImportError as exc:
+        logger.warning("AptIQ CSV fallback unavailable: %s", exc)
+        return None
+
+    row = apt_iq_csv_client.get_property_row(str(aptiq_property_id))
+    if not row:
+        logger.warning("AptIQ CSV: property_id %s not in daily sheet", aptiq_property_id)
+        return None
+
+    # CSV column → API-shaped raw key. Reuse apt_iq_reader's resolver +
+    # type coercion so we get the same value normalization the fluency
+    # pipeline uses. None values are dropped at the end so _normalize_snapshot's
+    # `if alias in raw` check doesn't pick up empty strings.
+    raw: dict = {
+        "occupancy":         apt_iq_reader._to_float(apt_iq_reader._resolve_col(row, "occupancy_pct")),
+        "exposure":          apt_iq_reader._to_float(apt_iq_reader._resolve_col(row, "exposure_90d_pct")),
+        "available_units":   apt_iq_reader._to_int(apt_iq_reader._resolve_col(row, "available_units")),
+        "asking_rent":       apt_iq_reader._to_float(apt_iq_reader._resolve_col(row, "avg_rent")),
+        "year_built":        apt_iq_reader._to_int(apt_iq_reader._resolve_col(row, "year_built")),
+        "market_name":       apt_iq_reader._resolve_col(row, "market_name"),
+        "submarket_name":    apt_iq_reader._resolve_col(row, "submarket_name"),
+        "property_class":    apt_iq_reader._resolve_col(row, "property_class"),
+    }
+
+    # Total units — the CSV doesn't have a uniform column name, but
+    # "Total Units" or "Unit Count" are common. Try a few aliases.
+    for col in ("Total Units", "Unit Count", "Units", "total_units", "unit_count"):
+        if col in row and row[col] not in (None, ""):
+            raw["total_units"] = apt_iq_reader._to_int(row[col])
+            break
+
+    # Leases-last-30 + leased_percent: column names vary by AptIQ tenant
+    # config. Try the most-common patterns and silently skip if absent.
+    for col in ("Leases Last 30", "Leases Last 30 Days", "Leases (30d)",
+                "Leases 30d", "leases_last_30", "leases_30d"):
+        if col in row and row[col] not in (None, ""):
+            raw["leases_last_30"] = apt_iq_reader._to_int(row[col])
+            break
+    for col in ("Leased %", "Leased Percent", "Leased", "leased_percent", "leased_pct"):
+        if col in row and row[col] not in (None, ""):
+            raw["leased_percent"] = apt_iq_reader._to_float(row[col])
+            break
+
+    # Drop empties so _normalize_snapshot doesn't latch onto a blank alias.
+    raw = {k: v for k, v in raw.items() if v not in (None, "")}
+    return raw or None
 
 
 def get_property_history(aptiq_property_id: str, as_of_date: str) -> dict | None:
