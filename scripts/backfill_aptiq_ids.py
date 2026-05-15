@@ -170,6 +170,72 @@ def token_set_similarity(a: str, b: str) -> float:
     return len(inter) / len(union)
 
 
+_STATE_ABBREV = {
+    "alabama": "al", "alaska": "ak", "arizona": "az", "arkansas": "ar",
+    "california": "ca", "colorado": "co", "connecticut": "ct", "delaware": "de",
+    "district of columbia": "dc",
+    "florida": "fl", "georgia": "ga", "hawaii": "hi", "idaho": "id",
+    "illinois": "il", "indiana": "in", "iowa": "ia", "kansas": "ks",
+    "kentucky": "ky", "louisiana": "la", "maine": "me", "maryland": "md",
+    "massachusetts": "ma", "michigan": "mi", "minnesota": "mn",
+    "mississippi": "ms", "missouri": "mo", "montana": "mt", "nebraska": "ne",
+    "nevada": "nv", "new hampshire": "nh", "new jersey": "nj",
+    "new mexico": "nm", "new york": "ny", "north carolina": "nc",
+    "north dakota": "nd", "ohio": "oh", "oklahoma": "ok", "oregon": "or",
+    "pennsylvania": "pa", "rhode island": "ri", "south carolina": "sc",
+    "south dakota": "sd", "tennessee": "tn", "texas": "tx", "utah": "ut",
+    "vermont": "vt", "virginia": "va", "washington": "wa",
+    "west virginia": "wv", "wisconsin": "wi", "wyoming": "wy",
+}
+
+
+def _norm_state(s: str) -> str:
+    """Map full state names ('Texas') and abbrevs ('TX') to a canonical 2-letter
+    lowercase code. Returns '' for empty input. Pass-through anything unknown."""
+    if not s:
+        return ""
+    key = s.lower().strip()
+    return _STATE_ABBREV.get(key, key)
+
+
+def _street_num(addr: str) -> str:
+    """Extract leading street number ('2200' from '2200 S Grace St').
+    Returns '' if the address doesn't start with digits."""
+    if not addr:
+        return ""
+    m = re.match(r"^\s*(\d+)", addr)
+    return m.group(1) if m else ""
+
+
+def addresses_likely_same(
+    hs_addr: str, hs_city: str, hs_state: str,
+    csv_addr: str, csv_city: str, csv_state: str,
+) -> bool:
+    """Cheap sanity check that two address records refer to the same physical
+    property. Used to reject same-name-different-property collisions (e.g.,
+    HubSpot's 'Newport' in Nashville vs CSV's 'Newport' in Chicago).
+
+    Returns True iff city, state, AND leading street number all agree when
+    present. Missing data on either side is treated as a wildcard (don't punish
+    HubSpot/CSV gaps), but disagreement on any present field returns False.
+    """
+    # State agreement
+    hs_st, csv_st = _norm_state(hs_state), _norm_state(csv_state)
+    if hs_st and csv_st and hs_st != csv_st:
+        return False
+    # City agreement
+    hs_c  = (hs_city or "").lower().strip()
+    csv_c = (csv_city or "").lower().strip()
+    if hs_c and csv_c and hs_c != csv_c:
+        return False
+    # Street-number agreement (catches same-city/state collisions where the
+    # property is at a different street number — e.g., Brookside Park 591 vs 565)
+    hs_n, csv_n = _street_num(hs_addr), _street_num(csv_addr)
+    if hs_n and csv_n and hs_n != csv_n:
+        return False
+    return True
+
+
 # ── HubSpot side ────────────────────────────────────────────────────────────
 
 def fetch_unmatched_companies() -> list[dict]:
@@ -311,12 +377,26 @@ def match_company_to_csv(company: dict, csv_props: dict[str, dict]) -> dict:
     exact_hits = [p for p in csv_props.values() if names_match(hs_name, p["name"])]
     if len(exact_hits) == 1:
         csv = exact_hits[0]
-        return _match_record(company, csv, "exact_name", 1.0)
+        # Reject name collisions: a unique name match still must agree on city,
+        # state, and leading street number. Without this, generic names like
+        # "Newport" or "The Woodlands" pick whatever single CSV property happens
+        # to share the name regardless of geography.
+        if addresses_likely_same(hs_addr, hs_city, hs_state,
+                                  csv["address"], csv["city"], csv["state"]):
+            return _match_record(company, csv, "exact_name", 1.0)
+        return _match_record(
+            company, csv, "exact_name_addr_mismatch", 1.0,
+            override_notes=(f"name matches but address disagrees "
+                            f"(HubSpot {hs_city}/{hs_state} #{_street_num(hs_addr)} "
+                            f"vs CSV {csv['city']}/{csv['state']} #{_street_num(csv['address'])})"),
+        )
     elif len(exact_hits) > 1:
-        # Disambiguate via address
+        # Disambiguate via address. Prefer addresses_likely_same (street+city+state)
+        # over the older normalize_address full-string equality — same reason as
+        # the single-hit branch.
         for csv in exact_hits:
-            csv_norm = normalize_address(f"{csv['address']} {csv['city']} {csv['state']}")
-            if norm_addr and csv_norm and norm_addr == csv_norm:
+            if addresses_likely_same(hs_addr, hs_city, hs_state,
+                                      csv["address"], csv["city"], csv["state"]):
                 return _match_record(company, csv, "exact_name_addr_tiebreak", 1.0)
         # Ambiguous — fall through to fuzzy
         return _no_match(company, notes=f"{len(exact_hits)} exact name hits — address didn't tie-break")
@@ -342,7 +422,9 @@ def match_company_to_csv(company: dict, csv_props: dict[str, dict]) -> dict:
     return _no_match(company)
 
 
-def _match_record(company: dict, csv: dict, match_type: str, score: float) -> dict:
+def _match_record(company: dict, csv: dict, match_type: str, score: float,
+                   override_notes: str | None = None) -> dict:
+    default_notes = "" if csv["has_home"] else "no home market — Property ID only"
     return {
         "company_id":        company["id"],
         "hs_name":           company.get("name", ""),
@@ -359,8 +441,7 @@ def _match_record(company: dict, csv: dict, match_type: str, score: float) -> di
         "home_market_name":  csv["home_market_name"],
         "has_home":          csv["has_home"],
         "all_market_count":  len(csv["all_market_ids"]),
-        "notes":             "" if csv["has_home"]
-                                else "no home market — Property ID only",
+        "notes":             override_notes if override_notes is not None else default_notes,
     }
 
 
@@ -440,10 +521,13 @@ def main() -> int:
         print(f"  {k:30s} {summary[k]}", file=sys.stderr)
 
     # Decide will-commit per row
+    # NEVER auto-commit: none, exact_name_addr_mismatch (manual review only),
+    # fuzzy (unless --include-fuzzy-commits is set).
+    NEVER_COMMIT = {"none", "exact_name_addr_mismatch"}
     for m in matches:
         if not args.commit:
             m["will_commit"] = False
-        elif m["match_type"] == "none":
+        elif m["match_type"] in NEVER_COMMIT:
             m["will_commit"] = False
         elif m["match_type"] == "fuzzy" and not args.include_fuzzy_commits:
             m["will_commit"] = False
