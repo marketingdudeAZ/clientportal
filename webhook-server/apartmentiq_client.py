@@ -249,51 +249,326 @@ def _csv_snapshot_fallback(aptiq_property_id: str) -> dict | None:
 
 
 def get_property_history(aptiq_property_id: str, as_of_date: str) -> dict | None:
-    """Fetch a historical property snapshot at a given date.
+    """Fetch a single historical snapshot at a given date.
 
-    `as_of_date` is "YYYY-MM-DD". ApartmentIQ does not publicly document a REST
-    time-series endpoint in our client today, but their platform retains 4+
-    years of daily history. This function attempts the plausible endpoint
-    shapes and returns None on miss. Callers should fall back to the BigQuery
-    aptiq_snapshots table (which is the long-term source of truth once we
-    accumulate history).
+    For ONE date, the bulk_api batch flow is wasteful (15+ min round-trip to
+    pull one day). This stub remains so the existing red-light v2 fallback
+    pathway in redlight_v2.py still resolves; for actual historical pulls
+    we use `fetch_property_history_monthly()` below, which goes through the
+    documented batch flow once for the full range and returns aggregated
+    monthly snapshots.
 
-    TODO: Confirm exact endpoint with ApartmentIQ support and tighten the
-    attempted URLs / params.
+    Returns None — callers fall back to BigQuery aptiq_snapshots.
     """
-    if not APTIQ_TOKEN or not aptiq_property_id:
+    # No live single-date endpoint exists. Historical data flows through
+    # the bulk_api/jobs batch flow into the aptiq_snapshots table, then
+    # callers read from BQ. See fetch_property_history_monthly().
+    return None
+
+
+# ─── Bulk historical export (long-term backfill, async batch flow) ───────────
+#
+# Per https://developers.apartmentiq.io/api-reference/bulk-data-export/ the
+# flow is:
+#   1. POST  /bulk_api/jobs                       → { job_id, status: "submitted" }
+#   2. GET   /bulk_api/jobs/{job_id}              → poll until status="succeeded"
+#   3. GET   /bulk_api/jobs/{job_id}/results      → 302 redirect to signed S3 URL
+#   4. Download the file (JSONL one row per day per property)
+#
+# Property reports contain DAILY snapshots — we aggregate to end-of-month
+# for storage in aptiq_snapshots (which is monthly granularity).
+#
+# No `account_id` query param required (JWT alone authenticates per docs).
+
+_BULK_TIMEOUT          = 30    # POST can carry a long property_ids list
+_BULK_POLL_SECONDS     = 20    # interval between status polls
+_BULK_POLL_MAX_SECONDS = 900   # 15-min hard cap per job
+_BULK_DOWNLOAD_TIMEOUT = 120   # signed-S3 URL can serve large files
+
+
+def create_bulk_history_job(
+    property_ids: list,
+    start_date: str,
+    end_date: str,
+    *,
+    report_type: str = "property",
+    output_format: str = "jsonl",
+    callback_url: str | None = None,
+) -> dict | None:
+    """Create a bulk export job. Returns the job dict (job_id, status, ...) or None.
+
+    Args:
+      property_ids:    list of AptIQ property IDs (ints or stringified ints)
+      start_date:      "YYYY-MM-DD" inclusive
+      end_date:        "YYYY-MM-DD" inclusive
+      report_type:     "property" (default) | "units" | "floorplans"
+      output_format:   "jsonl" (default) | "csv" | "parquet"
+      callback_url:    optional webhook the AptIQ side will POST to when done
+    """
+    if not APTIQ_TOKEN:
+        logger.warning("ApartmentIQ_Token not configured — bulk job skipped")
+        return None
+    if not property_ids:
         return None
 
-    candidates = [
-        # Most likely patterns based on ApartmentIQ's URL style
-        (f"{BASE_URL}/properties/bulk_details",
-         {"property_ids": aptiq_property_id, "as_of": as_of_date}),
-        (f"{BASE_URL}/properties/{aptiq_property_id}/history",
-         {"date": as_of_date}),
-        (f"{BASE_URL}/properties/{aptiq_property_id}/snapshots",
-         {"date": as_of_date}),
-    ]
+    # AptIQ property IDs are documented as integers in the request body.
+    try:
+        prop_ids = [int(pid) for pid in property_ids]
+    except (TypeError, ValueError) as exc:
+        logger.error("create_bulk_history_job: bad property_ids %s (%s)", property_ids, exc)
+        return None
 
-    for url, params in candidates:
-        try:
-            resp = requests.get(url, headers=_headers(), params=params, timeout=15)
-            if resp.status_code in (200, 201):
-                data = resp.json()
-                results = data if isinstance(data, list) else data.get("data", data.get("properties", []))
-                if isinstance(results, list) and results:
-                    return _normalize_snapshot(results[0])
-                if isinstance(results, dict) and results:
-                    return _normalize_snapshot(results)
-            # 4xx → try the next candidate silently
-        except Exception as exc:
-            logger.debug("ApartmentIQ history attempt %s failed: %s", url, exc)
+    body: dict = {
+        "report_type":   report_type,
+        "output_format": output_format,
+        "start_date":    start_date,
+        "end_date":      end_date,
+        "property_ids":  prop_ids,
+    }
+    if callback_url:
+        body["callback_url"] = callback_url
 
-    logger.info(
-        "No ApartmentIQ historical endpoint accepted property=%s as_of=%s — "
-        "callers should fall back to the aptiq_snapshots table",
-        aptiq_property_id, as_of_date,
-    )
+    try:
+        resp = requests.post(
+            f"{BASE_URL}/bulk_api/jobs",
+            headers={**_headers(), "Content-Type": "application/json"},
+            json=body,
+            timeout=_BULK_TIMEOUT,
+        )
+    except Exception as exc:
+        logger.error("AptIQ create bulk job network error: %s", exc)
+        return None
+
+    if not (200 <= resp.status_code < 300):
+        logger.warning("AptIQ create bulk job -> %s %s",
+                       resp.status_code, resp.text[:300])
+        return None
+    return resp.json()
+
+
+def get_bulk_job_status(job_id: str) -> dict | None:
+    """GET /bulk_api/jobs/{job_id}. Returns the job state dict or None on error."""
+    if not APTIQ_TOKEN or not job_id:
+        return None
+    try:
+        resp = requests.get(
+            f"{BASE_URL}/bulk_api/jobs/{job_id}",
+            headers=_headers(),
+            timeout=15,
+        )
+    except Exception as exc:
+        logger.error("AptIQ bulk job status network error for %s: %s", job_id, exc)
+        return None
+    if resp.status_code in (200, 201):
+        return resp.json()
+    logger.warning("AptIQ bulk job status %s -> %s %s",
+                   job_id, resp.status_code, resp.text[:200])
     return None
+
+
+def wait_for_bulk_job(
+    job_id: str,
+    *,
+    timeout_seconds: int = _BULK_POLL_MAX_SECONDS,
+    poll_seconds: int = _BULK_POLL_SECONDS,
+) -> dict | None:
+    """Poll the job until status reaches a terminal state, or timeout.
+    Terminal states: succeeded | failed | cancelled. Returns final state dict."""
+    import time
+    deadline = time.monotonic() + timeout_seconds
+    last_state = None
+    while time.monotonic() < deadline:
+        status = get_bulk_job_status(job_id)
+        if not status:
+            # transient — retry after a short pause
+            time.sleep(poll_seconds)
+            continue
+        state = status.get("status")
+        if state != last_state:
+            logger.info("AptIQ bulk job %s status=%s", job_id, state)
+            last_state = state
+        if state in ("succeeded", "failed", "cancelled"):
+            return status
+        time.sleep(poll_seconds)
+    logger.warning("AptIQ bulk job %s timed out after %ds (last_state=%s)",
+                   job_id, timeout_seconds, last_state)
+    return None
+
+
+def download_bulk_job_results(job_id: str) -> list[dict]:
+    """Download and parse the results of a succeeded bulk job.
+
+    The /results endpoint returns a 302 → pre-signed S3 URL. The S3 URL
+    needs no auth (signed). Output is JSONL; we return a list of parsed dicts.
+    """
+    if not APTIQ_TOKEN or not job_id:
+        return []
+    try:
+        resp = requests.get(
+            f"{BASE_URL}/bulk_api/jobs/{job_id}/results",
+            headers=_headers(),
+            allow_redirects=False,
+            timeout=15,
+        )
+    except Exception as exc:
+        logger.error("AptIQ bulk results network error for %s: %s", job_id, exc)
+        return []
+
+    if resp.status_code in (200, 201):
+        # Some setups may return the file inline
+        return _parse_jsonl_bytes(resp.content)
+    if resp.status_code not in (301, 302, 303, 307, 308):
+        logger.warning("AptIQ bulk results %s -> %s %s",
+                       job_id, resp.status_code, resp.text[:200])
+        return []
+    s3_url = resp.headers.get("Location") or ""
+    if not s3_url:
+        logger.warning("AptIQ bulk results %s: redirect missing Location header", job_id)
+        return []
+
+    try:
+        s3 = requests.get(s3_url, timeout=_BULK_DOWNLOAD_TIMEOUT)
+    except Exception as exc:
+        logger.error("AptIQ bulk S3 download failed for %s: %s", job_id, exc)
+        return []
+    if not (200 <= s3.status_code < 300):
+        logger.warning("AptIQ bulk S3 download %s -> %s", job_id, s3.status_code)
+        return []
+    return _parse_jsonl_bytes(s3.content)
+
+
+def _parse_jsonl_bytes(b: bytes) -> list[dict]:
+    """Parse a JSONL payload (one JSON object per line). Tolerates empty lines
+    and skips lines that fail to parse with a warning."""
+    import json as _json
+    if not b:
+        return []
+    text = b.decode("utf-8", errors="replace") if isinstance(b, (bytes, bytearray)) else str(b)
+    out: list[dict] = []
+    for i, line in enumerate(text.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = _json.loads(line)
+            if isinstance(obj, dict):
+                out.append(obj)
+        except _json.JSONDecodeError as exc:
+            logger.warning("Skipping malformed bulk JSONL line %d: %s", i, exc)
+    return out
+
+
+def fetch_property_history_monthly(
+    aptiq_property_id,
+    months_back: int = 13,
+    *,
+    end_month: str | None = None,
+) -> list[dict]:
+    """End-to-end: spin up a bulk job for one property, wait, download, and
+    aggregate daily rows to one snapshot per month (end-of-month value).
+
+    Args:
+      aptiq_property_id: the AptIQ property id (int or str)
+      months_back:       number of complete past months to retrieve
+      end_month:         "YYYY-MM" — the most recent month to include
+                          (default: the month before today, so we don't
+                          conflict with the current-month write that
+                          redlight_v2.persist_snapshot() makes)
+
+    Returns:
+      list of dicts, oldest-first, each shaped like:
+        {
+          "snapshot_month": "YYYY-MM-01",   # DATE
+          "occupancy":      float | None,
+          "leased_percent": float | None,
+          "exposure":       float | None,
+          ...                                # other _SNAPSHOT_FIELD_ALIASES keys
+          "_raw":           <the latest daily row that month>,
+        }
+      Empty list on any failure (auth, job failed, no results).
+    """
+    from datetime import date, timedelta
+
+    if not aptiq_property_id:
+        return []
+
+    # Resolve the date window
+    today = date.today()
+    if end_month:
+        try:
+            ey, em = (int(x) for x in end_month.split("-")[:2])
+        except (ValueError, IndexError):
+            logger.error("Bad end_month %r — expected YYYY-MM", end_month)
+            return []
+    else:
+        first_of_this = today.replace(day=1)
+        prev_last = first_of_this - timedelta(days=1)
+        ey, em = prev_last.year, prev_last.month
+
+    # End date = last day of (ey, em)
+    if em == 12:
+        first_of_next = date(ey + 1, 1, 1)
+    else:
+        first_of_next = date(ey, em + 1, 1)
+    end_d = first_of_next - timedelta(days=1)
+
+    # Start date = first day of the month, months_back-1 months before (ey, em)
+    sy, sm = ey, em
+    for _ in range(max(0, months_back - 1)):
+        sm -= 1
+        if sm == 0:
+            sm = 12
+            sy -= 1
+    start_d = date(sy, sm, 1)
+
+    job = create_bulk_history_job(
+        property_ids=[aptiq_property_id],
+        start_date=start_d.isoformat(),
+        end_date=end_d.isoformat(),
+    )
+    if not job or "job_id" not in job:
+        return []
+    job_id = job["job_id"]
+    logger.info("AptIQ bulk job %s submitted for property=%s window=%s..%s",
+                job_id, aptiq_property_id, start_d, end_d)
+
+    final = wait_for_bulk_job(job_id)
+    if not final or final.get("status") != "succeeded":
+        logger.warning("AptIQ bulk job %s did not succeed: status=%s err=%s",
+                       job_id,
+                       (final or {}).get("status"),
+                       (final or {}).get("error_message"))
+        return []
+
+    rows = download_bulk_job_results(job_id)
+    if not rows:
+        logger.warning("AptIQ bulk job %s succeeded but returned 0 rows", job_id)
+        return []
+    logger.info("AptIQ bulk job %s returned %d daily rows", job_id, len(rows))
+
+    # Group daily rows by YYYY-MM, keep the row with the latest within-month date.
+    # The exact "date" field name in the JSONL isn't documented; try the
+    # plausible aliases.
+    by_month: dict = {}    # "YYYY-MM" → (latest_date_iso, row)
+    for row in rows:
+        d_raw = (row.get("date") or row.get("report_date") or row.get("as_of_date")
+                 or row.get("snapshot_date") or row.get("snapshotted_at") or "")
+        d_iso = str(d_raw)[:10]
+        if len(d_iso) < 7 or d_iso[4] != "-":
+            continue
+        ym = d_iso[:7]
+        cur = by_month.get(ym)
+        if cur is None or d_iso > cur[0]:
+            by_month[ym] = (d_iso, row)
+
+    out: list[dict] = []
+    for ym in sorted(by_month):
+        _, row = by_month[ym]
+        snap = _normalize_snapshot(row)
+        snap["snapshot_month"] = ym + "-01"
+        snap["_raw"] = row
+        out.append(snap)
+    return out
 
 
 # ─── Aggregated context for script generation ────────────────────────────────

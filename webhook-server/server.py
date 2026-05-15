@@ -1114,6 +1114,171 @@ def seo_refresh_property():
     })
 
 
+@app.route("/api/internal/aptiq-backfill-history", methods=["POST", "OPTIONS"])
+@require_internal_key
+def aptiq_backfill_history():
+    """Trigger an ApartmentIQ historical backfill for one company.
+
+    Fires the documented async bulk_api/jobs flow against AptIQ:
+      1. POST  /bulk_api/jobs           → create batch job
+      2. GET   /bulk_api/jobs/{id}      → poll until succeeded
+      3. GET   /bulk_api/jobs/{id}/results  → download JSONL via signed S3
+      4. Aggregate daily rows → end-of-month, write to BQ aptiq_snapshots
+
+    The bulk job typically takes a few minutes — this endpoint blocks for up
+    to ~15 minutes. Use async=true to dispatch in a daemon thread and return
+    immediately; poll BQ to observe completion.
+
+    Auth:  X-Internal-Key header = INTERNAL_API_KEY env var.
+
+    Body JSON:
+      company_id   (required) — HubSpot company id (must already have aptiq_property_id set)
+      months_back  (default 13)
+      end_month    (default = last full month, "YYYY-MM")
+      dry_run      (default false) — return parsed snapshots without writing to BQ
+      async        (default false) — return 202 immediately, run in background
+
+    Returns per-month rollup: how many months returned, range, sample of one
+    month's normalized payload, BQ write count.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    payload = request.get_json(silent=True) or {}
+    company_id = (payload.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+    try:
+        months_back = int(payload.get("months_back") or 13)
+    except (TypeError, ValueError):
+        return jsonify({"error": "months_back must be int"}), 400
+    end_month = payload.get("end_month") or None
+    dry_run   = bool(payload.get("dry_run"))
+    run_async = bool(payload.get("async"))
+
+    # Look up company props (uuid + aptiq_property_id) from HubSpot
+    import requests as _req
+    from config import HUBSPOT_API_KEY as _HK
+    try:
+        r = _req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
+            "?properties=name,uuid,aptiq_property_id,aptiq_market_id",
+            headers={"Authorization": f"Bearer {_HK}"},
+            timeout=15,
+        )
+        r.raise_for_status()
+        props = r.json().get("properties", {})
+    except Exception as e:
+        logger.error("aptiq-backfill-history: HubSpot fetch failed for %s: %s", company_id, e)
+        return jsonify({"error": f"HubSpot lookup failed: {e}"}), 502
+
+    uuid              = (props.get("uuid") or "").strip()
+    aptiq_property_id = (props.get("aptiq_property_id") or "").strip()
+    name              = (props.get("name") or "").strip()
+    if not (uuid and aptiq_property_id):
+        return jsonify({
+            "error": "Company missing uuid or aptiq_property_id — backfill needs both",
+            "uuid": uuid, "aptiq_property_id": aptiq_property_id,
+        }), 400
+
+    import time as _time
+    t0 = _time.time()
+
+    def _do_backfill(bucket: dict):
+        """Run the AptIQ bulk pull + BQ write into `bucket`."""
+        from apartmentiq_client import fetch_property_history_monthly
+        monthly = fetch_property_history_monthly(
+            aptiq_property_id, months_back=months_back, end_month=end_month,
+        )
+        bucket["months_returned"] = len(monthly)
+        bucket["first_month"]     = monthly[0]["snapshot_month"]  if monthly else None
+        bucket["last_month"]      = monthly[-1]["snapshot_month"] if monthly else None
+        # Drop _raw before returning the sample — it's huge
+        if monthly:
+            sample = dict(monthly[-1])
+            sample.pop("_raw", None)
+            bucket["sample_latest_month"] = sample
+
+        if dry_run or not monthly:
+            bucket["rows_written"] = 0
+            return
+
+        try:
+            from bigquery_client import write_aptiq_snapshot, is_bigquery_configured
+            if not is_bigquery_configured():
+                bucket["error"] = "BigQuery not configured"
+                return
+        except Exception as exc:
+            bucket["error"] = f"BQ import failed: {exc}"
+            return
+
+        import json as _json
+        written = 0
+        errors: list[str] = []
+        for snap in monthly:
+            row = {
+                "property_uuid":        uuid,
+                "hubspot_company_id":   company_id,
+                "aptiq_property_id":    aptiq_property_id,
+                "snapshot_month":       snap["snapshot_month"],
+                "occupancy":            snap.get("occupancy"),
+                "leased_percent":       snap.get("leased_percent"),
+                "exposure":             snap.get("exposure"),
+                "available_units":      snap.get("available_units"),
+                "leases_last_30":       snap.get("leases_last_30"),
+                "applications_last_30": snap.get("applications_last_30"),
+                "asking_rent":          snap.get("asking_rent"),
+                "ner":                  snap.get("ner"),
+                "rent_psf":             snap.get("rent_psf"),
+                "monthly_service_cost": None,
+                "cost_per_lease":       None,
+                "raw_payload":          _json.dumps(snap.get("_raw") or {})[:60_000],
+            }
+            try:
+                write_aptiq_snapshot(row)
+                written += 1
+            except Exception as exc:
+                errors.append(f"{snap['snapshot_month']}: {exc}")
+                logger.warning("aptiq_snapshots write failed %s %s: %s",
+                               uuid, snap.get("snapshot_month"), exc)
+        bucket["rows_written"] = written
+        if errors:
+            bucket["write_errors"] = errors[:5]
+
+    if run_async:
+        import threading
+        bucket: dict = {}
+        threading.Thread(target=_do_backfill, args=(bucket,), daemon=True).start()
+        return jsonify({
+            "status":            "started",
+            "company_id":        company_id,
+            "property_uuid":     uuid,
+            "property_name":     name,
+            "aptiq_property_id": aptiq_property_id,
+            "months_back":       months_back,
+            "end_month":         end_month,
+            "dry_run":           dry_run,
+            "note":              "Running in background thread. Poll BQ aptiq_snapshots to observe completion.",
+        }), 202
+
+    # Sync path
+    results: dict = {}
+    _do_backfill(results)
+    runtime = round(_time.time() - t0, 1)
+    return jsonify({
+        "status":            "ok" if results.get("months_returned", 0) > 0 else "no_data",
+        "company_id":        company_id,
+        "property_uuid":     uuid,
+        "property_name":     name,
+        "aptiq_property_id": aptiq_property_id,
+        "months_back":       months_back,
+        "end_month":         end_month,
+        "dry_run":           dry_run,
+        "runtime_seconds":   runtime,
+        **results,
+    })
+
+
 # ─── Support: tickets + knowledge base search ───────────────────────────────
 
 
