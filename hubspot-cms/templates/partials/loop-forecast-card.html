@@ -1,0 +1,65 @@
+<!--
+  Loop Forecast Card — drops into the existing client-portal.html
+  dashboard without overwriting anything. Designed to sit in the
+  Performance section (id="section-performance") next to existing
+  leasing metrics, OR in the Overview hero (id="section-overview")
+  as a quick-glance card.
+
+  Renders the latest forecast for the property + a CTA to the full
+  Loop subpage (when wired). Hides itself entirely if no forecast
+  has been generated for this property yet (no embarrassing empty
+  states).
+
+  Include with:
+
+    {% include "partials/loop-forecast-card.html" %}
+
+  Place anywhere inside the property-detail view branch. Reads
+  property.hs_object_id and property.uuid from the existing
+  template scope.
+-->
+<div class="loop-forecast-card" id="loop-forecast-card" style="display:none">
+  <style>
+    .loop-forecast-card{background:#fff;border:1px solid var(--bd,#e7e5e4);
+      border-radius:10px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);
+      margin-bottom:16px}
+    .lfc-hdr{display:flex;justify-content:space-between;align-items:baseline;
+      margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #f3f4f6}
+    .lfc-title{font-size:12px;font-weight:700;text-transform:uppercase;
+      letter-spacing:.5px;color:#57534e;display:flex;align-items:center;gap:6px}
+    .lfc-title::before{content:"";display:inline-block;width:8px;height:8px;
+      border-radius:50%;background:#9333ea}
+    .lfc-link{font-size:11px;color:#2563eb;text-decoration:none;font-weight:600}
+    .lfc-link:hover{text-decoration:underline}
+    .lfc-num{font-size:42px;font-weight:700;line-height:1;color:#1c1917;
+      margin:8px 0 4px;font-variant-numeric:tabular-nums}
+    .lfc-sub{font-size:12px;color:#57534e}
+    .lfc-channels{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));
+      gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid #f3f4f6}
+    .lfc-chan{font-size:11px}
+    .lfc-chan-label{color:#a8a29e;text-transform:uppercase;letter-spacing:.4px;
+      font-weight:600}
+    .lfc-chan-val{color:#1c1917;font-weight:600;font-size:13px;margin-top:2px}
+    .lfc-rec{margin-top:12px;padding:10px;background:#f0f9ff;border-radius:6px;
+      border:1px solid #bae6fd;font-size:12px;color:#0c4a6e}
+    .lfc-meta{font-size:10px;color:#a8a29e;margin-top:8px;text-align:right}
+  </style>
+
+  <div class="lfc-hdr">
+    <span class="lfc-title">Loop Forecast</span>
+    <a class="lfc-link" id="lfc-open-loop"
+       href="#"
+       title="Open the full Loop view for this property">
+       See full Loop →
+    </a>
+  </div>
+
+  <div class="lfc-num" id="lfc-num">—</div>
+  <div class="lfc-sub" id="lfc-sub">projected leases · 30d</div>
+
+  <div class="lfc-channels" id="lfc-channels"></div>
+
+  <div class="lfc-rec" id="lfc-rec" style="display:none"></div>
+
+  <div class="lfc-meta" id="lfc-meta"></div>
+</div>

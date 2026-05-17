@@ -432,6 +432,90 @@ def loop_channels():
     })
 
 
+# ── POST /api/loop/forecasts/batch ────────────────────────────────────────────
+
+@loop_bp.route("/api/loop/forecasts/batch", methods=["POST", "OPTIONS"])
+def loop_forecasts_batch():
+    """Bulk-fetch latest forecasts for many properties at once.
+
+    Used by the /accounts table to decorate each row with its current
+    Loop forecast in a single request (vs N fetches one-per-row).
+
+    Body JSON:
+      uuids: ["...","...","..."]   — up to 500 property UUIDs
+
+    Returns:
+      { forecasts: { uuid: { forecast_leases, ci_low, ci_high,
+                             run_at, methodology, recommendations_count }, ... } }
+    """
+    if request.method == "OPTIONS":
+        return preflight_response()
+    if not _is_authorized(request):
+        return jsonify({"error": "auth required"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    uuids_in = payload.get("uuids") or []
+    if not isinstance(uuids_in, list):
+        return jsonify({"error": "uuids must be a list"}), 400
+    uuids = [str(u).strip() for u in uuids_in if u][:500]
+    if not uuids:
+        return jsonify({"forecasts": {}})
+
+    import loop_writer
+    client = loop_writer._bq()
+    if client is None:
+        return jsonify({"forecasts": {}, "note": "BQ unavailable"})
+
+    project = os.environ.get("BIGQUERY_PROJECT_ID")
+    dataset = os.environ.get("BIGQUERY_DATASET_PROD")
+
+    from google.cloud import bigquery
+    sql = f"""
+      WITH ranked AS (
+        SELECT
+          property_uuid, run_at, horizon_days, methodology,
+          forecast_leases, ci_low, ci_high, confidence_level,
+          recommendations,
+          ROW_NUMBER() OVER (PARTITION BY property_uuid ORDER BY run_at DESC) AS rn
+        FROM `{project}.{dataset}.forecast_runs`
+        WHERE property_uuid IN UNNEST(@uuids)
+      )
+      SELECT * EXCEPT(rn) FROM ranked WHERE rn = 1
+    """
+    cfg = bigquery.QueryJobConfig(query_parameters=[
+        bigquery.ArrayQueryParameter("uuids", "STRING", uuids),
+    ])
+    out: dict = {}
+    try:
+        import json as _json
+        for r in client.query(sql, job_config=cfg).result():
+            recs_raw = r.recommendations
+            rec_count = 0
+            if recs_raw:
+                try:
+                    rec_list = _json.loads(recs_raw) if isinstance(recs_raw, str) else recs_raw
+                    rec_count = sum(1 for x in rec_list
+                                    if x.get("action") not in
+                                       ("hold", "collect_more_data", "expand_inputs"))
+                except (TypeError, ValueError):
+                    pass
+            out[r.property_uuid] = {
+                "forecast_leases":      r.forecast_leases,
+                "ci_low":               r.ci_low,
+                "ci_high":              r.ci_high,
+                "confidence_level":     r.confidence_level,
+                "methodology":          r.methodology,
+                "horizon_days":         r.horizon_days,
+                "run_at":               r.run_at.isoformat() if r.run_at else None,
+                "recommendations_count": rec_count,
+            }
+    except Exception as exc:
+        logger.warning("loop_forecasts_batch failed: %s", exc)
+        return jsonify({"forecasts": {}, "error": str(exc)[:200]}), 500
+
+    return jsonify({"forecasts": out, "count": len(out)})
+
+
 # ── GET /api/loop/accuracy ───────────────────────────────────────────────────
 
 @loop_bp.route("/api/loop/accuracy", methods=["GET", "OPTIONS"])

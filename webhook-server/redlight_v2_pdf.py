@@ -228,6 +228,107 @@ def _comparison_table(title: str, subtitle: str, comparison: list[dict],
     return blocks
 
 
+def _loop_forecast_section(forecast: Optional[dict], styles: dict) -> list:
+    """Render the Loop forecast as a section in the Red Light report.
+
+    Surfaces the projected lease count + confidence interval + channel
+    allocation + actionable recommendations. Anchored on real numbers
+    from the Forecasting Engine (forecast_runs table) — turns the
+    'Where you are going' narrative into a data-backed projection.
+
+    Returns empty when no forecast is on file (graceful degrade — the
+    rest of the report renders unchanged).
+    """
+    if not forecast:
+        return []
+
+    elements = [
+        Paragraph("Loop forecast", styles["h2"]),
+        Paragraph("AI-projected lease velocity and channel allocation for the next 30 days.",
+                  styles["subtitle"]),
+        Spacer(1, 8),
+    ]
+
+    fl = forecast.get("forecast_leases")
+    lo = forecast.get("ci_low")
+    hi = forecast.get("ci_high")
+    conf = forecast.get("confidence_level")
+    method = forecast.get("methodology", "")
+
+    # Headline number block
+    if fl is not None:
+        elements.append(Paragraph(
+            f"<b>Projected leases (30d):</b> "
+            f"<font size='14'>{fl}</font> "
+            f"<font size='9' color='#666666'>"
+            f"range {lo}–{hi}, {int((conf or 0)*100)}% confidence"
+            f"</font>",
+            styles["body"],
+        ))
+        elements.append(Spacer(1, 4))
+        elements.append(Paragraph(
+            f"<font size='9' color='#999999'>Methodology: {method}</font>",
+            styles["body"],
+        ))
+        elements.append(Spacer(1, 12))
+
+    # Channel allocation table
+    alloc = forecast.get("channel_allocation") or {}
+    rows_with_spend = [(c, a) for c, a in alloc.items()
+                       if (a or {}).get("spend") and a["spend"] > 0]
+    if rows_with_spend:
+        elements.append(Paragraph("<b>Channel allocation</b>", styles["body"]))
+        elements.append(Spacer(1, 6))
+        data = [["Channel", "Spend", "CPL", "Projected"]]
+        for chan, a in rows_with_spend:
+            data.append([
+                chan.replace("_", " ").title(),
+                f"${(a.get('spend') or 0):,.0f}",
+                f"${(a.get('cpl') or 0):,.0f}",
+                f"{(a.get('forecast_leases') or 0):.1f}",
+            ])
+        t = Table(data, colWidths=[1.6*inch, 1.1*inch, 0.9*inch, 1.0*inch])
+        t.setStyle(TableStyle([
+            ("BACKGROUND",   (0, 0), (-1, 0), colors.HexColor("#2E75B6")),
+            ("TEXTCOLOR",    (0, 0), (-1, 0), colors.white),
+            ("FONTNAME",     (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE",     (0, 0), (-1, -1), 9),
+            ("ALIGN",        (1, 0), (-1, -1), "RIGHT"),
+            ("GRID",         (0, 0), (-1, -1), 0.5, colors.HexColor("#D9D9D9")),
+            ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING",   (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING",(0, 0), (-1, -1), 5),
+        ]))
+        elements.append(t)
+        elements.append(Spacer(1, 12))
+
+    # Recommendations
+    recs = forecast.get("recommendations") or []
+    actionable = [r for r in recs
+                  if r.get("action") not in ("hold", "collect_more_data", "expand_inputs")]
+    if actionable:
+        elements.append(Paragraph("<b>Recommended actions</b>", styles["body"]))
+        elements.append(Spacer(1, 6))
+        for r in actionable:
+            impact = r.get("forecast_impact")
+            impact_str = f"<font color='#2E7D32'>+{impact} leases</font>" if impact else ""
+            elements.append(Paragraph(
+                f"• <b>{r.get('action','').replace('_',' ').title()}</b> — "
+                f"{r.get('reason','')} {impact_str}",
+                styles["body"],
+            ))
+            elements.append(Spacer(1, 4))
+    elif recs and recs[0].get("action") == "hold":
+        elements.append(Paragraph(
+            f"<i>The Loop optimizer evaluates this property's channel allocation as "
+            f"<b>balanced</b> — no shift recommended this period.</i>",
+            styles["body"],
+        ))
+
+    elements.append(Spacer(1, 12))
+    return elements
+
+
 def _narrative_section(title: str, subtitle: str, prose: str,
                        styles: dict) -> list:
     return [
@@ -275,6 +376,11 @@ def render_pdf(payload: dict) -> bytes:
     ))
 
     story.append(PageBreak())
+
+    # Loop forecast section — anchors "where you are going" in actual
+    # projected lease numbers from the Forecasting Engine. Renders only
+    # when a forecast is on file; report gracefully omits when not.
+    story.extend(_loop_forecast_section(payload.get("loop_forecast"), styles))
 
     story.extend(_narrative_section(
         "Where you are going",

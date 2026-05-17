@@ -290,6 +290,17 @@ def build_report_payload(
     # Persist this run as a snapshot for the next report's history.
     persist_snapshot(current, report_date)
 
+    # Loop forecast (Phase 2): pull the latest forecast for this property
+    # so the PDF can render the new "Loop forecast" section ahead of the
+    # 'where you are going' narrative. Best-effort: if no forecast exists,
+    # the PDF gracefully omits the section.
+    loop_forecast = None
+    try:
+        import forecasting
+        loop_forecast = forecasting.get_latest_forecast(property_uuid)
+    except Exception as exc:
+        logger.debug("Loop forecast fetch skipped: %s", exc)
+
     return {
         "property_uuid":        property_uuid,
         "property_name":        property_name,
@@ -305,4 +316,5 @@ def build_report_payload(
         "mom_comparison":       build_comparison(current, last_month),
         "yoy_comparison":       build_comparison(current, last_year),
         "trailing_trend":       trend,
+        "loop_forecast":        loop_forecast,
     }
