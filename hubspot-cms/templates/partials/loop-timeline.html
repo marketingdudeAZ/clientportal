@@ -1,0 +1,32 @@
+<!--
+  Timeline pane — unified Loop activity feed across all stages.
+
+  Renders /api/loop/events?uuid=X&limit=50 as a chronological list.
+  Each row: timestamp, stage chip, event_type + payload preview.
+-->
+<div class="pane" data-pane="timeline">
+
+  <div class="card" style="padding:0">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--bd);
+                display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Loop Activity</h2>
+      <div>
+        <label style="font-size:12px;color:var(--tm);margin-right:8px">Filter:</label>
+        <select id="timeline-filter" style="padding:6px;border:1px solid var(--bd);
+                border-radius:6px;font-family:inherit;font-size:13px">
+          <option value="">All stages</option>
+          <option value="attract">Attract</option>
+          <option value="engage">Engage</option>
+          <option value="convert">Convert</option>
+          <option value="optimize">Optimize</option>
+          <option value="ops">Ops</option>
+        </select>
+      </div>
+    </div>
+    <div id="timeline-empty" class="empty">
+      <p>No Loop events recorded yet for this property.</p>
+    </div>
+    <div id="timeline-body" class="timeline" style="display:none"></div>
+  </div>
+
+</div>

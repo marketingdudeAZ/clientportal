@@ -1,0 +1,65 @@
+<!--
+  Execute pane — stage-grouped action buttons.
+
+  Each button calls a Loop or downstream endpoint via loop.js.
+  Buttons are hidden if the action isn't available for the current
+  property's tier or configuration.
+-->
+<div class="pane" data-pane="execute">
+
+  <div class="exec-grid">
+
+    {# Attract actions #}
+    <div class="exec-card">
+      <h3><span class="health-dot" style="background:#fbbf24"></span> Attract</h3>
+      <p>Generate paid creative and refresh organic surfaces.</p>
+      <div class="exec-actions">
+        <button class="btn" data-action="regenerate-marquee">Regenerate Marquee creative</button>
+        <button class="btn" data-action="refresh-seo">Refresh SEO content</button>
+        <button class="btn" data-action="seo-content-batch">Generate SEO page batch</button>
+      </div>
+    </div>
+
+    {# Engage actions #}
+    <div class="exec-card">
+      <h3><span class="health-dot" style="background:#60a5fa"></span> Engage</h3>
+      <p>Generate property-page and AEO content.</p>
+      <div class="exec-actions">
+        <button class="btn" data-action="generate-aeo-batch">Generate AEO Q&amp;A batch</button>
+        <button class="btn" data-action="refresh-community-brief">Refresh Community Brief</button>
+        <button class="btn" data-action="refresh-property-brief">Refresh Property Brief</button>
+      </div>
+    </div>
+
+    {# Convert actions #}
+    <div class="exec-card">
+      <h3><span class="health-dot" style="background:#4ade80"></span> Convert</h3>
+      <p>Inspect lead flow and channel attribution.</p>
+      <div class="exec-actions">
+        <button class="btn" data-action="open-hyly-crm">Open Hyly CRM in new tab</button>
+        <button class="btn" data-action="refresh-aptiq">Refresh AptIQ snapshot</button>
+        <button class="btn" data-action="backfill-hyly">Backfill Hyly history (180d)</button>
+      </div>
+    </div>
+
+    {# Optimize actions #}
+    <div class="exec-card">
+      <h3><span class="health-dot" style="background:#f472b6"></span> Optimize</h3>
+      <p>Run a fresh forecast or escalate to AM.</p>
+      <div class="exec-actions">
+        <button class="btn primary" data-action="run-forecast">Run forecast now</button>
+        <button class="btn" data-action="talk-to-am">Talk to my AM</button>
+        <button class="btn" data-action="change-mode">Change Loop mode</button>
+      </div>
+    </div>
+
+  </div>
+
+  {# Status feedback area for action results #}
+  <div id="action-status" style="margin-top:20px;padding:16px;background:#f0f9ff;
+       border-radius:8px;border:1px solid #bae6fd;font-size:13px;display:none">
+    <strong id="action-status-title"></strong>
+    <div id="action-status-body" style="margin-top:6px;color:var(--tm)"></div>
+  </div>
+
+</div>

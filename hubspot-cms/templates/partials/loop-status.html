@@ -1,0 +1,46 @@
+<!--
+  Loop Status pane — 4-stage health summary.
+
+  Rendered by loop.js after fetching /api/loop/status?uuid=X.
+  Each stage card shows: health dot, last event_type, last_at,
+  optional magnitude. Click a card to filter the Timeline to that stage.
+-->
+<div class="pane" data-pane="status">
+  <div class="stages" id="stages">
+    {% set stage_labels = [
+      ('attract',  'Attract',  'Paid + organic acquisition'),
+      ('engage',   'Engage',   'Property content + AEO'),
+      ('convert',  'Convert',  'Leads → tours → leases'),
+      ('optimize', 'Optimize', 'AI engine + forecasts')
+    ] %}
+    {% for stage_key, stage_name, stage_desc in stage_labels %}
+    <div class="stage" data-stage="{{ stage_key }}">
+      <h3><span class="health-dot" data-health-dot="{{ stage_key }}"></span>{{ stage_name }}</h3>
+      <div class="last" data-stage-summary="{{ stage_key }}">
+        <span style="color:var(--tl);font-size:12px">{{ stage_desc }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# Convert stage detail: Hyly channels — shown in Status pane below the grid #}
+  <div class="card" id="channels-card" style="display:none">
+    <h2>Convert — Last 30 Days by Channel</h2>
+    <div id="channels-empty" class="empty" style="display:none">
+      <p>Hyly attribution not configured for this property yet.<br>
+         Channel data will appear here when Hyly beta reaches this property.</p>
+    </div>
+    <table class="chan-table" id="channels-table" style="display:none">
+      <thead>
+        <tr>
+          <th>Channel</th>
+          <th class="chan-cell-num">Visitors</th>
+          <th class="chan-cell-num">Known</th>
+          <th class="chan-cell-num">Contacts</th>
+          <th class="chan-cell-num">Conv %</th>
+        </tr>
+      </thead>
+      <tbody id="channels-tbody"></tbody>
+    </table>
+  </div>
+</div>

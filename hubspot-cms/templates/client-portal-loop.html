@@ -1,0 +1,232 @@
+<!--
+  RPM Living Client Portal — Loop subpage (ADR 0018)
+
+  A non-destructive view that lives alongside the existing client-portal.html.
+  Renders the 4-stage Multifamily Loop for one property:
+    - Status panel (Attract / Engage / Convert / Optimize health)
+    - Plan tab (forecast + recommendations + budget allocation)
+    - Timeline (unified Loop activity feed)
+    - Execute (stage-grouped action buttons)
+
+  Routes:
+    ?uuid={id}                         Single-property Loop view
+    ?uuid={id}&tab={status|plan|timeline}  Deep-link to a tab
+
+  Auth: HubSpot Memberships (same as the main portal).
+  Backend: /api/loop/* (Flask blueprint registered via routes/loop.py)
+
+  This template can either be:
+    (a) Hosted as a separate HubSpot page (e.g., /portal-dashboard-loop)
+    (b) Embedded in client-portal.html behind {% if view_param == 'loop' %}
+        — that wiring is left for the operator to land when they're ready
+-->
+{% set uuid_param = request.query_dict.uuid %}
+{% set tab_param  = request.query_dict.tab or 'status' %}
+
+{% if uuid_param %}
+  {% set companies = crm_objects("company",
+    "uuid=" ~ uuid_param,
+    "id,name,rpmmarket,plestatus,totalunits,uuid,seo_tier,loop_mode,hyly_property_id,aptiq_property_id") %}
+  {% if companies.results|length > 0 %}
+    {% set property = companies.results[0] %}
+  {% endif %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ property.name|default("Property") }} — Loop</title>
+<style>
+  /* ─── Loop subpage styles ─────────────────────────────────────────────── */
+  :root{
+    --bg:#fafaf9;--card:#fff;--bd:#e7e5e4;--ts:#1c1917;--tm:#57534e;
+    --tl:#a8a29e;--j:#2563eb;--g:#16a34a;--y:#ca8a04;--r:#dc2626;
+    --cu:#0891b2;--shadow:0 1px 3px rgba(0,0,0,0.04),0 1px 2px rgba(0,0,0,0.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+       background:var(--bg);color:var(--ts);font-size:14px;line-height:1.5}
+  .wrap{max-width:1240px;margin:0 auto;padding:24px}
+
+  /* Header */
+  .hdr{display:flex;align-items:baseline;justify-content:space-between;
+       padding-bottom:20px;border-bottom:1px solid var(--bd);margin-bottom:24px}
+  .hdr h1{margin:0;font-size:24px;font-weight:700}
+  .hdr .meta{color:var(--tm);font-size:13px}
+  .hdr .meta strong{color:var(--ts)}
+  .hdr .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;
+             font-weight:600;background:#e0e7ff;color:#3730a3;margin-left:8px;
+             text-transform:uppercase;letter-spacing:.5px}
+
+  /* Tabs */
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--bd);margin-bottom:24px}
+  .tab{padding:10px 18px;cursor:pointer;border:none;background:none;
+       font-family:inherit;font-size:14px;font-weight:600;color:var(--tm);
+       border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab.active{color:var(--j);border-bottom-color:var(--j)}
+  .tab:hover:not(.active){color:var(--ts)}
+  .pane{display:none}
+  .pane.active{display:block}
+
+  /* Loop Status panel (4-stage grid) */
+  .stages{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+  .stage{background:var(--card);border:1px solid var(--bd);border-radius:10px;
+         padding:18px;box-shadow:var(--shadow)}
+  .stage h3{margin:0 0 4px;font-size:13px;font-weight:700;text-transform:uppercase;
+            letter-spacing:.5px;color:var(--tm);display:flex;align-items:center;gap:8px}
+  .stage .health-dot{width:8px;height:8px;border-radius:50%;display:inline-block;
+                     background:var(--tl)}
+  .stage .health-dot.healthy{background:var(--g)}
+  .stage .health-dot.ok{background:var(--y)}
+  .stage .health-dot.stale{background:#f97316}
+  .stage .health-dot.no_data{background:var(--tl)}
+  .stage .last{margin:8px 0 0;font-size:12px;color:var(--tm)}
+  .stage .last code{background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:11px}
+  .stage .last-time{display:block;color:var(--tl);font-size:11px;margin-top:2px}
+  .stage .magnitude{font-size:28px;font-weight:700;color:var(--ts);margin:8px 0 4px}
+
+  /* Plan tab */
+  .plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:10px;
+        padding:20px;box-shadow:var(--shadow);margin-bottom:16px}
+  .card h2{margin:0 0 16px;font-size:16px;font-weight:700}
+  .forecast-num{font-size:48px;font-weight:700;color:var(--ts);line-height:1;margin:0}
+  .forecast-range{color:var(--tm);font-size:13px;margin-top:8px}
+  .forecast-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;
+                 padding-top:16px;border-top:1px solid var(--bd)}
+  .forecast-meta div{font-size:12px;color:var(--tm)}
+  .forecast-meta strong{display:block;color:var(--ts);font-size:18px;font-weight:600}
+
+  /* Channels table */
+  .chan-table{width:100%;border-collapse:collapse;font-size:13px}
+  .chan-table th{text-align:left;padding:8px 0;color:var(--tm);font-weight:600;
+                 border-bottom:1px solid var(--bd);font-size:11px;text-transform:uppercase}
+  .chan-table td{padding:10px 0;border-bottom:1px solid #f3f4f6}
+  .chan-table tr:last-child td{border-bottom:none}
+  .chan-cell-name{font-weight:600;color:var(--ts)}
+  .chan-cell-num{text-align:right;color:var(--tm)}
+  .chan-bar{height:4px;background:#f1f5f9;border-radius:2px;margin-top:4px;overflow:hidden}
+  .chan-bar > span{display:block;height:100%;background:var(--j)}
+
+  /* Recommendations */
+  .rec{background:var(--card);border:1px solid var(--bd);border-radius:8px;
+       padding:16px;margin-bottom:12px}
+  .rec h4{margin:0 0 6px;font-size:14px;font-weight:600}
+  .rec p{margin:0 0 12px;color:var(--tm);font-size:13px}
+  .rec-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .rec-chip{font-size:11px;background:#f1f5f9;color:var(--tm);padding:3px 8px;
+            border-radius:4px;font-weight:600}
+  .rec-chip.impact{background:#dcfce7;color:#15803d}
+  .rec-actions{display:flex;gap:8px}
+  .btn{padding:8px 14px;border-radius:6px;border:1px solid var(--bd);
+       background:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;
+       color:var(--ts);transition:all .15s}
+  .btn:hover{border-color:var(--ts)}
+  .btn.primary{background:var(--j);color:#fff;border-color:var(--j)}
+  .btn.primary:hover{background:#1d4ed8;border-color:#1d4ed8}
+  .btn.danger{color:var(--r)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+
+  /* Timeline */
+  .timeline{background:var(--card);border:1px solid var(--bd);border-radius:10px;
+            box-shadow:var(--shadow)}
+  .timeline-row{display:grid;grid-template-columns:120px 100px 1fr;gap:16px;
+                padding:14px 20px;border-bottom:1px solid #f3f4f6;align-items:center}
+  .timeline-row:last-child{border-bottom:none}
+  .timeline-time{font-size:11px;color:var(--tl);font-variant-numeric:tabular-nums}
+  .timeline-stage{font-size:11px;font-weight:700;text-transform:uppercase;
+                  letter-spacing:.5px;padding:2px 8px;border-radius:4px;display:inline-block;
+                  text-align:center;width:fit-content}
+  .timeline-stage.attract{background:#fef3c7;color:#92400e}
+  .timeline-stage.engage{background:#dbeafe;color:#1e40af}
+  .timeline-stage.convert{background:#dcfce7;color:#166534}
+  .timeline-stage.optimize{background:#fce7f3;color:#9d174d}
+  .timeline-stage.ops{background:#f3f4f6;color:var(--tm)}
+  .timeline-msg{font-size:13px}
+  .timeline-msg code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px}
+
+  /* Execute pane */
+  .exec-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .exec-card{background:var(--card);border:1px solid var(--bd);border-radius:10px;
+             padding:20px;box-shadow:var(--shadow)}
+  .exec-card h3{margin:0 0 4px;font-size:13px;font-weight:700;text-transform:uppercase;
+                letter-spacing:.5px;color:var(--tm)}
+  .exec-card p{color:var(--tm);font-size:12px;margin:0 0 16px}
+  .exec-actions{display:flex;flex-direction:column;gap:8px}
+
+  /* Empty state */
+  .empty{padding:48px 20px;text-align:center;color:var(--tm)}
+  .empty svg{margin-bottom:12px;opacity:.4}
+
+  /* Loading */
+  .loading{padding:20px;text-align:center;color:var(--tm);font-size:13px}
+
+  @media(max-width:900px){
+    .stages{grid-template-columns:repeat(2,1fr)}
+    .plan-grid{grid-template-columns:1fr}
+    .exec-grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  {# Header #}
+  <div class="hdr">
+    <div>
+      <h1>{{ property.name|default("Property") }}
+          <span class="pill">Loop</span></h1>
+      <div class="meta">
+        {{ property.rpmmarket|default("") }}
+        {% if property.totalunits %} · {{ property.totalunits|int }} units{% endif %}
+        {% if property.seo_tier %} · SEO <strong>{{ property.seo_tier }}</strong>{% endif %}
+        {% if property.loop_mode %} · Loop Mode <strong>{{ property.loop_mode }}</strong>{% endif %}
+      </div>
+    </div>
+    <div class="meta" id="last-updated"></div>
+  </div>
+
+  {# Tab nav #}
+  <div class="tabs">
+    <button class="tab" data-tab="status">Status</button>
+    <button class="tab" data-tab="plan">Plan &amp; Forecast</button>
+    <button class="tab" data-tab="timeline">Timeline</button>
+    <button class="tab" data-tab="execute">Execute</button>
+  </div>
+
+  {# Status pane — 4-stage grid #}
+  {% include "partials/loop-status.html" %}
+
+  {# Plan pane — forecast + recommendations + channels #}
+  {% include "partials/loop-plan.html" %}
+
+  {# Timeline pane #}
+  {% include "partials/loop-timeline.html" %}
+
+  {# Execute pane #}
+  {% include "partials/loop-actions.html" %}
+
+</div>
+
+<script>
+window.RPM_LOOP_CONFIG = {
+  uuid: "{{ property.uuid|default(uuid_param) }}",
+  companyId: "{{ property.hs_object_id|default('') }}",
+  seoTier: "{{ property.seo_tier|default('') }}",
+  loopMode: "{{ property.loop_mode|default('co-pilot') }}",
+  hylyPropertyId: "{{ property.hyly_property_id|default('') }}",
+  apiBase: "https://rpm-portal-server.onrender.com",
+  portalEmail: "{{ contact.email|default('') }}",
+  defaultTab: "{{ tab_param }}"
+};
+</script>
+<script src="{{ get_asset_url('/portal/js/loop.js') }}"></script>
+
+</body>
+</html>
+
+{% else %}
+  {# No uuid_param → redirect to portfolio (existing portal page) #}
+  <script>window.location.replace('/portal-dashboard')</script>
+{% endif %}

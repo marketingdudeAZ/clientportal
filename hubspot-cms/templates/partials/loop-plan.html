@@ -1,0 +1,66 @@
+<!--
+  Plan pane — forecast + budget allocation + recommendations.
+  Renders the Optimize stage UX (ADR 0009 + 0018).
+-->
+<div class="pane" data-pane="plan">
+
+  <div class="plan-grid">
+
+    {# Forecast card #}
+    <div class="card">
+      <h2>30-Day Lease Forecast</h2>
+      <div id="forecast-empty" class="empty">
+        <p>No forecast has been run for this property yet.<br>
+           Click <strong>Run forecast now</strong> in the Execute tab.</p>
+      </div>
+      <div id="forecast-body" style="display:none">
+        <div class="forecast-num" id="forecast-num">—</div>
+        <div class="forecast-range" id="forecast-range">—</div>
+        <div class="forecast-meta">
+          <div>Methodology<strong id="forecast-method">—</strong></div>
+          <div>Confidence<strong id="forecast-conf">—</strong></div>
+          <div>Data months<strong id="forecast-months">—</strong></div>
+          <div>Last run<strong id="forecast-when">—</strong></div>
+        </div>
+      </div>
+    </div>
+
+    {# Channel allocation card #}
+    <div class="card">
+      <h2>Current Channel Allocation</h2>
+      <div id="allocation-empty" class="empty">
+        <p>Channel allocation data appears once a forecast has been run.</p>
+      </div>
+      <table class="chan-table" id="allocation-table" style="display:none">
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th class="chan-cell-num">Spend</th>
+            <th class="chan-cell-num">CPL</th>
+            <th class="chan-cell-num">Forecast</th>
+          </tr>
+        </thead>
+        <tbody id="allocation-tbody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  {# Recommendations list — full width below the grid #}
+  <div class="card">
+    <h2>Recommendations <span id="rec-count" style="color:var(--tl);font-weight:400;font-size:13px"></span></h2>
+    <div id="recs-empty" class="empty" style="display:none">
+      <p>No actionable recommendations right now. The Loop is balanced.</p>
+    </div>
+    <div id="recs-list"></div>
+
+    {# Loop mode hint #}
+    <div style="margin-top:16px;padding:12px;background:#f8fafc;border-radius:6px;
+                font-size:12px;color:var(--tm)">
+      <strong id="mode-label">Co-pilot mode:</strong> <span id="mode-desc">
+        Recommendations require your approval before the Loop applies them.
+      </span>
+    </div>
+  </div>
+
+</div>
