@@ -70,20 +70,21 @@ LEFT JOIN seo_monthly s ON s.property_uuid = rp.property_uuid AND s.month = p.mo
 STUB_VIEW = """
 CREATE OR REPLACE VIEW `{project}.{dataset}.loop_attract_v1` AS
 SELECT
-  CAST(NULL AS STRING) AS property_uuid,
-  CAST(NULL AS STRING) AS name,
-  CAST(NULL AS STRING) AS market,
-  CAST(NULL AS STRING) AS seo_tier,
-  CAST(NULL AS DATE) AS month,
+  CAST(NULL AS STRING)  AS property_uuid,
+  CAST(NULL AS STRING)  AS name,
+  CAST(NULL AS STRING)  AS market,
+  CAST(NULL AS STRING)  AS seo_tier,
+  CAST(NULL AS DATE)    AS month,
   CAST(NULL AS FLOAT64) AS paid_search_spend,
   CAST(NULL AS FLOAT64) AS paid_social_spend,
   CAST(NULL AS FLOAT64) AS seo_spend,
   CAST(NULL AS FLOAT64) AS reputation_spend,
   CAST(NULL AS FLOAT64) AS creative_spend,
   CAST(NULL AS FLOAT64) AS total_spend,
-  CAST(NULL AS INT64) AS keywords_top_3,
-  CAST(NULL AS INT64) AS keywords_top_10,
-  CAST(NULL AS INT64) AS keywords_tracked
+  CAST(NULL AS INT64)   AS keywords_top_3,
+  CAST(NULL AS INT64)   AS keywords_top_10,
+  CAST(NULL AS INT64)   AS keywords_tracked
+FROM (SELECT 1 AS _dummy)
 WHERE FALSE
 """
 

@@ -23,18 +23,19 @@ TARGETS = ["bigquery"]
 STUB_VIEW = """
 CREATE OR REPLACE VIEW `{project}.{dataset}.loop_convert_v1` AS
 SELECT
-  CAST(NULL AS STRING) AS property_uuid,
-  CAST(NULL AS STRING) AS name,
-  CAST(NULL AS STRING) AS market,
-  CAST(NULL AS DATE)   AS month,
-  CAST(NULL AS STRING) AS source,
-  CAST(NULL AS INT64)  AS visitors,
-  CAST(NULL AS INT64)  AS known_visitors,
-  CAST(NULL AS INT64)  AS contacts,
-  CAST(NULL AS INT64)  AS aptiq_leases_last_30,
-  CAST(NULL AS INT64)  AS applications_last_30,
+  CAST(NULL AS STRING)  AS property_uuid,
+  CAST(NULL AS STRING)  AS name,
+  CAST(NULL AS STRING)  AS market,
+  CAST(NULL AS DATE)    AS month,
+  CAST(NULL AS STRING)  AS source,
+  CAST(NULL AS INT64)   AS visitors,
+  CAST(NULL AS INT64)   AS known_visitors,
+  CAST(NULL AS INT64)   AS contacts,
+  CAST(NULL AS INT64)   AS aptiq_leases_last_30,
+  CAST(NULL AS INT64)   AS applications_last_30,
   CAST(NULL AS FLOAT64) AS contact_rate,
   CAST(NULL AS FLOAT64) AS lead_to_lease_rate
+FROM (SELECT 1 AS _dummy)
 WHERE FALSE
 """
 
