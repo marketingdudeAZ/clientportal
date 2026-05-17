@@ -230,6 +230,25 @@ def record(
             logger.warning("loop_writer BQ insert errors: %s", errors[:3])
     except Exception as exc:
         logger.warning("loop_writer BQ insert exception: %s", exc)
+
+    # Phase 2 — Slack notification for high-signal events. Best-effort;
+    # never blocks. The notifier internally filters to NOTIFIABLE_EVENT_TYPES
+    # so this call is cheap for the 90% of events that don't notify.
+    try:
+        import slack_notifier
+        slack_notifier.post_loop_event({
+            "event_id":      event_id,
+            "event_type":    event_type,
+            "stage":         stage,
+            "property_uuid": property_uuid,
+            "magnitude":     magnitude,
+            "payload":       payload,
+            "error_message": error_message,
+            "status":        status,
+        })
+    except Exception as exc:
+        logger.debug("loop_writer Slack post skipped: %s", exc)
+
     return event_id
 
 

@@ -1742,6 +1742,44 @@ def aptiq_backfill_batch():
     })
 
 
+@app.route("/api/internal/loop-autopilot", methods=["POST", "OPTIONS"])
+@require_internal_key
+def loop_autopilot_cron():
+    """Phase 2: cron-style processor for auto-pilot mode properties.
+
+    Scans recent recommendation_proposed events that haven't been actioned,
+    filters to properties with loop_mode='auto-pilot', applies bounds
+    checks, and auto-approves the safe ones. Emits recommendation_approved
+    events as if the property owner had clicked Approve in the portal.
+
+    Should be scheduled to run hourly (or as often as forecasts emit
+    recommendations).
+
+    Body JSON:
+      lookback_hours  — how far back to scan for pending recs (default 24)
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    payload = request.get_json(silent=True) or {}
+    try:
+        lookback = int(payload.get("lookback_hours") or 24)
+    except (TypeError, ValueError):
+        lookback = 24
+    try:
+        from loop_autopilot import process_pending_recommendations
+    except Exception as exc:
+        return jsonify({"error": f"import failed: {exc}"}), 500
+
+    import time as _time
+    t0 = _time.time()
+    summary = process_pending_recommendations(lookback_hours=lookback)
+    return jsonify({
+        "status":          "ok" if "error" not in summary else "error",
+        "runtime_seconds": round(_time.time() - t0, 2),
+        **summary,
+    })
+
+
 @app.route("/api/internal/loop-bootstrap", methods=["POST", "OPTIONS"])
 @require_internal_key
 def loop_bootstrap():

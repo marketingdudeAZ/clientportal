@@ -432,6 +432,103 @@ def loop_channels():
     })
 
 
+# ── GET /api/loop/accuracy ───────────────────────────────────────────────────
+
+@loop_bp.route("/api/loop/accuracy", methods=["GET", "OPTIONS"])
+def loop_accuracy():
+    """Forecast accuracy summary — uses the forecast_accuracy view
+    (migration 0010) to surface how well simple_lag_v1 has done so far.
+
+    Query params:
+      uuid       — single property (optional; omit for portfolio summary)
+      months     — lookback window in months (default 6)
+
+    Returns per-property hit rate, mean abs error, mean rel error, plus
+    portfolio totals when no uuid is supplied.
+    """
+    if request.method == "OPTIONS":
+        return preflight_response()
+    if not _is_authorized(request):
+        return jsonify({"error": "auth required"}), 401
+
+    uuid = (request.args.get("uuid") or "").strip() or None
+    try:
+        months = max(1, min(int(request.args.get("months") or 6), 24))
+    except (TypeError, ValueError):
+        months = 6
+
+    import loop_writer
+    client = loop_writer._bq()
+    if client is None:
+        return jsonify({"error": "BQ unavailable"}), 503
+
+    project = os.environ.get("BIGQUERY_PROJECT_ID")
+    dataset = os.environ.get("BIGQUERY_DATASET_PROD")
+
+    from google.cloud import bigquery
+    where = ["run_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @months MONTH)"]
+    params = [bigquery.ScalarQueryParameter("months", "INT64", months)]
+    if uuid:
+        where.append("property_uuid = @uuid")
+        params.append(bigquery.ScalarQueryParameter("uuid", "STRING", uuid))
+
+    sql = f"""
+      SELECT
+        property_uuid,
+        COUNT(*) AS forecasts_evaluated,
+        COUNTIF(realized_leases IS NOT NULL) AS forecasts_with_outcome,
+        AVG(IF(realized_leases IS NOT NULL, abs_error, NULL)) AS mean_abs_error,
+        AVG(IF(realized_leases IS NOT NULL, rel_error, NULL)) AS mean_rel_error,
+        COUNTIF(ci_hit IS TRUE) AS ci_hits,
+        SAFE_DIVIDE(COUNTIF(ci_hit IS TRUE),
+                     COUNTIF(realized_leases IS NOT NULL)) AS ci_hit_rate,
+        COUNTIF(bias_direction = 'under_forecast') AS under_forecasts,
+        COUNTIF(bias_direction = 'over_forecast')  AS over_forecasts
+      FROM `{project}.{dataset}.forecast_accuracy`
+      WHERE {' AND '.join(where)}
+      GROUP BY property_uuid
+      ORDER BY forecasts_with_outcome DESC
+    """
+    cfg = bigquery.QueryJobConfig(query_parameters=params)
+    try:
+        rows = list(client.query(sql, job_config=cfg).result())
+    except Exception as exc:
+        logger.warning("loop_accuracy query failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+    by_property = []
+    portfolio = {
+        "total_forecasts":          0,
+        "with_outcome":             0,
+        "ci_hits":                  0,
+        "weighted_mean_abs_error":  0.0,
+        "weighted_mean_rel_error":  0.0,
+    }
+    for r in rows:
+        d = dict(r.items())
+        by_property.append(d)
+        portfolio["total_forecasts"] += int(d.get("forecasts_evaluated") or 0)
+        portfolio["with_outcome"]    += int(d.get("forecasts_with_outcome") or 0)
+        portfolio["ci_hits"]         += int(d.get("ci_hits") or 0)
+        # Weighted by forecasts_with_outcome
+        n = int(d.get("forecasts_with_outcome") or 0)
+        if n > 0:
+            portfolio["weighted_mean_abs_error"] += (d.get("mean_abs_error") or 0) * n
+            portfolio["weighted_mean_rel_error"] += (d.get("mean_rel_error") or 0) * n
+
+    if portfolio["with_outcome"] > 0:
+        portfolio["weighted_mean_abs_error"] /= portfolio["with_outcome"]
+        portfolio["weighted_mean_rel_error"] /= portfolio["with_outcome"]
+        portfolio["ci_hit_rate"] = portfolio["ci_hits"] / portfolio["with_outcome"]
+
+    return jsonify({
+        "uuid":         uuid,
+        "months":       months,
+        "portfolio":    portfolio,
+        "by_property":  by_property,
+    })
+
+
 # ── GET /api/loop/convert/leads ──────────────────────────────────────────────
 
 @loop_bp.route("/api/loop/convert/leads", methods=["GET", "OPTIONS"])
