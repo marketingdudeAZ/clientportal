@@ -9,6 +9,7 @@ from .onboarding import onboarding_bp
 from .paid import paid_bp
 from .property_brief import property_brief_bp
 from .seo import seo_bp
+from .webhooks import register_webhook_blueprints
 
 
 def register_all(app):
@@ -18,3 +19,4 @@ def register_all(app):
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(property_brief_bp)
     app.register_blueprint(loop_bp)
+    register_webhook_blueprints(app)

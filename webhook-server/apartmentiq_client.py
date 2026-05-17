@@ -22,10 +22,20 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://data.apartmentiq.io/apartmentiq/api/v1"
 APTIQ_TOKEN = os.getenv("ApartmentIQ_Token", "")
+APTIQ_TOKEN_STANDBY = os.getenv("ApartmentIQ_Token_Standby", "")
+
+
+def _active_token() -> str:
+    """Return the primary token if set, else the standby. Read fresh each
+    call so env var rotations take effect without service restart."""
+    primary = os.environ.get("ApartmentIQ_Token", "")
+    if primary:
+        return primary
+    return os.environ.get("ApartmentIQ_Token_Standby", "")
 
 
 def _headers() -> dict:
-    return {"Authorization": f"Bearer {APTIQ_TOKEN}"}
+    return {"Authorization": f"Bearer {_active_token()}"}
 
 
 # ─── Property Details ────────────────────────────────────────────────────────

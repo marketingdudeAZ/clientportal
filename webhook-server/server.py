@@ -1028,60 +1028,92 @@ def seo_refresh_property():
 
     def _run_steps(results_bucket: dict):
         """Execute the selected refresh steps. Runs sync in the request thread
-        OR in a daemon thread when async=true. Writes into `results_bucket`."""
-        step_t0 = _time.time()
+        OR in a daemon thread when async=true. Writes into `results_bucket`.
 
-        if "ranks" in include:
-            try:
-                from seo_refresh_cron import refresh_ranks
-                count = refresh_ranks(uuid, domain)
-                results_bucket["ranks"] = {"status": "ok", "keywords_refreshed": count}
-            except Exception as e:
-                logger.error("refresh_ranks failed for %s: %s", uuid, e, exc_info=True)
-                results_bucket["ranks"] = {"status": "error", "error": str(e)}
-
-        if "ai_mentions" in include:
-            try:
-                from seo_refresh_cron import refresh_ai_mentions
-                scan = refresh_ai_mentions(uuid, name, domain, city)
-                results_bucket["ai_mentions"] = {
-                    "status":          "ok",
-                    "composite_index": (scan or {}).get("composite_index"),
-                    "scanned_at":      (scan or {}).get("scanned_at"),
-                }
-            except Exception as e:
-                logger.error("refresh_ai_mentions failed for %s: %s", uuid, e, exc_info=True)
-                results_bucket["ai_mentions"] = {"status": "error", "error": str(e)}
-
-        if "onpage" in include:
-            try:
-                from seo_refresh_cron import refresh_onpage
-                score = refresh_onpage(company_id, domain)
-                results_bucket["onpage"] = {"status": "ok", "audit_score": score}
-            except Exception as e:
-                logger.error("refresh_onpage failed for %s: %s", uuid, e, exc_info=True)
-                results_bucket["onpage"] = {"status": "error", "error": str(e)}
-
-        if "content_planning" in include:
-            try:
-                from seo_refresh_cron import _meets_tier, _refresh_content_planning
-                if tier and _meets_tier(tier, "Standard"):
-                    _refresh_content_planning(uuid, domain)
-                    results_bucket["content_planning"] = {"status": "ok"}
-                else:
-                    results_bucket["content_planning"] = {"status": "skipped", "reason": f"tier={tier} below Standard"}
-            except Exception as e:
-                logger.error("content_planning failed for %s: %s", uuid, e, exc_info=True)
-                results_bucket["content_planning"] = {"status": "error", "error": str(e)}
-
+        Wrapped in loop_writer.track_job so the daemon-thread path becomes
+        observable via the loop_events store (ADR 0010). Any failure that
+        happens before the first per-step try-block — e.g., an import error
+        — gets logged with a traceback and status='failed' in loop_events
+        rather than disappearing silently.
+        """
         try:
-            from seo_dashboard import invalidate as _invalidate_dashboard
-            _invalidate_dashboard(uuid)
-        except Exception:
-            pass
+            from loop_writer import track_job
+        except Exception:  # pragma: no cover — loop_writer should always import
+            track_job = None
 
-        logger.info("seo-refresh steps done for %s in %.1fs: %s",
-                    uuid, _time.time() - step_t0, results_bucket)
+        def _do_work():
+            step_t0 = _time.time()
+
+            if "ranks" in include:
+                try:
+                    from seo_refresh_cron import refresh_ranks
+                    count = refresh_ranks(uuid, domain)
+                    results_bucket["ranks"] = {"status": "ok", "keywords_refreshed": count}
+                except Exception as e:
+                    logger.error("refresh_ranks failed for %s: %s", uuid, e, exc_info=True)
+                    results_bucket["ranks"] = {"status": "error", "error": str(e)}
+
+            if "ai_mentions" in include:
+                try:
+                    from seo_refresh_cron import refresh_ai_mentions
+                    scan = refresh_ai_mentions(uuid, name, domain, city)
+                    results_bucket["ai_mentions"] = {
+                        "status":          "ok",
+                        "composite_index": (scan or {}).get("composite_index"),
+                        "scanned_at":      (scan or {}).get("scanned_at"),
+                    }
+                except Exception as e:
+                    logger.error("refresh_ai_mentions failed for %s: %s", uuid, e, exc_info=True)
+                    results_bucket["ai_mentions"] = {"status": "error", "error": str(e)}
+
+            if "onpage" in include:
+                try:
+                    from seo_refresh_cron import refresh_onpage
+                    score = refresh_onpage(company_id, domain)
+                    results_bucket["onpage"] = {"status": "ok", "audit_score": score}
+                except Exception as e:
+                    logger.error("refresh_onpage failed for %s: %s", uuid, e, exc_info=True)
+                    results_bucket["onpage"] = {"status": "error", "error": str(e)}
+
+            if "content_planning" in include:
+                try:
+                    from seo_refresh_cron import _meets_tier, _refresh_content_planning
+                    if tier and _meets_tier(tier, "Standard"):
+                        _refresh_content_planning(uuid, domain)
+                        results_bucket["content_planning"] = {"status": "ok"}
+                    else:
+                        results_bucket["content_planning"] = {"status": "skipped", "reason": f"tier={tier} below Standard"}
+                except Exception as e:
+                    logger.error("content_planning failed for %s: %s", uuid, e, exc_info=True)
+                    results_bucket["content_planning"] = {"status": "error", "error": str(e)}
+
+            try:
+                from seo_dashboard import invalidate as _invalidate_dashboard
+                _invalidate_dashboard(uuid)
+            except Exception:
+                pass
+
+            logger.info("seo-refresh steps done for %s in %.1fs: %s",
+                        uuid, _time.time() - step_t0, results_bucket)
+
+        if track_job is not None:
+            with track_job(
+                stage="ops",
+                event_type="seo_refresh",
+                property_uuid=uuid,
+                company_id=company_id,
+                source="seo_refresh_cron",
+                trigger="manual" if not run_async else "api",
+                payload={"includes": sorted(include), "tier": tier},
+            ) as job:
+                _do_work()
+                # Mirror the high-level result into the Loop event so the
+                # portal Timeline shows which steps succeeded.
+                summary = {k: (v or {}).get("status") for k, v in results_bucket.items()
+                           if isinstance(v, dict)}
+                job.set_result({"step_status": summary})
+        else:
+            _do_work()
 
     if run_async:
         # Kick off in a daemon thread so the HTTP response returns fast.
@@ -1185,65 +1217,101 @@ def aptiq_backfill_history():
     t0 = _time.time()
 
     def _do_backfill(bucket: dict):
-        """Run the AptIQ bulk pull + BQ write into `bucket`."""
-        from apartmentiq_client import fetch_property_history_monthly
-        monthly = fetch_property_history_monthly(
-            aptiq_property_id, months_back=months_back, end_month=end_month,
-        )
-        bucket["months_returned"] = len(monthly)
-        bucket["first_month"]     = monthly[0]["snapshot_month"]  if monthly else None
-        bucket["last_month"]      = monthly[-1]["snapshot_month"] if monthly else None
-        # Drop _raw before returning the sample — it's huge
-        if monthly:
-            sample = dict(monthly[-1])
-            sample.pop("_raw", None)
-            bucket["sample_latest_month"] = sample
+        """Run the AptIQ bulk pull + BQ write into `bucket`.
 
-        if dry_run or not monthly:
-            bucket["rows_written"] = 0
-            return
-
+        Wrapped in loop_writer.track_job (ADR 0010) — when the daemon thread
+        version of this runs, status + error + runtime are visible in
+        loop_events.
+        """
         try:
-            from bigquery_client import write_aptiq_snapshot, is_bigquery_configured
-            if not is_bigquery_configured():
-                bucket["error"] = "BigQuery not configured"
-                return
-        except Exception as exc:
-            bucket["error"] = f"BQ import failed: {exc}"
-            return
+            from loop_writer import track_job
+        except Exception:
+            track_job = None
 
-        import json as _json
-        written = 0
-        errors: list[str] = []
-        for snap in monthly:
-            row = {
-                "property_uuid":        uuid,
-                "hubspot_company_id":   company_id,
-                "aptiq_property_id":    aptiq_property_id,
-                "snapshot_month":       snap["snapshot_month"],
-                "occupancy":            snap.get("occupancy"),
-                "leased_percent":       snap.get("leased_percent"),
-                "exposure":             snap.get("exposure"),
-                "available_units":      snap.get("available_units"),
-                "leases_last_30":       snap.get("leases_last_30"),
-                "applications_last_30": snap.get("applications_last_30"),
-                "asking_rent":          snap.get("asking_rent"),
-                "ner":                  snap.get("ner"),
-                "rent_psf":             snap.get("rent_psf"),
-                "monthly_service_cost": None,
-                "cost_per_lease":       None,
-                "raw_payload":          _json.dumps(snap.get("_raw") or {})[:60_000],
-            }
+        def _inner():
+            from apartmentiq_client import fetch_property_history_monthly
+            monthly = fetch_property_history_monthly(
+                aptiq_property_id, months_back=months_back, end_month=end_month,
+            )
+            bucket["months_returned"] = len(monthly)
+            bucket["first_month"]     = monthly[0]["snapshot_month"]  if monthly else None
+            bucket["last_month"]      = monthly[-1]["snapshot_month"] if monthly else None
+            # Drop _raw before returning the sample — it's huge
+            if monthly:
+                sample = dict(monthly[-1])
+                sample.pop("_raw", None)
+                bucket["sample_latest_month"] = sample
+
+            if dry_run or not monthly:
+                bucket["rows_written"] = 0
+                return
+
             try:
-                write_aptiq_snapshot(row)
-                written += 1
+                from bigquery_client import write_aptiq_snapshot, is_bigquery_configured
+                if not is_bigquery_configured():
+                    bucket["error"] = "BigQuery not configured"
+                    return
             except Exception as exc:
-                errors.append(f"{snap['snapshot_month']}: {exc}")
-                logger.warning("aptiq_snapshots write failed %s %s: %s",
-                               uuid, snap.get("snapshot_month"), exc)
-        bucket["rows_written"] = written
-        if errors:
-            bucket["write_errors"] = errors[:5]
+                bucket["error"] = f"BQ import failed: {exc}"
+                return
+
+            import json as _json
+            written = 0
+            errors: list = []
+            for snap in monthly:
+                row = {
+                    "property_uuid":        uuid,
+                    "hubspot_company_id":   company_id,
+                    "aptiq_property_id":    aptiq_property_id,
+                    "snapshot_month":       snap["snapshot_month"],
+                    "occupancy":            snap.get("occupancy"),
+                    "leased_percent":       snap.get("leased_percent"),
+                    "exposure":             snap.get("exposure"),
+                    "available_units":      snap.get("available_units"),
+                    "leases_last_30":       snap.get("leases_last_30"),
+                    "applications_last_30": snap.get("applications_last_30"),
+                    "asking_rent":          snap.get("asking_rent"),
+                    "ner":                  snap.get("ner"),
+                    "rent_psf":             snap.get("rent_psf"),
+                    "monthly_service_cost": None,
+                    "cost_per_lease":       None,
+                    "raw_payload":          _json.dumps(snap.get("_raw") or {})[:60_000],
+                }
+                try:
+                    write_aptiq_snapshot(row)
+                    written += 1
+                except Exception as exc:
+                    errors.append(f"{snap['snapshot_month']}: {exc}")
+                    logger.warning("aptiq_snapshots write failed %s %s: %s",
+                                   uuid, snap.get("snapshot_month"), exc)
+            bucket["rows_written"] = written
+            if errors:
+                bucket["write_errors"] = errors[:5]
+
+        if track_job is not None:
+            with track_job(
+                stage="ops",
+                event_type="aptiq_history_backfill",
+                property_uuid=uuid,
+                company_id=company_id,
+                source="apartmentiq",
+                trigger="api" if not run_async else "cron",
+                payload={
+                    "months_back":       months_back,
+                    "end_month":         end_month,
+                    "dry_run":           dry_run,
+                    "aptiq_property_id": aptiq_property_id,
+                },
+            ) as job:
+                _inner()
+                job.set_result({
+                    "months_returned": bucket.get("months_returned"),
+                    "rows_written":    bucket.get("rows_written"),
+                    "first_month":     bucket.get("first_month"),
+                    "last_month":      bucket.get("last_month"),
+                })
+        else:
+            _inner()
 
     if run_async:
         import threading
