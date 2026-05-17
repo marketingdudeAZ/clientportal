@@ -60,7 +60,11 @@ def _file_checksum(path: Path) -> str:
 
 def _discover_migrations() -> list[Path]:
     """List migration files in order. Filenames look like 0001_thing.py."""
-    pattern = str(HERE / "[0-9]" * 4 + "_*.py")
+    # IMPORTANT: parenthesize the glob pattern. `HERE / "[0-9]" * 4` evaluates
+    # left-to-right at same precedence, which calls __truediv__ first then
+    # tries to multiply a PosixPath by an int. The fix is to build the glob
+    # string completely before the path-join.
+    pattern = str(HERE / ("[0-9]" * 4 + "_*.py"))
     files = sorted(Path(p) for p in glob.glob(pattern))
     return files
 
