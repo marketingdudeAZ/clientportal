@@ -47,10 +47,11 @@ live on that record.
 | BigQuery | Normalized warehouse + historical snapshots | Domains: properties, paid_media, seo, reputation, leads, snapshots |
 | GA4 | Traffic + conversions | Daily snapshot cache |
 | Google Ads | Paid spend / clicks / conversions | Daily snapshot cache |
-| Apt IQ | Reputation, review data, daily CSV | Property ID join lives on HubSpot company `aptiq_property_id` |
+| Apt IQ | Property snapshot + historical (bulk_api/jobs) | Property ID on HubSpot company `aptiq_property_id`; market on `aptiq_market_id`. JWT rotates every 30 days (ADR 0012 + `aptiq_token_monitor.py`) |
+| Hyly | Convert-stage attribution (visitors, leads, journey) | Beta rolls out June 2026. Property ID on HubSpot company `hyly_property_id`. Three BQ tables: `daily_activity_summary`, `contact_submits`, `website_visits`. Joins via `loop_convert_v1` view. ADR 0015 |
 | Fluency | Paid media execution layer | Reads from "RPM Property Tag Source" Google Sheet keyed by uuid |
 | Yardi / CRM IQ | Lease pipeline (post-migration) | API TBD |
-| NinjaCat | Aggregated paid + SEO reports | **Deprecating by Feb 2026 — replace with direct API calls** |
+| NinjaCat | Aggregated paid + SEO reports | **Deprecating Feb 2026** — replaced by direct API connectors + portal Loop view (ADR 0016) |
 
 ## Key Rules
 
@@ -64,11 +65,28 @@ live on that record.
 
 ## Current Phase
 
-**Phase 0 — Foundation.** Building Layer 1 connectors + Layer 2 skills
-before any new Layer 3 apps. Five blocking decisions resolved
-2026-05-11 (Flask, migrate-in-place, Clerk, monorepo, load-bearing
-list). The audit deliverable at `docs/architecture/audit.md` is next.
-See `docs/architecture/decisions/` for ADR log.
+**Phase 1 — Multifamily Marketing Loop.** Phase 0 foundation is
+landed (audit done, Flask/Clerk/monorepo decisions locked). Phase 1
+implements the 4-stage Loop (Attract / Engage / Convert / Optimize)
+per ADR 0009. Delight + Advocate are owned by another team and
+deferred.
+
+The Loop is the organizing principle for every feature on the platform.
+Every consolidation move emits a Loop-aware artifact; every new feature
+goes through the Loop Event Bus (ADR 0010). The portal Loop subpage
+(ADR 0018) is the client-facing surface.
+
+Key Loop infrastructure (committed 2026-05-16, weekend autonomous build):
+- ADRs 0009-0018 — 10 architecture decisions covering Loop, Event Bus,
+  schema migrations, AptIQ token rotation, AEO, HubSpot integration,
+  Hyly integration, NinjaCat sunset, Marquee, Portal Loop subpage
+- `migrations/` — homegrown runner + 6 initial migrations
+- `webhook-server/loop_writer.py` — canonical event writer (ADR 0010)
+- `webhook-server/hyly_client.py` — Hyly BQ reader (ADR 0015)
+- `webhook-server/forecasting.py` — per-property forecasting (ADR 0009)
+- `webhook-server/routes/loop.py` — /api/loop/* blueprint
+- `webhook-server/routes/webhooks/hubspot.py` — inbound webhook receivers
+- `hubspot-cms/templates/client-portal-loop.html` + partials — portal subpage
 
 Phase milestones (from `docs/SPEC.md`):
 - Phase 0 (now → 60 days): foundation, Property Resolver, HubSpot +

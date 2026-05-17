@@ -3,6 +3,28 @@
 One-page map of how every piece of the RPM Living Client Portal fits together.
 If something here contradicts the code, the code wins — open a PR to fix the doc.
 
+> **Phase 1 update (2026-05-16):** The Multifamily Marketing Loop is now the
+> organizing principle. See `docs/architecture/decisions/0009-multifamily-loop.md`
+> for the canonical architecture, and ADRs 0010-0018 for the supporting
+> decisions. The diagram and module map below pre-date the Loop and still
+> apply — the Loop layer is _additive_, not destructive. Specifically:
+>
+> - `loop_events` BigQuery table is the new central nervous system
+> - `webhook-server/loop_writer.py` is the single writer skill
+> - `webhook-server/routes/loop.py` exposes `/api/loop/*`
+> - `hubspot-cms/templates/client-portal-loop.html` is the new client surface
+>   (lives alongside the existing portal at `?view=loop`)
+> - `migrations/_runner.py` is the new schema management pattern (ADR 0011)
+> - `webhook-server/hyly_client.py` reads Hyly's three BQ tables for the
+>   Convert stage (ADR 0015; Hyly beta rolls out June 2026)
+> - `webhook-server/forecasting.py` is the per-property forecast skill
+>   (ADR 0009 Optimize stage)
+> - `webhook-server/routes/webhooks/hubspot.py` receives deal / line item /
+>   engagement webhooks (ADR 0014)
+> - 2026 SEO Package Strategy maps to 5 tiers (Local / Lite / Basic /
+>   Standard / Premium) — read off the company `seo_tier` property
+>
+
 ## System diagram
 
 ```
