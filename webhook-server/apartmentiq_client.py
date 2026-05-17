@@ -137,15 +137,32 @@ def get_market_narrative(market_id: str) -> dict | None:
 # Keys we want on the snapshot dict. ApartmentIQ field names vary in casing
 # across endpoints; we accept the common variants and normalize.
 _SNAPSHOT_FIELD_ALIASES = {
-    "occupancy":         ("occupancy", "occupancy_percent", "occupied_percent"),
+    # Verified 2026-05-17 against an actual bulk_api/jobs JSONL output.
+    # AptIQ uses different field names across:
+    #   - /properties/bulk_details endpoint (legacy live API)
+    #   - /bulk_api/jobs JSONL export       (the historical batch flow)
+    #   - daily CSV at APT_IQ_DAILY_SHEET_URL (fluency fallback)
+    # Each row tries each alias in order — first non-None wins.
+    #
+    # UNIT-SCALE NOTE: bulk_api returns percentages as DECIMALS
+    # (0.9715 = 97.15%) while the CSV returns WHOLE numbers (93.5). We
+    # haven't normalized this yet — values land in aptiq_snapshots
+    # exactly as they arrive. Consumers should be tolerant of both
+    # scales until a unit-normalization migration lands.
+    "occupancy":         ("occupancy", "occupancy_percent", "occupied_percent",
+                          "advertised_occupancy_pct"),
     "leased_percent":    ("leased_percent", "leased", "leased_pct"),
     "exposure":          ("exposure", "exposure_percent", "exposure_pct"),
     "available_units":   ("available_units_count", "available_units", "atr"),
-    "leases_last_30":    ("leases_last_30", "leases_30d", "leases_last_30_days"),
+    "leases_last_30":    ("leases_last_30", "leases_30d", "leases_last_30_days",
+                          "leases_last_30d"),
     "applications_last_30": ("applications_last_30", "applications_30d"),
-    "asking_rent":       ("asking_rent",),
-    "ner":               ("ner", "net_effective_rent"),
-    "rent_psf":          ("rent_psf",),
+    # NOTE: bulk_api JSONL exposes applications_last_7d only — no
+    # 30-day rollup. Multiplying ×~4.3 would be misleading; we'd rather
+    # store None than a fabricated number.
+    "asking_rent":       ("asking_rent", "avg_rent"),
+    "ner":               ("ner", "net_effective_rent", "avg_ner"),
+    "rent_psf":          ("rent_psf", "avg_rent_psf"),
     "total_units":       ("total_units", "unit_count"),
     "year_built":        ("year_built",),
     "property_class":    ("property_class",),
@@ -557,12 +574,16 @@ def fetch_property_history_monthly(
     logger.info("AptIQ bulk job %s returned %d daily rows", job_id, len(rows))
 
     # Group daily rows by YYYY-MM, keep the row with the latest within-month date.
-    # The exact "date" field name in the JSONL isn't documented; try the
-    # plausible aliases.
+    # Verified 2026-05-17 from a real bulk_api JSONL: AptIQ uses
+    # `report_generation_date`. The other aliases stay defensive in case
+    # AptIQ changes the field name or other code paths produce different
+    # shapes (e.g., a future live snapshot endpoint).
     by_month: dict = {}    # "YYYY-MM" → (latest_date_iso, row)
     for row in rows:
-        d_raw = (row.get("date") or row.get("report_date") or row.get("as_of_date")
-                 or row.get("snapshot_date") or row.get("snapshotted_at") or "")
+        d_raw = (row.get("report_generation_date")
+                 or row.get("date") or row.get("report_date")
+                 or row.get("as_of_date") or row.get("snapshot_date")
+                 or row.get("snapshotted_at") or "")
         d_iso = str(d_raw)[:10]
         if len(d_iso) < 7 or d_iso[4] != "-":
             continue
