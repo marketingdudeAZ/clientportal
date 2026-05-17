@@ -379,6 +379,22 @@ def get_ninjacat_benchmarks(market, size_band):
     return out
 
 
+# ── Monthly spend snapshots (Loop Attract stage) ───────────────────────────
+
+def write_monthly_spend_snapshots(rows: list) -> int:
+    """Insert one or more rows into monthly_spend_per_property.
+
+    Each row must include property_uuid, month, snapshot_kind, and
+    recorded_at. Other fields optional. Returns the number of rows
+    successfully inserted (errors logged but not raised).
+    """
+    if not rows:
+        return 0
+    insert_rows("monthly_spend_per_property", rows)
+    logger.info("Wrote %d monthly_spend_per_property rows", len(rows))
+    return len(rows)
+
+
 # ── ApartmentIQ snapshots (Red Light v2) ───────────────────────────────────
 
 def write_aptiq_snapshot(snapshot: dict):

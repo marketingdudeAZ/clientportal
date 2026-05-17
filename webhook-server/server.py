@@ -1347,6 +1347,401 @@ def aptiq_backfill_history():
     })
 
 
+@app.route("/api/internal/sync-spend-to-bq", methods=["POST", "OPTIONS"])
+@require_internal_key
+def sync_spend_to_bq():
+    """Snapshot current monthly recurring spend per property into BigQuery
+    `monthly_spend_per_property` (Loop Attract stage data foundation).
+
+    Reads from spend_sheet.py (HubSpot deals + line items via the 30-min
+    cache). Aggregates the 17 granular SKU columns into 5 forecasting
+    channels (paid_search / paid_social / seo / reputation / creative)
+    via spend_sheet_to_channels.SKU_TO_CHANNEL.
+
+    Body JSON (all optional):
+      company_id            — single property; omit to snapshot all RPM-managed
+      backfill_baseline     — int N (default 0): also write N prior months
+                               with current spend as a baseline so the
+                               Forecasting Engine has trailing inputs
+                               before natural month-over-month history
+                               accumulates. snapshot_kind='baseline_backfill'.
+                               Use sparingly; the data is honest but flat.
+
+    Returns:
+      { status, companies_processed, rows_written, runtime_seconds,
+        sample_company }
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    payload = request.get_json(silent=True) or {}
+    only_company_id = (payload.get("company_id") or "").strip() or None
+    try:
+        backfill_n = int(payload.get("backfill_baseline") or 0)
+    except (TypeError, ValueError):
+        backfill_n = 0
+    backfill_n = max(0, min(backfill_n, 24))   # sanity cap
+
+    import time as _time
+    from datetime import datetime as _dt
+    t0 = _time.time()
+
+    try:
+        from spend_sheet import get_spend_sheet_data, get_company_monthly_spend
+        from spend_sheet_to_channels import aggregate_to_channels
+        from bigquery_client import write_monthly_spend_snapshots, is_bigquery_configured
+        if not is_bigquery_configured():
+            return jsonify({"error": "BigQuery not configured"}), 503
+    except Exception as e:
+        return jsonify({"error": f"import failed: {e}"}), 500
+
+    # Resolve property_uuid for each company via HubSpot (we need uuid for
+    # the R1 join key; spend_sheet only carries company_id natively).
+    import requests as _req
+    from config import HUBSPOT_API_KEY as _HK
+
+    def _resolve_uuid(company_id):
+        try:
+            r = _req.get(
+                f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
+                "?properties=uuid",
+                headers={"Authorization": f"Bearer {_HK}"},
+                timeout=10,
+            )
+            r.raise_for_status()
+            return (r.json().get("properties") or {}).get("uuid") or ""
+        except Exception:
+            return ""
+
+    # Determine the set of companies to process
+    if only_company_id:
+        companies_to_process = [{"company_id": only_company_id}]
+    else:
+        rows = get_spend_sheet_data()
+        # Only process companies that have at least one $ of spend somewhere;
+        # zero-spend rows would just write 5 zeros and clutter BQ.
+        companies_to_process = [
+            r for r in rows
+            if r.get("company_id") and (r.get("total") or 0) > 0
+        ]
+
+    # Compute the month list
+    now = _dt.utcnow()
+    current_month = _dt(now.year, now.month, 1).date()
+    months_to_write = [(current_month, "current_month")]
+    if backfill_n > 0:
+        y, m = current_month.year, current_month.month
+        for _ in range(backfill_n):
+            m -= 1
+            if m == 0:
+                m = 12
+                y -= 1
+            from datetime import date as _date
+            months_to_write.append((_date(y, m, 1), "baseline_backfill"))
+
+    bq_rows: list = []
+    sample_company = None
+    recorded_at_iso = now.isoformat() + "Z"
+
+    for c in companies_to_process:
+        cid = str(c.get("company_id"))
+        spend = get_company_monthly_spend(cid)
+        if not spend or (spend.get("total") or 0) <= 0:
+            continue
+        uuid = _resolve_uuid(cid)
+        if not uuid:
+            logger.warning("sync-spend: no uuid for company %s — skipping", cid)
+            continue
+
+        channels = aggregate_to_channels(spend.get("by_sku") or {})
+        total = round(sum(channels.values()), 2)
+        import json as _json
+        raw_by_sku = _json.dumps(spend.get("by_sku") or {})[:30_000]
+
+        for (mo, kind) in months_to_write:
+            bq_rows.append({
+                "property_uuid":      uuid,
+                "hubspot_company_id": cid,
+                "month":              mo.isoformat(),
+                "snapshot_kind":      kind,
+                "recorded_at":        recorded_at_iso,
+                "paid_search_spend":  round(channels["paid_search"], 2),
+                "paid_social_spend":  round(channels["paid_social"], 2),
+                "seo_spend":          round(channels["seo"], 2),
+                "reputation_spend":   round(channels["reputation"], 2),
+                "creative_spend":     round(channels["creative"], 2),
+                "total_spend":        total,
+                "raw_by_sku":         raw_by_sku,
+                "deal_id":            spend.get("deal_id") or "",
+                "deal_name":          spend.get("deal_name") or "",
+            })
+
+        if sample_company is None:
+            sample_company = {
+                "company_id": cid,
+                "uuid":       uuid,
+                "total":      total,
+                "channels":   channels,
+            }
+
+    written = 0
+    if bq_rows:
+        written = write_monthly_spend_snapshots(bq_rows)
+
+    runtime = round(_time.time() - t0, 1)
+
+    # Loop event
+    try:
+        import loop_writer
+        loop_writer.record(
+            stage="ops", event_type="cron_completed",
+            source="sync_spend_to_bq",
+            trigger="api",
+            magnitude=written,
+            payload={
+                "companies_processed": len(companies_to_process),
+                "rows_written":        written,
+                "backfill_baseline":   backfill_n,
+                "scope":               "single" if only_company_id else "portfolio",
+            },
+        )
+    except Exception:
+        pass
+
+    return jsonify({
+        "status":              "ok",
+        "companies_processed": len(companies_to_process),
+        "rows_written":        written,
+        "months_per_company":  len(months_to_write),
+        "backfill_baseline":   backfill_n,
+        "runtime_seconds":     runtime,
+        "sample_company":      sample_company,
+    })
+
+
+@app.route("/api/internal/aptiq-backfill-batch", methods=["POST", "OPTIONS"])
+@require_internal_key
+def aptiq_backfill_batch():
+    """Trigger AptIQ historical backfill for MANY properties in parallel
+    (delight: 10× faster portfolio onboarding vs hitting the per-property
+    endpoint serially).
+
+    AptIQ's bulk_api accepts up to N property_ids per job. We pack them
+    into one job per ~10 properties, run them in parallel via background
+    threads, and aggregate results.
+
+    Body JSON:
+      company_ids            — list of HubSpot company IDs (required)
+      months_back            — int, default 13
+      dry_run                — bool, default false
+      chunk_size             — int, default 10 (properties per AptIQ job)
+      async                  — bool, default true (recommended; long-running)
+
+    With async=true: returns 202 immediately. Watch /api/loop/events?stage=ops
+    to see per-chunk progress.
+
+    With async=false: blocks ~5-10 min per chunk. Use for small batches.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    payload = request.get_json(silent=True) or {}
+    company_ids = payload.get("company_ids") or []
+    if not isinstance(company_ids, list) or not company_ids:
+        return jsonify({"error": "company_ids (non-empty list) required"}), 400
+    try:
+        months_back = int(payload.get("months_back") or 13)
+    except (TypeError, ValueError):
+        return jsonify({"error": "months_back must be int"}), 400
+    dry_run    = bool(payload.get("dry_run"))
+    try:
+        chunk_size = int(payload.get("chunk_size") or 10)
+    except (TypeError, ValueError):
+        chunk_size = 10
+    chunk_size = max(1, min(chunk_size, 25))   # AptIQ practical limit
+    run_async  = payload.get("async", True)
+
+    # Resolve each company → (uuid, aptiq_property_id)
+    import requests as _req
+    from config import HUBSPOT_API_KEY as _HK
+    resolved = []
+    skipped = []
+    for cid in company_ids:
+        cid = str(cid).strip()
+        if not cid:
+            continue
+        try:
+            r = _req.get(
+                f"https://api.hubapi.com/crm/v3/objects/companies/{cid}"
+                "?properties=name,uuid,aptiq_property_id",
+                headers={"Authorization": f"Bearer {_HK}"},
+                timeout=10,
+            )
+            r.raise_for_status()
+            props = r.json().get("properties", {})
+            uuid  = (props.get("uuid") or "").strip()
+            pid   = (props.get("aptiq_property_id") or "").strip()
+            name  = (props.get("name") or "").strip()
+            if not (uuid and pid):
+                skipped.append({"company_id": cid, "reason": "missing uuid or aptiq_property_id"})
+                continue
+            resolved.append({"company_id": cid, "uuid": uuid,
+                             "aptiq_property_id": pid, "name": name})
+        except Exception as e:
+            skipped.append({"company_id": cid, "reason": str(e)[:120]})
+
+    if not resolved:
+        return jsonify({
+            "status": "no_eligible_properties",
+            "skipped": skipped[:20],
+        }), 400
+
+    # Chunk
+    chunks = [resolved[i:i + chunk_size] for i in range(0, len(resolved), chunk_size)]
+
+    def _process_chunks(_):
+        from apartmentiq_client import (
+            create_bulk_history_job, wait_for_bulk_job,
+            download_bulk_job_results, _normalize_snapshot,
+        )
+        from bigquery_client import write_aptiq_snapshot, is_bigquery_configured
+        import loop_writer
+        from collections import defaultdict
+        from datetime import date, timedelta
+        import json as _json
+
+        # End-of-prev-month date window
+        today = date.today()
+        first_of_this = today.replace(day=1)
+        end_d = first_of_this - timedelta(days=1)
+        sy, sm = end_d.year, end_d.month
+        for _ in range(months_back - 1):
+            sm -= 1
+            if sm == 0: sm = 12; sy -= 1
+        start_d = date(sy, sm, 1)
+
+        for idx, chunk in enumerate(chunks):
+            with loop_writer.track_job(
+                stage="ops", event_type="aptiq_history_backfill",
+                source="apartmentiq", trigger="api",
+                payload={
+                    "chunk_index": idx,
+                    "chunk_size": len(chunk),
+                    "property_count_total": len(resolved),
+                    "months_back": months_back,
+                    "dry_run": dry_run,
+                },
+            ) as job:
+                # 1. create job for all property_ids in this chunk
+                aptiq_ids = [int(c["aptiq_property_id"]) for c in chunk]
+                created = create_bulk_history_job(
+                    property_ids=aptiq_ids,
+                    start_date=start_d.isoformat(),
+                    end_date=end_d.isoformat(),
+                )
+                if not created:
+                    job.set_result({"error": "bulk job creation failed"})
+                    continue
+                job_id = created.get("job_id")
+
+                # 2. wait
+                final = wait_for_bulk_job(job_id)
+                if not final or final.get("status") != "succeeded":
+                    job.set_result({"error": f"job status={final and final.get('status')}",
+                                    "aptiq_job_id": job_id})
+                    continue
+
+                # 3. download
+                rows = download_bulk_job_results(job_id)
+                if not rows:
+                    job.set_result({"chunk_index": idx, "rows_returned": 0})
+                    continue
+
+                # 4. aggregate per (property, month)
+                by_pm: dict = defaultdict(dict)
+                for row in rows:
+                    pid_in_row = str(row.get("id") or "")
+                    if not pid_in_row:
+                        continue
+                    d_raw = (row.get("report_generation_date")
+                             or row.get("date") or row.get("report_date")
+                             or row.get("as_of_date") or "")
+                    d_iso = str(d_raw)[:10]
+                    if len(d_iso) < 7 or d_iso[4] != "-":
+                        continue
+                    ym = d_iso[:7]
+                    key = (pid_in_row, ym)
+                    cur = by_pm.get(key)
+                    if cur is None or d_iso > cur[0]:
+                        by_pm[key] = (d_iso, row)
+
+                # 5. write to BQ (one row per property × month)
+                written = 0
+                if not dry_run and is_bigquery_configured():
+                    for (pid, ym), (_, row) in by_pm.items():
+                        snap = _normalize_snapshot(row)
+                        snap["snapshot_month"] = ym + "-01"
+                        # Find the company that owns this aptiq_property_id
+                        owner = next((c for c in chunk
+                                      if c["aptiq_property_id"] == pid), None)
+                        if not owner:
+                            continue
+                        bq_row = {
+                            "property_uuid":        owner["uuid"],
+                            "hubspot_company_id":   owner["company_id"],
+                            "aptiq_property_id":    pid,
+                            "snapshot_month":       snap["snapshot_month"],
+                            "occupancy":            snap.get("occupancy"),
+                            "leased_percent":       snap.get("leased_percent"),
+                            "exposure":             snap.get("exposure"),
+                            "available_units":      snap.get("available_units"),
+                            "leases_last_30":       snap.get("leases_last_30"),
+                            "applications_last_30": snap.get("applications_last_30"),
+                            "asking_rent":          snap.get("asking_rent"),
+                            "ner":                  snap.get("ner"),
+                            "rent_psf":             snap.get("rent_psf"),
+                            "monthly_service_cost": None,
+                            "cost_per_lease":       None,
+                            "raw_payload":          _json.dumps(row)[:60_000],
+                        }
+                        try:
+                            write_aptiq_snapshot(bq_row)
+                            written += 1
+                        except Exception as exc:
+                            logger.warning("batch aptiq write failed %s %s: %s",
+                                           owner["uuid"], ym, exc)
+                job.set_result({
+                    "chunk_index":   idx,
+                    "rows_returned": len(by_pm),
+                    "rows_written":  written,
+                    "aptiq_job_id":  job_id,
+                })
+
+    if run_async:
+        import threading
+        threading.Thread(target=_process_chunks, args=(None,), daemon=True).start()
+        return jsonify({
+            "status":            "started",
+            "chunks":            len(chunks),
+            "chunk_size":        chunk_size,
+            "property_count":    len(resolved),
+            "skipped":           len(skipped),
+            "skipped_sample":    skipped[:5],
+            "months_back":       months_back,
+            "dry_run":           dry_run,
+            "note":              "Processing in background. Poll /api/loop/events?stage=ops to watch chunk progress.",
+        }), 202
+
+    # Synchronous path
+    _process_chunks(None)
+    return jsonify({
+        "status":         "ok",
+        "chunks":         len(chunks),
+        "property_count": len(resolved),
+        "skipped":        len(skipped),
+    })
+
+
 # ─── Support: tickets + knowledge base search ───────────────────────────────
 
 
