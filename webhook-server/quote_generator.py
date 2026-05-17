@@ -194,6 +194,37 @@ def generate_and_send_quote(
         quote_id, deal_id, len(line_item_ids), signer_email,
         len([e for e in (additional_contact_emails or []) if e and e != signer_email]),
     )
+
+    # Loop integration (ADR 0014): if this property has a forecast, attach it
+    # to the deal as a HubSpot note. Best-effort — quote creation does NOT
+    # depend on forecast availability.
+    try:
+        import forecasting
+        import hubspot_timeline
+        # Look up property_uuid via the company
+        import requests as _req
+        _r = _req.get(
+            f"{API_BASE}/crm/v3/objects/companies/{company_id}"
+            "?properties=uuid",
+            headers=HEADERS,
+            timeout=10,
+        )
+        if _r.status_code in (200, 201):
+            uuid = ((_r.json() or {}).get("properties") or {}).get("uuid") or ""
+            if uuid:
+                forecast = forecasting.get_latest_forecast(uuid)
+                if forecast:
+                    hubspot_timeline.attach_forecast_to_deal(
+                        deal_id=deal_id,
+                        company_id=company_id,
+                        forecast=forecast,
+                    )
+                    logger.info("Quote %s: attached Loop forecast to deal %s",
+                                quote_id, deal_id)
+    except Exception as _exc:
+        # Non-blocking; quote creation already succeeded.
+        logger.debug("Quote %s: forecast attach skipped: %s", quote_id, _exc)
+
     return quote_id
 
 

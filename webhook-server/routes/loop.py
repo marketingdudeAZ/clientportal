@@ -88,7 +88,7 @@ def loop_status():
             return "stale"
         return "no_data"
 
-    return jsonify({
+    response = {
         "property_uuid": uuid,
         "stages": {
             stage: {
@@ -100,7 +100,59 @@ def loop_status():
             }
             for stage, data in stages.items()
         },
-    })
+    }
+
+    # Enrich the Convert stage card with AptIQ trailing summary — gives the
+    # portal Status panel actual numbers to show instead of just "last event
+    # 2d ago". Best-effort: if the query fails, response shape stays the same.
+    try:
+        client = loop_writer._bq()
+        if client is not None:
+            project = os.environ.get("BIGQUERY_PROJECT_ID")
+            dataset = os.environ.get("BIGQUERY_DATASET_PROD")
+            from google.cloud import bigquery
+            sql = f"""
+              SELECT
+                MAX(DATE(snapshot_month)) AS latest_month,
+                ANY_VALUE(occupancy)      AS occupancy_latest,
+                SUM(leases_last_30)       AS leases_trailing_total,
+                COUNTIF(snapshot_month > DATE_SUB(CURRENT_DATE(), INTERVAL 13 MONTH)) AS months_with_data
+              FROM `{project}.{dataset}.aptiq_snapshots_latest`
+              WHERE property_uuid = @uuid
+                AND snapshot_month > DATE_SUB(CURRENT_DATE(), INTERVAL 13 MONTH)
+            """
+            cfg = bigquery.QueryJobConfig(query_parameters=[
+                bigquery.ScalarQueryParameter("uuid", "STRING", uuid),
+            ])
+            rows = list(client.query(sql, job_config=cfg).result())
+            if rows and rows[0].months_with_data:
+                r = rows[0]
+                response["convert_aptiq"] = {
+                    "latest_month":         r.latest_month.isoformat() if r.latest_month else None,
+                    "occupancy_latest":     r.occupancy_latest,
+                    "leases_trailing_total": int(r.leases_trailing_total or 0),
+                    "months_with_data":     int(r.months_with_data),
+                }
+    except Exception as exc:
+        logger.debug("loop_status AptIQ enrichment skipped: %s", exc)
+
+    # Same for the Optimize stage — latest forecast headline
+    try:
+        import forecasting
+        f = forecasting.get_latest_forecast(uuid)
+        if f:
+            response["optimize_forecast"] = {
+                "forecast_leases":  f.get("forecast_leases"),
+                "ci_low":           f.get("ci_low"),
+                "ci_high":          f.get("ci_high"),
+                "methodology":      f.get("methodology"),
+                "run_at":           f.get("run_at"),
+                "recommendations":  len(f.get("recommendations") or []),
+            }
+    except Exception as exc:
+        logger.debug("loop_status forecast enrichment skipped: %s", exc)
+
+    return jsonify(response)
 
 
 # ── GET /api/loop/events ─────────────────────────────────────────────────────

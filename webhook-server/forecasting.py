@@ -81,6 +81,11 @@ def get_trailing_data(property_uuid: str, months: int = 12) -> list[dict]:
         return []
     from google.cloud import bigquery
 
+    # Read AptIQ from the deduped view (migration 0008) — protects against
+    # duplicate rows that accumulate when both redlight_v2 persist_snapshot
+    # and aptiq-backfill-history write for the same property+month.
+    # Falls back to the raw table if the view doesn't exist yet (older
+    # deployments).
     sql = f"""
       WITH a AS (
         SELECT
@@ -92,9 +97,10 @@ def get_trailing_data(property_uuid: str, months: int = 12) -> list[dict]:
       ),
       c AS (
         SELECT
-          property_uuid, snapshot_month AS month,
+          property_uuid,
+          DATE_TRUNC(snapshot_month, MONTH) AS month,
           leases_last_30, applications_last_30, occupancy
-        FROM `{_bq_ref('aptiq_snapshots')}`
+        FROM `{_bq_ref('aptiq_snapshots_latest')}`
         WHERE property_uuid = @uuid
       )
       SELECT
