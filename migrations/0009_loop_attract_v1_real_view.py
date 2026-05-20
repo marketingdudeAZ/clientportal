@@ -103,11 +103,16 @@ WHERE FALSE
 
 
 def up(ctx):
-    # Driver is monthly_spend_per_property. Verify it exists; otherwise
-    # keep the stub (downstream still queries safely).
+    # The REAL view selects FROM monthly_spend_per_property and LEFT JOINs
+    # rpm_properties + seo_ranks_daily. BQ rejects CREATE VIEW with a
+    # reference to a non-existent table even when the reference is in a
+    # LEFT JOIN. So ALL three tables must exist for the real view; if
+    # any are missing we degrade to the stub (zero rows, right shape,
+    # downstream queries don't error).
     check_sql = f"""
       SELECT table_name FROM `{ctx.project}.{ctx.dataset}.INFORMATION_SCHEMA.TABLES`
-      WHERE table_name IN ('monthly_spend_per_property')
+      WHERE table_name IN ('monthly_spend_per_property',
+                           'rpm_properties', 'seo_ranks_daily')
     """
     try:
         rows = list(ctx.bq_client.query(check_sql).result())
@@ -117,8 +122,12 @@ def up(ctx):
         ctx.run_bq(ctx.render(STUB_VIEW))
         return
 
-    if 'monthly_spend_per_property' not in names:
-        ctx.log("monthly_spend_per_property missing — keeping STUB view")
+    required = {'monthly_spend_per_property', 'rpm_properties', 'seo_ranks_daily'}
+    missing = sorted(required - names)
+    if missing:
+        ctx.log(f"Missing source tables {missing} — installing STUB view. "
+                f"Re-run after sync-properties-to-bq + sync-spend-to-bq + "
+                f"first SEO refresh populate them.")
         ctx.run_bq(ctx.render(STUB_VIEW))
         return
 
