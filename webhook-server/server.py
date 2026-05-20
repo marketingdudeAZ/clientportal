@@ -1987,6 +1987,321 @@ def loop_bootstrap():
     return jsonify({"status": "ok", "runtime_seconds": runtime})
 
 
+@app.route("/api/internal/sync-hubspot-list-to-bq", methods=["POST", "OPTIONS"])
+@require_internal_key
+def sync_hubspot_list_to_bq():
+    """Pull a HubSpot list's members → hash per Google Customer Match spec
+    → upsert to BQ `hubspot_contacts_for_match`.
+
+    Designed for daily Render Cron. The HubSpot list defines the
+    audience filter (marketing owns it); this endpoint just transports
+    the data.
+
+    Body JSON:
+      list_id            (required) — HubSpot list ID (e.g., "18185")
+      batch_size         (default 100) — contacts per batch_read call
+      max_contacts       (optional)   — cap for safety; omit for full list
+      dry_run            (default false) — count + sample but don't write BQ
+      country_default    (default "US") — phone normalization fallback
+
+    Returns:
+      { status, list_id, members_seen, contacts_read, rows_written,
+        sample_signature, runtime_seconds }
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    payload = request.get_json(silent=True) or {}
+    list_id = (payload.get("list_id") or "").strip()
+    if not list_id:
+        return jsonify({"error": "list_id required"}), 400
+    try:
+        batch_size = int(payload.get("batch_size") or 100)
+    except (TypeError, ValueError):
+        return jsonify({"error": "batch_size must be int"}), 400
+    batch_size = max(1, min(batch_size, 100))   # HubSpot batch_read cap
+    max_contacts = payload.get("max_contacts")
+    if max_contacts is not None:
+        try:
+            max_contacts = int(max_contacts)
+        except (TypeError, ValueError):
+            return jsonify({"error": "max_contacts must be int"}), 400
+    dry_run = bool(payload.get("dry_run"))
+    country_default = (payload.get("country_default") or "US").upper()
+
+    import time as _time
+    from datetime import datetime as _dt
+    import json as _json
+    t0 = _time.time()
+
+    try:
+        import requests as _req
+        import customer_match_export as _cme
+        from config import HUBSPOT_API_KEY as _HK
+        from bigquery_client import insert_rows, is_bigquery_configured
+        if not is_bigquery_configured():
+            return jsonify({"error": "BigQuery not configured"}), 503
+    except Exception as e:
+        return jsonify({"error": f"import failed: {e}"}), 500
+
+    if not _HK:
+        return jsonify({"error": "HUBSPOT_API_KEY not set"}), 503
+
+    HS = "https://api.hubapi.com"
+    headers = {"Authorization": f"Bearer {_HK}", "Content-Type": "application/json"}
+
+    # Loop event for observability
+    try:
+        import loop_writer as _lw
+        track_ctx = _lw.track_job(
+            stage="ops", event_type="cron_started",
+            source="hubspot_list_to_bq", trigger="cron",
+            payload={"list_id": list_id, "dry_run": dry_run},
+        )
+    except Exception:
+        # No-op context manager fallback if loop_writer unavailable
+        from contextlib import nullcontext
+        track_ctx = nullcontext(type("J", (), {"set_result": lambda self, x: None})())
+
+    with track_ctx as job:
+        # 1. Paginate list memberships to collect contact IDs.
+        member_ids: list[str] = []
+        after = None
+        while True:
+            params = {"limit": 100}
+            if after:
+                params["after"] = after
+            try:
+                r = _req.get(
+                    f"{HS}/crm/v3/lists/{list_id}/memberships",
+                    headers=headers, params=params, timeout=20,
+                )
+                r.raise_for_status()
+            except Exception as exc:
+                logger.error("HubSpot list memberships fetch failed: %s", exc)
+                return jsonify({"error": f"memberships fetch: {exc}"}), 502
+            body = r.json() or {}
+            for m in body.get("results") or []:
+                # HubSpot returns {recordId: "...", membershipTimestamp: ...}
+                rid = str(m.get("recordId") or m.get("id") or "").strip()
+                if rid:
+                    member_ids.append(rid)
+            after = (body.get("paging") or {}).get("next", {}).get("after")
+            if not after:
+                break
+            if max_contacts is not None and len(member_ids) >= max_contacts:
+                member_ids = member_ids[:max_contacts]
+                break
+
+        members_seen = len(member_ids)
+        logger.info("HubSpot list %s: %d members", list_id, members_seen)
+
+        if members_seen == 0:
+            job.set_result({"members_seen": 0})
+            return jsonify({
+                "status":          "no_members",
+                "list_id":         list_id,
+                "members_seen":    0,
+                "runtime_seconds": round(_time.time() - t0, 1),
+            })
+
+        # 2. Batch-read full contact properties.
+        properties_to_read = [
+            "email", "phone", "firstname", "lastname",
+            "country", "postal_code", "zip",
+            "lifecyclestage", "hs_marketable_status",
+        ]
+        synced_at = _dt.utcnow().isoformat() + "Z"
+        contacts_read = 0
+        rows_to_write: list[dict] = []
+        sample_signature = None
+
+        for i in range(0, members_seen, batch_size):
+            chunk = member_ids[i:i + batch_size]
+            try:
+                r = _req.post(
+                    f"{HS}/crm/v3/objects/contacts/batch/read",
+                    headers=headers,
+                    json={
+                        "inputs": [{"id": cid} for cid in chunk],
+                        "properties": properties_to_read,
+                    },
+                    timeout=30,
+                )
+                r.raise_for_status()
+            except Exception as exc:
+                logger.warning("HubSpot batch_read failed for chunk %d: %s", i, exc)
+                continue
+            for rec in (r.json() or {}).get("results") or []:
+                contacts_read += 1
+                props = rec.get("properties") or {}
+                hashed = _cme.hash_contact(props, country_default=country_default)
+                sig = _cme.signature_for(rec.get("id") or "", list_id, hashed)
+                if sample_signature is None:
+                    sample_signature = sig
+                rows_to_write.append({
+                    "contact_id":        str(rec.get("id") or ""),
+                    "list_id":           list_id,
+                    "synced_at":         synced_at,
+                    "email_sha256":      hashed["email_sha256"],
+                    "phone_sha256":      hashed["phone_sha256"],
+                    "first_name_sha256": hashed["first_name_sha256"],
+                    "last_name_sha256":  hashed["last_name_sha256"],
+                    "country":           hashed["country"],
+                    "postal_code":       hashed["postal_code"],
+                    "source_signature":  sig,
+                    "hubspot_lifecycle": props.get("lifecyclestage"),
+                    "marketing_status":  props.get("hs_marketable_status"),
+                })
+
+        rows_written = 0
+        if not dry_run and rows_to_write:
+            # Insert in 500-row batches (BQ streaming insert ceiling is 10k,
+            # but smaller batches log errors more usefully).
+            BATCH = 500
+            for i in range(0, len(rows_to_write), BATCH):
+                insert_rows("hubspot_contacts_for_match", rows_to_write[i:i + BATCH])
+            rows_written = len(rows_to_write)
+
+        job.set_result({
+            "list_id":      list_id,
+            "members_seen": members_seen,
+            "contacts_read": contacts_read,
+            "rows_written": rows_written,
+        })
+
+        return jsonify({
+            "status":           "ok",
+            "list_id":          list_id,
+            "members_seen":     members_seen,
+            "contacts_read":    contacts_read,
+            "rows_written":     rows_written,
+            "dry_run":          dry_run,
+            "sample_signature": sample_signature,
+            "runtime_seconds":  round(_time.time() - t0, 1),
+        })
+
+
+@app.route("/api/internal/build-customer-match-csv", methods=["POST", "OPTIONS"])
+@require_internal_key
+def build_customer_match_csv():
+    """Build the Google Ads Customer Match CSV from the latest hashed
+    contacts in BQ and upload to GCS.
+
+    Reads from `hubspot_contacts_for_match_latest` (view auto-dedupes
+    by (list_id, contact_id) keeping the most recent sync). Writes TWO
+    objects to GCS:
+      gs://{bucket}/customer_match/{list_id}/{YYYY-MM-DD}.csv   (audit)
+      gs://{bucket}/customer_match/{list_id}/latest.csv          (stable
+                                                                    URL for
+                                                                    Data Manager)
+
+    Body JSON:
+      list_id   (required)
+      bucket    (default "rpm-ads-audiences")
+      dry_run   (default false) — returns row count + sample CSV without GCS write
+
+    Returns:
+      { status, list_id, rows, dry_run, gs_uri_latest, gs_uri_dated,
+        runtime_seconds, sample_csv (first 3 rows when dry_run) }
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    payload = request.get_json(silent=True) or {}
+    list_id = (payload.get("list_id") or "").strip()
+    if not list_id:
+        return jsonify({"error": "list_id required"}), 400
+    bucket = (payload.get("bucket") or "rpm-ads-audiences").strip()
+    dry_run = bool(payload.get("dry_run"))
+
+    import time as _time
+    from datetime import datetime as _dt
+    t0 = _time.time()
+
+    try:
+        import customer_match_export as _cme
+        from bigquery_client import query, is_bigquery_configured
+        from google.cloud import bigquery as _bq
+        if not is_bigquery_configured():
+            return jsonify({"error": "BigQuery not configured"}), 503
+        project = os.environ.get("BIGQUERY_PROJECT_ID")
+        dataset = os.environ.get("BIGQUERY_DATASET_PROD")
+    except Exception as e:
+        return jsonify({"error": f"import failed: {e}"}), 500
+
+    sql = f"""
+      SELECT email_sha256, phone_sha256, first_name_sha256, last_name_sha256,
+             country, postal_code
+      FROM `{project}.{dataset}.hubspot_contacts_for_match_latest`
+      WHERE list_id = @list_id
+        AND (email_sha256 IS NOT NULL OR phone_sha256 IS NOT NULL)
+    """
+    try:
+        rows = list(query(sql, [
+            _bq.ScalarQueryParameter("list_id", "STRING", list_id),
+        ]))
+    except Exception as exc:
+        logger.error("BQ read for CSV build failed: %s", exc)
+        return jsonify({"error": f"BQ read: {exc}"}), 500
+
+    # Loop event for observability
+    try:
+        import loop_writer as _lw
+        track_ctx = _lw.track_job(
+            stage="ops", event_type="cron_started",
+            source="customer_match_csv_build", trigger="cron",
+            payload={"list_id": list_id, "rows": len(rows), "dry_run": dry_run},
+        )
+    except Exception:
+        from contextlib import nullcontext
+        track_ctx = nullcontext(type("J", (), {"set_result": lambda self, x: None})())
+
+    with track_ctx as job:
+        if not rows:
+            job.set_result({"rows": 0})
+            return jsonify({
+                "status":          "no_rows",
+                "list_id":         list_id,
+                "rows":            0,
+                "runtime_seconds": round(_time.time() - t0, 1),
+            })
+
+        # Pass dicts (not BQ Row objects) to keep customer_match_export decoupled
+        csv_bytes = _cme.build_csv_bytes([dict(r) for r in rows])
+
+        result = {
+            "status":          "ok" if not dry_run else "dry_run",
+            "list_id":         list_id,
+            "bucket":          bucket,
+            "rows":            len(rows),
+            "csv_bytes":       len(csv_bytes),
+            "runtime_seconds": round(_time.time() - t0, 1),
+        }
+
+        if dry_run:
+            # Return first 3 rows of CSV (headers + 2) so Kyle can sanity-check
+            preview = "\n".join(csv_bytes.decode("utf-8").splitlines()[:3])
+            result["sample_csv"] = preview
+            job.set_result(result)
+            return jsonify(result)
+
+        today_iso = _dt.utcnow().strftime("%Y-%m-%d")
+        dated_blob = f"customer_match/{list_id}/{today_iso}.csv"
+        latest_blob = f"customer_match/{list_id}/latest.csv"
+
+        gs_dated = _cme.write_csv_to_gcs(csv_bytes, bucket, dated_blob)
+        gs_latest = _cme.write_csv_to_gcs(csv_bytes, bucket, latest_blob)
+
+        result["gs_uri_dated"]  = gs_dated
+        result["gs_uri_latest"] = gs_latest
+        if not (gs_dated and gs_latest):
+            result["status"] = "gcs_partial_failure"
+
+        job.set_result(result)
+        return jsonify(result)
+
+
 # ─── Support: tickets + knowledge base search ───────────────────────────────
 
 
