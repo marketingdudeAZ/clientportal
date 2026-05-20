@@ -2028,6 +2028,7 @@ def sync_hubspot_list_to_bq():
             return jsonify({"error": "max_contacts must be int"}), 400
     dry_run = bool(payload.get("dry_run"))
     country_default = (payload.get("country_default") or "US").upper()
+    run_async = bool(payload.get("async"))
 
     import time as _time
     from datetime import datetime as _dt
@@ -2050,136 +2051,199 @@ def sync_hubspot_list_to_bq():
     HS = "https://api.hubapi.com"
     headers = {"Authorization": f"Bearer {_HK}", "Content-Type": "application/json"}
 
-    # Loop event for observability
-    try:
-        import loop_writer as _lw
-        track_ctx = _lw.track_job(
-            stage="ops", event_type="cron_started",
-            source="hubspot_list_to_bq", trigger="cron",
-            payload={"list_id": list_id, "dry_run": dry_run},
-        )
-    except Exception:
-        # No-op context manager fallback if loop_writer unavailable
-        from contextlib import nullcontext
-        track_ctx = nullcontext(type("J", (), {"set_result": lambda self, x: None})())
+    # ── HubSpot rate-limit-aware request helpers ─────────────────────────
+    # HubSpot returns 429 with a `Retry-After` header (seconds). The free
+    # tier allows ~100 req/10sec. We additionally throttle proactively at
+    # ~12 req/sec to stay well under the burst limit.
+    THROTTLE_S = 0.08            # ~12 req/sec; HubSpot allows 10/sec sustained
+    MAX_429_RETRIES = 5
 
-    with track_ctx as job:
-        # 1. Paginate list memberships to collect contact IDs.
-        member_ids: list[str] = []
-        after = None
-        while True:
-            params = {"limit": 100}
-            if after:
-                params["after"] = after
-            try:
-                r = _req.get(
-                    f"{HS}/crm/v3/lists/{list_id}/memberships",
-                    headers=headers, params=params, timeout=20,
-                )
+    def _hs_get_retry(url, **kw):
+        for attempt in range(MAX_429_RETRIES + 1):
+            r = _req.get(url, headers=headers, timeout=kw.pop('timeout', 20), **kw)
+            if r.status_code != 429:
                 r.raise_for_status()
-            except Exception as exc:
-                logger.error("HubSpot list memberships fetch failed: %s", exc)
-                return jsonify({"error": f"memberships fetch: {exc}"}), 502
-            body = r.json() or {}
-            for m in body.get("results") or []:
-                # HubSpot returns {recordId: "...", membershipTimestamp: ...}
-                rid = str(m.get("recordId") or m.get("id") or "").strip()
-                if rid:
-                    member_ids.append(rid)
-            after = (body.get("paging") or {}).get("next", {}).get("after")
-            if not after:
-                break
-            if max_contacts is not None and len(member_ids) >= max_contacts:
-                member_ids = member_ids[:max_contacts]
-                break
+                return r
+            wait = float(r.headers.get("Retry-After", 10))
+            logger.warning("HubSpot 429 on GET %s — sleeping %.1fs (attempt %d/%d)",
+                           url.split("?")[0], wait, attempt + 1, MAX_429_RETRIES)
+            _time.sleep(wait)
+        r.raise_for_status()
+        return r
 
-        members_seen = len(member_ids)
-        logger.info("HubSpot list %s: %d members", list_id, members_seen)
+    def _hs_post_retry(url, **kw):
+        for attempt in range(MAX_429_RETRIES + 1):
+            r = _req.post(url, headers=headers, timeout=kw.pop('timeout', 30), **kw)
+            if r.status_code != 429:
+                r.raise_for_status()
+                return r
+            wait = float(r.headers.get("Retry-After", 10))
+            logger.warning("HubSpot 429 on POST %s — sleeping %.1fs (attempt %d/%d)",
+                           url.split("?")[0], wait, attempt + 1, MAX_429_RETRIES)
+            _time.sleep(wait)
+        r.raise_for_status()
+        return r
 
-        if members_seen == 0:
-            job.set_result({"members_seen": 0})
-            return jsonify({
-                "status":          "no_members",
+    # Bundle the work so it can run sync (in-request) or async (daemon thread)
+    def _do_sync(bucket: dict):
+        try:
+            import loop_writer as _lw
+            track_ctx = _lw.track_job(
+                stage="ops", event_type="cron_started",
+                source="hubspot_list_to_bq", trigger="cron",
+                payload={"list_id": list_id, "dry_run": dry_run,
+                         "max_contacts": max_contacts},
+            )
+        except Exception:
+            from contextlib import nullcontext
+            track_ctx = nullcontext(type("J", (), {"set_result": lambda self, x: None})())
+
+        with track_ctx as job:
+            # 1. Paginate list memberships
+            member_ids: list = []
+            after = None
+            page = 0
+            while True:
+                params = {"limit": 100}
+                if after:
+                    params["after"] = after
+                try:
+                    r = _hs_get_retry(
+                        f"{HS}/crm/v3/lists/{list_id}/memberships",
+                        params=params, timeout=20,
+                    )
+                except Exception as exc:
+                    msg = f"memberships fetch (page {page}): {exc}"
+                    logger.error(msg)
+                    bucket["error"] = msg
+                    bucket["members_seen"] = len(member_ids)
+                    return
+                body = r.json() or {}
+                for m in body.get("results") or []:
+                    rid = str(m.get("recordId") or m.get("id") or "").strip()
+                    if rid:
+                        member_ids.append(rid)
+                after = (body.get("paging") or {}).get("next", {}).get("after")
+                page += 1
+                if not after:
+                    break
+                if max_contacts is not None and len(member_ids) >= max_contacts:
+                    member_ids = member_ids[:max_contacts]
+                    break
+                _time.sleep(THROTTLE_S)   # proactive throttle between pages
+
+            members_seen = len(member_ids)
+            logger.info("HubSpot list %s: %d members (across %d pages)",
+                        list_id, members_seen, page)
+            bucket["members_seen"] = members_seen
+
+            if members_seen == 0:
+                bucket["status"] = "no_members"
+                job.set_result({"members_seen": 0})
+                return
+
+            # 2. Batch-read full contact properties
+            properties_to_read = [
+                "email", "phone", "firstname", "lastname",
+                "country", "postal_code", "zip",
+                "lifecyclestage", "hs_marketable_status",
+            ]
+            synced_at = _dt.utcnow().isoformat() + "Z"
+            contacts_read = 0
+            rows_to_write: list = []
+            sample_signature = None
+            batch_errors = 0
+
+            for i in range(0, members_seen, batch_size):
+                chunk = member_ids[i:i + batch_size]
+                try:
+                    r = _hs_post_retry(
+                        f"{HS}/crm/v3/objects/contacts/batch/read",
+                        json={"inputs": [{"id": cid} for cid in chunk],
+                              "properties": properties_to_read},
+                        timeout=30,
+                    )
+                except Exception as exc:
+                    batch_errors += 1
+                    logger.warning("HubSpot batch_read failed for chunk %d: %s", i, exc)
+                    _time.sleep(THROTTLE_S * 4)   # extra back-off on failure
+                    continue
+                for rec in (r.json() or {}).get("results") or []:
+                    contacts_read += 1
+                    props = rec.get("properties") or {}
+                    hashed = _cme.hash_contact(props, country_default=country_default)
+                    sig = _cme.signature_for(rec.get("id") or "", list_id, hashed)
+                    if sample_signature is None:
+                        sample_signature = sig
+                    rows_to_write.append({
+                        "contact_id":        str(rec.get("id") or ""),
+                        "list_id":           list_id,
+                        "synced_at":         synced_at,
+                        "email_sha256":      hashed["email_sha256"],
+                        "phone_sha256":      hashed["phone_sha256"],
+                        "first_name_sha256": hashed["first_name_sha256"],
+                        "last_name_sha256":  hashed["last_name_sha256"],
+                        "country":           hashed["country"],
+                        "postal_code":       hashed["postal_code"],
+                        "source_signature":  sig,
+                        "hubspot_lifecycle": props.get("lifecyclestage"),
+                        "marketing_status":  props.get("hs_marketable_status"),
+                    })
+                _time.sleep(THROTTLE_S)
+
+            rows_written = 0
+            if not dry_run and rows_to_write:
+                BATCH = 500
+                for i in range(0, len(rows_to_write), BATCH):
+                    insert_rows("hubspot_contacts_for_match",
+                                rows_to_write[i:i + BATCH])
+                rows_written = len(rows_to_write)
+
+            bucket.update({
+                "status":           "ok",
+                "members_seen":     members_seen,
+                "contacts_read":    contacts_read,
+                "rows_written":     rows_written,
+                "sample_signature": sample_signature,
+                "batch_errors":     batch_errors,
+            })
+            job.set_result({
                 "list_id":         list_id,
-                "members_seen":    0,
-                "runtime_seconds": round(_time.time() - t0, 1),
+                "members_seen":    members_seen,
+                "contacts_read":   contacts_read,
+                "rows_written":    rows_written,
+                "batch_errors":    batch_errors,
             })
 
-        # 2. Batch-read full contact properties.
-        properties_to_read = [
-            "email", "phone", "firstname", "lastname",
-            "country", "postal_code", "zip",
-            "lifecyclestage", "hs_marketable_status",
-        ]
-        synced_at = _dt.utcnow().isoformat() + "Z"
-        contacts_read = 0
-        rows_to_write: list[dict] = []
-        sample_signature = None
-
-        for i in range(0, members_seen, batch_size):
-            chunk = member_ids[i:i + batch_size]
-            try:
-                r = _req.post(
-                    f"{HS}/crm/v3/objects/contacts/batch/read",
-                    headers=headers,
-                    json={
-                        "inputs": [{"id": cid} for cid in chunk],
-                        "properties": properties_to_read,
-                    },
-                    timeout=30,
-                )
-                r.raise_for_status()
-            except Exception as exc:
-                logger.warning("HubSpot batch_read failed for chunk %d: %s", i, exc)
-                continue
-            for rec in (r.json() or {}).get("results") or []:
-                contacts_read += 1
-                props = rec.get("properties") or {}
-                hashed = _cme.hash_contact(props, country_default=country_default)
-                sig = _cme.signature_for(rec.get("id") or "", list_id, hashed)
-                if sample_signature is None:
-                    sample_signature = sig
-                rows_to_write.append({
-                    "contact_id":        str(rec.get("id") or ""),
-                    "list_id":           list_id,
-                    "synced_at":         synced_at,
-                    "email_sha256":      hashed["email_sha256"],
-                    "phone_sha256":      hashed["phone_sha256"],
-                    "first_name_sha256": hashed["first_name_sha256"],
-                    "last_name_sha256":  hashed["last_name_sha256"],
-                    "country":           hashed["country"],
-                    "postal_code":       hashed["postal_code"],
-                    "source_signature":  sig,
-                    "hubspot_lifecycle": props.get("lifecyclestage"),
-                    "marketing_status":  props.get("hs_marketable_status"),
-                })
-
-        rows_written = 0
-        if not dry_run and rows_to_write:
-            # Insert in 500-row batches (BQ streaming insert ceiling is 10k,
-            # but smaller batches log errors more usefully).
-            BATCH = 500
-            for i in range(0, len(rows_to_write), BATCH):
-                insert_rows("hubspot_contacts_for_match", rows_to_write[i:i + BATCH])
-            rows_written = len(rows_to_write)
-
-        job.set_result({
-            "list_id":      list_id,
-            "members_seen": members_seen,
-            "contacts_read": contacts_read,
-            "rows_written": rows_written,
-        })
-
+    if run_async:
+        import threading
+        threading.Thread(target=_do_sync, args=({},), daemon=True).start()
         return jsonify({
-            "status":           "ok",
-            "list_id":          list_id,
-            "members_seen":     members_seen,
-            "contacts_read":    contacts_read,
-            "rows_written":     rows_written,
-            "dry_run":          dry_run,
-            "sample_signature": sample_signature,
-            "runtime_seconds":  round(_time.time() - t0, 1),
-        })
+            "status":  "started",
+            "list_id": list_id,
+            "dry_run": dry_run,
+            "note":    ("Running in background daemon thread. Poll "
+                        "/api/loop/events?stage=ops or BQ row counts to "
+                        "observe progress / completion."),
+        }), 202
+
+    results: dict = {}
+    _do_sync(results)
+    if results.get("error"):
+        return jsonify({"error": results["error"],
+                        "members_seen": results.get("members_seen", 0)}), 502
+
+    return jsonify({
+        "status":           results.get("status") or "ok",
+        "list_id":          list_id,
+        "members_seen":     results.get("members_seen", 0),
+        "contacts_read":    results.get("contacts_read", 0),
+        "rows_written":     results.get("rows_written", 0),
+        "batch_errors":     results.get("batch_errors", 0),
+        "dry_run":          dry_run,
+        "sample_signature": results.get("sample_signature"),
+        "runtime_seconds":  round(_time.time() - t0, 1),
+    })
 
 
 @app.route("/api/internal/build-customer-match-csv", methods=["POST", "OPTIONS"])
