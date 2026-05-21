@@ -1,6 +1,6 @@
 # Outstanding Work — Single Source of Truth
 
-**Last updated:** 2026-05-17 (post Phase 2 kickoff)
+**Last updated:** 2026-05-20 (paused mid-Customer-Match rollout)
 **This file:** the canonical list of "what's left." When Kyle asks "what do I still need to do?" — this is the answer.
 
 ## How to read this
@@ -10,6 +10,57 @@
 - **🟡 MEDIUM** — Should happen this quarter
 - **🟢 LOW** — Nice-to-have / backlog
 - **⏸️ BLOCKED** — Waiting on external dependency (Hyly beta, vendor decision, etc.)
+
+---
+
+## 🟠 Customer Match — Active rollout (paused 2026-05-20)
+
+**Status:** Pipeline plumbing proven end-to-end; ~50% through the Google
+Ads activation. Audience for paid team is **NOT yet usable** — at least
+3 more steps + 24-48h Google processing window.
+
+**Full reference:** `docs/RUNBOOKS/google-ads-data-manager-setup.md`
+
+### What's done
+
+| Step | Status |
+|---|---|
+| Code shipped (migration 0011, customer_match_export, sync + build endpoints, NinjaCat backfill script, runbook) | ✅ commits `809718b`, `dc0c911`, `3cda2a4`, plus migration 0009 recovery |
+| Migration 0011 applied (`hubspot_contacts_for_match` table + dedup view) | ✅ |
+| GCS bucket `rpm-ads-audiences` created + lifecycle + IAM grant to `rpm-portal-bq-reader@...` | ✅ |
+| Smoke test 50 contacts end-to-end: HubSpot → BQ → CSV → GCS | ✅ All 4 curls green; CSV format verified valid by inspection |
+| Data Quality probe: 100% email coverage, 62% phone, 100% names | ✅ Predicted match rate 60-80% |
+| Google Ads Data Manager connection at MCC `3158541695` | ✅ Connected to `gs://rpm-ads-audiences/customer_match/18185/latest.csv`, first scheduled run May 21 12:28 PT |
+
+### What's left — in order (~30 min active + 24-48h Google wait)
+
+| # | Priority | Task | Time | Notes |
+|---|---|---|---|---|
+| CM-1 | 🔴 | **Verify Data Manager settings before audience creation** | 5 min | Click Edit update method → switch from "Add more customers" → **"Replace existing customers"** (so dropped contacts also drop from audience). Click Edit mapping → confirm hashing is set to **"Data is already hashed"** (else Google re-hashes our hashes → 0% match). Both are silent failures if wrong. |
+| CM-2 | 🔴 | **DEBUG: full async sync writes nothing** | varies | Async sync endpoint returns 202 "started" but BQ row count stays at 50 (the test sample from May 20). No `loop_events` recorded for `hubspot_list_to_bq` runs. Likely daemon thread silent failure. Next debug: grep Render logs (search `hubspot_list_to_bq`) for traceback. Code path: `webhook-server/server.py:sync_hubspot_list_to_bq → _do_sync`. |
+| CM-3 | 🔴 | **Create the Customer Match audience in Google Ads** | 5 min | MCC → Tools → Audience manager → Segments → New segment → Customer list. Name: `RPM Living — Current Residents (Marketable)`. Source: Data Manager connection from Step 4. Membership: 540 days. Status will show "Processing" 6-24h. |
+| CM-4 | 🔴 | **Schedule 2 Render Cron Jobs** | 5 min | Cron A `customer-match-sync`: `0 9 * * *` (04:00 CT) → curl sync endpoint. Cron B `customer-match-csv-build`: `30 9 * * *` (04:30 CT) → curl build endpoint. Both write loop_events. See runbook §6 for exact commands. |
+| CM-5 | ⏳ | **Wait 24-48h for Google's first match processing** | passive | Audience size populates in Google Ads UI once Google finishes hash-matching. Only THEN can paid team meaningfully use it. |
+| CM-6 | 🟠 | **Ping paid media team to attach the audience** | 5 min | When size populates, the audience auto-appears in every child account under MCC `3158541695`. Paid adds it as Targeting / Observation / Similar Audience seed per campaign. |
+
+### Phase 2 (per-property fanout) — queued, code ready
+
+| # | Priority | Task | Notes |
+|---|---|---|---|
+| CM-7 | 🟡 | Run `scripts/backfill_google_ads_cid.py` against NinjaCat CSV | Populates `google_ads_customer_id` on every HubSpot company (733 properties under MCC). Dry-run first (`--csv ~/Downloads/advertiser_networks-list (11).csv`); `--commit` after spot-checking. Strips dashes from UI-formatted CIDs (e.g., `486-980-3719` → `4869803719`). |
+| CM-8 | 🟡 | Extend build endpoint to support per-CID grouping | Once `google_ads_customer_id` is populated, modify `/api/internal/build-customer-match-csv` to optionally group by CID and write one CSV per child account. Then 700 Data Manager connections (or use Google Ads API to push per-account) for per-property audiences. ~1-day code lift. |
+
+### Reference
+
+- Pipeline modules: `webhook-server/customer_match_export.py`, `webhook-server/server.py` (sync + build endpoints)
+- Migration: `migrations/0011_hubspot_contacts_for_match.py`
+- Phase-2 prep script: `scripts/backfill_google_ads_cid.py`
+- Runbook: `docs/RUNBOOKS/google-ads-data-manager-setup.md`
+- HubSpot list ID: **18185** (`Customer Match — Marketable Residents`)
+- MCC: **3158541695**
+- GCS bucket: **rpm-ads-audiences**, path `customer_match/18185/{date}.csv` + `latest.csv`
+- BQ project/dataset: `rpm-portal-492523.rpm_portal`
+- Service account: `rpm-portal-bq-reader@rpm-portal-492523.iam.gserviceaccount.com`
 
 ---
 
