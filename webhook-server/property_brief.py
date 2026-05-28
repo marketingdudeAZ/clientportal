@@ -365,6 +365,28 @@ def _truthy(value: Any) -> bool:
     return str(value).strip().lower() in ("true", "yes", "y", "1", "on")
 
 
+def brief_attested(task: dict[str, Any]) -> bool | None:
+    """Community Brief attestation gate for a ClickUp ticket.
+
+    Returns:
+      None  — the attestation checkbox is NOT on this ticket (gate N/A;
+              e.g. property-brief intake tickets). Caller should proceed.
+      True  — checkbox present AND checked. Proceed.
+      False — checkbox present but unchecked. Block until confirmed.
+
+    We read the raw custom_fields list (not custom_field_value) so we can
+    tell "field absent" apart from "field present but unchecked".
+    """
+    from config import CLICKUP_BRIEF_ATTEST_FIELD
+    needle = (CLICKUP_BRIEF_ATTEST_FIELD or "").strip().lower()
+    if not needle:
+        return None
+    for field in (task.get("custom_fields") or []):
+        if (field.get("name") or "").strip().lower() == needle:
+            return _truthy(field.get("value"))
+    return None
+
+
 # ── Path A: Commercial ─────────────────────────────────────────────────────
 
 class CompanyMatchAmbiguous(Exception):
@@ -799,6 +821,9 @@ def handle_approval(record: dict[str, Any]) -> dict[str, Any]:
         "rpm_brief_approved_at":       decided_iso,
         "rpm_brief_content":           record.get("brief_markdown") or "",
         "rpm_brief_revision_count":    str(record.get("revision_count") or 0),
+        # Publish to the /accounts/property side: mark the brief approved so the
+        # HubSpot-side editor shows it as live.
+        "rpm_brief_status":            "approved",
     })
 
     brief_url = generate_brief_doc(record)

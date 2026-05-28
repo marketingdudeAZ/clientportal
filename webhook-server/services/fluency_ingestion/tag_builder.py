@@ -36,6 +36,7 @@ Skipped this session (require URL scrape, ClickUp form, or overrides — later p
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
 from typing import Any
 
@@ -73,11 +74,24 @@ def build_tags(
     amenities = apt_iq.get("amenities") or []
     if amenities:
         out["fluency_amenities"] = ", ".join(amenities)
+    # Broken-out buckets (property-level vs in-unit) for the Community Brief.
+    property_amenities = apt_iq.get("property_amenities") or []
+    if property_amenities:
+        out["fluency_property_amenities"] = "\n".join(property_amenities)
+    unit_features = apt_iq.get("unit_features") or []
+    if unit_features:
+        out["fluency_unit_features"] = "\n".join(unit_features)
 
-    # ── Floor plans (CSV) ───────────────────────────────────────────────
+    # ── Floor plans ─────────────────────────────────────────────────────
+    # Legacy bedroom-bucket text (back-compat).
     floor_plans = apt_iq.get("floor_plans") or []
     if floor_plans:
         out["fluency_floor_plans"] = ", ".join(floor_plans)
+    # Structured floorplans (name/beds/baths/sqft) from the floor_plan report.
+    floor_plans_struct = apt_iq.get("floor_plans_struct") or []
+    if floor_plans_struct:
+        out["fluency_floor_plans_json"] = json.dumps(
+            floor_plans_struct, separators=(",", ":"))
 
     # ── Year built / renovated ─────────────────────────────────────────
     if apt_iq.get("year_built") is not None:

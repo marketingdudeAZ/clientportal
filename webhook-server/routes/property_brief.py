@@ -101,6 +101,18 @@ def clickup_webhook():
     if not property_brief.should_fire(event, task):
         return jsonify({"status": "skipped", "reason": "trigger gate"}), 200
 
+    # Community Brief attestation gate. If this ticket carries the attestation
+    # checkbox and it's unchecked, hold the work until someone confirms the
+    # brief is current. Tickets without the field (e.g. brief intake) skip this.
+    attested = property_brief.brief_attested(task)
+    if attested is False:
+        clickup_client.post_comment(
+            task_id,
+            "Hold: please confirm the checkbox “Community Brief is up to date & "
+            "accurate” before this is sent to the team. Re-trigger once checked.",
+        )
+        return jsonify({"status": "blocked", "reason": "brief_attestation_required"}), 200
+
     try:
         parsed = property_brief.parse_ticket(task)
     except property_brief.TicketParseError as e:
@@ -303,6 +315,24 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
     .err{color:var(--red);padding:14px 18px;border:1.5px solid var(--rose-bd);background:var(--rose);border-radius:var(--r);margin-top:12px}
     .ok{color:var(--sage);padding:14px 18px;border:1.5px solid var(--mint);background:var(--ml);border-radius:var(--r);margin-top:12px}
     .preview-pane{background:var(--white);padding:22px 28px;border-radius:var(--r);box-shadow:var(--sh);margin-top:14px;font-size:14px;line-height:1.6;white-space:pre-wrap;max-height:32rem;overflow:auto;color:var(--tp)}
+    /* Structured tables (floorplans / tracking / documents) */
+    table.tbl{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
+    table.tbl th{text-align:left;font-size:11px;font-weight:700;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;padding:8px 10px;border-bottom:2px solid var(--bdl)}
+    table.tbl td{padding:7px 10px;border-bottom:1px solid var(--bdl);color:var(--tp);vertical-align:middle}
+    table.tbl tr:last-child td{border-bottom:none}
+    table.tbl .src-label{font-weight:600;color:var(--jd)}
+    table.tbl input.cell{width:100%;padding:6px 8px;font-family:inherit;font-size:13px;border:1px solid var(--bd);border-radius:6px;background:var(--white);color:var(--tp)}
+    .tbl-empty{color:var(--tm);font-style:italic;font-size:13px;padding:6px 0}
+    .doc-list{list-style:none;display:flex;flex-direction:column;gap:8px;margin:4px 0 12px}
+    .doc-list li{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border-radius:8px}
+    .doc-list a{color:var(--j1);font-weight:600;text-decoration:none;word-break:break-all}
+    .doc-list a:hover{text-decoration:underline}
+    .doc-kind{font-size:10px;font-weight:700;color:var(--white);background:var(--sage);padding:2px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em}
+    .doc-del{margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:18px;line-height:1;padding:0 4px}
+    .doc-add{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+    .doc-add input{flex:1;min-width:160px;padding:8px 12px;font-family:inherit;font-size:13px;border:1px solid var(--bd);border-radius:8px}
+    .tbl-save{margin-top:12px}
+    .tbl-hint{color:var(--tm);font-size:12px;margin-bottom:10px;line-height:1.5}
     @media (max-width:760px){
       dl.fields{grid-template-columns:1fr}
       dl.fields dt{padding-top:14px;border:none}
@@ -341,8 +371,9 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
   <section class="section{% if sec.section == 'Guardrails' %} callout-warning{% endif %}" data-section="{{ sec.section }}">
     {% if sec.section == 'Guardrails' %}<div class="callout-banner">Voice guardrails — these shape what Fluency does and doesn't say</div>{% endif %}
     <h2>{{ sec.section }}</h2>
+    {% set table_types = ['floorplan_table','tracking_table','documents'] %}
     <dl class="fields">
-      {% for r in sec.rows %}
+      {% for r in sec.rows if r.type not in table_types %}
       <div class="row {% if r.editable %}has-edit{% endif %}" data-key="{{ r.key }}" data-type="{{ r.type }}">
         <dt>
           {{ r.label }}
@@ -379,6 +410,67 @@ _COMMUNITY_BRIEF_TEMPLATE = """\
       </div>
       {% endfor %}
     </dl>
+
+    {% for r in sec.rows if r.type in table_types %}
+      {% if r.hint %}<div class="tbl-hint">{{ r.hint }}</div>{% endif %}
+
+      {% if r.type == 'floorplan_table' %}
+      <div data-key="{{ r.key }}" data-type="floorplan_table">
+        {% if r.structured %}
+        <table class="tbl">
+          <thead><tr><th>Floor Plan</th><th>Beds</th><th>Baths</th><th>Sq Ft</th><th>Units</th><th>Avail</th></tr></thead>
+          <tbody>
+            {% for fp in r.structured %}
+            <tr>
+              <td class="src-label">{{ fp.name }}</td>
+              <td>{% if fp.beds == 0 %}Studio{% else %}{{ fp.beds }}{% endif %}</td>
+              <td>{{ fp.baths }}</td><td>{{ fp.sqft }}</td>
+              <td>{{ fp.total_units }}</td><td>{{ fp.available }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<div class="tbl-empty">Pending — floor plans load from Apt IQ once the property is onboarded.</div>{% endif %}
+        <details style="margin-top:10px">
+          <summary style="cursor:pointer;color:var(--ts);font-size:12px">Edit floor plans (advanced — JSON)</summary>
+          <textarea id="fp-json" class="edit-input" style="margin-top:8px;min-height:140px;font-family:monospace">{{ r.value }}</textarea>
+          <div class="tbl-save"><button class="btn btn-primary" onclick="saveJsonField('{{ r.key }}','fp-json')">Save floor plans</button></div>
+        </details>
+      </div>
+
+      {% elif r.type == 'tracking_table' %}
+      <table class="tbl" id="trk-table">
+        <thead><tr><th style="width:30%">Source</th><th style="width:30%">Tracking Number</th><th>UTM</th></tr></thead>
+        <tbody>
+          {% for t in r.structured %}
+          <tr data-source="{{ t.source }}">
+            <td class="src-label">{{ t.source }}</td>
+            <td><input class="cell trk-num" value="{{ t.tracking_number }}" placeholder="e.g. 512-555-0100"></td>
+            <td><input class="cell trk-utm" value="{{ t.utm }}" placeholder="utm_source={{ t.utm_source }}&utm_medium={{ t.utm_medium }}"></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="tbl-save"><button class="btn btn-primary" onclick="saveTracking('{{ r.key }}')">Save tracking &amp; UTMs</button></div>
+
+      {% elif r.type == 'documents' %}
+      <ul class="doc-list" id="doc-list">
+        {% for d in r.structured %}
+        <li data-url="{{ d.url }}" data-label="{{ d.label }}" data-kind="{{ d.kind }}">
+          <a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.label }}</a>
+          {% if d.kind %}<span class="doc-kind">{{ d.kind }}</span>{% endif %}
+          <button class="doc-del" title="Remove" onclick="removeDoc(this,'{{ r.key }}')">&times;</button>
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="doc-add">
+        <input id="doc-label" placeholder="Label (e.g. 2026 Pitch Deck)">
+        <input id="doc-url" placeholder="https://… link to the file">
+        <input id="doc-kind" placeholder="Kind (pitch_deck / rfp / brand_guide)" style="max-width:220px">
+        <button class="btn btn-primary" onclick="addDoc('{{ r.key }}')">Add</button>
+      </div>
+      {% endif %}
+    {% endfor %}
   </section>
   {% endfor %}
 
@@ -457,6 +549,59 @@ async function saveEdit(btn) {
   } catch (e) {
     alert('Save failed: ' + e.message);
   } finally { btn.disabled = false; btn.textContent = 'Save'; }
+}
+
+async function patchField(key, value) {
+  const r = await fetch(`/api/community-brief/${TOKEN}/field`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key, value}),
+  });
+  const d = await r.json();
+  if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
+  return d;
+}
+
+async function saveJsonField(key, textareaId) {
+  const ta = document.getElementById(textareaId);
+  try { await patchField(key, ta.value); alert('Saved.'); }
+  catch (e) { alert('Save failed: ' + e.message); }
+}
+
+async function saveTracking(key) {
+  const rows = [];
+  document.querySelectorAll('#trk-table tbody tr').forEach(tr => {
+    const num = tr.querySelector('.trk-num').value.trim();
+    const utm = tr.querySelector('.trk-utm').value.trim();
+    if (num || utm) rows.push({source: tr.getAttribute('data-source'),
+                               tracking_number: num, utm: utm});
+  });
+  try { await patchField(key, JSON.stringify(rows)); alert('Tracking saved.'); }
+  catch (e) { alert('Save failed: ' + e.message); }
+}
+
+function _collectDocs() {
+  const out = [];
+  document.querySelectorAll('#doc-list li').forEach(li => {
+    out.push({label: li.getAttribute('data-label'), url: li.getAttribute('data-url'),
+              kind: li.getAttribute('data-kind') || ''});
+  });
+  return out;
+}
+async function addDoc(key) {
+  const label = document.getElementById('doc-label').value.trim();
+  const url = document.getElementById('doc-url').value.trim();
+  const kind = document.getElementById('doc-kind').value.trim();
+  if (!url) { alert('A link (URL) is required.'); return; }
+  const docs = _collectDocs();
+  docs.push({label: label || url, url, kind});
+  try { await patchField(key, JSON.stringify(docs)); location.reload(); }
+  catch (e) { alert('Save failed: ' + e.message); }
+}
+async function removeDoc(btn, key) {
+  btn.closest('li').remove();
+  try { await patchField(key, JSON.stringify(_collectDocs())); }
+  catch (e) { alert('Save failed: ' + e.message); }
 }
 
 async function loadPreview() {
@@ -682,6 +827,43 @@ def submit_approval_legacy(token):
     if request.is_json:
         return jsonify({"status": "ok", "decision": decision})
     return _render_brief(token, None, reviewed_just_now=True)
+
+
+# ── Community Brief auto-capture scan (daily cron) ─────────────────────────
+#
+# Trigger: plestatus == "RPM Managed". For each such property with no brief
+# yet, run the AI capture, persist a brief + token, and write the approval
+# link onto the company (rpm_brief_approval_url). Also advances the AptIQ
+# exact-match retry clock (~30 days) on every property in scope.
+
+@property_brief_bp.route("/api/internal/community-brief-capture-scan",
+                         methods=["POST", "GET"])
+def community_brief_capture_scan():
+    import community_brief_capture as cap
+    args = request.args
+    dry_run = (args.get("dry_run") or "").lower() in ("1", "true", "yes")
+    run_async = (args.get("async") or "").lower() in ("1", "true", "yes")
+    limit = args.get("limit", type=int)
+
+    try:
+        companies = cap.fetch_rpm_managed_companies()
+    except Exception as e:
+        logger.exception("capture-scan: company fetch failed")
+        return jsonify({"error": f"company fetch failed: {e}"}), 502
+
+    if run_async and not dry_run:
+        def _bg():
+            try:
+                res = cap.run_scan(companies, dry_run=False, limit=limit)
+                logger.info("capture-scan async done: scanned=%d captured=%d",
+                            res["scanned"], res["captured"])
+            except Exception:
+                logger.exception("capture-scan async run failed")
+        threading.Thread(target=_bg, daemon=True, name="cb-capture-scan").start()
+        return jsonify({"status": "dispatched", "scope_count": len(companies)}), 202
+
+    summary = cap.run_scan(companies, dry_run=dry_run, limit=limit)
+    return jsonify(summary)
 
 
 # ── Signature verification ─────────────────────────────────────────────────

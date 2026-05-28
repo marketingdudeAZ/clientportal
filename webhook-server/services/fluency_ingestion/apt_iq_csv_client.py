@@ -9,6 +9,10 @@ Public API:
     get_all_rows() -> dict[str, dict]   # keyed by Property ID
     column_names() -> list[str]
     invalidate_cache()
+
+    # Floor-plan report (report_type=floor_plan) — many rows per property:
+    get_floor_plan_rows(property_id: str) -> list[dict]
+    invalidate_floor_plan_cache()
 """
 
 from __future__ import annotations
@@ -26,14 +30,22 @@ import requests
 logger = logging.getLogger(__name__)
 
 CSV_URL_ENV = "APT_IQ_DAILY_SHEET_URL"
+# Floor-plan report export (report_type=floor_plan). One row PER floor plan,
+# so many rows share a Property ID — grouped into lists, not a flat dict.
+FLOOR_PLAN_URL_ENV = "APT_IQ_FLOOR_PLAN_SHEET_URL"
 PROPERTY_ID_COL = "Property ID"
-_FETCH_TIMEOUT = 60
+_FETCH_TIMEOUT = 120
 
 # Module-level cache; thread-safe load.
 _lock = threading.Lock()
 _cache: dict[str, dict] | None = None
 _cache_loaded_at: float = 0.0
 _columns: list[str] = []
+
+# Floor-plan cache: Property ID -> list of floor-plan rows.
+_fp_lock = threading.Lock()
+_fp_cache: dict[str, list[dict]] | None = None
+_fp_loaded_at: float = 0.0
 
 
 def _load_csv() -> dict[str, dict]:
@@ -104,3 +116,64 @@ def invalidate_cache() -> None:
     with _lock:
         _cache = None
         _cache_loaded_at = 0.0
+
+
+# ── Floor-plan report (report_type=floor_plan) ──────────────────────────────
+
+
+def _load_floor_plan_csv() -> dict[str, list[dict]]:
+    """Fetch + parse the floor-plan CSV, grouping rows by Property ID.
+
+    The floor-plan export carries one row per floor plan (Floor Plan Name,
+    Beds, Baths, Avg Sq Ft, Unit Mix counts, ...). Many rows share a
+    Property ID, so we return Property ID -> [rows].
+    """
+    url = os.environ.get(FLOOR_PLAN_URL_ENV, "")
+    if not url:
+        logger.warning("apt_iq_csv_client: %s not set", FLOOR_PLAN_URL_ENV)
+        return {}
+
+    t0 = time.time()
+    r = requests.get(url, timeout=_FETCH_TIMEOUT, allow_redirects=True)
+    r.raise_for_status()
+    text = r.text
+    logger.info("apt_iq_csv_client[floor_plan]: fetched %d bytes in %.1fs",
+                len(r.content), time.time() - t0)
+
+    reader = csv.DictReader(io.StringIO(text))
+    out: dict[str, list[dict]] = {}
+    for row in reader:
+        pid = (row.get(PROPERTY_ID_COL) or "").strip()
+        if not pid:
+            continue
+        out.setdefault(pid, []).append(row)
+    logger.info("apt_iq_csv_client[floor_plan]: parsed %d properties (%d rows)",
+                len(out), sum(len(v) for v in out.values()))
+    return out
+
+
+def _ensure_fp_loaded() -> dict[str, list[dict]]:
+    global _fp_cache, _fp_loaded_at
+    if _fp_cache is not None:
+        return _fp_cache
+    with _fp_lock:
+        if _fp_cache is None:
+            _fp_cache = _load_floor_plan_csv()
+            _fp_loaded_at = time.time()
+    return _fp_cache
+
+
+def get_floor_plan_rows(property_id: str) -> list[dict]:
+    """Return all floor-plan rows for a Property ID (empty list if none)."""
+    pid = (property_id or "").strip()
+    if not pid:
+        return []
+    return _ensure_fp_loaded().get(pid, [])
+
+
+def invalidate_floor_plan_cache() -> None:
+    """Force the next call to re-fetch the floor-plan CSV."""
+    global _fp_cache, _fp_loaded_at
+    with _fp_lock:
+        _fp_cache = None
+        _fp_loaded_at = 0.0

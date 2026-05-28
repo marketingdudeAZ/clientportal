@@ -32,6 +32,7 @@ Three rules govern this surface:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any
@@ -42,15 +43,39 @@ logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.hubapi.com"
 
+# Field types whose stored value is a JSON document (not a scalar string).
+# These render as structured editors in the portal rather than text inputs.
+TABLE_TYPES = ("floorplan_table", "tracking_table", "documents")
+
+# The fixed attribution sources we capture a tracking number + UTM for.
+# (label, default utm_source, default utm_medium) — UTMs are suggestions the
+# reviewer can edit; tracking numbers are always entered by hand.
+TRACKING_SOURCES: list[tuple[str, str, str]] = [
+    ("Brochure/Flyer",                  "brochure",       "print"),
+    ("Bandit Signs",                    "bandit_sign",    "offline"),
+    ("Yelp",                            "yelp",           "referral"),
+    ("Zillow",                          "zillow",         "ils"),
+    ("Apple Maps",                      "apple_maps",     "maps"),
+    ("Banner",                          "banner",         "display"),
+    ("Corporate Website",               "corporate_site", "referral"),
+    ("CoStar/Apartments.com",           "apartments_com", "ils"),
+    ("Google Business Profile/Maps",    "google",         "gbp"),
+    ("Google Paid Search/PPC",          "google",         "cpc"),
+    ("Property Website",                "property_site",  "referral"),
+    ("Social Ads",                      "social",         "paid_social"),
+    ("Social Posting",                  "social",         "organic_social"),
+]
+
 
 # ── Field map ──────────────────────────────────────────────────────────────
 
 class BriefField:
     __slots__ = ("key", "label", "section", "type", "hint",
-                 "hs_resolved", "hs_override", "options")
+                 "hs_resolved", "hs_override", "options", "internal")
 
     def __init__(self, key, label, section, type,
-                 hs_resolved=None, hs_override=None, hint="", options=None):
+                 hs_resolved=None, hs_override=None, hint="", options=None,
+                 internal=False):
         self.key = key
         self.label = label
         self.section = section
@@ -59,6 +84,10 @@ class BriefField:
         self.hs_resolved = hs_resolved
         self.hs_override = hs_override
         self.options = options or []
+        # internal=True: context/operational/sensitive field that must NEVER
+        # be fed into ad-copy generation (e.g. budget, resident demographics,
+        # PMS/CMS). Still editable + stored; just excluded from the LLM prose.
+        self.internal = internal
 
 
 # Sections + fields — modeled after the /accounts/property dashboard.
@@ -95,6 +124,40 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
         BriefField("short_name", "Short Name", "Voice & Positioning", "text",
                    hs_override="fluency_short_name_override",
                    hint="The shortened name used in tight UI / social copy."),
+        BriefField("former_property_name", "Former Property Name",
+                   "Voice & Positioning", "text",
+                   hs_override="fluency_former_property_name",
+                   hint="If rebranded, the prior name — protects search equity during the transition."),
+    ]),
+
+    # ─── Brand & Story ─────────────────────────────────────────────────
+    ("Brand & Story", [
+        BriefField("taglines", "Taglines", "Brand & Story", "textarea",
+                   hs_override="fluency_taglines",
+                   hint="Property taglines / slogans. One per line."),
+        BriefField("brand_adjectives", "Brand Adjectives", "Brand & Story", "textarea",
+                   hs_override="fluency_brand_adjectives",
+                   hint="3–5 adjectives that best describe the community. One per line."),
+        BriefField("differentiators", "Differentiators", "Brand & Story", "textarea",
+                   hs_override="fluency_differentiators",
+                   hint="Unique features / solutions that set this community apart from competitors. One per line."),
+        BriefField("selling_points", "Additional Selling Points", "Brand & Story", "textarea",
+                   hs_override="fluency_selling_points",
+                   hint="Extra points to emphasize in marketing. One per line."),
+        BriefField("residents_love", "What Residents Love", "Brand & Story", "textarea",
+                   hs_override="fluency_residents_love",
+                   hint="What current residents love about the community. One per line."),
+        BriefField("residents_dislike", "What Residents Don't Love", "Brand & Story", "textarea",
+                   hs_override="fluency_residents_dislike",
+                   hint="Internal context — friction points to be aware of. Not used in ad copy.",
+                   internal=True),
+        BriefField("target_resident", "Typical Resident (lifestyle / needs only)",
+                   "Brand & Story", "textarea",
+                   hs_override="fluency_target_resident",
+                   hint="Describe the typical resident by LIFESTYLE and NEEDS only — commute, amenities, "
+                        "price sensitivity. FAIR HOUSING: never age, family status, race, religion, "
+                        "national origin, or disability. Internal context, not ad copy.",
+                   internal=True),
     ]),
 
     # ─── Lifecycle ─────────────────────────────────────────────────────
@@ -111,19 +174,25 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
                    hint="From Apt IQ."),
     ]),
 
-    # ─── Inventory ─────────────────────────────────────────────────────
+    # ─── Inventory (structured floorplans from Apt IQ floor_plan report) ─
     ("Inventory", [
-        BriefField("floor_plans", "Floor Plans", "Inventory", "readonly",
-                   hs_resolved="fluency_floor_plans",
-                   hint="Pulled from Apt IQ. Pending until your property is onboarded."),
+        BriefField("floor_plans", "Floor Plans", "Inventory", "floorplan_table",
+                   hs_resolved="fluency_floor_plans_json",
+                   hs_override="fluency_floor_plans_override",
+                   hint="Name, beds, baths, sq ft per plan. Auto-filled from Apt IQ; "
+                        "edit a row to override. Pending until your property is onboarded."),
     ]),
 
-    # ─── Amenities ─────────────────────────────────────────────────────
+    # ─── Amenities — split into property-level vs in-unit ──────────────
     ("Amenities", [
-        BriefField("amenities", "Amenities", "Amenities", "textarea",
-                   hs_resolved="fluency_amenities",
-                   hs_override="fluency_amenities_override",
-                   hint="Normalized list — used for Fluency tag matching. One per line."),
+        BriefField("property_amenities", "Property Amenities", "Amenities", "textarea",
+                   hs_resolved="fluency_property_amenities",
+                   hs_override="fluency_property_amenities_override",
+                   hint="Community-level: pool, fitness center, clubhouse, etc. One per line."),
+        BriefField("unit_features", "In-Unit Features", "Amenities", "textarea",
+                   hs_resolved="fluency_unit_features",
+                   hs_override="fluency_unit_features_override",
+                   hint="Inside the unit: stainless appliances, walk-in closets, etc. One per line."),
         BriefField("marketed_amenity_names", "Marketed Amenity Names",
                    "Amenities", "textarea",
                    hs_resolved="fluency_marketed_amenity_names",
@@ -136,20 +205,25 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
                    hint="Short prose Fluency can pull from. Optional."),
     ]),
 
-    # ─── Geography ─────────────────────────────────────────────────────
+    # ─── Geography — In / Near / Close To / Highlights ─────────────────
     ("Geography", [
-        BriefField("neighborhood", "Neighborhood", "Geography", "text",
+        BriefField("neighborhood", "In (Located In)", "Geography", "text",
                    hs_resolved="fluency_neighborhood",
                    hs_override="fluency_neighborhood_override",
-                   hint="The official-feeling name (e.g., 'South Congress', not 'Austin')."),
-        BriefField("nearby_neighborhoods", "Nearby Neighborhoods",
+                   hint="The neighborhood the property sits IN (e.g., 'South Congress', not 'Austin')."),
+        BriefField("nearby_neighborhoods", "Near (Adjacent Areas)",
                    "Geography", "textarea",
                    hs_override="fluency_nearby_neighborhoods_override",
-                   hint="Worth name-dropping in copy. One per line."),
-        BriefField("landmarks", "Landmarks", "Geography", "textarea",
+                   hint="Desirable areas the property is NEAR, worth name-dropping in copy. One per line."),
+        BriefField("landmarks", "Close To (Landmarks)", "Geography", "textarea",
                    hs_resolved="fluency_landmarks",
                    hs_override="fluency_landmarks_override",
-                   hint="Specific places / institutions / parks. One per line."),
+                   hint="Specific places / institutions / parks the property is close to. One per line."),
+        BriefField("neighborhood_highlights", "Neighborhood Highlights",
+                   "Geography", "textarea",
+                   hs_resolved="fluency_neighborhood_highlights",
+                   hs_override="fluency_neighborhood_highlights_override",
+                   hint="What makes the area desirable — walkability, dining, vibe. One per line."),
         BriefField("nearby_employers", "Nearby Employers",
                    "Geography", "textarea",
                    hs_resolved="fluency_nearby_employers",
@@ -163,6 +237,72 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
                    hs_resolved="fluency_competitors",
                    hs_override="fluency_competitors_override",
                    hint="Same-market rent peers. One per line."),
+    ]),
+
+    # ─── Strategy & Goals ──────────────────────────────────────────────
+    ("Strategy & Goals", [
+        BriefField("goals", "Overarching Goals", "Strategy & Goals", "textarea",
+                   hs_override="fluency_goals",
+                   hint="Top-line goals for this property. One per line."),
+        BriefField("initiatives", "Short- vs Long-Term Initiatives",
+                   "Strategy & Goals", "textarea",
+                   hs_override="fluency_initiatives",
+                   hint="What to prioritize near-term vs longer-term. One per line."),
+        BriefField("challenges", "Anticipated Challenges (6–8 mo)",
+                   "Strategy & Goals", "textarea",
+                   hs_override="fluency_challenges",
+                   hint="Internal context — challenges to plan around. Not ad copy.",
+                   internal=True),
+        BriefField("priorities", "Additional Priorities",
+                   "Strategy & Goals", "textarea",
+                   hs_override="fluency_priorities",
+                   hint="Other focus areas we should know about. Internal.",
+                   internal=True),
+        BriefField("onsite_developments", "Upcoming Onsite Developments",
+                   "Strategy & Goals", "textarea",
+                   hs_override="fluency_onsite_developments",
+                   hint="Renovations, rebranding, amenity closures, etc. One per line."),
+        BriefField("local_partnerships", "Local Business Partnerships",
+                   "Strategy & Goals", "textarea",
+                   hs_override="fluency_local_partnerships",
+                   hint="Partnerships with local businesses worth featuring. One per line."),
+        BriefField("onsite_events", "Planned Onsite Events",
+                   "Strategy & Goals", "textarea",
+                   hs_override="fluency_onsite_events",
+                   hint="Events targeting new prospects. One per line."),
+        BriefField("website_priorities", "Website Page Priorities",
+                   "Strategy & Goals", "textarea",
+                   hs_override="fluency_website_priorities",
+                   hint="How to prioritize new pages (blog, landing pages, comparisons). Internal.",
+                   internal=True),
+    ]),
+
+    # ─── Operations & Tech ─────────────────────────────────────────────
+    # Internal reference — mostly Salesforce/PM-sourced. Not ad copy.
+    ("Operations & Tech", [
+        BriefField("marketing_budget", "Marketing Budget", "Operations & Tech", "text",
+                   hs_override="fluency_marketing_budget",
+                   hint="Total monthly marketing budget (and/or per-unit). Internal.",
+                   internal=True),
+        BriefField("pms", "Property Management System (PMS)", "Operations & Tech", "text",
+                   hs_override="fluency_pms", hint="e.g. Yardi, RealPage.", internal=True),
+        BriefField("cms", "Website CMS", "Operations & Tech", "text",
+                   hs_override="fluency_cms", hint="What powers the website.", internal=True),
+        BriefField("chatbot", "Chatbot / Assistant", "Operations & Tech", "text",
+                   hs_override="fluency_chatbot", hint="Any on-site chatbot / automated assistant.", internal=True),
+        BriefField("website_last_updated", "Website Creative Last Updated",
+                   "Operations & Tech", "text",
+                   hs_override="fluency_website_last_updated", hint="When the site was last refreshed.", internal=True),
+        BriefField("building_style", "Building Style", "Operations & Tech", "text",
+                   hs_override="fluency_building_style", hint="Salesforce field — check for accuracy.", internal=True),
+        BriefField("asset_class", "Asset Class", "Operations & Tech", "text",
+                   hs_override="fluency_asset_class", hint="Salesforce field — check for accuracy.", internal=True),
+        BriefField("elise_ai", "Elise AI Participation", "Operations & Tech", "text",
+                   hs_override="fluency_elise_ai", hint="Salesforce field — check for accuracy.", internal=True),
+        BriefField("crm", "CRM", "Operations & Tech", "text",
+                   hs_override="fluency_crm", hint="Salesforce field — check for accuracy.", internal=True),
+        BriefField("host_name", "Host Name", "Operations & Tech", "text",
+                   hs_override="fluency_host_name", hint="Salesforce field — check for accuracy.", internal=True),
     ]),
 
     # ─── Guardrails ────────────────────────────────────────────────────
@@ -182,6 +322,34 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
                    hs_override="fluency_motivations_considerations_override",
                    hint="WHAT motivates renters at this property — lifestyle, amenities, commute, walkability. "
                         "Fair Housing safe: focus on needs/preferences, NOT demographics (no age, family status, race, religion, national origin, disability, or schools)."),
+        BriefField("excluded_neighborhoods", "Neighborhoods NOT to Target",
+                   "Guardrails", "textarea",
+                   hs_override="fluency_excluded_neighborhoods",
+                   hint="Areas to avoid in ad copy / keyword targeting (NOT geo-targeting). "
+                        "One per line. Keep Fair Housing compliant.",
+                   internal=True),
+        BriefField("client_expectations", "Firm Client Expectations",
+                   "Guardrails", "textarea",
+                   hs_override="fluency_client_expectations",
+                   hint="Hard rules from the client — e.g. agency not allowed to independently update copy. Internal.",
+                   internal=True),
+    ]),
+
+    # ─── Tracking & Attribution ────────────────────────────────────────
+    ("Tracking & Attribution", [
+        BriefField("tracking", "Tracking Numbers & UTMs", "Tracking & Attribution",
+                   "tracking_table",
+                   hs_override="fluency_tracking_json",
+                   hint="Call-tracking number + UTM string per source. Powers attribution "
+                        "across paid + organic channels. One row per source."),
+    ]),
+
+    # ─── Documents (pitch decks / RFP / brand guide) ───────────────────
+    ("Documents", [
+        BriefField("documents", "Pitch Decks, RFPs & Brand Guides", "Documents",
+                   "documents",
+                   hs_override="rpm_brief_documents_json",
+                   hint="Link any pitch deck, RFP, or brand guide so the whole brief lives in one place."),
     ]),
 ]
 
@@ -269,6 +437,85 @@ def _split_for_pills(value: str) -> list[str]:
     return [x for x in items if x]
 
 
+# ── Structured (JSON) field helpers ─────────────────────────────────────────
+
+
+def _parse_json_list(value: Any) -> list[dict]:
+    """Parse a stored JSON-array field into a list of dicts. Tolerant."""
+    if not value:
+        return []
+    if isinstance(value, list):
+        rows = value
+    else:
+        try:
+            rows = json.loads(value)
+        except (ValueError, TypeError):
+            return []
+    return [r for r in rows if isinstance(r, dict)]
+
+
+def _build_floorplan_table(value: Any) -> list[dict]:
+    """Normalize floorplan rows to {name, beds, baths, sqft, total_units, available}."""
+    out = []
+    for r in _parse_json_list(value):
+        out.append({
+            "name":        str(r.get("name", "") or ""),
+            "beds":        r.get("beds", ""),
+            "baths":       r.get("baths", ""),
+            "sqft":        r.get("sqft", ""),
+            "total_units": r.get("total_units", ""),
+            "available":   r.get("available", ""),
+        })
+    return out
+
+
+def _build_tracking_table(value: Any) -> list[dict]:
+    """Always return all TRACKING_SOURCES, merging in any saved numbers/UTMs.
+
+    Match saved rows to canonical sources by source label so the editor shows
+    a complete, ordered list regardless of what's been filled in so far.
+    """
+    saved = {str(r.get("source", "")).strip().lower(): r
+             for r in _parse_json_list(value)}
+    out = []
+    for label, utm_source, utm_medium in TRACKING_SOURCES:
+        row = saved.get(label.lower(), {})
+        out.append({
+            "source":          label,
+            "tracking_number": str(row.get("tracking_number", "") or ""),
+            "utm":             str(row.get("utm", "") or ""),
+            "utm_source":      utm_source,
+            "utm_medium":      utm_medium,
+        })
+    return out
+
+
+def _build_documents(value: Any) -> list[dict]:
+    """Normalize document rows to {label, url, kind}."""
+    out = []
+    for r in _parse_json_list(value):
+        url = str(r.get("url", "") or "").strip()
+        if not url:
+            continue
+        out.append({
+            "label": str(r.get("label", "") or "").strip() or url,
+            "url":   url,
+            "kind":  str(r.get("kind", "") or "").strip(),
+        })
+    return out
+
+
+def _structured_for(field: "BriefField", effective_value: Any) -> list[dict]:
+    """Build the structured row list for a TABLE_TYPES field."""
+    if field.type == "floorplan_table":
+        return _build_floorplan_table(effective_value)
+    if field.type == "tracking_table":
+        return _build_tracking_table(effective_value)
+    if field.type == "documents":
+        return _build_documents(effective_value)
+    return []
+
+
 def build_render_context(company_props: dict) -> list[dict]:
     """Shape data for the page template.
 
@@ -303,6 +550,14 @@ def build_render_context(company_props: dict) -> list[dict]:
                 value = str(resolved_val)
 
             editable = bool(f.hs_override)
+            is_table = f.type in TABLE_TYPES
+
+            # A tracking table is "set" once any number/UTM is filled in; we
+            # always render the full 13-row grid, so treat presence of any
+            # saved value (override) as the signal for the badge.
+            if is_table:
+                has_override = bool(_parse_json_list(value if has_override else
+                                                     override_val))
 
             # Source badge resolution.
             if has_override:
@@ -320,7 +575,8 @@ def build_render_context(company_props: dict) -> list[dict]:
                 "type":       f.type,
                 "hint":       f.hint,
                 "value":      value,
-                "pills":      _split_for_pills(value),
+                "pills":      [] if is_table else _split_for_pills(value),
+                "structured": _structured_for(f, value) if is_table else [],
                 "options":    f.options,
                 "editable":   editable,
                 "badge":      badge,
@@ -344,6 +600,20 @@ def write_field(company_id: str, field_key: str, value: str) -> tuple[bool, str]
         return False, f"{field.label} is not editable"
     if field.options and value and value not in field.options:
         return False, f"{value!r} not in allowed values"
+
+    # Structured (JSON) fields: validate it parses as a list of objects and
+    # store a canonical, compact serialization. Empty clears the override.
+    if field.type in TABLE_TYPES:
+        if value in (None, "", "[]"):
+            value = ""
+        else:
+            try:
+                parsed = json.loads(value)
+            except (ValueError, TypeError):
+                return False, "value must be valid JSON"
+            if not isinstance(parsed, list):
+                return False, "value must be a JSON array"
+            value = json.dumps(parsed, separators=(",", ":"))
 
     payload = {"properties": {field.hs_override: value or ""}}
     try:
@@ -376,6 +646,26 @@ def _effective(field: BriefField, props: dict) -> str:
         if v not in (None, ""):
             return str(v)
     return ""
+
+
+def _effective_display(field: BriefField, props: dict) -> str:
+    """Human-readable effective value for LLM prompting (flattens tables)."""
+    v = _effective(field, props)
+    if not v:
+        return ""
+    if field.type == "floorplan_table":
+        parts = []
+        for r in _build_floorplan_table(v):
+            beds = str(r.get("beds", "")).strip()
+            bed_lbl = "Studio" if beds in ("0", "0.0") else (f"{beds} bd" if beds else "")
+            baths = str(r.get("baths", "")).strip()
+            sqft = str(r.get("sqft", "")).strip()
+            detail = ", ".join(p for p in (bed_lbl, f"{baths} ba" if baths else "",
+                                           f"{sqft} sqft" if sqft else "") if p)
+            name = r.get("name", "")
+            parts.append(f"{name} ({detail})" if detail else name)
+        return "; ".join(p for p in parts if p)
+    return v
 
 
 def generate_summary(company_props: dict, property_name: str) -> str:
@@ -453,7 +743,11 @@ def _llm_call(*, company_props: dict, property_name: str,
     for section_label, fields in SECTIONS:
         section_lines = []
         for f in fields:
-            v = _effective(f, company_props)
+            # Tracking, documents, and internal/sensitive fields (budget,
+            # resident demographics, PMS/CMS, ...) are never ad-copy inputs.
+            if f.type in ("tracking_table", "documents") or f.internal:
+                continue
+            v = _effective_display(f, company_props)
             if v:
                 section_lines.append(f"  - {f.label}: {v}")
         if section_lines:

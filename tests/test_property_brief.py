@@ -832,15 +832,58 @@ class TestCommunityBriefHelpers(unittest.TestCase):
         import community_brief as cb
         self.assertEqual(cb._effective(cb.FIELDS["neighborhood"], {}), "")
 
-    def test_render_context_marks_apt_iq_fields_pending(self):
-        # Floor Plans is a read-only Apt IQ field. With no data, the
-        # row's badge should read "Pending" (not editable, no source).
+    def test_render_context_floor_plans_is_editable_table(self):
+        # Floor Plans is now a structured, editable table (AptIQ-derived with a
+        # manual override). With no data the badge reads "Not set" and the row
+        # is editable, exposing an empty structured list.
         import community_brief as cb
         ctx = cb.build_render_context({})
         inventory = next(s for s in ctx if s["section"] == "Inventory")
         floor_plans = next(r for r in inventory["rows"] if r["key"] == "floor_plans")
-        self.assertEqual(floor_plans["badge"], "Pending")
-        self.assertFalse(floor_plans["editable"])
+        self.assertEqual(floor_plans["type"], "floorplan_table")
+        self.assertEqual(floor_plans["badge"], "Not set")
+        self.assertTrue(floor_plans["editable"])
+        self.assertEqual(floor_plans["structured"], [])
+
+    def test_render_context_floor_plans_parses_json(self):
+        import community_brief as cb, json
+        props = {"fluency_floor_plans_json": json.dumps([
+            {"name": "A1", "beds": 1, "baths": 1.0, "sqft": 700,
+             "total_units": 20, "available": 2}])}
+        ctx = cb.build_render_context(props)
+        fp = next(r for s in ctx for r in s["rows"] if r["key"] == "floor_plans")
+        self.assertEqual(fp["badge"], "Pipeline")
+        self.assertEqual(len(fp["structured"]), 1)
+        self.assertEqual(fp["structured"][0]["name"], "A1")
+
+    def test_render_context_tracking_table_seeds_all_sources(self):
+        # The tracking table always renders all 13 canonical sources, merging
+        # in any saved tracking numbers / UTMs by source label.
+        import community_brief as cb, json
+        props = {"fluency_tracking_json": json.dumps(
+            [{"source": "Zillow", "tracking_number": "512-555-0101",
+              "utm": "utm_source=zillow&utm_medium=ils"}])}
+        ctx = cb.build_render_context(props)
+        trk = next(r for s in ctx for r in s["rows"] if r["key"] == "tracking")
+        self.assertEqual(len(trk["structured"]), len(cb.TRACKING_SOURCES))
+        zillow = next(x for x in trk["structured"] if x["source"] == "Zillow")
+        self.assertEqual(zillow["tracking_number"], "512-555-0101")
+
+    def test_write_field_validates_json_for_tables(self):
+        import community_brief as cb
+        ok, msg = cb.write_field("123", "floor_plans", "not json")
+        self.assertFalse(ok)
+        self.assertIn("JSON", msg)
+
+    def test_amenities_split_into_property_and_unit(self):
+        import community_brief as cb
+        secs = {s for s, _ in cb.SECTIONS}
+        self.assertIn("property_amenities", cb.FIELDS)
+        self.assertIn("unit_features", cb.FIELDS)
+        self.assertEqual(cb.FIELDS["property_amenities"].hs_resolved,
+                         "fluency_property_amenities")
+        self.assertEqual(cb.FIELDS["unit_features"].hs_override,
+                         "fluency_unit_features_override")
 
     def test_render_context_one_row_per_field_with_override_winning(self):
         # Single-row model: when override is set, it wins. Badge says

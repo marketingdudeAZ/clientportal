@@ -331,3 +331,83 @@ posture is correct.
 | Brief persistence (token records, revisions) | `webhook-server/property_brief_store.py` |
 | Paid-media FHA targeting guards | `webhook-server/fair_housing.py` |
 | Trigger/status/revision config | `webhook-server/config.py` |
+
+---
+
+## Community Brief v2 — 2026-05-27 rework
+
+Renamed "Client Brief" → **Community Brief** and reworked per the
+questionnaire. What changed:
+
+### New / restructured sections
+- **Amenities split** → *Property Amenities* (community-level) + *In-Unit
+  Features*. Auto-classified from Apt IQ's 39 amenity columns.
+- **Structured Floor Plans** → name / beds / baths / sq ft / units, pulled
+  from Apt IQ's **floor_plan report** (not the daily property CSV). Editable
+  table.
+- **Geography** → *In (Located In)* / *Near (Adjacent Areas)* / *Close To
+  (Landmarks)* / *Neighborhood Highlights*.
+- **Tracking & Attribution** → call-tracking number + UTM per source, for all
+  13 sources (Brochure/Flyer, Bandit Signs, Yelp, Zillow, Apple Maps, Banner,
+  Corporate Website, CoStar/Apartments.com, Google Business Profile/Maps,
+  Google Paid Search/PPC, Property Website, Social Ads, Social Posting).
+- **Documents** → link pitch decks / RFPs / brand guides.
+- **Full questionnaire** added: Brand & Story (taglines, adjectives,
+  differentiators, selling points, what residents love/don't, typical
+  resident), Strategy & Goals (goals, initiatives, challenges, priorities,
+  onsite developments, partnerships, events, website priorities), Operations &
+  Tech (budget, PMS, CMS, chatbot, building style, asset class, Elise AI, CRM,
+  host, website last-updated), former property name, and two new guardrails
+  (neighborhoods NOT to target, firm client expectations).
+- Fields tagged **internal** (budget, resident demographics, PMS/CMS, etc.)
+  are stored + editable but **never fed into ad-copy generation** — Fair
+  Housing + sensitivity protection.
+
+### New flow (the flywheel)
+1. **Trigger:** when `plestatus` = *RPM Managed*, a daily cron
+   (`POST /api/internal/community-brief-capture-scan`) runs the AI capture for
+   what it can get (website scrape + LLM).
+2. The approval **server link is written onto the company record**
+   (`rpm_brief_approval_url`); `rpm_brief_status` = *pending_approval*.
+3. A human reviews/edits at the link and approves → the brief **publishes** to
+   the HubSpot `/accounts/property` side (`rpm_brief_status` = *approved*).
+4. **Editable on the HubSpot side** too, via `/api/accounts/property/brief`
+   (render) + `/api/accounts/property/field` (PATCH) — same override-wins path.
+5. **AptIQ retry:** the same cron re-attempts the exact `aptiq_property_id`
+   match for ~30 days (`aptiq_match_status`, `aptiq_match_attempts`), so a
+   property managed before its ID resolves still fills in automatically.
+6. **ClickUp gate:** a campaign ticket carrying the checkbox *"Community Brief
+   is up to date & accurate"* must have it checked before work routes to the
+   team (`CLICKUP_BRIEF_ATTEST_FIELD`). Tickets without the field are
+   unaffected.
+
+The more (and better) the inputs, the better the campaigns — capture →
+review → publish → feed Fluency → repeat.
+
+### Operational steps to go live
+- Set Render env **`APT_IQ_FLOOR_PLAN_SHEET_URL`** = the Apt IQ
+  `report_type=floor_plan` export URL.
+- Run the migration:
+  `python3 migrations/2026-05-27-community-brief-v2-properties.py` (dry-run
+  first).
+- Schedule the capture cron (daily):
+  `POST /api/internal/community-brief-capture-scan?async=1`.
+- (Optional) create the ClickUp checkbox field and set
+  `CLICKUP_BRIEF_ATTEST_FIELD` if its name differs from the default.
+- **Remaining front-end:** wire the HubSpot CMS `/accounts/property` detail
+  template to the two new endpoints so the structured editor renders there
+  (server side is done; the HubL/JS is the open piece).
+
+### Code added/changed in v2
+| Concern | File |
+|---|---|
+| New properties (idempotent) | `migrations/2026-05-27-community-brief-v2-properties.py` |
+| Field model + structured tables + internal flag | `webhook-server/community_brief.py` |
+| Auto-capture + AptIQ retry logic | `webhook-server/community_brief_capture.py` |
+| Capture scan endpoint + portal table rendering + attestation gate | `webhook-server/routes/property_brief.py` |
+| Apt IQ floor_plan report + amenity property/unit split | `webhook-server/services/fluency_ingestion/apt_iq_reader.py`, `apt_iq_csv_client.py` |
+| Emit split amenities + structured floorplans | `webhook-server/services/fluency_ingestion/tag_builder.py` |
+| Editable `/accounts/property` endpoints | `webhook-server/server.py` |
+| Publish-on-approval status | `webhook-server/property_brief.py` |
+| Attestation field config | `webhook-server/config.py`, `config.py` |
+| Tests | `tests/test_community_brief_capture.py`, `tests/test_property_brief.py` |

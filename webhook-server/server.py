@@ -5653,6 +5653,63 @@ def accounts_property_detail():
     })
 
 
+@app.route("/api/accounts/property/brief", methods=["GET", "OPTIONS"])
+def accounts_property_brief():
+    """Structured Community Brief render-context for the /accounts editor.
+
+    Returns the SAME section/row model the token-based approval portal uses
+    (community_brief.build_render_context), so the HubSpot CMS detail page can
+    render an identical, editable Community Brief keyed by company_id instead
+    of a one-off token. Auth mirrors the GET above (X-Portal-Email).
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = (request.args.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id is required"}), 400
+    import community_brief
+    props = community_brief.load_company_state(company_id)
+    if not props:
+        return jsonify({"error": "Company not found or no data"}), 404
+    return jsonify({
+        "company_id": company_id,
+        "property_name": props.get("name", ""),
+        "sections": community_brief.build_render_context(props),
+    })
+
+
+@app.route("/api/accounts/property/field", methods=["PATCH", "OPTIONS"])
+def accounts_property_field():
+    """Edit one Community Brief field on the HubSpot side, keyed by company_id.
+
+    The editable counterpart to /api/accounts/property. Writes to the field's
+    override property via community_brief.write_field (override-wins), so edits
+    here behave identically to the token-based approval portal and are picked
+    up by Fluency on the next daily sync. Auth: X-Portal-Email.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    payload = request.get_json(silent=True) or {}
+    company_id = (payload.get("company_id") or "").strip()
+    key = (payload.get("key") or "").strip()
+    value = payload.get("value")
+    if value is None:
+        value = ""
+    if not company_id or not key:
+        return jsonify({"error": "company_id and key are required"}), 400
+    import community_brief
+    ok, message = community_brief.write_field(company_id, key, str(value))
+    if not ok:
+        return jsonify({"error": message}), 400
+    return jsonify({"status": "ok", "value": message, "edited_by": email})
+
+
 # ─── Fluency tag sync (Track 2 of /accounts spec v3) ───────────────────────
 
 @app.route("/api/internal/fluency-tag-sync", methods=["POST", "OPTIONS"])
@@ -5915,6 +5972,15 @@ def fluency_tag_sync():
                 market_index=full_market_idx,
                 top_n=5,
             )
+
+            # Structured floorplans from the AptIQ floor_plan report (cached
+            # after the first lookup). build_tags emits fluency_floor_plans_json.
+            try:
+                e["apt_iq"]["floor_plans_struct"] = apt_iq_reader.read_floor_plans(
+                    e["apt_iq"]["property_id"])
+            except Exception as exc:
+                logger.warning("fluency-tag-sync: floor_plan read failed for %s: %s",
+                               e["apt_iq"].get("property_id"), exc)
 
             e["computed"] = build_tags(
                 e["apt_iq"],

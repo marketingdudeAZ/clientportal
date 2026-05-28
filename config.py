@@ -114,6 +114,12 @@ PROPERTY_BRIEF_PUBLIC_URL = os.getenv("PROPERTY_BRIEF_PUBLIC_URL") or os.getenv(
 # Default: never re-fire on updates (creation-only trigger).
 PROPERTY_BRIEF_REFIRE_FIELD = os.getenv("PROPERTY_BRIEF_REFIRE_FIELD", "rpm_brief_reprocess")
 
+# ClickUp checkbox attesting the Community Brief is current. When a campaign
+# ticket carries this field, it must be checked before automation proceeds
+# (the brief gate). Tickets WITHOUT the field are unaffected.
+CLICKUP_BRIEF_ATTEST_FIELD = os.getenv(
+    "CLICKUP_BRIEF_ATTEST_FIELD", "Community Brief is up to date & accurate")
+
 # --- Creatify Video Pipeline ---
 CREATIFY_API_ID  = os.getenv("CREATIFY_API_ID", "")
 CREATIFY_API_KEY = os.getenv("CREATIFY_API_KEY", "")

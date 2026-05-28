@@ -40,6 +40,41 @@ AMENITY_COLS = [
 
 FLOOR_PLAN_BUCKETS = ["Studio", "0BR", "1BR", "2BR", "3BR", "4BR"]
 
+# Classify each amenity column as a community/property-level amenity ("property")
+# or an in-unit feature ("unit"). Used to split the single amenity list into the
+# two buckets the Community Brief shows. Any column not listed defaults to
+# "property" (safer to surface as a shared amenity than to imply it's in-unit).
+AMENITY_CLASS = {
+    # Property / community-level
+    "24 Hour Maintenance": "property", "BBQ/Grill Area": "property",
+    "Bicycle Storage": "property", "Business Center": "property",
+    "Clubhouse/Lounge": "property", "Controlled Access": "property",
+    "EV Charging": "property", "Elevator": "property", "Fitness Center": "property",
+    "Gameroom": "property", "Laundry Facilities": "property",
+    "Online Payments": "property", "Package Service": "property",
+    "Pet Park": "property", "Playground": "property", "Pool": "property",
+    "Rooftop Space": "property", "Storage Space": "property",
+    # In-unit features
+    "Air Conditioning": "unit", "Balcony/Patio": "unit", "Carpet": "unit",
+    "Ceiling Fans": "unit", "Dishwasher": "unit", "Fireplace": "unit",
+    "Garbage Disposal": "unit", "Hardwood Floors": "unit", "High Ceilings": "unit",
+    "Kitchen Island": "unit", "Linen Closet": "unit", "Pantry": "unit",
+    "SS Appliances": "unit", "Smart Technology": "unit", "Stone Countertops": "unit",
+    "Tile": "unit", "Views": "unit", "Vinyl Flooring": "unit",
+    "Walk-In Closets": "unit", "Washer/Dryer": "unit", "Washer/Dryer Hookup": "unit",
+}
+
+
+def _classify_amenities(amenities: list[str]) -> tuple[list[str], list[str]]:
+    """Split a flat amenity list into (property_amenities, unit_features)."""
+    prop, unit = [], []
+    for a in amenities:
+        if AMENITY_CLASS.get(a, "property") == "unit":
+            unit.append(a)
+        else:
+            prop.append(a)
+    return prop, unit
+
 # CSV column name aliases — Apt IQ may name a column slightly differently
 # from our internal vocab. _resolve_col looks for any of these.
 COLUMN_ALIASES = {
@@ -172,6 +207,9 @@ def read_property(company: dict) -> dict:
     else:
         concession_text = ""
 
+    amenities_all = _extract_amenities(row)
+    prop_amen, unit_amen = _classify_amenities(amenities_all)
+
     return {
         "matched":           True,
         "property_id":       aptiq_id,
@@ -187,7 +225,44 @@ def read_property(company: dict) -> dict:
         "concession_value":  concession_value,
         "concession_text":   concession_text[:80] or None,
         "available_units":   _to_int(_resolve_col(row, "available_units")),
-        "amenities":         _extract_amenities(row),
+        "amenities":         amenities_all,
+        "property_amenities": prop_amen,
+        "unit_features":     unit_amen,
         "floor_plans":       _extract_floor_plans(row),
         "raw":               row,
     }
+
+
+def read_floor_plans(property_id: str) -> list[dict]:
+    """Return structured floor plans for a property from the floor_plan report.
+
+    Each item: {name, beds, baths, sqft, total_units, available}. Sorted by
+    bed count then name. Pricing (Avg Rent / NER) is intentionally EXCLUDED —
+    it stays in HubSpot-only pricing fields and never reaches Fluency.
+    """
+    pid = (property_id or "").strip()
+    if not pid:
+        return []
+    rows = apt_iq_csv_client.get_floor_plan_rows(pid)
+    out: list[dict] = []
+    seen: set[tuple] = set()
+    for row in rows:
+        name = (row.get("Floor Plan Name") or "").strip()
+        if not name:
+            continue
+        plan = {
+            "name":        name,
+            "beds":        _to_int(row.get("Beds")),
+            "baths":       _to_float(row.get("Baths")),
+            "sqft":        _to_int(row.get("Avg Sq Ft")),
+            "total_units": _to_int(row.get("Unit Mix: Total Units")),
+            "available":   _to_int(row.get("Available Units")),
+        }
+        # The export can repeat a plan verbatim — dedup on plan identity.
+        ident = (name, plan["beds"], plan["baths"], plan["sqft"])
+        if ident in seen:
+            continue
+        seen.add(ident)
+        out.append(plan)
+    out.sort(key=lambda r: ((r["beds"] if r["beds"] is not None else 99), r["name"]))
+    return out
