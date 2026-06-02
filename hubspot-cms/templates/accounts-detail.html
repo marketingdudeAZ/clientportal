@@ -85,6 +85,43 @@ textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-hei
 .tip{display:inline-block;font-size:12px;color:var(--ts);margin-top:4px;font-style:italic}
 .who{font-size:11px;color:var(--ts);margin-bottom:12px;padding:8px 12px;background:var(--ml);border-radius:6px}
 .who strong{color:var(--jd);font-weight:700}
+/* Section hint (small italic note under the section title) */
+.section .hint{font-size:12px;color:var(--ts);margin-top:-10px;margin-bottom:14px;font-style:italic}
+/* Tracking table */
+table.tracking{width:100%;border-collapse:collapse;font-size:13px}
+table.tracking th{text-align:left;font-size:11px;font-weight:700;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;padding:8px 10px;border-bottom:1px solid var(--bdl)}
+table.tracking td{padding:8px 10px;border-bottom:1px solid var(--bdl);vertical-align:middle}
+table.tracking td.src{font-weight:600;color:var(--tp);width:200px}
+table.tracking input{width:100%;padding:6px 8px;font:inherit;font-size:13px;border:1px solid var(--bd);border-radius:4px;background:var(--white);color:var(--tp)}
+table.tracking input:focus{border-color:var(--cu);outline:none}
+table.tracking input::placeholder{color:var(--tm);font-style:italic}
+.section-save{margin-top:14px;padding:8px 18px;background:var(--j1);color:var(--white);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.04em;text-transform:uppercase}
+.section-save:hover{background:var(--j2)}
+.section-save:disabled{opacity:.55;cursor:not-allowed}
+.section-msg{margin-left:12px;font-size:12px;font-weight:600}
+.section-msg.ok{color:var(--ok-tx)}
+.section-msg.no{color:var(--red)}
+/* Documents list */
+.docs-list{list-style:none;padding:0;margin:0 0 14px}
+.docs-list li{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bdl);border-radius:6px;margin-bottom:8px}
+.docs-list .label{font-weight:600;color:var(--tp);flex:0 0 200px;word-break:break-word}
+.docs-list .url{flex:1;color:var(--cu);text-decoration:none;font-size:13px;word-break:break-all}
+.docs-list .url:hover{text-decoration:underline}
+.docs-list .kind{font-size:11px;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;font-weight:700;background:var(--white);padding:3px 8px;border-radius:99px}
+.docs-list .rm{background:transparent;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0 4px;line-height:1}
+.docs-list .rm:hover{color:#8B2828}
+.docs-add{display:grid;grid-template-columns:1.2fr 2fr 1fr auto;gap:8px;align-items:center}
+.docs-add input{padding:8px 10px;font:inherit;font-size:13px;border:1px solid var(--bd);border-radius:5px}
+.docs-add input:focus{border-color:var(--cu);outline:none}
+.docs-add button{padding:8px 18px;background:var(--cu);color:var(--white);border:none;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.04em;text-transform:uppercase}
+.docs-add button:hover{background:var(--cul)}
+@media (max-width:700px){
+  table.tracking,table.tracking tbody,table.tracking tr,table.tracking td{display:block;width:100%}
+  table.tracking thead{display:none}
+  table.tracking td.src{padding-bottom:4px;font-size:11px;text-transform:uppercase;color:var(--ts)}
+  .docs-add{grid-template-columns:1fr}
+  .docs-list li{flex-wrap:wrap}
+}
 
 @media (max-width: 700px){
   dl.fields{grid-template-columns:1fr}
@@ -136,11 +173,13 @@ textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-hei
     return items.map(function(s){return '<span class="chip">' + esc(s) + '</span>';}).join('');
   }
 
-  // f = [label, hsKey, kind?, logicalKey?]
-  //   kind:   '' = text  |  'chips'  |  'textarea'
+  // f = [label, hsKey, kind?, logicalKey?, options?]
+  //   kind:   '' = text  |  'chips'  |  'textarea'  |  'dropdown'
   //   logicalKey: present = editable; absent = readonly.
+  //   options:    array of allowed values; only used when kind='dropdown'.
   function row(f, p){
     var label = f[0], hsKey = f[1], kind = f[2] || 'text', lk = f[3] || '';
+    var options = f[4] || null;
     var val = p[hsKey];
     var has = val !== null && val !== undefined && String(val).trim() !== '';
     var src = srcLabel(hsKey, val, !!lk);
@@ -158,7 +197,8 @@ textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-hei
     var ddBody;
     if (lk){
       var dataVal = esc(val == null ? '' : String(val));
-      ddBody = '<span class="editable" data-lk="' + esc(lk) + '" data-kind="' + esc(kind) + '" data-val="' + dataVal + '">' +
+      var optsAttr = options ? ' data-options="' + esc(JSON.stringify(options)) + '"' : '';
+      ddBody = '<span class="editable" data-lk="' + esc(lk) + '" data-kind="' + esc(kind) + '" data-val="' + dataVal + '"' + optsAttr + '>' +
                   inner +
                   '<span class="pencil" aria-hidden="true">✎</span>' +
                '</span>';
@@ -168,6 +208,91 @@ textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-hei
     return '<dt>' + esc(label) + '</dt>' +
            '<dd class="' + ddClass + '">' + ddBody + '</dd>' +
            '<dd class="source" data-src-for="' + esc(lk || hsKey) + '">' + esc(src) + '</dd>';
+  }
+
+  // ── Tracking & Attribution section ───────────────────────────────────
+  // Canonical 13 sources with default UTM values mirroring the brief approval portal.
+  var TRACKING_SOURCES = [
+    ['Brochure/Flyer',                'brochure',        'print'],
+    ['Bandit Signs',                  'bandit_sign',     'offline'],
+    ['Yelp',                          'yelp',            'referral'],
+    ['Zillow',                        'zillow',          'ils'],
+    ['Apple Maps',                    'apple_maps',      'maps'],
+    ['Banner',                        'banner',          'display'],
+    ['Corporate Website',             'corporate_site',  'referral'],
+    ['CoStar/Apartments.com',         'apartments_com',  'ils'],
+    ['Google Business Profile/Maps',  'google',          'gbp'],
+    ['Google Paid Search/PPC',        'google',          'cpc'],
+    ['Property Website',              'property_site',   'referral'],
+    ['Social Ads',                    'social',          'paid_social'],
+    ['Social Posting',                'social',          'organic_social'],
+  ];
+
+  function parseJSONList(s){
+    if (!s) return [];
+    try { var v = JSON.parse(s); return Array.isArray(v) ? v : []; }
+    catch (e) { return []; }
+  }
+
+  function defaultUtm(src, med){ return 'utm_source=' + src + '&utm_medium=' + med; }
+
+  function renderTracking(p){
+    var saved = parseJSONList(p.fluency_tracking_json);
+    var bySrc = {};
+    saved.forEach(function(r){ bySrc[(r.source || '').toLowerCase()] = r; });
+
+    var rows = TRACKING_SOURCES.map(function(s){
+      var src = s[0], utmSrc = s[1], utmMed = s[2];
+      var saved = bySrc[src.toLowerCase()] || {};
+      var num = saved.tracking_number || '';
+      var utm = saved.utm || defaultUtm(utmSrc, utmMed);
+      return '<tr>' +
+        '<td class="src">' + esc(src) + '</td>' +
+        '<td><input type="text" data-src="' + esc(src) + '" data-col="tracking_number" value="' + esc(num) + '" placeholder="e.g. 512-555-0100"></td>' +
+        '<td><input type="text" data-src="' + esc(src) + '" data-col="utm" value="' + esc(utm) + '"></td>' +
+      '</tr>';
+    }).join('');
+
+    return '<section class="section" id="sec-tracking">' +
+           '<h2>Tracking &amp; Attribution</h2>' +
+           '<div class="hint">Call-tracking number + UTM string per source. Powers attribution across paid + organic channels. One row per source.</div>' +
+           '<table class="tracking"><thead><tr><th>Source</th><th>Tracking Number</th><th>UTM</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+           '<button class="section-save" id="save-tracking">Save tracking &amp; UTMs</button>' +
+           '<span class="section-msg" id="msg-tracking"></span>' +
+           '</section>';
+  }
+
+  // ── Documents section ────────────────────────────────────────────────
+  var docsState = [];
+
+  function renderDocuments(p){
+    docsState = parseJSONList(p.rpm_brief_documents_json);
+    var items = docsState.map(function(d, i){
+      var kind = d.kind ? '<span class="kind">' + esc(d.kind) + '</span>' : '';
+      return '<li data-i="' + i + '">' +
+        '<span class="label">' + esc(d.label || d.url) + '</span>' +
+        '<a class="url" href="' + esc(d.url) + '" target="_blank" rel="noopener">' + esc(d.url) + '</a>' +
+        kind +
+        '<button class="rm" title="Remove" data-act="rm-doc" data-i="' + i + '">×</button>' +
+      '</li>';
+    }).join('');
+
+    var listHTML = items
+      ? '<ul class="docs-list">' + items + '</ul>'
+      : '<div class="hint" style="margin-bottom:14px;">No documents yet — add a pitch deck, RFP, or brand guide below.</div>';
+
+    return '<section class="section" id="sec-documents">' +
+           '<h2>Documents</h2>' +
+           '<div class="hint">Link any pitch deck, RFP, or brand guide so the whole brief lives in one place.</div>' +
+           listHTML +
+           '<div class="docs-add">' +
+             '<input type="text" id="doc-label" placeholder="Label (e.g. 2026 Pitch Deck)">' +
+             '<input type="text" id="doc-url"   placeholder="https://… link to the file">' +
+             '<input type="text" id="doc-kind"  placeholder="Kind (pitch_deck / rfp / brand_guide / other)">' +
+             '<button id="add-doc">Add</button>' +
+           '</div>' +
+           '<span class="section-msg" id="msg-documents"></span>' +
+           '</section>';
   }
 
   function section(title, fields, p, opts){
@@ -209,12 +334,14 @@ textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-hei
       ['NinjaCat System ID',     'ninjacat_system_id'],
     ], p);
 
-    // 2) Voice & Positioning — overrides editable
+    // 2) Voice & Positioning — overrides editable (with dropdowns for enums)
     html += section('Voice and Positioning', [
       ['Voice Tier (auto)',      'fluency_voice_tier'],
-      ['Voice Tier (Override)',  'fluency_voice_tier_override',          '', 'voice_tier'],
+      ['Voice Tier (Override)',  'fluency_voice_tier_override', 'dropdown', 'voice_tier',
+        ['value','standard','lifestyle','luxury']],
       ['Unit Noun (auto)',       'fluency_unit_noun'],
-      ['Unit Noun (Override)',   'fluency_unit_noun_override',           '', 'unit_noun'],
+      ['Unit Noun (Override)',   'fluency_unit_noun_override',  'dropdown', 'unit_noun',
+        ['apartment','townhome','loft','home','duplex']],
       ['Advertised Name',        'fluency_advertised_name_override',     '', 'advertised_name'],
       ['Short Name',             'fluency_short_name_override',          '', 'short_name'],
       ['Former Property Name',   'fluency_former_property_name',         '', 'former_property_name'],
@@ -235,10 +362,11 @@ textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-hei
       ['Typical Resident (lifestyle/needs)', 'fluency_target_resident', 'textarea', 'target_resident'],
     ], p, { callout: 'internal', banner: 'Internal context only — never used in ad copy (Fair Housing).' });
 
-    // 4) Lifecycle
+    // 4) Lifecycle (dropdown for the override)
     html += section('Lifecycle', [
       ['Lifecycle State (auto)',   'fluency_lifecycle_state'],
-      ['Lifecycle (Override)',     'fluency_lifecycle_state_override',  '', 'lifecycle_state'],
+      ['Lifecycle (Override)',     'fluency_lifecycle_state_override', 'dropdown', 'lifecycle_state',
+        ['pre_lease','lease_up','stabilized','renovated']],
       ['Year Built',               'fluency_year_built'],
       ['Year Renovated',           'fluency_year_renovated'],
     ], p);
@@ -307,6 +435,12 @@ textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-hei
       ['Client Expectations',          'fluency_client_expectations',         'textarea', 'client_expectations'],
     ], p);
 
+    // 11b) Tracking & Attribution (table)
+    html += renderTracking(p);
+
+    // 11c) Documents (pitch decks, RFPs, brand guides)
+    html += renderDocuments(p);
+
     // 12) Operations & Tech — all internal
     html += section('Operations & Tech — Internal', [
       ['Marketing Budget',         'fluency_marketing_budget',       '', 'marketing_budget'],
@@ -346,15 +480,119 @@ textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-hei
     wireEdits();
   }
 
-  // ── Inline edit ──────────────────────────────────────────────────────
+  // ── Inline edit + section save delegation ────────────────────────────
   function wireEdits(){
-    document.getElementById('root').addEventListener('click', function(e){
+    var root = document.getElementById('root');
+    root.addEventListener('click', function(e){
+      // Tracking-table save
+      if (e.target && e.target.id === 'save-tracking'){ saveTracking(); return; }
+      // Documents add
+      if (e.target && e.target.id === 'add-doc'){ addDocument(); return; }
+      // Documents remove
+      var rmBtn = e.target && e.target.closest && e.target.closest('[data-act="rm-doc"]');
+      if (rmBtn){ removeDocument(parseInt(rmBtn.dataset.i, 10)); return; }
+      // Inline cell edit
       var span = e.target.closest('.editable');
       if (!span || span.classList.contains('editing')) return;
-      // Don't start edit when clicking inside the active editor.
       if (e.target.closest('.edit-input,.edit-btn')) return;
       startEdit(span);
     });
+  }
+
+  // ── Tracking save: collect all rows, PATCH as JSON list ──────────────
+  function saveTracking(){
+    var btn = document.getElementById('save-tracking');
+    var msg = document.getElementById('msg-tracking');
+    var rows = [];
+    TRACKING_SOURCES.forEach(function(s){
+      var src = s[0];
+      var numEl = document.querySelector('table.tracking input[data-src="' + cssEsc(src) + '"][data-col="tracking_number"]');
+      var utmEl = document.querySelector('table.tracking input[data-src="' + cssEsc(src) + '"][data-col="utm"]');
+      rows.push({
+        source:          src,
+        tracking_number: numEl ? numEl.value.trim() : '',
+        utm:             utmEl ? utmEl.value.trim() : '',
+      });
+    });
+    btn.disabled = true; msg.className = 'section-msg'; msg.textContent = 'Saving…';
+    fetch(API_BASE + '/api/accounts/property/field', {
+      method:  'PATCH',
+      headers: {'Content-Type': 'application/json', 'X-Portal-Email': EMAIL},
+      body:    JSON.stringify({company_id: cid, key: 'tracking', value: JSON.stringify(rows)}),
+    })
+    .then(function(r){ return r.json().then(function(j){ return {ok: r.ok, status: r.status, data: j}; }); })
+    .then(function(res){
+      btn.disabled = false;
+      if (res.ok){
+        msg.className = 'section-msg ok'; msg.textContent = '✓ Saved';
+        setTimeout(function(){ msg.textContent = ''; }, 2500);
+      } else {
+        msg.className = 'section-msg no'; msg.textContent = (res.data && res.data.error) || ('Save failed (' + res.status + ')');
+      }
+    })
+    .catch(function(){
+      btn.disabled = false;
+      msg.className = 'section-msg no'; msg.textContent = 'Network error';
+    });
+  }
+
+  function cssEsc(s){ return String(s).replace(/(["'\\])/g, '\\$1'); }
+
+  // ── Documents: add/remove a row, persist as JSON list ────────────────
+  function addDocument(){
+    var label = document.getElementById('doc-label').value.trim();
+    var url   = document.getElementById('doc-url').value.trim();
+    var kind  = document.getElementById('doc-kind').value.trim();
+    if (!url){
+      var m = document.getElementById('msg-documents');
+      m.className = 'section-msg no'; m.textContent = 'URL is required';
+      return;
+    }
+    docsState.push({label: label || url, url: url, kind: kind});
+    persistDocs(function(ok){
+      if (ok) rerenderDocs();
+    });
+  }
+
+  function removeDocument(i){
+    if (i < 0 || i >= docsState.length) return;
+    docsState.splice(i, 1);
+    persistDocs(function(ok){ if (ok) rerenderDocs(); });
+  }
+
+  function persistDocs(cb){
+    var msg = document.getElementById('msg-documents');
+    msg.className = 'section-msg'; msg.textContent = 'Saving…';
+    fetch(API_BASE + '/api/accounts/property/field', {
+      method:  'PATCH',
+      headers: {'Content-Type': 'application/json', 'X-Portal-Email': EMAIL},
+      body:    JSON.stringify({company_id: cid, key: 'documents', value: JSON.stringify(docsState)}),
+    })
+    .then(function(r){ return r.json().then(function(j){ return {ok: r.ok, status: r.status, data: j}; }); })
+    .then(function(res){
+      if (res.ok){
+        msg.className = 'section-msg ok'; msg.textContent = '✓ Saved';
+        setTimeout(function(){ msg.textContent = ''; }, 2000);
+        cb(true);
+      } else {
+        msg.className = 'section-msg no'; msg.textContent = (res.data && res.data.error) || ('Save failed (' + res.status + ')');
+        cb(false);
+      }
+    })
+    .catch(function(){
+      msg.className = 'section-msg no'; msg.textContent = 'Network error';
+      cb(false);
+    });
+  }
+
+  function rerenderDocs(){
+    var newHTML = renderDocuments({rpm_brief_documents_json: JSON.stringify(docsState)});
+    var oldSec = document.getElementById('sec-documents');
+    if (oldSec){
+      var tmp = document.createElement('div');
+      tmp.innerHTML = newHTML;
+      oldSec.parentNode.replaceChild(tmp.firstChild, oldSec);
+    }
   }
 
   function startEdit(span){
@@ -366,14 +604,31 @@ textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-hei
     span.innerHTML = '';
 
     var input;
-    if (kind === 'textarea' || kind === 'chips'){
+    if (kind === 'dropdown'){
+      input = document.createElement('select');
+      input.className = 'edit-input';
+      var opts = [];
+      try { opts = JSON.parse(span.dataset.options || '[]'); } catch(e){ opts = []; }
+      // Empty option = "clear the override"
+      var blank = document.createElement('option');
+      blank.value = ''; blank.textContent = '— clear —';
+      input.appendChild(blank);
+      opts.forEach(function(o){
+        var op = document.createElement('option');
+        op.value = o; op.textContent = o;
+        if (o === val) op.selected = true;
+        input.appendChild(op);
+      });
+    } else if (kind === 'textarea' || kind === 'chips'){
       input = document.createElement('textarea');
+      input.className = 'edit-input';
+      input.value = val;
     } else {
       input = document.createElement('input');
       input.type = 'text';
+      input.className = 'edit-input';
+      input.value = val;
     }
-    input.className = 'edit-input';
-    input.value = val;
     span.appendChild(input);
 
     var btnRow = document.createElement('div');
