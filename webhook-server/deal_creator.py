@@ -61,6 +61,15 @@ CHANNEL_SKU_MAP = {
     "management_fee":  "Management_Fee",
 }
 
+# Channel → HubSpot product id for that channel's ONE-TIME setup fee. When a
+# selection carries setup > 0 and the channel is mapped here, the setup line
+# item references the real catalog product (e.g. "Email Drip Campaign Setup",
+# $225) instead of an ad-hoc named line item. Channels not listed fall back
+# to a named "<channel> — Setup Fee" line item.
+SETUP_PRODUCT_MAP = {
+    "email_drip": "2948989326",  # Email Drip Campaign Setup
+}
+
 
 def create_deal_with_line_items(
     company_id: str,
@@ -187,14 +196,24 @@ def create_deal_with_line_items(
         setup_amount = float(sel.get("setup") or 0)
         if setup_amount <= 0:
             continue
-        setup_props = {
-            "name":     f"{channel} — Setup Fee",
-            "quantity": "1",
-            "price":    str(setup_amount),
-        }
-        sku = CHANNEL_SKU_MAP.get(channel)
-        if sku:
-            setup_props["hs_sku"] = sku
+        setup_pid = SETUP_PRODUCT_MAP.get(channel)
+        if setup_pid:
+            # Real catalog setup product — HubSpot fills name/SKU from it.
+            setup_props = {
+                "hs_product_id": setup_pid,
+                "quantity":      "1",
+                "price":         str(setup_amount),
+            }
+        else:
+            # No setup product mapped — ad-hoc named one-time line item.
+            setup_props = {
+                "name":     f"{channel} — Setup Fee",
+                "quantity": "1",
+                "price":    str(setup_amount),
+            }
+            sku = CHANNEL_SKU_MAP.get(channel)
+            if sku:
+                setup_props["hs_sku"] = sku
         si_resp = requests.post(
             f"{API_BASE}/crm/v3/objects/line_items",
             headers=HEADERS,

@@ -53,6 +53,8 @@ def _task(**overrides):
         "name": "Maple Court — New Property Brief",
         "url":  "https://app.clickup.com/t/abc123",
         "description": "New property launching Q3 in Austin.",
+        # Intake-ready status — the automation triggers on "to vet".
+        "status": {"status": "to vet", "type": "custom"},
         "assignees": [
             {"id": 999, "username": "Test AM", "email": "am@rpmliving.com"},
         ],
@@ -294,16 +296,71 @@ class TestTypedCustomFieldLookup(unittest.TestCase):
 
 
 class TestShouldFire(unittest.TestCase):
-    def test_creation_always_fires(self):
+    def test_creation_in_trigger_status_fires(self):
+        # _task() defaults to the "to vet" status.
         self.assertTrue(property_brief.should_fire({"event": "taskCreated"}, _task()))
 
-    def test_update_without_flag_does_not_fire(self):
-        self.assertFalse(property_brief.should_fire({"event": "taskUpdated"}, _task()))
+    def test_status_change_into_to_vet_fires(self):
+        # Ticket created elsewhere, moved to "to vet" — the status-change
+        # event must trigger the automation.
+        task = _task(status={"status": "to vet"})
+        self.assertTrue(property_brief.should_fire({"event": "taskStatusUpdated"}, task))
 
-    def test_update_with_reprocess_flag_fires(self):
-        task = _task()
+    def test_creation_in_other_status_does_not_fire(self):
+        # A genuine intake ticket that isn't vetted yet should wait.
+        task = _task(status={"status": "backlog"})
+        self.assertFalse(property_brief.should_fire({"event": "taskCreated"}, task))
+
+    def test_update_in_other_status_without_flag_does_not_fire(self):
+        task = _task(status={"status": "in progress"})
+        self.assertFalse(property_brief.should_fire({"event": "taskUpdated"}, task))
+
+    def test_update_with_reprocess_flag_fires_from_any_status(self):
+        task = _task(status={"status": "in progress"})
         task["custom_fields"].append({"name": "rpm_brief_reprocess", "value": True})
         self.assertTrue(property_brief.should_fire({"event": "taskUpdated"}, task))
+
+    def test_subtask_does_not_fire(self):
+        # A checklist subtask carries a `parent` — it must never spawn a deal,
+        # even on creation and even though it inherits the list's intake fields.
+        task = _task(parent="parent-ticket-123")
+        self.assertFalse(property_brief.should_fire({"event": "taskCreated"}, task))
+
+    def test_task_without_intake_fields_does_not_fire(self):
+        # An onboarding checklist task ("Account Set Up") with no populated
+        # intake field is not an intake ticket.
+        task = _task(name="Account Set Up", custom_fields=[])
+        self.assertFalse(property_brief.should_fire({"event": "taskCreated"}, task))
+
+    def test_intake_fields_present_but_empty_does_not_fire(self):
+        # Same-list checklist task: intake fields exist but are blank.
+        task = _task(custom_fields=[
+            {"name": "RM Email", "value": ""},
+            {"name": "Selections", "value": ""},
+        ])
+        self.assertFalse(property_brief.should_fire({"event": "taskCreated"}, task))
+
+    def test_channel_selection_alone_counts_as_intake(self):
+        # A ticket that only filled channel fields (no RM email yet) still fires.
+        task = _task(custom_fields=[
+            {"name": "Paid Search", "type": "currency", "value": "750"},
+        ])
+        self.assertTrue(property_brief.should_fire({"event": "taskCreated"}, task))
+
+    def test_in_intake_list_fires_even_without_signature_fields(self):
+        # Real-world shape: channels are subtasks, parent has brief-style
+        # fields, none of our signature names. Membership in the configured
+        # intake list must be enough to fire.
+        with mock.patch.dict("config.CLICKUP_LISTS",
+                             {"property_brief": "901112045284"}):
+            task = _task(custom_fields=[], list={"id": "901112045284"})
+            self.assertTrue(property_brief.should_fire({"event": "taskCreated"}, task))
+
+    def test_task_in_other_list_does_not_fire(self):
+        with mock.patch.dict("config.CLICKUP_LISTS",
+                             {"property_brief": "901112045284"}):
+            task = _task(list={"id": "999999999"})  # different list
+            self.assertFalse(property_brief.should_fire({"event": "taskCreated"}, task))
 
 
 # ── 2. Brief store ─────────────────────────────────────────────────────────
@@ -385,11 +442,16 @@ class TestCommercialPath(unittest.TestCase):
             "id": "company-7", "name": "Maple Court", "domain": "maplecourtaustin.com",
         }
 
+        import product_catalog as _product_catalog
+
         def _import(name):
             return {
                 "deal_creator":     self.deal_creator,
                 "quote_generator":  self.quote_generator,
                 "brief_ai_drafter": self.drafter,
+                # Real module — run_commercial_path uses it to compute the
+                # deal totals it reports back to ClickUp.
+                "product_catalog":  _product_catalog,
             }[name]
 
         self._patcher = mock.patch.object(property_brief, "_import", side_effect=_import)

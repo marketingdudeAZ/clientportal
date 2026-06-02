@@ -98,6 +98,24 @@ CLICKUP_BRIEF_STATUSES = {
 CLICKUP_WEBHOOK_SECRET = os.getenv("CLICKUP_WEBHOOK_SECRET", "")
 HUBSPOT_QUOTE_WEBHOOK_SECRET = os.getenv("HUBSPOT_QUOTE_WEBHOOK_SECRET", "")
 
+# ClickUp status that means "this intake ticket is ready — create the
+# deal/quote/brief". The automation fires when a ticket is created in, or
+# moves into, one of these statuses. Comma-separated, case-insensitive.
+CLICKUP_INTAKE_STATUSES = [
+    s.strip().lower()
+    for s in os.getenv("CLICKUP_INTAKE_STATUS", "to vet").split(",")
+    if s.strip()
+]
+
+# HubSpot quote template pinned on every auto-generated quote so the AM
+# doesn't see "Your template is no longer available" in the editor. This
+# MUST be a quote_template object id that exists in the portal — a stale
+# id produces exactly that error. Set HUBSPOT_QUOTE_TEMPLATE_ID to the
+# current "Marketing Services Insertion Order" template id. Leave empty
+# to skip pinning entirely (the editor falls back to the portal default
+# and the AM picks the template manually).
+HUBSPOT_QUOTE_TEMPLATE_ID = os.getenv("HUBSPOT_QUOTE_TEMPLATE_ID", "472873408612")
+
 # --- Property Brief Automation ---
 # Token-gated approval portal. Tokens are unguessable and consumed once a
 # decision is captured (see property_brief_store.py).
