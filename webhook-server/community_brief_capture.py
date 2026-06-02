@@ -27,7 +27,15 @@ from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
+# Legacy single-status constant. Kept because tests + a couple of
+# downstream callers reference it; the actual gate is now inclusive
+# of every PLE status except the ones in EXCLUDED_PLE_STATUSES.
 RPM_MANAGED_STATUS = "RPM Managed"
+
+# Capture is in-scope for ANY company with a deal whose PLE status is
+# NOT one of these. Aligns with the /accounts table source of truth.
+EXCLUDED_PLE_STATUSES = {"Disposition Complete", "Management Not Awarded"}
+
 APTIQ_RETRY_WINDOW_DAYS = 30
 _DAY_MS = 86_400_000
 
@@ -269,13 +277,21 @@ def fetch_rpm_managed_companies() -> list[dict]:
         "rpm_brief_status", "rpm_brief_approval_url",
         "aptiq_match_status", "aptiq_first_attempt_at",
         "aptiq_last_attempt_at", "aptiq_match_attempts",
+        "num_associated_deals",
     ]
     out: list[dict] = []
     after = None
+    # Inclusion via NOT-IN gives us every active PLE status (RPM Managed,
+    # Dispositioning, Onboarding, none) AND any future-added status —
+    # matches the /accounts table scope.
     while True:
         payload = {
             "filterGroups": [{"filters": [
-                {"propertyName": "plestatus", "operator": "EQ", "value": RPM_MANAGED_STATUS},
+                {"propertyName": "plestatus",
+                 "operator": "NOT_IN",
+                 "values": list(EXCLUDED_PLE_STATUSES)},
+                {"propertyName": "num_associated_deals",
+                 "operator": "GTE", "value": "1"},
             ]}],
             "properties": props,
             "limit": 100,
@@ -316,10 +332,16 @@ def run_scan(companies: list[dict], *, deps: CaptureDeps | None = None,
     in the set (intersected with the RPM Managed filter).
     """
     deps = (deps or CaptureDeps()).resolve()
-    targets = [c for c in companies
-               if (c.get("props", {}).get("plestatus") or c.get("plestatus") or "").strip()
-               == RPM_MANAGED_STATUS or "plestatus" not in (c.get("props") or {})]
-    # If callers already filtered, the filter above is a no-op safety net.
+    # Safety-net filter (the search-side already filtered): keep any company
+    # whose plestatus isn't in EXCLUDED_PLE_STATUSES. Empty/missing plestatus
+    # is allowed (a new, unclassified company with a deal).
+    targets = []
+    for c in companies:
+        props = c.get("props") or {}
+        status = (props.get("plestatus") or c.get("plestatus") or "").strip()
+        if status in EXCLUDED_PLE_STATUSES:
+            continue
+        targets.append(c)
     if company_ids:
         targets = [c for c in targets if str(c.get("id") or "") in company_ids]
     if limit:

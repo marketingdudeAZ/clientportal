@@ -26,6 +26,17 @@ HS_HDRS = {
     "Content-Type": "application/json",
 }
 
+# Inclusion is exclusion-based now: every PLE status is in scope EXCEPT
+# "Disposition Complete" (and "Management Not Awarded" — properties that
+# never came on). This matches the /accounts table's intent: every
+# property we have a deal for, alive or wrapping up, but not finished.
+# "(none)" / empty plestatus is allowed in case a new company hasn't
+# been classified yet (still has a deal).
+EXCLUDED_PLE_STATUSES = {"Disposition Complete", "Management Not Awarded"}
+
+# Kept for back-compat with downstream callers that read this list; it
+# is no longer used to filter — only EXCLUDED_PLE_STATUSES gates the
+# build. Will be removed in a follow-up after callers are updated.
 PLE_STATUSES = ["RPM Managed", "Dispositioning", "Onboarding"]
 
 # HubSpot SKU → column key returned in each row
@@ -266,8 +277,12 @@ def _get_managed_companies() -> list[dict]:
     """
     companies: list[dict] = []
     after = None
+    # Pull num_associated_deals so we can require ≥1 deal (matches the
+    # "companies with a deal" intent of the /accounts table). Properties
+    # with no deal aren't billable / managed surface — exclude them.
     props = ["name", "rpmmarket", "marketing_manager",
-             "marketing_manager_email", "plestatus"]
+             "marketing_manager_email", "plestatus",
+             "num_associated_deals"]
 
     for _ in range(50):  # safety: max 5,000 companies
         params = {
@@ -290,8 +305,17 @@ def _get_managed_companies() -> list[dict]:
         data = r.json()
         for c in data.get("results", []):
             cp = c.get("properties", {})
-            status = cp.get("plestatus", "")
-            if status not in PLE_STATUSES:
+            status = (cp.get("plestatus") or "").strip()
+            # Exclude finished / never-active properties.
+            if status in EXCLUDED_PLE_STATUSES:
+                continue
+            # Require at least one associated deal — every row in the
+            # /accounts table represents a deal.
+            try:
+                num_deals = int(cp.get("num_associated_deals") or 0)
+            except (TypeError, ValueError):
+                num_deals = 0
+            if num_deals < 1:
                 continue
             companies.append({
                 "id":         c["id"],
@@ -305,7 +329,9 @@ def _get_managed_companies() -> list[dict]:
         if not after:
             break
 
-    logger.info("_get_managed_companies: %d companies after client-side plestatus filter", len(companies))
+    logger.info("_get_managed_companies: %d companies after exclusion filter "
+                "(excluded: %s; required ≥1 deal)",
+                len(companies), sorted(EXCLUDED_PLE_STATUSES))
     return companies
 
 
