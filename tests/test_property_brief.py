@@ -53,6 +53,8 @@ def _task(**overrides):
         "name": "Maple Court — New Property Brief",
         "url":  "https://app.clickup.com/t/abc123",
         "description": "New property launching Q3 in Austin.",
+        # Intake-ready status — the automation triggers on "to vet".
+        "status": {"status": "to vet", "type": "custom"},
         "assignees": [
             {"id": 999, "username": "Test AM", "email": "am@rpmliving.com"},
         ],
@@ -294,14 +296,27 @@ class TestTypedCustomFieldLookup(unittest.TestCase):
 
 
 class TestShouldFire(unittest.TestCase):
-    def test_creation_always_fires(self):
+    def test_creation_in_trigger_status_fires(self):
+        # _task() defaults to the "to vet" status.
         self.assertTrue(property_brief.should_fire({"event": "taskCreated"}, _task()))
 
-    def test_update_without_flag_does_not_fire(self):
-        self.assertFalse(property_brief.should_fire({"event": "taskUpdated"}, _task()))
+    def test_status_change_into_to_vet_fires(self):
+        # Ticket created elsewhere, moved to "to vet" — the status-change
+        # event must trigger the automation.
+        task = _task(status={"status": "to vet"})
+        self.assertTrue(property_brief.should_fire({"event": "taskStatusUpdated"}, task))
 
-    def test_update_with_reprocess_flag_fires(self):
-        task = _task()
+    def test_creation_in_other_status_does_not_fire(self):
+        # A genuine intake ticket that isn't vetted yet should wait.
+        task = _task(status={"status": "backlog"})
+        self.assertFalse(property_brief.should_fire({"event": "taskCreated"}, task))
+
+    def test_update_in_other_status_without_flag_does_not_fire(self):
+        task = _task(status={"status": "in progress"})
+        self.assertFalse(property_brief.should_fire({"event": "taskUpdated"}, task))
+
+    def test_update_with_reprocess_flag_fires_from_any_status(self):
+        task = _task(status={"status": "in progress"})
         task["custom_fields"].append({"name": "rpm_brief_reprocess", "value": True})
         self.assertTrue(property_brief.should_fire({"event": "taskUpdated"}, task))
 

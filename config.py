@@ -98,6 +98,15 @@ CLICKUP_BRIEF_STATUSES = {
 CLICKUP_WEBHOOK_SECRET = os.getenv("CLICKUP_WEBHOOK_SECRET", "")
 HUBSPOT_QUOTE_WEBHOOK_SECRET = os.getenv("HUBSPOT_QUOTE_WEBHOOK_SECRET", "")
 
+# ClickUp status that means "this intake ticket is ready — create the
+# deal/quote/brief". The automation fires when a ticket is created in, or
+# moves into, one of these statuses. Comma-separated, case-insensitive.
+CLICKUP_INTAKE_STATUSES = [
+    s.strip().lower()
+    for s in os.getenv("CLICKUP_INTAKE_STATUS", "to vet").split(",")
+    if s.strip()
+]
+
 # HubSpot quote template pinned on every auto-generated quote so the AM
 # doesn't see "Your template is no longer available" in the editor. Must be
 # a quote_template object id that currently exists in the portal — a stale

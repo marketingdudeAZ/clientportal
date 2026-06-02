@@ -52,6 +52,7 @@ import clickup_client
 import property_brief_store as store
 from config import (
     CLICKUP_BRIEF_STATUSES,
+    CLICKUP_INTAKE_STATUSES,
     PROPERTY_BRIEF_FAILURE_CHANNEL,
     PROPERTY_BRIEF_MAX_REVISIONS,
     PROPERTY_BRIEF_PUBLIC_URL,
@@ -360,25 +361,50 @@ def _extract_rpm_selections(task: dict[str, Any]) -> dict[str, dict]:
 def should_fire(event: dict[str, Any], task: dict[str, Any]) -> bool:
     """Return True if this ClickUp event should trigger the workflow.
 
-    Rules:
-      - Fire on `taskCreated` ONLY for a genuine intake ticket (see
-        `is_intake_ticket`). This is the fix for the runaway-deals bug:
-        the webhook was firing on every task created in the workspace,
-        so each onboarding checklist task/subtask (Account Set Up, IO
-        Signed, Heatmaps, …) spawned its own deal + quote. Gating on the
-        intake signature stops the checklist from minting deals.
-      - On `taskUpdated`, fire only when the configured re-process flag
-        flips to a truthy value AND the task is still an intake ticket.
-        Anything else is a no-op so editing a description doesn't re-bill
-        the LLM and re-create deals.
+    Trigger model (per RPM's workflow): the automation runs when an intake
+    ticket is in the "To Vet" status — i.e. an AM has marked it ready. It
+    fires whether the ticket was created directly in that status OR moved
+    into it via a status change, so a ticket that lands in another status
+    first and gets vetted later is still picked up.
+
+    Two preconditions, then the status check:
+      1. `is_intake_ticket` — must be a non-subtask in the intake list (kills
+         the runaway-deals bug where every checklist subtask minted a deal).
+      2. Status — the ticket must be in one of CLICKUP_INTAKE_STATUSES,
+         unless the manual re-process flag is flipped (an explicit re-fire
+         from any status). Idempotency downstream (brief store + in-flight
+         mutex + existing-deal reuse) keeps repeat events from duplicating.
     """
+    if not is_intake_ticket(task):
+        return False
+
     event_type = (event.get("event") or "").lower()
-    if event_type in ("taskcreated", "task_created"):
-        return is_intake_ticket(task)
+
+    # Manual re-fire override: flip the reprocess flag on an update to
+    # re-run from any status (e.g. after fixing ticket data).
     if event_type in ("taskupdated", "task_updated"):
-        flag = clickup_client.custom_field_value(task, PROPERTY_BRIEF_REFIRE_FIELD)
-        return _truthy(flag) and is_intake_ticket(task)
+        if _truthy(clickup_client.custom_field_value(task, PROPERTY_BRIEF_REFIRE_FIELD)):
+            return True
+
+    # Primary trigger: the ticket is in an intake-ready status.
+    if _ticket_in_trigger_status(task):
+        return True
+
+    logger.info("Skip ticket %s: status %r is not an intake trigger status %s",
+                task.get("id"), _ticket_status_name(task), CLICKUP_INTAKE_STATUSES)
     return False
+
+
+def _ticket_status_name(task: dict[str, Any]) -> str:
+    """Current ClickUp status name, lowercased. Handles dict + string shapes."""
+    st = task.get("status")
+    if isinstance(st, dict):
+        return (st.get("status") or "").strip().lower()
+    return str(st or "").strip().lower()
+
+
+def _ticket_in_trigger_status(task: dict[str, Any]) -> bool:
+    return bool(CLICKUP_INTAKE_STATUSES) and _ticket_status_name(task) in CLICKUP_INTAKE_STATUSES
 
 
 def is_intake_ticket(task: dict[str, Any]) -> bool:
