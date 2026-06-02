@@ -18,6 +18,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import threading
 
 from flask import Blueprint, jsonify, render_template_string, request
@@ -839,6 +840,14 @@ def submit_approval_legacy(token):
 @property_brief_bp.route("/api/internal/community-brief-capture-scan",
                          methods=["POST", "GET"])
 def community_brief_capture_scan():
+    # Internal server-to-server endpoint — same shared-secret gate as the
+    # other /api/internal/* routes. Without this it ran unauthenticated,
+    # exposing RPM-managed company data and letting anyone trigger a
+    # capture scan that writes fluency_* overrides.
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+
     import community_brief_capture as cap
     args = request.args
     dry_run = (args.get("dry_run") or "").lower() in ("1", "true", "yes")
