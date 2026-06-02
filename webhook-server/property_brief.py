@@ -384,37 +384,55 @@ def should_fire(event: dict[str, Any], task: dict[str, Any]) -> bool:
 def is_intake_ticket(task: dict[str, Any]) -> bool:
     """Return True when a ClickUp task is a real property-brief intake ticket.
 
-    Three independent gates, applied because the test team wasn't sure how
-    the onboarding checklist items get spawned (subtasks vs. tasks in
-    another list). Any one of them tripping is enough to reject:
+    Ordered gates (each logs WHY it rejected so a missed ticket is
+    diagnosable from the server log):
 
-      1. Subtasks never trigger. A task with a `parent` is part of a
-         checklist under the intake ticket, not the intake ticket itself.
-      2. If an intake list is configured (CLICKUP_LIST_PROPERTY_BRIEF),
-         the task must live in it. Tasks in an onboarding list are out.
-      3. The task must carry the intake-form signature — at least one
-         intake field populated with a real value. ClickUp custom fields
-         are list-level, so a checklist task sharing the intake list still
-         has these fields, but EMPTY; requiring a value (not just the
-         field's presence) filters those out.
+      1. Subtasks never trigger. A task with a `parent` is part of the
+         checklist under the intake ticket (the channels + ClickBot tasks),
+         not the intake ticket itself. This alone kills the duplicate-deal
+         bug, since those were all subtasks.
+      2. If an intake list is configured (CLICKUP_LIST_PROPERTY_BRIEF) AND
+         the task's list id is visible, membership is AUTHORITATIVE: a
+         non-subtask in the intake list IS an intake ticket — we do NOT
+         also demand specific custom-field names, because the intake form's
+         field layout varies (channels can live in subtasks, RM/RVP fields
+         can be named differently). In-list => fire; other-list => skip.
+      3. Fallback only — no intake list configured, or its id wasn't in the
+         payload: require the intake-form signature (≥1 populated intake
+         field) so we don't fire on arbitrary tasks.
     """
     if not task:
         return False
 
+    ticket_id = task.get("id")
+
     # Gate 1 — subtasks.
     if task.get("parent"):
+        logger.info("Skip ticket %s: it's a subtask (parent=%s)",
+                    ticket_id, task.get("parent"))
         return False
 
-    # Gate 2 — intake list, only when configured.
     from config import CLICKUP_LISTS
     intake_list = str(CLICKUP_LISTS.get("property_brief") or "").strip()
-    if intake_list:
-        task_list_id = str(((task.get("list") or {}).get("id")) or "").strip()
-        if task_list_id and task_list_id != intake_list:
-            return False
+    task_list_id = str(((task.get("list") or {}).get("id")) or "").strip()
 
-    # Gate 3 — intake signature.
-    return _has_intake_signature(task)
+    # Gate 2 — intake-list membership is authoritative when both are known.
+    if intake_list and task_list_id:
+        if task_list_id == intake_list:
+            return True
+        logger.info("Skip ticket %s: in list %s, not the intake list %s",
+                    ticket_id, task_list_id, intake_list)
+        return False
+
+    # Gate 3 — fallback signature heuristic.
+    if _has_intake_signature(task):
+        return True
+    logger.info(
+        "Skip ticket %s: not matched to intake list %r (task list id=%r) "
+        "and no intake-form field is populated",
+        ticket_id, intake_list or "(unset)", task_list_id or "(absent)",
+    )
+    return False
 
 
 # Intake-form fields whose presence-with-a-value marks a task as a real

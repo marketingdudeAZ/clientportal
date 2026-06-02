@@ -332,6 +332,21 @@ class TestShouldFire(unittest.TestCase):
         ])
         self.assertTrue(property_brief.should_fire({"event": "taskCreated"}, task))
 
+    def test_in_intake_list_fires_even_without_signature_fields(self):
+        # Real-world shape: channels are subtasks, parent has brief-style
+        # fields, none of our signature names. Membership in the configured
+        # intake list must be enough to fire.
+        with mock.patch.dict("config.CLICKUP_LISTS",
+                             {"property_brief": "901112045284"}):
+            task = _task(custom_fields=[], list={"id": "901112045284"})
+            self.assertTrue(property_brief.should_fire({"event": "taskCreated"}, task))
+
+    def test_task_in_other_list_does_not_fire(self):
+        with mock.patch.dict("config.CLICKUP_LISTS",
+                             {"property_brief": "901112045284"}):
+            task = _task(list={"id": "999999999"})  # different list
+            self.assertFalse(property_brief.should_fire({"event": "taskCreated"}, task))
+
 
 # ── 2. Brief store ─────────────────────────────────────────────────────────
 
