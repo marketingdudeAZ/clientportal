@@ -5603,6 +5603,39 @@ _ACCOUNTS_DETAIL_PROPERTIES = [
     "fluency_nearby_neighborhoods_override", "fluency_landmarks_override",
     "fluency_nearby_employers_override", "fluency_advertised_name_override",
     "fluency_short_name_override",
+    # ── Community Brief v2 fields (2026-05) ─────────────────────────────
+    # Amenities split (property vs in-unit)
+    "fluency_property_amenities", "fluency_property_amenities_override",
+    "fluency_unit_features", "fluency_unit_features_override",
+    # Floor plans (structured JSON from Apt IQ)
+    "fluency_floor_plans_json", "fluency_floor_plans_override",
+    # Geography v2 (In/Near/Close-To/Highlights)
+    "fluency_neighborhood_highlights", "fluency_neighborhood_highlights_override",
+    # Voice & Positioning v2
+    "fluency_former_property_name",
+    # Brand & Story (all editable, all from questionnaire)
+    "fluency_taglines", "fluency_brand_adjectives", "fluency_differentiators",
+    "fluency_selling_points", "fluency_residents_love", "fluency_residents_dislike",
+    "fluency_target_resident",
+    # Strategy & Goals
+    "fluency_goals", "fluency_initiatives", "fluency_challenges", "fluency_priorities",
+    "fluency_onsite_developments", "fluency_local_partnerships", "fluency_onsite_events",
+    "fluency_website_priorities",
+    # Guardrails v2
+    "fluency_excluded_neighborhoods", "fluency_client_expectations",
+    # Operations & Tech (internal)
+    "fluency_marketing_budget", "fluency_pms", "fluency_cms", "fluency_chatbot",
+    "fluency_website_last_updated", "fluency_building_style", "fluency_asset_class",
+    "fluency_elise_ai", "fluency_crm", "fluency_host_name",
+    # Tracking + documents
+    "fluency_tracking_json", "rpm_brief_documents_json",
+    # Brief lifecycle metadata
+    "rpm_brief_status", "rpm_brief_approval_url", "rpm_brief_captured_at",
+    "rpm_brief_source", "rpm_brief_approved_by", "rpm_brief_approved_at",
+    "rpm_brief_url", "rpm_brief_revision_count",
+    # AptIQ match status
+    "aptiq_match_status", "aptiq_first_attempt_at", "aptiq_last_attempt_at",
+    "aptiq_match_attempts",
 ]
 
 

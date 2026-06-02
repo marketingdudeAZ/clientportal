@@ -3,12 +3,11 @@
   label: RPM Accounts — Property Detail
   isAvailableForNewContent: true
 -->
-{# PRODUCTION: /accounts/property detail page (Track 1 of RPM_accounts_Build_Spec_v3.md) #}
-{# v1 deviation from spec section 2.5: company id is read from ?company_id= query
-   string instead of a path parameter. Same UX, no HubSpot dynamic-page CRM-object
-   binding required. Future: swap to /accounts/property/{companyId} once the page
-   is set up as a dynamic page in HubSpot UI.
-#}
+{# PRODUCTION: /accounts/property detail page #}
+{# v2 (2026-05): inline-edit on every override field. Clients log in via the
+   portal, click any editable cell, type, save — writes to the matching
+   fluency_*_override (community_brief.write_field). Override-wins on the
+   next daily Fluency sync. CSS-only affordance: hover row → pencil shows. #}
 <!doctype html><html lang="en"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -23,6 +22,7 @@
   --sage:#8FA68E;--mint:#CDE3E0;--ml:#E8F4F2;
   --red:#C94444;--amb:#D4910A;--amb-bg:#FEF7E6;--amb-bd:#F5D58F;
   --rose:#FFF0F0;--rose-bd:#F2C8C8;
+  --ok:#DEFCE9;--ok-bd:#A5DAB9;--ok-tx:#1F6F3D;
   --white:#fff;--bg:#F0F2F5;
   --tp:#1F2937;--ts:#6B7280;--tm:#9CA3AF;
   --bd:#E5E7EB;--bdl:#F3F4F6;
@@ -42,6 +42,9 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 .callout-warning{border:1.5px solid var(--amb-bd);background:var(--amb-bg)}
 .callout-warning .callout-banner{display:flex;align-items:center;gap:8px;background:var(--amb);color:var(--white);padding:8px 16px;margin:-22px -28px 16px -28px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;border-radius:var(--r) var(--r) 0 0}
 .callout-warning .callout-banner::before{content:'⚠'}
+.callout-internal{border:1.5px solid var(--bd);background:#FAFAFA}
+.callout-internal .callout-banner{display:flex;align-items:center;gap:8px;background:var(--j);color:var(--white);padding:8px 16px;margin:-22px -28px 16px -28px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;border-radius:var(--r) var(--r) 0 0}
+.callout-internal .callout-banner::before{content:'🔒'}
 dl.fields{display:grid;grid-template-columns:200px 1fr 160px;column-gap:14px;row-gap:0}
 dl.fields > div{display:contents}
 dl.fields .row{display:contents}
@@ -53,11 +56,42 @@ dl.fields dd.source{color:var(--tm);font-size:11px;text-transform:uppercase;lett
 .chip{display:inline-block;background:var(--ml);color:var(--jd);padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;margin:2px 4px 2px 0}
 .loading,.error{text-align:center;padding:60px 24px;color:var(--tm)}
 .error{color:var(--red)}
+
+/* Editable affordance — applied to value cells with a logical key. */
+.editable{position:relative;cursor:text;padding:6px 30px 6px 8px;margin:-6px -8px;border-radius:6px;display:inline-block;min-width:120px;max-width:100%;transition:background .15s,box-shadow .15s}
+.editable:hover{background:var(--cug);box-shadow:inset 0 0 0 1px var(--cu)}
+.editable .pencil{position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--cu);font-size:13px;opacity:0;transition:opacity .15s;pointer-events:none}
+.editable:hover .pencil{opacity:1}
+.editable .ph{color:var(--tm);font-style:italic}
+.editable.editing{cursor:default;background:var(--white);box-shadow:inset 0 0 0 2px var(--cu);padding:8px;display:block}
+.editable.editing:hover{background:var(--white)}
+.editable.editing .pencil{display:none}
+.editable.saving{opacity:.55;pointer-events:none}
+.editable.saved{background:var(--ok);box-shadow:inset 0 0 0 1px var(--ok-bd)}
+.editable.err  {background:var(--rose);box-shadow:inset 0 0 0 1px var(--rose-bd)}
+.edit-input{width:100%;font:inherit;color:var(--tp);padding:5px 8px;border:1px solid var(--bd);border-radius:5px;outline:none}
+.edit-input:focus{border-color:var(--cu)}
+textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-height:1.45}
+.edit-row{margin-top:8px;display:flex;gap:6px;align-items:center}
+.edit-btn{padding:5px 14px;border:none;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.02em}
+.edit-btn.save{background:var(--cu);color:var(--white)}
+.edit-btn.save:hover{background:var(--cul)}
+.edit-btn.cancel{background:transparent;color:var(--ts)}
+.edit-btn.cancel:hover{color:var(--tp)}
+.edit-hint{font-size:11px;color:var(--ts);margin-left:8px;font-style:italic}
+.edit-msg{font-size:12px;font-weight:600}
+.edit-msg.ok{color:var(--ok-tx)}
+.edit-msg.no{color:var(--red)}
+.tip{display:inline-block;font-size:12px;color:var(--ts);margin-top:4px;font-style:italic}
+.who{font-size:11px;color:var(--ts);margin-bottom:12px;padding:8px 12px;background:var(--ml);border-radius:6px}
+.who strong{color:var(--jd);font-weight:700}
+
 @media (max-width: 700px){
   dl.fields{grid-template-columns:1fr}
   dl.fields dt{padding-top:14px;border:none}
   dl.fields dd{padding-bottom:14px}
   dl.fields dd.source{text-align:left;padding-top:0}
+  .editable{display:block}
 }
 </style>
 </head><body>
@@ -72,59 +106,80 @@ dl.fields dd.source{color:var(--tm);font-size:11px;text-transform:uppercase;lett
 (function(){
   var API_BASE = 'https://rpm-portal-server.onrender.com';
   var EMAIL = (window.__PORTAL_EMAIL || 'portal@rpmliving.com');
+  var cid = '';   // populated from query string below
 
   function getQ(name){
     var m = location.search.match(new RegExp('[?&]' + name + '=([^&]+)'));
     return m ? decodeURIComponent(m[1]) : '';
   }
 
-  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
 
-  // Source-label resolver: "Pipeline" if the field is fluency_* and populated;
-  // "HubSpot" for identity fields; "Pipeline pending" if a fluency_* is empty.
-  function srcLabel(key, val){
+  // Source label resolution. Override fields show "Override" once filled,
+  // "Editable" when empty (invitation to edit). Pipeline fields show
+  // "Pipeline" / "Pipeline pending". Identity / readonly show "HubSpot".
+  function srcLabel(hsKey, val, isEditable){
     var has = val !== null && val !== undefined && String(val).trim() !== '';
-    if (key.startsWith('fluency_') && key.endsWith('_override')) return has ? 'Override' : 'Override pending';
-    if (key.startsWith('fluency_'))                                return has ? 'Pipeline' : 'Pipeline pending';
+    if (isEditable){
+      return has ? 'Override' : 'Editable';
+    }
+    if (hsKey && hsKey.indexOf('fluency_') === 0) return has ? 'Pipeline' : 'Pipeline pending';
     return 'HubSpot';
   }
 
-  function fieldRow(label, val, key){
-    var has = val !== null && val !== undefined && String(val).trim() !== '';
-    var valHTML = has ? esc(val) : '<span>Not yet computed</span>';
-    var src     = srcLabel(key, val);
-    return '<dt>' + esc(label) + '</dt>' +
-           '<dd class="' + (has ? 'value' : 'empty') + '">' + valHTML + '</dd>' +
-           '<dd class="source">' + esc(src) + '</dd>';
+  function renderChips(val){
+    var items = String(val || '').split(/[,\n]/).map(function(s){return s.trim();}).filter(Boolean);
+    return items.map(function(s){return '<span class="chip">' + esc(s) + '</span>';}).join('');
   }
 
-  // CSV-string field renderer — splits on comma, renders chips.
-  function chipsRow(label, val, key){
+  // f = [label, hsKey, kind?, logicalKey?]
+  //   kind:   '' = text  |  'chips'  |  'textarea'
+  //   logicalKey: present = editable; absent = readonly.
+  function row(f, p){
+    var label = f[0], hsKey = f[1], kind = f[2] || 'text', lk = f[3] || '';
+    var val = p[hsKey];
     var has = val !== null && val !== undefined && String(val).trim() !== '';
-    if (!has) {
-      return '<dt>' + esc(label) + '</dt>' +
-             '<dd class="empty"><span>Not yet computed</span></dd>' +
-             '<dd class="source">' + esc(srcLabel(key, val)) + '</dd>';
+    var src = srcLabel(hsKey, val, !!lk);
+
+    var inner;
+    if (has){
+      inner = (kind === 'chips' ? renderChips(val) : esc(val).replace(/\n/g, '<br>'));
+    } else if (lk) {
+      inner = '<span class="ph">Click to add</span>';
+    } else {
+      inner = '<span>Not yet computed</span>';
     }
-    var items = String(val).split(',').map(function(s){ return s.trim(); }).filter(Boolean);
-    var html = items.map(function(s){ return '<span class="chip">' + esc(s) + '</span>'; }).join('');
+
+    var ddClass = has ? 'value' : 'empty';
+    var ddBody;
+    if (lk){
+      var dataVal = esc(val == null ? '' : String(val));
+      ddBody = '<span class="editable" data-lk="' + esc(lk) + '" data-kind="' + esc(kind) + '" data-val="' + dataVal + '">' +
+                  inner +
+                  '<span class="pencil" aria-hidden="true">✎</span>' +
+               '</span>';
+    } else {
+      ddBody = inner;
+    }
     return '<dt>' + esc(label) + '</dt>' +
-           '<dd class="value">' + html + '</dd>' +
-           '<dd class="source">' + esc(srcLabel(key, val)) + '</dd>';
+           '<dd class="' + ddClass + '">' + ddBody + '</dd>' +
+           '<dd class="source" data-src-for="' + esc(lk || hsKey) + '">' + esc(src) + '</dd>';
   }
 
-  // Section rendering: array of [label, propertyKey, kind] tuples.
   function section(title, fields, p, opts){
-    var rows = fields.map(function(f){
-      var label = f[0], key = f[1], kind = f[2] || 'text';
-      var val = p[key];
-      return kind === 'chips' ? chipsRow(label, val, key) : fieldRow(label, val, key);
-    }).join('');
-    var classes = 'section' + (opts && opts.callout ? ' callout-warning' : '');
-    var banner  = opts && opts.banner ? '<div class="callout-banner">' + esc(opts.banner) + '</div>' : '';
-    return '<section class="' + classes + '">' + banner + '<h2>' + esc(title) + '</h2><dl class="fields">' + rows + '</dl></section>';
+    var rows = fields.map(function(f){return row(f, p);}).join('');
+    var cls  = 'section' +
+               (opts && opts.callout === 'warn'     ? ' callout-warning'  : '') +
+               (opts && opts.callout === 'internal' ? ' callout-internal' : '');
+    var banner = opts && opts.banner ? '<div class="callout-banner">' + esc(opts.banner) + '</div>' : '';
+    return '<section class="' + cls + '">' + banner + '<h2>' + esc(title) + '</h2><dl class="fields">' + rows + '</dl></section>';
   }
 
+  // ── Render ────────────────────────────────────────────────────────────
   function render(p, companyId){
     var name = p.name || 'Unnamed Property';
     var addr = [p.address, p.city, p.state, p.zip].filter(Boolean).join(', ');
@@ -133,9 +188,11 @@ dl.fields dd.source{color:var(--tm);font-size:11px;text-transform:uppercase;lett
                  '<div class="h-name">' + esc(name) + '</div>' +
                  (addr ? '<div class="h-sub">' + esc(addr) + '</div>' : '') +
                  '<div class="h-sub">HubSpot ID: ' + esc(companyId) + '</div>' +
+                 '<div class="who">Editing as <strong>' + esc(EMAIL) + '</strong>. ' +
+                   'Hover any field to see the edit pencil. Every override-wins — your edit beats the auto value on the next daily Fluency sync.</div>' +
                '</div>';
 
-    // 1. Identity (always populated where present)
+    // 1) Identity (read-only)
     html += section('Identity', [
       ['Name',                   'name'],
       ['Address',                'address'],
@@ -152,81 +209,127 @@ dl.fields dd.source{color:var(--tm);font-size:11px;text-transform:uppercase;lett
       ['NinjaCat System ID',     'ninjacat_system_id'],
     ], p);
 
-    // 2. Voice and Positioning
+    // 2) Voice & Positioning — overrides editable
     html += section('Voice and Positioning', [
-      ['Voice Tier',             'fluency_voice_tier'],
-      ['Unit Noun',              'fluency_unit_noun'],
-      ['Voice Tier (Override)',  'fluency_voice_tier_override'],
-      ['Unit Noun (Override)',   'fluency_unit_noun_override'],
-      ['Advertised Name',        'fluency_advertised_name_override'],
-      ['Short Name',             'fluency_short_name_override'],
+      ['Voice Tier (auto)',      'fluency_voice_tier'],
+      ['Voice Tier (Override)',  'fluency_voice_tier_override',          '', 'voice_tier'],
+      ['Unit Noun (auto)',       'fluency_unit_noun'],
+      ['Unit Noun (Override)',   'fluency_unit_noun_override',           '', 'unit_noun'],
+      ['Advertised Name',        'fluency_advertised_name_override',     '', 'advertised_name'],
+      ['Short Name',             'fluency_short_name_override',          '', 'short_name'],
+      ['Former Property Name',   'fluency_former_property_name',         '', 'former_property_name'],
     ], p);
 
-    // 3. Lifecycle
+    // 3) Brand & Story — net-new in v2; all editable.
+    html += section('Brand & Story', [
+      ['Taglines',                  'fluency_taglines',          'textarea', 'taglines'],
+      ['Brand Adjectives',          'fluency_brand_adjectives',  'textarea', 'brand_adjectives'],
+      ['Differentiators',           'fluency_differentiators',   'textarea', 'differentiators'],
+      ['Additional Selling Points', 'fluency_selling_points',    'textarea', 'selling_points'],
+      ['What Residents Love',       'fluency_residents_love',    'textarea', 'residents_love'],
+    ], p);
+
+    // 3b) Brand & Story (internal — won't reach ad copy)
+    html += section('Brand & Story — Internal', [
+      ["What Residents Don't Love", 'fluency_residents_dislike', 'textarea', 'residents_dislike'],
+      ['Typical Resident (lifestyle/needs)', 'fluency_target_resident', 'textarea', 'target_resident'],
+    ], p, { callout: 'internal', banner: 'Internal context only — never used in ad copy (Fair Housing).' });
+
+    // 4) Lifecycle
     html += section('Lifecycle', [
-      ['Lifecycle State',          'fluency_lifecycle_state'],
-      ['Lifecycle (Override)',     'fluency_lifecycle_state_override'],
+      ['Lifecycle State (auto)',   'fluency_lifecycle_state'],
+      ['Lifecycle (Override)',     'fluency_lifecycle_state_override',  '', 'lifecycle_state'],
       ['Year Built',               'fluency_year_built'],
       ['Year Renovated',           'fluency_year_renovated'],
     ], p);
 
-    // 4. Inventory
-    html += section('Inventory', [
-      ['Floor Plans',              'fluency_floor_plans'],
+    // 5) Inventory (floor plans — JSON; advanced edit via approval portal)
+    html += section('Inventory — Floor Plans', [
+      ['Floor Plans (auto)',       'fluency_floor_plans_json'],
+      ['Floor Plans (Override)',   'fluency_floor_plans_override'],
     ], p);
 
-    // 5. Pricing — locked callout per spec section 2.5
+    // 6) Pricing — locked (Fair Housing)
     html += section('Pricing', [
       ['Average Rent',             'fluency_avg_rent'],
       ['Concession Active',        'fluency_concession_active'],
       ['Concession Text',          'fluency_concession_text'],
       ['Concession Value',         'fluency_concession_value'],
       ['Rent Percentile',          'fluency_rent_percentile'],
-    ], p, { callout: true, banner: 'Internal reference only. Not pushed to Fluency.' });
+    ], p, { callout: 'warn', banner: 'Internal reference only. Never pushed to Fluency.' });
 
-    // 6. Amenities
+    // 7) Amenities — split: property-level vs in-unit
     html += section('Amenities', [
-      ['Amenities',                       'fluency_amenities',                       'chips'],
-      ['Marketed Amenity Names',          'fluency_marketed_amenity_names',          'chips'],
-      ['Amenity Descriptions',            'fluency_amenities_descriptions'],
-      ['Amenities (Override)',            'fluency_amenities_override',              'chips'],
-      ['Marketed Amenity Names (Override)','fluency_marketed_amenity_names_override','chips'],
+      ['Property Amenities (auto)',    'fluency_property_amenities',          'chips'],
+      ['Property Amenities',           'fluency_property_amenities_override', 'textarea', 'property_amenities'],
+      ['In-Unit Features (auto)',      'fluency_unit_features',               'chips'],
+      ['In-Unit Features',             'fluency_unit_features_override',      'textarea', 'unit_features'],
+      ['Marketed Amenity Names',       'fluency_marketed_amenity_names_override', 'textarea', 'marketed_amenity_names'],
+      ['Amenity Descriptions',         'fluency_amenities_descriptions_override', 'textarea', 'amenities_descriptions'],
     ], p);
 
-    // 7. Geography
+    // 8) Geography — In / Near / Close To / Highlights
     html += section('Geography', [
-      ['Neighborhood',             'fluency_neighborhood'],
-      ['Neighborhood (Override)',  'fluency_neighborhood_override'],
-      ['Nearby Neighborhoods (Override)','fluency_nearby_neighborhoods_override','chips'],
-      ['Landmarks',                'fluency_landmarks',                         'chips'],
-      ['Landmarks (Override)',     'fluency_landmarks_override',                'chips'],
-      ['Nearby Employers',         'fluency_nearby_employers',                  'chips'],
-      ['Nearby Employers (Override)','fluency_nearby_employers_override',       'chips'],
+      ['In (Located In)',          'fluency_neighborhood_override',           '',         'neighborhood'],
+      ['Near (Adjacent Areas)',    'fluency_nearby_neighborhoods_override',   'textarea', 'nearby_neighborhoods'],
+      ['Close To (Landmarks)',     'fluency_landmarks_override',              'textarea', 'landmarks'],
+      ['Neighborhood Highlights',  'fluency_neighborhood_highlights_override','textarea', 'neighborhood_highlights'],
+      ['Nearby Employers',         'fluency_nearby_employers_override',       'textarea', 'nearby_employers'],
     ], p);
 
-    // 8. Competitors
+    // 9) Competitors
     html += section('Competitors', [
-      ['Competitors',              'fluency_competitors',          'chips'],
-      ['Competitors (Override)',   'fluency_competitors_override', 'chips'],
+      ['Competitors (auto)',       'fluency_competitors',           'chips'],
+      ['Competitors (Override)',   'fluency_competitors_override',  'textarea', 'competitors'],
     ], p);
 
-    // 9. Guardrails
+    // 10) Strategy & Goals — net-new in v2
+    html += section('Strategy & Goals', [
+      ['Overarching Goals',        'fluency_goals',                  'textarea', 'goals'],
+      ['Initiatives (short/long)', 'fluency_initiatives',            'textarea', 'initiatives'],
+      ['Onsite Developments',      'fluency_onsite_developments',    'textarea', 'onsite_developments'],
+      ['Local Partnerships',       'fluency_local_partnerships',     'textarea', 'local_partnerships'],
+      ['Onsite Events',            'fluency_onsite_events',          'textarea', 'onsite_events'],
+    ], p);
+
+    // 10b) Strategy & Goals (internal)
+    html += section('Strategy & Goals — Internal', [
+      ['Challenges',               'fluency_challenges',             'textarea', 'challenges'],
+      ['Additional Priorities',    'fluency_priorities',             'textarea', 'priorities'],
+      ['Website Page Priorities',  'fluency_website_priorities',     'textarea', 'website_priorities'],
+    ], p, { callout: 'internal', banner: 'Internal AM context. Not used in ad copy.' });
+
+    // 11) Guardrails
     html += section('Guardrails', [
-      ['Must Include',                  'fluency_must_include'],
-      ['Must Include (Override)',       'fluency_must_include_override'],
-      ['Forbidden Phrases',             'fluency_forbidden_phrases'],
-      ['Forbidden Phrases (Override)',  'fluency_forbidden_phrases_override'],
+      ['Must Include',                 'fluency_must_include_override',       'textarea', 'must_include'],
+      ['Things NOT to Say',            'fluency_forbidden_phrases_override',  'textarea', 'forbidden_phrases'],
+      ['Neighborhoods NOT to Target',  'fluency_excluded_neighborhoods',      'textarea', 'excluded_neighborhoods'],
+      ['Client Expectations',          'fluency_client_expectations',         'textarea', 'client_expectations'],
     ], p);
 
-    // 10. PM Context — locked callout per spec section 2.5
-    html += section('PM Context', [
-      ['Lease Signal (Form 5)',         'fluency_lease_signal_text'],
-      ['Struggling Units (Form 7)',     'fluency_struggling_units'],
-      ['Insider Color (Form 9)',        'fluency_insider_color'],
-    ], p, { callout: true, banner: 'AM context only. Not used in ad copy.' });
+    // 12) Operations & Tech — all internal
+    html += section('Operations & Tech — Internal', [
+      ['Marketing Budget',         'fluency_marketing_budget',       '', 'marketing_budget'],
+      ['Property Management (PMS)','fluency_pms',                    '', 'pms'],
+      ['Website CMS',              'fluency_cms',                    '', 'cms'],
+      ['Chatbot / Assistant',      'fluency_chatbot',                '', 'chatbot'],
+      ['Website Last Updated',     'fluency_website_last_updated',   '', 'website_last_updated'],
+      ['Building Style',           'fluency_building_style',         '', 'building_style'],
+      ['Asset Class',              'fluency_asset_class',            '', 'asset_class'],
+      ['Elise AI Participation',   'fluency_elise_ai',               '', 'elise_ai'],
+      ['CRM',                      'fluency_crm',                    '', 'crm'],
+      ['Host Name',                'fluency_host_name',              '', 'host_name'],
+    ], p, { callout: 'internal', banner: 'Operational reference. Not used in ad copy.' });
 
-    // 11. Operational
-    html += section('Operational', [
+    // 13) PM Context — locked (legacy fields, kept for AM reference)
+    html += section('PM Context', [
+      ['Lease Signal',             'fluency_lease_signal_text'],
+      ['Struggling Units',         'fluency_struggling_units'],
+      ['Insider Color',            'fluency_insider_color'],
+    ], p, { callout: 'internal', banner: 'AM context only. Not used in ad copy.' });
+
+    // 14) Operational metadata
+    html += section('Account Metadata', [
       ['Client Portfolio',          'client_portfolio'],
       ['Packages Enrolled',         'packages_enrolled'],
       ['Account Manager',           'account_manager_email'],
@@ -240,14 +343,128 @@ dl.fields dd.source{color:var(--tm);font-size:11px;text-transform:uppercase;lett
 
     document.getElementById('root').innerHTML = html;
     document.title = 'RPM | ' + name;
+    wireEdits();
   }
 
-  var cid = getQ('company_id');
-  if (!cid) {
-    document.getElementById('root').innerHTML = '<div class="error">Missing company_id query parameter. Try opening this page from the <a href="/accounts">accounts table</a>.</div>';
+  // ── Inline edit ──────────────────────────────────────────────────────
+  function wireEdits(){
+    document.getElementById('root').addEventListener('click', function(e){
+      var span = e.target.closest('.editable');
+      if (!span || span.classList.contains('editing')) return;
+      // Don't start edit when clicking inside the active editor.
+      if (e.target.closest('.edit-input,.edit-btn')) return;
+      startEdit(span);
+    });
+  }
+
+  function startEdit(span){
+    var lk   = span.dataset.lk;
+    var kind = span.dataset.kind || 'text';
+    var val  = span.dataset.val  || '';
+
+    span.classList.add('editing');
+    span.innerHTML = '';
+
+    var input;
+    if (kind === 'textarea' || kind === 'chips'){
+      input = document.createElement('textarea');
+    } else {
+      input = document.createElement('input');
+      input.type = 'text';
+    }
+    input.className = 'edit-input';
+    input.value = val;
+    span.appendChild(input);
+
+    var btnRow = document.createElement('div');
+    btnRow.className = 'edit-row';
+    var save   = document.createElement('button'); save.className   = 'edit-btn save';   save.textContent   = 'Save';
+    var cancel = document.createElement('button'); cancel.className = 'edit-btn cancel'; cancel.textContent = 'Cancel';
+    var hint   = document.createElement('span');   hint.className   = 'edit-hint';       hint.textContent   = kind === 'chips' ? 'comma-separated or one per line' : (kind === 'textarea' ? 'one per line where it makes sense' : '');
+    btnRow.appendChild(save); btnRow.appendChild(cancel); btnRow.appendChild(hint);
+    span.appendChild(btnRow);
+
+    setTimeout(function(){ input.focus(); input.select(); }, 0);
+
+    cancel.addEventListener('click', function(){ finishEdit(span, val, kind, /*saved*/false); });
+    save.addEventListener('click', function(){
+      doSave(span, lk, input.value, kind);
+    });
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Escape'){ e.preventDefault(); finishEdit(span, val, kind, false); }
+      if (e.key === 'Enter' && !e.shiftKey && input.tagName !== 'TEXTAREA'){
+        e.preventDefault(); save.click();
+      }
+    });
+  }
+
+  function doSave(span, lk, newVal, kind){
+    span.classList.add('saving');
+    fetch(API_BASE + '/api/accounts/property/field', {
+      method:  'PATCH',
+      headers: {'Content-Type': 'application/json', 'X-Portal-Email': EMAIL},
+      body:    JSON.stringify({company_id: cid, key: lk, value: newVal}),
+    })
+    .then(function(r){
+      return r.json().then(function(j){ return {ok: r.ok, status: r.status, data: j}; });
+    })
+    .then(function(res){
+      span.classList.remove('saving');
+      if (res.ok){
+        span.classList.add('saved');
+        finishEdit(span, newVal, kind, true);
+        // bump the source cell to "Override"
+        var dd = span.closest('dd');
+        var src = dd && dd.nextElementSibling;
+        if (src && src.classList.contains('source')) src.textContent = newVal && newVal.trim() ? 'Override' : 'Editable';
+        setTimeout(function(){ span.classList.remove('saved'); }, 1400);
+      } else {
+        span.classList.add('err');
+        showError(span, (res.data && res.data.error) || ('Save failed (' + res.status + ')'));
+      }
+    })
+    .catch(function(err){
+      span.classList.remove('saving');
+      span.classList.add('err');
+      showError(span, 'Network error');
+    });
+  }
+
+  function showError(span, msg){
+    span.innerHTML = '<span class="edit-msg no">' + esc(msg) + '</span> <button class="edit-btn cancel" data-act="dismiss">Dismiss</button>';
+    span.querySelector('button[data-act="dismiss"]').addEventListener('click', function(){
+      var val = span.dataset.val || '';
+      span.classList.remove('err','editing');
+      finishEdit(span, val, span.dataset.kind || 'text', false);
+    });
+  }
+
+  function finishEdit(span, val, kind, saved){
+    span.classList.remove('editing');
+    span.dataset.val = val || '';
+    var has = val !== null && val !== undefined && String(val).trim() !== '';
+    var dd = span.closest('dd');
+    if (dd){
+      dd.classList.toggle('value', has);
+      dd.classList.toggle('empty', !has);
+    }
+    var inner;
+    if (has){
+      inner = (kind === 'chips' ? renderChips(val) : esc(val).replace(/\n/g, '<br>'));
+    } else {
+      inner = '<span class="ph">Click to add</span>';
+    }
+    span.innerHTML = inner + '<span class="pencil" aria-hidden="true">✎</span>';
+  }
+
+  // ── Boot ─────────────────────────────────────────────────────────────
+  cid = getQ('company_id');
+  if (!cid){
+    document.getElementById('root').innerHTML =
+      '<div class="error">Missing company_id query parameter. Try opening this page from the <a href="/accounts">accounts table</a>.</div>';
     return;
   }
-  fetch(API_BASE + '/api/accounts/property?company_id=' + encodeURIComponent(cid), { headers: { 'X-Portal-Email': EMAIL } })
+  fetch(API_BASE + '/api/accounts/property?company_id=' + encodeURIComponent(cid), {headers: {'X-Portal-Email': EMAIL}})
     .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
     .then(function(d){ render(d.properties || {}, d.company_id || cid); })
     .catch(function(err){
