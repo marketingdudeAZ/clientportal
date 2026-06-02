@@ -29,6 +29,7 @@ parses the trailing dollar amount out of that label.
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any
 
@@ -65,6 +66,20 @@ CHANNEL_PRODUCT_MAP: dict[str, str] = {
 
     # Management Fee — calculated server-side. $0 default; AM can adjust.
     "management_fee":"3995554730",   # Management Fee
+
+    # Sellable channels that are NOT auto-included on every IO but DO get
+    # quoted when a ticket selects them (e.g. Email Drip Campaign). These
+    # were silently dropped before because they had no product id AND
+    # build_default_line_items only walked DEFAULT_DIGITAL_LINE_ITEMS — so
+    # a selected Email Drip never became a line item. Product ids are
+    # portal-specific; set them via env so ops can fill them in without a
+    # code change. An empty id means the channel still can't be created as
+    # a catalog line item (build_default_line_items logs and skips it).
+    "email_drip":     os.getenv("HS_PRODUCT_ID_EMAIL_DRIP", ""),
+    "eblast":         os.getenv("HS_PRODUCT_ID_EBLAST", ""),
+    "reputation":     os.getenv("HS_PRODUCT_ID_REPUTATION", ""),
+    "social_posting": os.getenv("HS_PRODUCT_ID_SOCIAL_POSTING", ""),
+    "website_hosting":os.getenv("HS_PRODUCT_ID_WEBSITE_HOSTING", ""),
 }
 
 # Channel keys whose monthly spend feeds the Management Fee calculation
@@ -100,22 +115,44 @@ def hs_product_id(channel_key: str) -> str:
     return CHANNEL_PRODUCT_MAP.get(channel_key, "")
 
 
-def _seo_price(tier_label: str) -> float:
-    """Parse the dollar amount out of an SEO tier label.
+def _price_from_label(tier_label: str) -> float:
+    """Parse a trailing dollar amount out of a tier dropdown label.
 
-    The ClickUp drop_down has values like "Local - $100", "Lite - $300",
-    "Basic - $500", "Standard - $800", "Premium - $1,300". Returns 0.0
-    on no match — which is correct for the "no SEO selected" case.
+    Several channels price themselves through the dropdown label rather
+    than a currency field — SEO ("Local - $100", "Standard - $800",
+    "Premium - $1,300") is the classic case, and the same shape shows up
+    on add-on channels like Email Drip ("New Build - $125"). Returns 0.0
+    on no match — correct for the "not selected" case.
     """
     if not tier_label:
         return 0.0
-    m = re.search(r"\$([\d,]+)", str(tier_label))
+    m = re.search(r"\$([\d,]+(?:\.\d+)?)", str(tier_label))
     if not m:
         return 0.0
     try:
         return float(m.group(1).replace(",", ""))
     except (TypeError, ValueError):
         return 0.0
+
+
+# Back-compat alias — SEO-specific callers/tests may still import this name.
+_seo_price = _price_from_label
+
+
+def _price_for_channel(channel: str, selections: dict[str, dict]) -> float:
+    """Resolve the monthly price for a single channel from selections.
+
+    Order: management fee is computed; otherwise an explicit monthly
+    currency wins; if there's no monthly, fall back to a dollar amount
+    embedded in the tier label (SEO + add-ons like Email Drip).
+    """
+    if channel == "management_fee":
+        return compute_management_fee(selections)
+    sel = selections.get(channel) or {}
+    monthly = float(sel.get("monthly") or 0)
+    if monthly:
+        return monthly
+    return _price_from_label(sel.get("tier") or "")
 
 
 MANAGEMENT_FEE_RATE = 0.20   # 20% of asterisked-products total
@@ -163,19 +200,44 @@ def build_default_line_items(
     fills them in from hs_product_id) so we don't pass a name here.
     """
     out: list[dict[str, Any]] = []
+    included: set[str] = set()
+
+    # 1. The fixed "always on every IO" SKUs (zeroed when not selected).
     for channel in DEFAULT_DIGITAL_LINE_ITEMS:
         pid = hs_product_id(channel)
         if not pid:
             logger.warning("No product id for channel %r — skipping", channel)
             continue
+        out.append({
+            "channel": channel,
+            "hs_product_id": pid,
+            "price": _price_for_channel(channel, selections),
+        })
+        included.add(channel)
 
-        if channel == "seo":
-            tier = (selections.get("seo") or {}).get("tier", "")
-            price = _seo_price(tier)
-        elif channel == "management_fee":
-            price = compute_management_fee(selections)
-        else:
-            price = float((selections.get(channel) or {}).get("monthly", 0) or 0)
+    # 2. Selected channels that AREN'T in the default set (e.g. Email Drip,
+    #    Eblast, Reputation). These were dropped before — the loop above
+    #    only walked the fixed list, so a ticket that selected Email Drip
+    #    never produced an Email Drip line item. Append them here so what
+    #    the submitter actually picked lands on the quote. A channel with
+    #    no configured product id can't be created as a catalog line item;
+    #    log loudly so the gap is visible rather than silent.
+    for channel in (selections or {}):
+        if channel in included:
+            continue
+        pid = hs_product_id(channel)
+        if not pid:
+            logger.warning(
+                "Selected channel %r has no product id — cannot create a "
+                "catalog line item; set its HS_PRODUCT_ID_* env var. Skipping.",
+                channel,
+            )
+            continue
+        out.append({
+            "channel": channel,
+            "hs_product_id": pid,
+            "price": _price_for_channel(channel, selections),
+        })
+        included.add(channel)
 
-        out.append({"channel": channel, "hs_product_id": pid, "price": price})
     return out

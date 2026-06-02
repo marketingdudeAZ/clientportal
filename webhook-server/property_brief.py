@@ -295,7 +295,10 @@ _RPM_CHANNEL_FIELDS: list[tuple[str, str | None, str | None]] = [
     # Tier-only channels (no currency on the RPM form):
     ("seo",           None, "SEO - Onboard"),
     ("social_posting", None, "Organic Social"),
-    ("email_drip",    None, "Email Drip Campaign - New Build"),
+    # Email Drip carries a price + a one-time setup fee. Give it a currency
+    # field so its monthly is captured; if the form prices it through the
+    # tier label instead ("New Build - $125"), product_catalog parses that.
+    ("email_drip",    "Email Drip Campaign", "Email Drip Campaign - New Build"),
 ]
 
 # Tier dropdown values that mean "no, skip this channel". Case-insensitive.
@@ -327,14 +330,27 @@ def _extract_rpm_selections(task: dict[str, Any]) -> dict[str, dict]:
                 tier_clean = ""
 
         monthly = _num(monthly_raw) if monthly_raw is not None else 0.0
-        # Skip when both the currency and the tier indicate no spend.
-        if monthly <= 0 and not tier_clean:
+
+        # One-time setup fee. RPM forms put it in a sibling currency field
+        # named "<Channel> Setup" or "<Channel> Setup Fee" (e.g. Email Drip
+        # Campaign's $225). Missing field -> 0.0, which is the common case.
+        setup = 0.0
+        if currency_name:
+            setup_raw = (
+                cfv(task, f"{currency_name} Setup Fee", of_type="currency")
+                or cfv(task, f"{currency_name} Setup", of_type="currency")
+            )
+            setup = _num(setup_raw) if setup_raw is not None else 0.0
+
+        # Skip when there's no spend signal at all (no currency, no tier,
+        # no setup) — that's an unselected channel.
+        if monthly <= 0 and setup <= 0 and not tier_clean:
             continue
 
         selections[channel_key] = {
             "tier":    tier_clean,
             "monthly": monthly,
-            "setup":   0.0,
+            "setup":   setup,
         }
     return selections
 
@@ -345,18 +361,94 @@ def should_fire(event: dict[str, Any], task: dict[str, Any]) -> bool:
     """Return True if this ClickUp event should trigger the workflow.
 
     Rules:
-      - Always fire on `taskCreated`.
-      - On `taskUpdated`, fire only when the configured re-process flag flips
-        to a truthy value. Anything else is a no-op so editing a description
-        doesn't re-bill the LLM and re-create deals.
+      - Fire on `taskCreated` ONLY for a genuine intake ticket (see
+        `is_intake_ticket`). This is the fix for the runaway-deals bug:
+        the webhook was firing on every task created in the workspace,
+        so each onboarding checklist task/subtask (Account Set Up, IO
+        Signed, Heatmaps, …) spawned its own deal + quote. Gating on the
+        intake signature stops the checklist from minting deals.
+      - On `taskUpdated`, fire only when the configured re-process flag
+        flips to a truthy value AND the task is still an intake ticket.
+        Anything else is a no-op so editing a description doesn't re-bill
+        the LLM and re-create deals.
     """
     event_type = (event.get("event") or "").lower()
     if event_type in ("taskcreated", "task_created"):
-        return True
+        return is_intake_ticket(task)
     if event_type in ("taskupdated", "task_updated"):
         flag = clickup_client.custom_field_value(task, PROPERTY_BRIEF_REFIRE_FIELD)
-        return _truthy(flag)
+        return _truthy(flag) and is_intake_ticket(task)
     return False
+
+
+def is_intake_ticket(task: dict[str, Any]) -> bool:
+    """Return True when a ClickUp task is a real property-brief intake ticket.
+
+    Three independent gates, applied because the test team wasn't sure how
+    the onboarding checklist items get spawned (subtasks vs. tasks in
+    another list). Any one of them tripping is enough to reject:
+
+      1. Subtasks never trigger. A task with a `parent` is part of a
+         checklist under the intake ticket, not the intake ticket itself.
+      2. If an intake list is configured (CLICKUP_LIST_PROPERTY_BRIEF),
+         the task must live in it. Tasks in an onboarding list are out.
+      3. The task must carry the intake-form signature — at least one
+         intake field populated with a real value. ClickUp custom fields
+         are list-level, so a checklist task sharing the intake list still
+         has these fields, but EMPTY; requiring a value (not just the
+         field's presence) filters those out.
+    """
+    if not task:
+        return False
+
+    # Gate 1 — subtasks.
+    if task.get("parent"):
+        return False
+
+    # Gate 2 — intake list, only when configured.
+    from config import CLICKUP_LISTS
+    intake_list = str(CLICKUP_LISTS.get("property_brief") or "").strip()
+    if intake_list:
+        task_list_id = str(((task.get("list") or {}).get("id")) or "").strip()
+        if task_list_id and task_list_id != intake_list:
+            return False
+
+    # Gate 3 — intake signature.
+    return _has_intake_signature(task)
+
+
+# Intake-form fields whose presence-with-a-value marks a task as a real
+# intake ticket. Channel currency/tier field names are appended below so a
+# ticket that only filled in channels (no RM email yet) still qualifies.
+_INTAKE_SIGNATURE_FIELDS: list[str] = [
+    "selections",
+    "rm email", "relationship manager", "rm's email",
+    "submitter email", "submitter", "requester email",
+    "property url", "property domain", "domain",
+    "rvp email", "rvp's email",
+]
+# Append the RPM intake-form channel field names (currency + tier) so a
+# ticket that only filled in channel selections still reads as intake.
+for _ch_key, _cur, _tier in _RPM_CHANNEL_FIELDS:
+    for _nm in (_cur, _tier):
+        if _nm and _nm.lower() not in _INTAKE_SIGNATURE_FIELDS:
+            _INTAKE_SIGNATURE_FIELDS.append(_nm.lower())
+
+
+def _has_intake_signature(task: dict[str, Any]) -> bool:
+    """True if any recognized intake field carries a non-empty value."""
+    for name in _INTAKE_SIGNATURE_FIELDS:
+        if _nonempty(clickup_client.custom_field_value(task, name)):
+            return True
+    return False
+
+
+def _nonempty(value: Any) -> bool:
+    if value in (None, ""):
+        return False
+    if isinstance(value, (list, dict)) and not value:
+        return False
+    return True
 
 
 def _truthy(value: Any) -> bool:
@@ -408,6 +500,7 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
     company = match_or_create_company(parsed)
     deal_creator = _import("deal_creator")
     quote_generator = _import("quote_generator")
+    product_catalog = _import("product_catalog")
 
     # Idempotency: if a deal already exists for this ClickUp ticket, reuse
     # it. ClickUp retries failed webhooks; without this check, a transient
@@ -466,14 +559,28 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
         if portal_id else ""
     )
 
+    # Real deal totals for the ClickUp comment. parsed["totals"]["monthly"]
+    # only sums currency-field channels — it leaves out SEO (priced from a
+    # tier label), the management fee, and add-ons like Email Drip, so the
+    # comment used to under-report (the "$750 only" bug). Sum the actual
+    # line items we just created instead, and add up every setup fee.
+    line_items = product_catalog.build_default_line_items(parsed["selections"])
+    monthly_total = sum(item["price"] for item in line_items)
+    setup_total = sum(
+        float((sel or {}).get("setup") or 0)
+        for sel in (parsed.get("selections") or {}).values()
+    )
+
     return {
-        "company_id":   company["id"],
-        "company_name": company.get("name") or parsed["property_name"],
-        "deal_id":      deal_id,
-        "deal_url":     deal_url,
-        "quote_id":     quote_id,
-        "quote_url":    quote_url,
-        "quote_error":  quote_error,
+        "company_id":    company["id"],
+        "company_name":  company.get("name") or parsed["property_name"],
+        "deal_id":       deal_id,
+        "deal_url":      deal_url,
+        "quote_id":      quote_id,
+        "quote_url":     quote_url,
+        "quote_error":   quote_error,
+        "monthly_total": monthly_total,
+        "setup_total":   setup_total,
     }
 
 
@@ -645,10 +752,32 @@ def _create_company(*, name: str, domain: str = "") -> dict:
 
 def comment_commercial_result(parsed: dict[str, Any], result: dict[str, Any]) -> None:
     """Post the deal/quote details into the ClickUp ticket and move status."""
+    # Prefer the real deal totals computed in run_commercial_path (line-item
+    # sum + every setup fee). Fall back to the parsed selection totals only
+    # if they're absent, e.g. when a deal was reused on a retry.
+    monthly = result.get("monthly_total")
+    if monthly is None:
+        monthly = parsed.get("totals", {}).get("monthly", 0)
+    setup = result.get("setup_total")
+    if setup is None:
+        setup = parsed.get("totals", {}).get("setup", 0)
+
+    quote_line = (
+        f"Quote: {result.get('quote_url') or result.get('quote_id')} — "
+        f"you need to send it to the RM ({parsed.get('rm_email') or 'RM'})"
+    )
+    if not result.get("quote_id"):
+        # Quote step soft-failed — say so instead of printing a blank link.
+        quote_line = (
+            "Quote: not created automatically"
+            + (f" ({result['quote_error']})" if result.get("quote_error") else "")
+            + " — create it from the deal in HubSpot."
+        )
+
     lines = [
         f"HubSpot deal created: {result.get('deal_url') or result.get('deal_id')}",
-        f"Quote: {result.get('quote_url') or result.get('quote_id')} — you need to send it to the RM ({parsed.get('rm_email') or 'RM'})",
-        f"Monthly: ${parsed['totals']['monthly']:,.0f} · Setup: ${parsed['totals']['setup']:,.0f}",
+        quote_line,
+        f"Monthly: ${monthly:,.0f} · Setup: ${setup:,.0f}",
     ]
     clickup_client.post_comment(parsed["ticket_id"], "\n".join(lines))
     _set_status(parsed["ticket_id"], "deal_created")

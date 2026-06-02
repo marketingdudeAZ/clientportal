@@ -98,6 +98,13 @@ CLICKUP_BRIEF_STATUSES = {
 CLICKUP_WEBHOOK_SECRET = os.getenv("CLICKUP_WEBHOOK_SECRET", "")
 HUBSPOT_QUOTE_WEBHOOK_SECRET = os.getenv("HUBSPOT_QUOTE_WEBHOOK_SECRET", "")
 
+# HubSpot quote template pinned on every auto-generated quote so the AM
+# doesn't see "Your template is no longer available" in the editor. Must be
+# a quote_template object id that currently exists in the portal — a stale
+# id is itself the cause of that error. Empty -> don't pin (editor falls
+# back to the portal default and the AM picks a template manually).
+HUBSPOT_QUOTE_TEMPLATE_ID = os.getenv("HUBSPOT_QUOTE_TEMPLATE_ID", "")
+
 # --- Property Brief Automation ---
 # Token-gated approval portal. Tokens are unguessable and consumed once a
 # decision is captured (see property_brief_store.py).

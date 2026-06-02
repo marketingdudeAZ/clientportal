@@ -305,6 +305,33 @@ class TestShouldFire(unittest.TestCase):
         task["custom_fields"].append({"name": "rpm_brief_reprocess", "value": True})
         self.assertTrue(property_brief.should_fire({"event": "taskUpdated"}, task))
 
+    def test_subtask_does_not_fire(self):
+        # A checklist subtask carries a `parent` — it must never spawn a deal,
+        # even on creation and even though it inherits the list's intake fields.
+        task = _task(parent="parent-ticket-123")
+        self.assertFalse(property_brief.should_fire({"event": "taskCreated"}, task))
+
+    def test_task_without_intake_fields_does_not_fire(self):
+        # An onboarding checklist task ("Account Set Up") with no populated
+        # intake field is not an intake ticket.
+        task = _task(name="Account Set Up", custom_fields=[])
+        self.assertFalse(property_brief.should_fire({"event": "taskCreated"}, task))
+
+    def test_intake_fields_present_but_empty_does_not_fire(self):
+        # Same-list checklist task: intake fields exist but are blank.
+        task = _task(custom_fields=[
+            {"name": "RM Email", "value": ""},
+            {"name": "Selections", "value": ""},
+        ])
+        self.assertFalse(property_brief.should_fire({"event": "taskCreated"}, task))
+
+    def test_channel_selection_alone_counts_as_intake(self):
+        # A ticket that only filled channel fields (no RM email yet) still fires.
+        task = _task(custom_fields=[
+            {"name": "Paid Search", "type": "currency", "value": "750"},
+        ])
+        self.assertTrue(property_brief.should_fire({"event": "taskCreated"}, task))
+
 
 # ── 2. Brief store ─────────────────────────────────────────────────────────
 
@@ -385,11 +412,16 @@ class TestCommercialPath(unittest.TestCase):
             "id": "company-7", "name": "Maple Court", "domain": "maplecourtaustin.com",
         }
 
+        import product_catalog as _product_catalog
+
         def _import(name):
             return {
                 "deal_creator":     self.deal_creator,
                 "quote_generator":  self.quote_generator,
                 "brief_ai_drafter": self.drafter,
+                # Real module — run_commercial_path uses it to compute the
+                # deal totals it reports back to ClickUp.
+                "product_catalog":  _product_catalog,
             }[name]
 
         self._patcher = mock.patch.object(property_brief, "_import", side_effect=_import)

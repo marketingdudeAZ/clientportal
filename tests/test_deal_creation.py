@@ -141,6 +141,43 @@ class TestProductCatalog(unittest.TestCase):
         self.assertEqual(by_channel["management_fee"], 1100.0)
 
 
+class TestNonDefaultChannelLineItems(unittest.TestCase):
+    """Selected channels outside the fixed 13 (e.g. Email Drip) must still
+    produce a line item — the bug the test team hit where Email Drip was
+    silently dropped."""
+
+    def test_selected_email_drip_is_appended_when_product_id_configured(self):
+        with mock.patch.dict(product_catalog.CHANNEL_PRODUCT_MAP,
+                             {"email_drip": "55555"}):
+            items = product_catalog.build_default_line_items({
+                "email_drip": {"tier": "New Build", "monthly": 125, "setup": 225},
+            })
+        by_channel = {i["channel"]: i for i in items}
+        self.assertIn("email_drip", by_channel)
+        self.assertEqual(by_channel["email_drip"]["hs_product_id"], "55555")
+        self.assertEqual(by_channel["email_drip"]["price"], 125.0)
+        # The 13 defaults are still there; email_drip is the 14th.
+        self.assertEqual(len(items), 14)
+
+    def test_selected_channel_without_product_id_is_skipped_not_crashing(self):
+        # email_drip ships with an empty product id by default — it should be
+        # skipped (logged), not raise, and not appear as a bare line item.
+        items = product_catalog.build_default_line_items({
+            "email_drip": {"tier": "", "monthly": 125, "setup": 0},
+        })
+        self.assertNotIn("email_drip", {i["channel"] for i in items})
+        self.assertEqual(len(items), 13)
+
+    def test_price_parsed_from_tier_label_for_non_seo_channel(self):
+        with mock.patch.dict(product_catalog.CHANNEL_PRODUCT_MAP,
+                             {"email_drip": "55555"}):
+            items = product_catalog.build_default_line_items({
+                "email_drip": {"tier": "New Build - $125", "monthly": 0, "setup": 0},
+            })
+        by_channel = {i["channel"]: i for i in items}
+        self.assertEqual(by_channel["email_drip"]["price"], 125.0)
+
+
 class TestCreateDealWithLineItems(unittest.TestCase):
     """End-to-end exercise of the real deal_creator with requests mocked."""
 
