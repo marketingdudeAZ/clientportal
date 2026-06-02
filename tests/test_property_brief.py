@@ -86,14 +86,28 @@ class TestParseTicket(unittest.TestCase):
         self.assertEqual(parsed["totals"]["monthly"], 4300.0)
         self.assertEqual(parsed["totals"]["setup"], 500.0)
 
-    def test_missing_required_field_raises(self):
+    def test_missing_property_name_raises(self):
+        # property_name is the ONLY hard requirement (and it falls back to
+        # the ticket title). To trigger the raise we have to drop both.
+        task = _task()
+        task["custom_fields"] = [
+            f for f in task["custom_fields"] if f["name"] != "Property Name"
+        ]
+        task["name"] = ""
+        with self.assertRaises(property_brief.TicketParseError) as ctx:
+            property_brief.parse_ticket(task)
+        self.assertIn("property_name", str(ctx.exception))
+
+    def test_missing_rm_email_does_not_raise(self):
+        # rm_email is soft now — the quote step soft-fails when it's missing
+        # so a deal is still created on every ticket.
         task = _task()
         task["custom_fields"] = [
             f for f in task["custom_fields"] if f["name"] != "RM Email"
         ]
-        with self.assertRaises(property_brief.TicketParseError) as ctx:
-            property_brief.parse_ticket(task)
-        self.assertIn("rm_email", str(ctx.exception))
+        parsed = property_brief.parse_ticket(task)
+        self.assertEqual(parsed["rm_email"], "")
+        self.assertEqual(parsed["property_name"], "Maple Court")
 
     def test_selections_accepts_list_form(self):
         task = _task()
@@ -105,13 +119,16 @@ class TestParseTicket(unittest.TestCase):
         parsed = property_brief.parse_ticket(task)
         self.assertEqual(parsed["selections"]["seo"]["monthly"], 1300.0)
 
-    def test_empty_selections_raises(self):
+    def test_empty_selections_does_not_raise(self):
+        # selections is soft now — a ticket with no selections still creates
+        # a deal (with no line items); the quote step soft-fails.
         task = _task()
         for f in task["custom_fields"]:
             if f["name"] == "Selections":
                 f["value"] = ""
-        with self.assertRaises(property_brief.TicketParseError):
-            property_brief.parse_ticket(task)
+        parsed = property_brief.parse_ticket(task)
+        self.assertEqual(parsed["selections"], {})
+        self.assertEqual(parsed["totals"]["monthly"], 0.0)
 
 
 def _rpm_dropdown(name, selected_label, options=None):
@@ -1076,10 +1093,14 @@ class TestClickUpWebhook(unittest.TestCase):
             )
             self.assertEqual(resp.status_code, 401)
 
-    def test_missing_field_comments_and_blocks(self):
-        # Strip RM Email so parse_ticket raises.
+    def test_missing_property_name_comments_and_blocks(self):
+        # property_name is the only hard requirement. Strip both the
+        # custom field AND the task title so the fallback is empty too.
         broken = _task()
-        broken["custom_fields"] = [f for f in broken["custom_fields"] if f["name"] != "RM Email"]
+        broken["custom_fields"] = [
+            f for f in broken["custom_fields"] if f["name"] != "Property Name"
+        ]
+        broken["name"] = ""
         body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
         with mock.patch.object(clickup_client, "get_task", return_value=broken), \
              mock.patch.object(clickup_client, "post_comment", return_value=True) as comment:
@@ -1088,8 +1109,24 @@ class TestClickUpWebhook(unittest.TestCase):
             )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.get_json()["status"], "blocked")
-        # Comment text mentions the missing field.
-        self.assertIn("rm_email", comment.call_args.args[1].lower())
+        self.assertIn("property_name", comment.call_args.args[1].lower())
+
+    def test_missing_soft_field_still_dispatches(self):
+        # Stripping RM Email used to block; with the relaxed gate it
+        # should now dispatch (the quote step will soft-fail downstream).
+        soft = _task()
+        soft["custom_fields"] = [
+            f for f in soft["custom_fields"] if f["name"] != "RM Email"
+        ]
+        body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
+        with mock.patch.object(clickup_client, "get_task", return_value=soft), \
+             mock.patch.object(clickup_client, "post_comment", return_value=True), \
+             mock.patch("threading.Thread"):   # don't actually run the pipeline
+            resp = self.client.post(
+                "/webhooks/clickup/property-brief", data=body, headers=self._signed(body),
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json()["status"], "dispatched")
 
 
 if __name__ == "__main__":

@@ -67,7 +67,11 @@ class TicketParseError(Exception):
     """Raised when the ClickUp ticket is missing required fields."""
 
 
-REQUIRED_FIELDS = ("property_name", "rm_email", "submitter_email", "selections")
+REQUIRED_FIELDS = ("property_name",)
+# property_name is the only HARD requirement — without it there's no company
+# name to match in HubSpot. Everything else (rm_email, submitter_email,
+# selections) is soft: a deal is still created on every ticket; the quote
+# step soft-fails when rm_email/selections are missing (see run_commercial_path).
 
 
 def parse_ticket(task: dict[str, Any]) -> dict[str, Any]:
