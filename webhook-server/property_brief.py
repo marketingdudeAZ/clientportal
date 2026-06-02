@@ -647,7 +647,7 @@ def comment_commercial_result(parsed: dict[str, Any], result: dict[str, Any]) ->
     """Post the deal/quote details into the ClickUp ticket and move status."""
     lines = [
         f"HubSpot deal created: {result.get('deal_url') or result.get('deal_id')}",
-        f"Quote: {result.get('quote_url') or result.get('quote_id')} — sent to {parsed.get('rm_email') or 'RM'}",
+        f"Quote: {result.get('quote_url') or result.get('quote_id')} — you need to send it to the RM ({parsed.get('rm_email') or 'RM'})",
         f"Monthly: ${parsed['totals']['monthly']:,.0f} · Setup: ${parsed['totals']['setup']:,.0f}",
     ]
     clickup_client.post_comment(parsed["ticket_id"], "\n".join(lines))

@@ -118,7 +118,8 @@ def _seo_price(tier_label: str) -> float:
         return 0.0
 
 
-MANAGEMENT_FEE_RATE = 0.20  # 20% of asterisked-products total
+MANAGEMENT_FEE_RATE = 0.20   # 20% of asterisked-products total
+MANAGEMENT_FEE_MIN  = 250.00 # floor — never bills lower than this
 
 
 def compute_management_fee(selections: dict[str, dict]) -> float:
@@ -132,15 +133,17 @@ def compute_management_fee(selections: dict[str, dict]) -> float:
     (One outlier "Relaunch Campaigns" deal at 50% appears to be a
     special category — different deal type, not new-build.)
 
-    AMs can override the line-item price after creation if a property
-    has a custom rate. Adjust MANAGEMENT_FEE_RATE here if RPM rolls
-    out a tier-based or volume-based formula.
+    A $250 floor is enforced: if 20% of paid spend is less than $250
+    (including the no-paid-spend case), the fee is $250. AMs can
+    override the line-item price after creation if a property has a
+    custom rate.
     """
     paid_total = sum(
         float((selections.get(c) or {}).get("monthly", 0) or 0)
         for c in ASTERISKED_PAID_CHANNELS
     )
-    return round(MANAGEMENT_FEE_RATE * paid_total, 2)
+    fee = round(MANAGEMENT_FEE_RATE * paid_total, 2)
+    return max(fee, MANAGEMENT_FEE_MIN)
 
 
 def build_default_line_items(
