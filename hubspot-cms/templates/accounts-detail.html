@@ -49,6 +49,7 @@ dl.fields{display:grid;grid-template-columns:200px 1fr 160px;column-gap:14px;row
 dl.fields > div{display:contents}
 dl.fields .row{display:contents}
 dl.fields dt{padding:9px 0;font-size:12px;font-weight:700;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bdl)}
+dl.fields dt .field-hint{font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;font-style:italic;color:var(--tm);margin-top:3px;line-height:1.35}
 dl.fields dd{padding:9px 0;border-bottom:1px solid var(--bdl);font-size:14px}
 dl.fields dd.value{color:var(--tp);font-weight:500;word-break:break-word}
 dl.fields dd.empty{color:var(--tm);font-style:italic;font-weight:400}
@@ -173,6 +174,56 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
     return items.map(function(s){return '<span class="chip">' + esc(s) + '</span>';}).join('');
   }
 
+  // ── Field hints (sourced from community_brief.py BriefField.hint) ───
+  // Mirrors the approval portal — small italic guidance under each label.
+  var HINTS = {
+    voice_tier:            "How copy should feel for this property's price point.",
+    unit_noun:             "What we call a unit in copy.",
+    advertised_name:       "The full name used in headlines.",
+    short_name:            "The shortened name used in tight UI / social copy.",
+    former_property_name:  "If rebranded, the prior name — protects search equity during the transition.",
+    taglines:              "Property taglines / slogans. One per line.",
+    brand_adjectives:      "3–5 adjectives that best describe the community. One per line.",
+    differentiators:       "Unique features / solutions that set this community apart. One per line.",
+    selling_points:        "Extra points to emphasize in marketing. One per line.",
+    residents_love:        "What current residents love about the community. One per line.",
+    residents_dislike:     "Internal context — friction points to be aware of. Not used in ad copy.",
+    target_resident:       "Lifestyle and needs ONLY (commute, amenities, price sensitivity). Never age, family status, race, religion, national origin, or disability. Internal context only.",
+    lifecycle_state:       "Where the property is in its leasing journey.",
+    property_amenities:    "Community-level: pool, fitness center, clubhouse, etc. One per line.",
+    unit_features:         "Inside the unit: stainless appliances, walk-in closets, etc. One per line.",
+    marketed_amenity_names:"Property-specific amenity names from the marketing site. One per line.",
+    amenities_descriptions:"Short prose Fluency can pull from. Optional.",
+    neighborhood:          "The neighborhood the property sits IN (e.g., 'South Congress', not 'Austin').",
+    nearby_neighborhoods:  "Desirable areas the property is NEAR, worth name-dropping. One per line.",
+    landmarks:             "Landmarks the property is CLOSE TO. One per line.",
+    neighborhood_highlights:"Why this location matters — food, transit, vibe. One per line.",
+    nearby_employers:      "Major nearby employers worth name-dropping for commuters. One per line.",
+    competitors:           "Same-market peers used for positioning context. One per line.",
+    goals:                 "Overarching goals for this property's marketing.",
+    initiatives:           "Short- and long-term initiatives. One per line.",
+    challenges:            "Internal — friction points / challenges this property faces. Not used in ad copy.",
+    priorities:            "Internal — additional priorities the AM should know about.",
+    onsite_developments:   "Construction, renovations, or developments happening at the property. One per line.",
+    local_partnerships:    "Local businesses or partnerships worth highlighting. One per line.",
+    onsite_events:         "Recurring events at the property worth promoting. One per line.",
+    website_priorities:    "Internal — which pages on the corporate site should be linked to.",
+    excluded_neighborhoods:"Neighborhoods we should NOT target in keywords or copy.",
+    client_expectations:   "Hard expectations the client has set for this account.",
+    must_include:          "Copy MUST include these phrases / facts.",
+    forbidden_phrases:     "Copy must NEVER use these phrases.",
+    marketing_budget:      "Internal — monthly marketing budget for this property.",
+    pms:                   "e.g. Yardi, RealPage. Internal.",
+    cms:                   "What powers the website. Internal.",
+    chatbot:               "Any on-site chatbot / automated assistant. Internal.",
+    website_last_updated:  "When the site was last refreshed. Internal.",
+    building_style:        "Salesforce field — check for accuracy. Internal.",
+    asset_class:           "Salesforce field — check for accuracy. Internal.",
+    elise_ai:              "Salesforce field — check for accuracy. Internal.",
+    crm:                   "CRM in use. Internal.",
+    host_name:             "Salesforce field — check for accuracy. Internal.",
+  };
+
   // f = [label, hsKey, kind?, logicalKey?, options?]
   //   kind:   '' = text  |  'chips'  |  'textarea'  |  'dropdown'
   //   logicalKey: present = editable; absent = readonly.
@@ -205,7 +256,8 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
     } else {
       ddBody = inner;
     }
-    return '<dt>' + esc(label) + '</dt>' +
+    var hint = (lk && HINTS[lk]) ? '<div class="field-hint">' + esc(HINTS[lk]) + '</div>' : '';
+    return '<dt>' + esc(label) + hint + '</dt>' +
            '<dd class="' + ddClass + '">' + ddBody + '</dd>' +
            '<dd class="source" data-src-for="' + esc(lk || hsKey) + '">' + esc(src) + '</dd>';
   }
@@ -611,7 +663,7 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
       try { opts = JSON.parse(span.dataset.options || '[]'); } catch(e){ opts = []; }
       // Empty option = "clear the override"
       var blank = document.createElement('option');
-      blank.value = ''; blank.textContent = '— clear —';
+      blank.value = ''; blank.textContent = '— not set —';
       input.appendChild(blank);
       opts.forEach(function(o){
         var op = document.createElement('option');
