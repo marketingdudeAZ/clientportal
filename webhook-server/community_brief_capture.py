@@ -140,7 +140,8 @@ def _auto_ticket_id(company_id: str) -> str:
     return f"auto:{company_id}"
 
 
-def process_company(company: dict, *, deps: CaptureDeps, dry_run: bool = False) -> dict:
+def process_company(company: dict, *, deps: CaptureDeps, dry_run: bool = False,
+                    force: bool = False) -> dict:
     """Process one RPM-Managed company: AptIQ match tracking + brief capture.
 
     `company` carries at least: id, name, domain, and the property dict under
@@ -167,11 +168,13 @@ def process_company(company: dict, *, deps: CaptureDeps, dry_run: bool = False) 
     action["aptiq_matched"] = matched
     action["aptiq_status"] = updates.get("aptiq_match_status")
 
-    # 2) Brief capture, if this property has no brief yet.
-    if needs_brief_capture(props):
+    # 2) Brief capture, if this property has no brief yet — OR if forced.
+    # `force=True` bypasses the duplicate-record skip so an operator can
+    # re-LLM a property after fixing the scraper / prompts.
+    if needs_brief_capture(props) or force:
         ticket_id = _auto_ticket_id(company_id)
         existing = deps.find_by_ticket(ticket_id) if deps.find_by_ticket else None
-        if existing:
+        if existing and not force:
             action["brief"] = "exists"
         elif dry_run:
             action["brief"] = "would_capture"
@@ -268,20 +271,30 @@ def fetch_rpm_managed_companies() -> list[dict]:
 
 
 def run_scan(companies: list[dict], *, deps: CaptureDeps | None = None,
-             dry_run: bool = False, limit: int | None = None) -> dict:
+             dry_run: bool = False, limit: int | None = None,
+             force: bool = False, company_ids: set[str] | None = None) -> dict:
     """Scan RPM-Managed companies, capturing briefs + tracking AptIQ matches.
 
     `companies` items: {id, name, domain, props}. Caller is responsible for
     pre-filtering to RPM Managed (or pass all and we filter on plestatus prop).
+
+    `force=True` re-runs LLM capture even when a record already exists for
+    the auto-ple ticket — used to re-populate a property after fixing the
+    scraper or prompts.
+
+    `company_ids`, when set, restricts the scan to companies whose id is
+    in the set (intersected with the RPM Managed filter).
     """
     deps = (deps or CaptureDeps()).resolve()
     targets = [c for c in companies
                if (c.get("props", {}).get("plestatus") or c.get("plestatus") or "").strip()
                == RPM_MANAGED_STATUS or "plestatus" not in (c.get("props") or {})]
     # If callers already filtered, the filter above is a no-op safety net.
+    if company_ids:
+        targets = [c for c in targets if str(c.get("id") or "") in company_ids]
     if limit:
         targets = targets[:limit]
-    actions = [process_company(c, deps=deps, dry_run=dry_run) for c in targets]
+    actions = [process_company(c, deps=deps, dry_run=dry_run, force=force) for c in targets]
     return {
         "scanned": len(targets),
         "captured": sum(1 for a in actions if a.get("brief") == "captured"),

@@ -843,7 +843,10 @@ def community_brief_capture_scan():
     args = request.args
     dry_run = (args.get("dry_run") or "").lower() in ("1", "true", "yes")
     run_async = (args.get("async") or "").lower() in ("1", "true", "yes")
+    force = (args.get("force") or "").lower() in ("1", "true", "yes")
     limit = args.get("limit", type=int)
+    ids_raw = (args.get("company_ids") or "").strip()
+    company_ids = {s.strip() for s in ids_raw.split(",") if s.strip()} or None
 
     try:
         companies = cap.fetch_rpm_managed_companies()
@@ -854,15 +857,18 @@ def community_brief_capture_scan():
     if run_async and not dry_run:
         def _bg():
             try:
-                res = cap.run_scan(companies, dry_run=False, limit=limit)
+                res = cap.run_scan(companies, dry_run=False, limit=limit,
+                                   force=force, company_ids=company_ids)
                 logger.info("capture-scan async done: scanned=%d captured=%d",
                             res["scanned"], res["captured"])
             except Exception:
                 logger.exception("capture-scan async run failed")
         threading.Thread(target=_bg, daemon=True, name="cb-capture-scan").start()
-        return jsonify({"status": "dispatched", "scope_count": len(companies)}), 202
+        return jsonify({"status": "dispatched", "scope_count": len(companies),
+                        "force": force, "company_ids": list(company_ids or [])}), 202
 
-    summary = cap.run_scan(companies, dry_run=dry_run, limit=limit)
+    summary = cap.run_scan(companies, dry_run=dry_run, limit=limit,
+                           force=force, company_ids=company_ids)
     return jsonify(summary)
 
 

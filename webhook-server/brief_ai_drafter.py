@@ -129,35 +129,119 @@ def normalize_domain(raw: str) -> str:
     return s
 
 
-def scrape_site_text(domain: str, max_chars: int = 12000) -> str:
-    """Fetch the homepage and return visible text. Best-effort; never raises.
+# Subpage path keywords we ALWAYS try (even when not linked from home).
+# Most apartment marketing sites use these or very close variants. Each
+# variant gets a single HEAD-then-GET attempt; failures are silent.
+_SUBPAGE_HINTS = (
+    "amenities", "amenity", "features", "floorplans", "floor-plans", "floor_plans",
+    "neighborhood", "location", "lifestyle", "community", "about",
+)
+_SCRAPE_HEADERS = {"User-Agent": "RPMClientPortal-BriefDrafter/1.0"}
 
-    Keeping this dependency-light and synchronous — the caller is already
-    running in a background thread.
+
+def _strip_html(html: str) -> str:
+    html = re.sub(r"<script\b[^>]*>.*?</script>", " ", html, flags=re.I | re.S)
+    html = re.sub(r"<style\b[^>]*>.*?</style>", " ", html, flags=re.I | re.S)
+    text = re.sub(r"<[^>]+>", " ", html)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _extract_internal_paths(html: str, host: str) -> list[str]:
+    """Pull internal URL paths from anchor tags on the homepage."""
+    paths: list[str] = []
+    seen: set[str] = set()
+    # Find every href; cheap regex is fine for our purposes.
+    for m in re.finditer(r'href\s*=\s*["\']([^"\']+)["\']', html, flags=re.I):
+        raw = m.group(1).strip()
+        if not raw or raw.startswith(("#", "mailto:", "tel:", "javascript:")):
+            continue
+        # Same-host absolute -> reduce to path; relative -> use as-is.
+        if raw.startswith("http://") or raw.startswith("https://"):
+            try:
+                from urllib.parse import urlparse
+                u = urlparse(raw)
+                if u.netloc.lower().lstrip("www.") != host.lower().lstrip("www."):
+                    continue
+                path = u.path or "/"
+            except Exception:
+                continue
+        else:
+            path = raw if raw.startswith("/") else "/" + raw
+        # Keep it on the same host, drop query/fragment.
+        path = path.split("?", 1)[0].split("#", 1)[0].rstrip("/") or "/"
+        if path in seen:
+            continue
+        seen.add(path)
+        paths.append(path)
+    return paths
+
+
+def scrape_site_text(domain: str, max_chars: int = 20000) -> str:
+    """Fetch the homepage AND a handful of high-signal subpages, return
+    concatenated visible text. Best-effort; never raises.
+
+    Why crawl: the homepage rarely lists every amenity/feature. Amenity
+    grids, floorplans, neighborhood blurbs, and community pages all
+    live behind their own URL. Without them the LLM has to guess.
+    Strategy:
+      1) Fetch homepage.
+      2) Pull internal links from the homepage; keep ones whose path
+         hints at amenities/features/floorplans/neighborhood/etc.
+      3) Also try a small set of canonical paths even if unlinked
+         (covers sites where these pages are in a nav that's
+         JavaScript-rendered).
+      4) Fetch up to 5 additional pages, cap each at ~2,500 chars,
+         and concatenate with `--- PAGE: <path> ---` markers so the
+         LLM knows the provenance.
     """
     import requests
+    from urllib.parse import urlparse
 
-    url = f"https://{domain}"
+    base = f"https://{domain}"
     try:
-        r = requests.get(
-            url,
-            timeout=15,
-            headers={"User-Agent": "RPMClientPortal-BriefDrafter/1.0"},
-            allow_redirects=True,
-        )
+        r = requests.get(base, timeout=15, headers=_SCRAPE_HEADERS, allow_redirects=True)
         r.raise_for_status()
     except Exception as e:
         logger.warning("brief_ai_drafter: site scrape failed for %s: %s", domain, e)
         return ""
 
-    html = r.text or ""
-    # Drop script/style blocks, then strip tags — crude but sufficient for
-    # the small amount of context Claude needs.
-    html = re.sub(r"<script\b[^>]*>.*?</script>", " ", html, flags=re.I | re.S)
-    html = re.sub(r"<style\b[^>]*>.*?</style>", " ", html, flags=re.I | re.S)
-    text = re.sub(r"<[^>]+>", " ", html)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text[:max_chars]
+    home_html = r.text or ""
+    host = urlparse(r.url).netloc or domain
+    home_text = _strip_html(home_html)[:6000]
+
+    # Discover subpage candidates.
+    linked = _extract_internal_paths(home_html, host)
+    keep = []
+    for path in linked:
+        low = path.lower()
+        if any(hint in low for hint in _SUBPAGE_HINTS):
+            keep.append(path)
+    # Always-try canonical paths (in case nav is JS-rendered).
+    for hint in _SUBPAGE_HINTS:
+        for candidate in (f"/{hint}", f"/{hint}.html"):
+            if candidate not in keep:
+                keep.append(candidate)
+
+    # Crawl up to 5 subpages, ~2,500 chars each.
+    chunks: list[str] = [f"--- PAGE: / ---\n{home_text}"]
+    fetched: set[str] = {"/"}
+    for path in keep:
+        if len(chunks) > 5 or path in fetched:
+            continue
+        try:
+            rr = requests.get(base + path, timeout=10, headers=_SCRAPE_HEADERS, allow_redirects=True)
+            if rr.status_code != 200:
+                continue
+            sub_text = _strip_html(rr.text or "")[:2500]
+            if not sub_text:
+                continue
+            chunks.append(f"--- PAGE: {path} ---\n{sub_text}")
+            fetched.add(path)
+        except Exception:
+            continue
+
+    full = "\n\n".join(chunks)
+    return full[:max_chars]
 
 
 def draft_brief(
