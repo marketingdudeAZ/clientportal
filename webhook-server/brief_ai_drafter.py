@@ -531,8 +531,17 @@ CB_DRAFTABLE = [
      "In-unit features (stainless appliances, walk-in closets, quartz counters, "
      "in-unit washer/dryer, etc.). ONE PER LINE. Distinct from property amenities."),
     ("marketed_amenity_names",
-     "Property-specific amenity names that have a branded label (e.g. 'The Loft', "
-     "'Bark Park', 'Refresh Lounge'). ONE PER LINE. Skip generic ones."),
+     "Specific/marketed names of amenities as they appear on the marketing site, "
+     "more descriptive than generic categories. Examples: instead of 'pool', use "
+     "'Resort-Style Pool with Cabanas'; instead of 'gym', use '24-Hour Fitness "
+     "Center with Free Weights'; branded names like 'The Loft' or 'Bark Park' "
+     "also belong here. Pull the exact marketing phrases. ONE PER LINE. 5-12 items "
+     "when possible."),
+    ("amenities_descriptions",
+     "Short prose descriptions of the amenity experience that Fluency can pull "
+     "from for ad copy — 2-4 sentences total. Capture the property's marketing "
+     "voice (e.g. 'A resort-style pool surrounded by lounge cabanas and outdoor "
+     "kitchens — your weekend's headquarters.'). Plain prose, NOT a list."),
     ("taglines",
      "Marketing taglines / slogans the property uses in its own copy. ONE PER LINE. "
      "Maximum 3. Skip if no clear tagline appears."),
@@ -558,8 +567,13 @@ CB_DRAFTABLE = [
      "Why this location matters — food scene, transit access, vibe, walkability. "
      "ONE PER LINE."),
     ("nearby_employers",
-     "Major nearby employers worth name-dropping for commuters. ONE PER LINE. "
-     "Only include if explicitly mentioned or clearly visible from the source."),
+     "Major employers near this property's location that commuters from this "
+     "community would plausibly work for. ONE PER LINE. 4-8 items. When the "
+     "website explicitly mentions employers, prefer those; otherwise pull "
+     "from established general knowledge of the area's major employers given "
+     "the confirmed city/neighborhood (e.g. Atlanta → Delta, Coca-Cola, UPS, "
+     "Home Depot HQ; Fort Lauderdale → AutoNation, Citrix, Sheridan Healthcare). "
+     "Only use this knowledge path when the city is unambiguous from the source."),
     ("advertised_name",
      "The full property name as used in headlines / titles. One short string."),
     ("short_name",
