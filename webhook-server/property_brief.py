@@ -45,6 +45,7 @@ Identity fields on the new company (R1 + downstream contracts):
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 from urllib.parse import urljoin
 
@@ -839,7 +840,26 @@ def run_brief_path(parsed: dict[str, Any], commercial: dict[str, Any]) -> dict[s
     cross-worker race where two daemons end up running this for the
     same ticket — one wins the LLM call, the others see the record on
     their store.find_by_ticket() check.
+
+    Kill switch: set BRIEF_LLM_ENABLED=false to skip Path B entirely
+    (commercial path still runs). Useful when Anthropic credits are
+    depleted or for cost-control during incidents — no redeploy needed
+    to flip back on; just toggle the env var.
     """
+    if os.getenv("BRIEF_LLM_ENABLED", "true").lower() in ("false", "0", "no", "off"):
+        ticket_id = parsed.get("ticket_id") or ""
+        logger.info("BRIEF_LLM_ENABLED=false — skipping brief generation for ticket %s", ticket_id)
+        try:
+            clickup_client.post_comment(
+                ticket_id,
+                "Community Brief generation is paused (BRIEF_LLM_ENABLED=false). "
+                "The HubSpot deal + quote were created normally; flip the env var "
+                "on and re-trigger if you want the auto-drafted brief.",
+            )
+        except Exception:
+            pass
+        return {"skipped": True, "reason": "brief_llm_disabled"}
+
     ticket_id = parsed.get("ticket_id") or ""
     if ticket_id:
         existing = store.find_by_ticket(ticket_id)
