@@ -160,12 +160,13 @@ class TestNonDefaultChannelLineItems(unittest.TestCase):
         self.assertEqual(len(items), 14)
 
     def test_selected_channel_without_product_id_is_skipped_not_crashing(self):
-        # email_drip ships with an empty product id by default — it should be
-        # skipped (logged), not raise, and not appear as a bare line item.
+        # A selected channel with no configured product id (website_hosting
+        # has no catalog product) should be skipped (logged), not raise, and
+        # not appear as a bare line item.
         items = product_catalog.build_default_line_items({
-            "email_drip": {"tier": "", "monthly": 125, "setup": 0},
+            "website_hosting": {"tier": "", "monthly": 125, "setup": 0},
         })
-        self.assertNotIn("email_drip", {i["channel"] for i in items})
+        self.assertNotIn("website_hosting", {i["channel"] for i in items})
         self.assertEqual(len(items), 13)
 
     def test_price_parsed_from_tier_label_for_non_seo_channel(self):
@@ -356,6 +357,23 @@ class TestCreateDealWithLineItems(unittest.TestCase):
         self.assertIn("Setup Fee", last["name"])
         self.assertEqual(last["price"], "500.0")
         self.assertEqual(last["hs_sku"], "Paid_Search_Ads")
+
+    def test_email_drip_setup_uses_catalog_product(self):
+        deal_creator.create_deal_with_line_items(
+            company_id="c",
+            selections={
+                "email_drip": {"tier": "New Build", "monthly": 125, "setup": 225},
+            },
+            totals={"monthly": 125, "setup": 225},
+            property_name="X",
+        )
+        line_items = self._line_item_post_calls()
+        last = line_items[-1].kwargs["json"]["properties"]
+        # Setup line item references the real "Email Drip Campaign Setup"
+        # product, not an ad-hoc name.
+        self.assertEqual(last["hs_product_id"], "2948989326")
+        self.assertEqual(last["price"], "225.0")
+        self.assertNotIn("name", last)
 
 
 class TestPropertyBriefTestMode(unittest.TestCase):

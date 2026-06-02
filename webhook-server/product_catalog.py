@@ -71,12 +71,17 @@ CHANNEL_PRODUCT_MAP: dict[str, str] = {
     # quoted when a ticket selects them (e.g. Email Drip Campaign). These
     # were silently dropped before because they had no product id AND
     # build_default_line_items only walked DEFAULT_DIGITAL_LINE_ITEMS — so
-    # a selected Email Drip never became a line item. Product ids are
-    # portal-specific; set them via env so ops can fill them in without a
-    # code change. An empty id means the channel still can't be created as
-    # a catalog line item (build_default_line_items logs and skips it).
-    "email_drip":     os.getenv("HS_PRODUCT_ID_EMAIL_DRIP", ""),
-    "eblast":         os.getenv("HS_PRODUCT_ID_EBLAST", ""),
+    # a selected Email Drip never became a line item. Ids are from the
+    # HubSpot product export (2026-06-02); override per-portal via env.
+    #
+    # email_drip / eblast are single products → mapped directly.
+    # reputation / social_posting are TIER-PRICED in the catalog (Response
+    # Only vs Response+Removal; Basic/Standard/Premium) with no single
+    # "package" product, so there's no one id to pin — leave them to env
+    # until we pick a tier-resolution model. website_hosting has no product
+    # in the catalog at all.
+    "email_drip":     os.getenv("HS_PRODUCT_ID_EMAIL_DRIP", "2948989325"),
+    "eblast":         os.getenv("HS_PRODUCT_ID_EBLAST", "2948995166"),
     "reputation":     os.getenv("HS_PRODUCT_ID_REPUTATION", ""),
     "social_posting": os.getenv("HS_PRODUCT_ID_SOCIAL_POSTING", ""),
     "website_hosting":os.getenv("HS_PRODUCT_ID_WEBSITE_HOSTING", ""),

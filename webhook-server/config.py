@@ -105,7 +105,7 @@ HUBSPOT_QUOTE_WEBHOOK_SECRET = os.getenv("HUBSPOT_QUOTE_WEBHOOK_SECRET", "")
 # current "Marketing Services Insertion Order" template id. Leave empty
 # to skip pinning entirely (the editor falls back to the portal default
 # and the AM picks the template manually).
-HUBSPOT_QUOTE_TEMPLATE_ID = os.getenv("HUBSPOT_QUOTE_TEMPLATE_ID", "")
+HUBSPOT_QUOTE_TEMPLATE_ID = os.getenv("HUBSPOT_QUOTE_TEMPLATE_ID", "472873408612")
 
 # --- Property Brief Automation ---
 # Token-gated approval portal. Tokens are unguessable and consumed once a

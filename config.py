@@ -103,7 +103,7 @@ HUBSPOT_QUOTE_WEBHOOK_SECRET = os.getenv("HUBSPOT_QUOTE_WEBHOOK_SECRET", "")
 # a quote_template object id that currently exists in the portal — a stale
 # id is itself the cause of that error. Empty -> don't pin (editor falls
 # back to the portal default and the AM picks a template manually).
-HUBSPOT_QUOTE_TEMPLATE_ID = os.getenv("HUBSPOT_QUOTE_TEMPLATE_ID", "")
+HUBSPOT_QUOTE_TEMPLATE_ID = os.getenv("HUBSPOT_QUOTE_TEMPLATE_ID", "472873408612")
 
 # --- Property Brief Automation ---
 # Token-gated approval portal. Tokens are unguessable and consumed once a
