@@ -133,8 +133,9 @@ def compute_management_fee(selections: dict[str, dict]) -> float:
     (One outlier "Relaunch Campaigns" deal at 50% appears to be a
     special category — different deal type, not new-build.)
 
-    A $250 floor is enforced: if 20% of paid spend is less than $250
-    (including the no-paid-spend case), the fee is $250. AMs can
+    A $250 floor is enforced WHEN there's paid spend: if 20% of paid
+    spend is less than $250, the fee is $250. When there is no paid
+    spend at all the fee is $0 — no paid = no management. AMs can
     override the line-item price after creation if a property has a
     custom rate.
     """
@@ -142,6 +143,8 @@ def compute_management_fee(selections: dict[str, dict]) -> float:
         float((selections.get(c) or {}).get("monthly", 0) or 0)
         for c in ASTERISKED_PAID_CHANNELS
     )
+    if paid_total <= 0:
+        return 0.0
     fee = round(MANAGEMENT_FEE_RATE * paid_total, 2)
     return max(fee, MANAGEMENT_FEE_MIN)
 

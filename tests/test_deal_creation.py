@@ -64,15 +64,15 @@ class TestProductCatalog(unittest.TestCase):
         # 6500 * 0.20 = 1300
         self.assertEqual(product_catalog.compute_management_fee(sel), 1300.0)
 
-    def test_management_fee_uses_min_when_no_paid_spend(self):
-        # Floor: with no paid spend at all the fee is still the $250 minimum.
-        self.assertEqual(product_catalog.compute_management_fee({}),
-                         product_catalog.MANAGEMENT_FEE_MIN)
+    def test_management_fee_zero_when_no_paid_spend(self):
+        # The $250 floor only applies WHEN there's paid spend. No paid
+        # services selected → no management fee at all.
+        self.assertEqual(product_catalog.compute_management_fee({}), 0.0)
         self.assertEqual(
             product_catalog.compute_management_fee(
                 {"seo": {"tier": "Standard - $800", "monthly": 0, "setup": 0}}
             ),
-            product_catalog.MANAGEMENT_FEE_MIN,
+            0.0,
         )
 
     def test_management_fee_excludes_seo_from_calc(self):
@@ -121,16 +121,9 @@ class TestProductCatalog(unittest.TestCase):
             self.assertTrue(i["hs_product_id"], f"missing pid for {i['channel']}")
 
     def test_default_line_items_zero_for_inactive_channels(self):
-        # All channel line items price at $0 when no selections are made —
-        # EXCEPT management_fee, which carries the $250 floor.
         items = product_catalog.build_default_line_items({})
-        by_channel = {i["channel"]: i["price"] for i in items}
-        self.assertEqual(by_channel["management_fee"],
-                         product_catalog.MANAGEMENT_FEE_MIN)
-        for ch, price in by_channel.items():
-            if ch == "management_fee":
-                continue
-            self.assertEqual(price, 0.0, f"{ch} should be $0 with empty selections")
+        for i in items:
+            self.assertEqual(i["price"], 0.0)
 
     def test_default_line_items_uses_selection_prices(self):
         sel = {
