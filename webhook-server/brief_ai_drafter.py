@@ -506,3 +506,180 @@ def resolve_company_by_domain(domain: str) -> dict | None:
         logger.warning("brief_ai_drafter: website-fallback lookup failed: %s", e)
 
     return None
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Community Brief v2 structured extractor
+# ─────────────────────────────────────────────────────────────────────────
+#
+# Aligned to community_brief.FIELDS — emits values keyed by the logical
+# field key so the caller can pass each one straight into
+# community_brief.write_field(company_id, key, value). One LLM round-trip
+# per property; intentionally focused (only the fields a website can
+# plausibly support).
+
+# Logical key → human-readable extraction hint for the LLM. Driven by
+# what community_brief.write_field accepts as an editable key. Order is
+# meaningful — it's the order Claude sees the fields, which makes the
+# higher-value extractions come first in the JSON.
+CB_DRAFTABLE = [
+    ("property_amenities",
+     "Community-level amenities (pool, fitness center, clubhouse, dog park, etc.). "
+     "ONE PER LINE. Look hard at /amenities and /features pages — these are the "
+     "highest-value extractions. Do NOT include in-unit features here."),
+    ("unit_features",
+     "In-unit features (stainless appliances, walk-in closets, quartz counters, "
+     "in-unit washer/dryer, etc.). ONE PER LINE. Distinct from property amenities."),
+    ("marketed_amenity_names",
+     "Property-specific amenity names that have a branded label (e.g. 'The Loft', "
+     "'Bark Park', 'Refresh Lounge'). ONE PER LINE. Skip generic ones."),
+    ("taglines",
+     "Marketing taglines / slogans the property uses in its own copy. ONE PER LINE. "
+     "Maximum 3. Skip if no clear tagline appears."),
+    ("brand_adjectives",
+     "3-5 adjectives that best describe this community's brand voice based on the site. "
+     "ONE PER LINE."),
+    ("differentiators",
+     "What makes this property different from competitors. ONE PER LINE. 2-4 items."),
+    ("selling_points",
+     "Additional value propositions worth emphasizing in marketing. ONE PER LINE."),
+    ("residents_love",
+     "What residents would love about living here, grounded in the source material. "
+     "ONE PER LINE."),
+    ("neighborhood",
+     "The single neighborhood the property sits IN (e.g. 'South Congress', not "
+     "'Austin'). One short string."),
+    ("nearby_neighborhoods",
+     "Adjacent / nearby neighborhoods worth name-dropping in marketing. ONE PER LINE."),
+    ("landmarks",
+     "Landmarks / POIs the property is close to (parks, downtowns, attractions). "
+     "ONE PER LINE."),
+    ("neighborhood_highlights",
+     "Why this location matters — food scene, transit access, vibe, walkability. "
+     "ONE PER LINE."),
+    ("nearby_employers",
+     "Major nearby employers worth name-dropping for commuters. ONE PER LINE. "
+     "Only include if explicitly mentioned or clearly visible from the source."),
+    ("advertised_name",
+     "The full property name as used in headlines / titles. One short string."),
+    ("short_name",
+     "A short / abbreviated property name for tight UI. One short string."),
+]
+
+_CB_SYSTEM = """You are a marketing analyst extracting structured brief fields from an apartment community's website.
+
+The website text you receive is multi-page: the homepage AND a handful of subpages
+(amenities, floorplans, neighborhood, etc.), each prefixed with a `--- PAGE: <path> ---`
+marker. PAY ATTENTION to which page each fact came from — amenity pages are
+much more reliable than the homepage for amenity lists.
+
+For each field below, return a JSON value (or null) PLUS a confidence score
+0.0-1.0. Use null when the source does NOT clearly support an answer — never
+guess, never invent specific phone numbers, addresses, or rental prices.
+
+Confidence rubric:
+  0.9-1.0  Explicitly stated in the sources (exact phrase or direct claim).
+  0.6-0.8  Strongly implied (multiple consistent signals).
+  0.3-0.5  Weakly inferred (one soft signal); flag for review.
+  0.0-0.2  Not supported — return null for the value.
+
+For LIST-type fields (amenities, taglines, adjectives, etc.) return a SINGLE STRING
+with one item per line — NOT a JSON array. Empty string means none found.
+
+For SINGLE STRING fields (neighborhood, advertised_name, short_name) return a short
+plain string or null.
+
+Response shape (return ONLY this JSON — no preamble, no code fences):
+
+{
+  "<field_key>": {"value": <string-or-null>, "confidence": <0.0-1.0>},
+  ...
+}
+
+The fields to extract, IN ORDER:
+
+"""
+
+
+def draft_community_brief_overrides(*, domain: str, property_name: str,
+                                     site_text: str | None = None,
+                                     min_confidence: float = 0.55) -> dict:
+    """Run the LLM to extract structured override values from a property's website.
+
+    Returns a dict keyed by community_brief logical keys — only fields whose
+    confidence meets `min_confidence` are included. Values are normalized
+    strings ready to PATCH directly via community_brief.write_field.
+
+    Costs one Anthropic round-trip (~$0.02 with caching). Falls back to {}
+    on any error so the caller's main flow continues.
+    """
+    import anthropic
+    from config import ANTHROPIC_API_KEY, CLAUDE_AGENT_MODEL
+
+    if not ANTHROPIC_API_KEY:
+        logger.info("draft_community_brief_overrides: no anthropic key; skipping")
+        return {}
+
+    if site_text is None:
+        site_text = scrape_site_text(domain) if domain else ""
+    if not site_text:
+        logger.info("draft_community_brief_overrides: no site text for %s", domain)
+        return {}
+
+    field_lines = [f"  {key}\n    {hint}" for key, hint in CB_DRAFTABLE]
+    system = _CB_SYSTEM + "\n".join(field_lines)
+
+    user_content: list[dict] = [
+        {"type": "text",
+         "text": f"WEBSITE CONTENT from https://{domain} (multi-page, trimmed):\n\n{site_text}",
+         "cache_control": {"type": "ephemeral"}},
+        {"type": "text",
+         "text": f"Property name: {property_name}\n\nReturn ONLY the JSON object."},
+    ]
+
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        resp = client.messages.create(
+            model=CLAUDE_AGENT_MODEL,
+            max_tokens=2200,
+            temperature=0.2,
+            system=system,
+            messages=[{"role": "user", "content": user_content}],
+        )
+        raw = "".join(b.text for b in resp.content if hasattr(b, "text"))
+    except Exception as e:
+        logger.warning("draft_community_brief_overrides: API call failed: %s", e)
+        return {}
+
+    # Strip possible code fences and parse.
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```\s*$", "", raw)
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError) as e:
+        logger.warning("draft_community_brief_overrides: bad JSON from LLM: %s", e)
+        return {}
+
+    out: dict[str, str] = {}
+    for key, _hint in CB_DRAFTABLE:
+        entry = parsed.get(key)
+        if not isinstance(entry, dict):
+            continue
+        val = entry.get("value")
+        conf = entry.get("confidence")
+        try:
+            conf = float(conf) if conf is not None else 0.0
+        except (TypeError, ValueError):
+            conf = 0.0
+        if val is None or conf < min_confidence:
+            continue
+        if isinstance(val, list):
+            val = "\n".join(str(v).strip() for v in val if str(v).strip())
+        val = str(val).strip()
+        if val:
+            out[key] = val
+    logger.info("draft_community_brief_overrides: %s produced %d fields above %.2f",
+                domain, len(out), min_confidence)
+    return out

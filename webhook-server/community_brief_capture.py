@@ -203,6 +203,36 @@ def process_company(company: dict, *, deps: CaptureDeps, dry_run: bool = False,
                 updates["rpm_brief_source"] = "auto_ple"
                 action["brief"] = "captured"
                 action["token"] = record["token"]
+
+                # 2b) Structured field extraction — second LLM pass that
+                # populates individual fluency_* override props so they show
+                # up on the /accounts page WITHOUT requiring the human to
+                # manually transcribe from the markdown brief. One round-trip,
+                # best-effort; failures here never abort the main capture.
+                try:
+                    domain = parsed.get("property_domain") or ""
+                    if domain:
+                        import community_brief, brief_ai_drafter
+                        drafted = brief_ai_drafter.draft_community_brief_overrides(
+                            domain=brief_ai_drafter.normalize_domain(domain),
+                            property_name=parsed.get("property_name", ""),
+                        )
+                        written = 0
+                        for key, value in (drafted or {}).items():
+                            try:
+                                ok, _msg = community_brief.write_field(
+                                    company_id, key, str(value),
+                                )
+                                if ok:
+                                    written += 1
+                            except Exception as e:
+                                logger.warning("write_field %s/%s failed: %s",
+                                               company_id, key, e)
+                        action["llm_fields_written"] = written
+                        action["llm_fields_drafted"] = list((drafted or {}).keys())
+                except Exception as e:
+                    logger.warning("structured draft failed for %s: %s", company_id, e)
+                    action["llm_extract_error"] = str(e)
             except Exception as e:
                 logger.exception("brief capture failed for %s", company_id)
                 action["brief"] = f"error: {e}"
