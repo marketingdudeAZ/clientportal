@@ -85,6 +85,32 @@ def generate_and_send_quote(
 
     Does NOT publish. Returns the quote ID.
     """
+    # IDEMPOTENCY: if this deal already has a quote, reuse it. ClickUp can
+    # fire the webhook multiple times (subtask auto-creation + comment posts
+    # firing taskUpdated + retry-on-timeout), and the brief-store sentinel
+    # has read-after-write lag in HubDB — so the only reliable dedup at
+    # the OUTPUT level is "is there already a quote on this deal?". Found
+    # ANY existing quote-to-deal association → reuse it instead of creating
+    # a duplicate empty one. Observed 2026-06-03 as 9 quotes attached to a
+    # single deal before this guard was in place.
+    try:
+        existing_q = requests.get(
+            f"{API_BASE}/crm/v3/objects/deals/{deal_id}/associations/quotes",
+            headers=HEADERS, timeout=10,
+        )
+        if existing_q.status_code == 200:
+            results = (existing_q.json() or {}).get("results") or []
+            if results:
+                existing_quote_id = str(results[0].get("id") or "")
+                if existing_quote_id:
+                    logger.info("Reusing existing quote %s for deal %s "
+                                "(idempotency — deal already has %d quote(s))",
+                                existing_quote_id, deal_id, len(results))
+                    return existing_quote_id
+    except requests.RequestException as e:
+        logger.warning("Existing-quote lookup failed for deal %s: %s — proceeding with create",
+                       deal_id, e)
+
     deal_name = _fetch_deal_name(deal_id) or "Property Brief Quote"
     today = _dt.date.today()
 
