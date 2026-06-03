@@ -1011,6 +1011,28 @@ def run_brief_path(parsed: dict[str, Any], commercial: dict[str, Any]) -> dict[s
     if os.getenv("BRIEF_LLM_ENABLED", "true").lower() in ("false", "0", "no", "off"):
         ticket_id = parsed.get("ticket_id") or ""
         logger.info("BRIEF_LLM_ENABLED=false — skipping brief generation for ticket %s", ticket_id)
+
+        # CRITICAL: still write a sentinel brief-store record so the Layer 1
+        # idempotency check in clickup_webhook keeps catching retries.
+        # Without this, every taskUpdated event ClickUp fires (including
+        # the ones triggered by OUR OWN comment posts) re-enters the
+        # pipeline and creates a new quote — observed 2026-06-03 as 9
+        # quotes + 66 comments on a single deal.
+        if ticket_id:
+            existing = store.find_by_ticket(ticket_id)
+            if not existing:
+                try:
+                    store.create(
+                        ticket_id=ticket_id,
+                        company_id=commercial.get("company_id") or "",
+                        deal_id=commercial.get("deal_id") or None,
+                        submitter_email=parsed.get("submitter_email", "") or "",
+                        rm_email=parsed.get("rm_email", "") or "",
+                        brief_markdown="(brief generation paused — BRIEF_LLM_ENABLED=false)",
+                    )
+                    logger.info("Wrote sentinel brief-store record for %s (dedup gate)", ticket_id)
+                except Exception:
+                    logger.exception("Failed to write sentinel brief record for %s", ticket_id)
         try:
             clickup_client.post_comment(
                 ticket_id,
