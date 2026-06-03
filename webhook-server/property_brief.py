@@ -354,6 +354,21 @@ def _extract_rpm_selections(task: dict[str, Any]) -> dict[str, dict]:
             "monthly": monthly,
             "setup":   setup,
         }
+
+    # Diagnostic: surface every custom-field name on the ticket so failures
+    # like "Email Drip never fired" are debuggable in one log read. Pairs
+    # with the field-name mismatch problem QA hits during onboarding.
+    try:
+        present = sorted({
+            str((f.get("name") or "")).strip()
+            for f in (task.get("custom_fields") or [])
+            if (f.get("name") or "").strip()
+        })
+        logger.info("parse_ticket(%s): channels=%s  custom_fields=%s",
+                    task.get("id"), list(selections.keys()), present)
+    except Exception:  # pragma: no cover - diagnostic-only
+        pass
+
     return selections
 
 
