@@ -300,17 +300,46 @@ def lookup_company_owner_id(company_id: str) -> str:
         return ""
 
 
+def _am_email_map() -> dict[str, str]:
+    """Parse the CLICKUP_AM_EMAIL_MAP env var.
+
+    Format: comma-separated "Name:email" pairs.
+      CLICKUP_AM_EMAIL_MAP="Logan:logan.mcoien@rpmliving.com,Amanda:amanda.koontz@rpmliving.com"
+
+    Keys (Names) are case-insensitive — the ClickUp form's Account
+    Manager dropdown stores first names like "Logan" / "Amanda" /
+    "Dustin"; the map gives us a deterministic name → email lookup
+    that doesn't depend on HubSpot owners' firstName field matching
+    or on ClickUp exposing assignee emails (some users hide them).
+    """
+    raw = os.getenv("CLICKUP_AM_EMAIL_MAP", "").strip()
+    if not raw:
+        return {}
+    out: dict[str, str] = {}
+    for pair in raw.split(","):
+        if ":" not in pair:
+            continue
+        name, _, email = pair.partition(":")
+        name = name.strip().lower()
+        email = email.strip()
+        if name and email:
+            out[name] = email
+    return out
+
+
 def resolve_deal_owner(parsed: dict[str, Any], company_id: str) -> str:
     """Pick the HubSpot owner id for the deal + quote.
 
     Resolution chain (first hit wins):
       1. Ticket assignee email → HubSpot owner email lookup
-      2. "Account Manager" custom field name → HubSpot owner name lookup
-      3. ClickUp assignee NAME → HubSpot owner name lookup (covers
-         tickets where the assignee's email is hidden in the API)
-      4. Whoever owns the HubSpot company record
+      2. CLICKUP_AM_EMAIL_MAP → owner email lookup (env-configured,
+         most reliable for tickets where ClickUp hides the assignee
+         email — recommended path for production)
+      3. "Account Manager" custom field name → owner name lookup
+      4. ClickUp assignee NAME → owner name lookup
+      5. Whoever owns the HubSpot company record
 
-    Returns "" only when none of the four resolve — in which case the
+    Returns "" only when none of the five resolve — in which case the
     deal is created owner-less and the AM picks a person manually.
     """
     # 1) assignee email
@@ -319,17 +348,31 @@ def resolve_deal_owner(parsed: dict[str, Any], company_id: str) -> str:
         logger.info("resolve_deal_owner: matched by assignee email -> %s", owner_id)
         return owner_id
 
-    # 2) Account Manager custom field
+    # 2) Account Manager via env-configured name → email map.
     am_name = (parsed.get("account_manager") or "").strip()
+    a_name = (parsed.get("assignee_name") or "").strip()
+    am_map = _am_email_map()
+    for needle in filter(None, (am_name.lower(),
+                                a_name.lower(),
+                                a_name.split()[0].lower() if a_name else "")):
+        mapped_email = am_map.get(needle)
+        if not mapped_email:
+            continue
+        owner_id = lookup_hubspot_owner_id(mapped_email)
+        if owner_id:
+            logger.info("resolve_deal_owner: matched via CLICKUP_AM_EMAIL_MAP[%r] -> %s -> %s",
+                        needle, mapped_email, owner_id)
+            return owner_id
+
+    # 3) Account Manager custom field name → owner-by-name
     if am_name:
         owner_id = lookup_hubspot_owner_by_name(am_name)
         if owner_id:
-            logger.info("resolve_deal_owner: matched by Account Manager %r -> %s",
+            logger.info("resolve_deal_owner: matched by Account Manager name %r -> %s",
                         am_name, owner_id)
             return owner_id
 
-    # 3) Assignee name
-    a_name = (parsed.get("assignee_name") or "").strip()
+    # 4) Assignee name → owner-by-name
     if a_name and a_name != am_name:
         owner_id = lookup_hubspot_owner_by_name(a_name)
         if owner_id:
@@ -337,14 +380,21 @@ def resolve_deal_owner(parsed: dict[str, Any], company_id: str) -> str:
                         a_name, owner_id)
             return owner_id
 
-    # 4) Company owner
+    # 5) Company owner — last resort. Verify the owner has an email
+    # before returning, otherwise the quote sender stamping in
+    # quote_generator can't populate hs_sender_email and the AM has
+    # to fill the sender in manually anyway.
     owner_id = lookup_company_owner_id(company_id)
     if owner_id:
         logger.info("resolve_deal_owner: fell back to company owner -> %s", owner_id)
         return owner_id
 
-    logger.warning("resolve_deal_owner: NO match for ticket %s — deal will be owner-less",
-                   parsed.get("ticket_id"))
+    logger.warning("resolve_deal_owner: NO match for ticket %s — "
+                   "assignee_email=%r account_manager=%r assignee_name=%r — "
+                   "deal will be owner-less; quote sender will be blank",
+                   parsed.get("ticket_id"),
+                   parsed.get("assignee_email"),
+                   am_name, a_name)
     return ""
 
 
