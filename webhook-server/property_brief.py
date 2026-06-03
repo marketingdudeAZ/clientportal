@@ -796,7 +796,12 @@ def _create_company(*, name: str, domain: str = "") -> dict:
 
 
 def comment_commercial_result(parsed: dict[str, Any], result: dict[str, Any]) -> None:
-    """Post the deal/quote details into the ClickUp ticket and move status."""
+    """Post the deal/quote details into the ClickUp ticket.
+
+    Intentionally does NOT advance the ticket status — the PM team owns the
+    To Vet → Pending PM Approval transition by hand so they have a chance
+    to review the auto-created deal/quote before it leaves their queue.
+    """
     # Prefer the real deal totals computed in run_commercial_path (line-item
     # sum + every setup fee). Fall back to the parsed selection totals only
     # if they're absent, e.g. when a deal was reused on a retry.
@@ -825,7 +830,6 @@ def comment_commercial_result(parsed: dict[str, Any], result: dict[str, Any]) ->
         f"Monthly: ${monthly:,.0f} · Setup: ${setup:,.0f}",
     ]
     clickup_client.post_comment(parsed["ticket_id"], "\n".join(lines))
-    _set_status(parsed["ticket_id"], "deal_created")
 
 
 # ── Path B: Brief ──────────────────────────────────────────────────────────
