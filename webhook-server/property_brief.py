@@ -146,6 +146,11 @@ def parse_ticket(task: dict[str, Any]) -> dict[str, Any]:
         # owns the record (and is the quote's "from" name when sent).
         "assignee_email":  _primary_assignee_email(task),
         "assignee_name":   _primary_assignee_name(task),
+        # "Account Manager" dropdown on the RPM intake form. Names like
+        # "Logan", "Amanda", "Dustin" — when ClickUp doesn't expose the
+        # assignee's email this is the reliable signal for who owns the
+        # deal (resolved against HubSpot owners by name).
+        "account_manager": _str(cf(task, "Account Manager")),
         # Notes: prefer task description, then portal "Notes",
         # then RPM "Additional Details from Requester" / "Other Info".
         "notes":           _str(
@@ -222,6 +227,125 @@ def lookup_hubspot_owner_id(email: str) -> str:
     except Exception as e:
         logger.warning("Owner lookup failed for %s: %s", email, e)
         return ""
+
+
+def lookup_hubspot_owner_by_name(name: str) -> str:
+    """Resolve a HubSpot owner id by NAME (firstname or 'firstname lastname').
+
+    Fallback path for when the ClickUp ticket assignee's email is hidden
+    (ClickUp privacy settings frequently strip the email field from API
+    responses), or when the deal owner should be the Account Manager
+    named on the form rather than the assignee.
+
+    Match strategy:
+      * exact case-insensitive match on firstName (most common — the
+        intake form's "Account Manager" dropdown shows just first names)
+      * exact case-insensitive match on "firstName lastName" if the
+        input is a full name
+    Returns "" when no owner matches.
+    """
+    if not name:
+        return ""
+    import requests
+    from config import HUBSPOT_API_KEY
+    if not HUBSPOT_API_KEY:
+        return ""
+    needle = name.strip().lower()
+    try:
+        r = requests.get(
+            "https://api.hubapi.com/crm/v3/owners/",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"},
+            params={"limit": 500},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            logger.warning("Owner-by-name lookup %r -> %s %s",
+                           name, r.status_code, r.text[:200])
+            return ""
+        for o in r.json().get("results") or []:
+            first = (o.get("firstName") or "").strip().lower()
+            last = (o.get("lastName") or "").strip().lower()
+            full = f"{first} {last}".strip()
+            if needle in (first, full):
+                return str(o["id"])
+    except Exception as e:
+        logger.warning("Owner-by-name lookup failed for %r: %s", name, e)
+    return ""
+
+
+def lookup_company_owner_id(company_id: str) -> str:
+    """Return the hubspot_owner_id currently stored on a company record.
+
+    Last-resort fallback in the deal-owner resolution chain — when nothing
+    else identifies a person we use whoever the company is owned by.
+    """
+    if not company_id:
+        return ""
+    import requests
+    from config import HUBSPOT_API_KEY
+    if not HUBSPOT_API_KEY:
+        return ""
+    try:
+        r = requests.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"},
+            params={"properties": "hubspot_owner_id"},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return ""
+        return str((r.json().get("properties") or {}).get("hubspot_owner_id") or "")
+    except Exception as e:
+        logger.warning("Company-owner lookup failed for %s: %s", company_id, e)
+        return ""
+
+
+def resolve_deal_owner(parsed: dict[str, Any], company_id: str) -> str:
+    """Pick the HubSpot owner id for the deal + quote.
+
+    Resolution chain (first hit wins):
+      1. Ticket assignee email → HubSpot owner email lookup
+      2. "Account Manager" custom field name → HubSpot owner name lookup
+      3. ClickUp assignee NAME → HubSpot owner name lookup (covers
+         tickets where the assignee's email is hidden in the API)
+      4. Whoever owns the HubSpot company record
+
+    Returns "" only when none of the four resolve — in which case the
+    deal is created owner-less and the AM picks a person manually.
+    """
+    # 1) assignee email
+    owner_id = lookup_hubspot_owner_id(parsed.get("assignee_email") or "")
+    if owner_id:
+        logger.info("resolve_deal_owner: matched by assignee email -> %s", owner_id)
+        return owner_id
+
+    # 2) Account Manager custom field
+    am_name = (parsed.get("account_manager") or "").strip()
+    if am_name:
+        owner_id = lookup_hubspot_owner_by_name(am_name)
+        if owner_id:
+            logger.info("resolve_deal_owner: matched by Account Manager %r -> %s",
+                        am_name, owner_id)
+            return owner_id
+
+    # 3) Assignee name
+    a_name = (parsed.get("assignee_name") or "").strip()
+    if a_name and a_name != am_name:
+        owner_id = lookup_hubspot_owner_by_name(a_name)
+        if owner_id:
+            logger.info("resolve_deal_owner: matched by assignee name %r -> %s",
+                        a_name, owner_id)
+            return owner_id
+
+    # 4) Company owner
+    owner_id = lookup_company_owner_id(company_id)
+    if owner_id:
+        logger.info("resolve_deal_owner: fell back to company owner -> %s", owner_id)
+        return owner_id
+
+    logger.warning("resolve_deal_owner: NO match for ticket %s — deal will be owner-less",
+                   parsed.get("ticket_id"))
+    return ""
 
 
 def _coerce_selections(value: Any) -> dict[str, dict]:
@@ -304,7 +428,16 @@ _RPM_CHANNEL_FIELDS: list[tuple[str, str | None, str | None]] = [
 ]
 
 # Tier dropdown values that mean "no, skip this channel". Case-insensitive.
-_RPM_TIER_SKIP = {"", "none", "n/a", "no", "not requested", "do not include"}
+_RPM_TIER_SKIP = {"", "none", "n/a", "no", "not requested", "do not include", "-"}
+
+# Some channels are priced through the form's marketing copy ("$125/mo +
+# $225 setup" displayed next to the field) rather than per-ticket currency
+# inputs — there's literally no "Email Drip Campaign" currency field on
+# the intake form. Bake the defaults in here so a selected tier still
+# produces a line item at the right price instead of $0.
+_CHANNEL_DEFAULTS: dict[str, dict[str, float]] = {
+    "email_drip": {"monthly": 125.0, "setup": 225.0},  # New Build defaults
+}
 
 
 def _extract_rpm_selections(task: dict[str, Any]) -> dict[str, dict]:
@@ -348,6 +481,14 @@ def _extract_rpm_selections(task: dict[str, Any]) -> dict[str, dict]:
         # no setup) — that's an unselected channel.
         if monthly <= 0 and setup <= 0 and not tier_clean:
             continue
+
+        # Apply baked-in defaults for channels priced through form copy
+        # rather than per-ticket fields (Email Drip Campaign New Build).
+        defaults = _CHANNEL_DEFAULTS.get(channel_key, {})
+        if tier_clean and monthly <= 0 and defaults.get("monthly"):
+            monthly = defaults["monthly"]
+        if tier_clean and setup <= 0 and defaults.get("setup"):
+            setup = defaults["setup"]
 
         selections[channel_key] = {
             "tier":    tier_clean,
@@ -567,10 +708,12 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
     # error downstream (e.g., quote API 400) creates a new deal on every
     # retry. The ticket id is stored on the deal as `clickup_ticket_id` —
     # search HubSpot for that before creating a fresh deal.
-    # Resolve the ClickUp assignee -> HubSpot owner id ONCE per delivery.
-    # Both the deal and the quote get this owner so the AM is the
-    # record owner + the quote's "from" name when sent.
-    owner_id = lookup_hubspot_owner_id(parsed.get("assignee_email") or "")
+    #
+    # Deal owner resolution chain (see resolve_deal_owner): assignee email
+    # → Account Manager dropdown → assignee name → company owner. Both the
+    # deal and the quote get this owner so the AM is the record owner +
+    # the quote's "from" name when sent.
+    owner_id = resolve_deal_owner(parsed, company["id"])
 
     existing_deal_id = _find_existing_deal(parsed.get("ticket_id") or "")
     if existing_deal_id:
