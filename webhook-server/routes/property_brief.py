@@ -55,26 +55,51 @@ property_brief_bp = Blueprint("property_brief", __name__)
 # retries fall back to the brief-store check (slower-consistent but still
 # correct — duplicate briefs would just no-op).
 
-_in_flight: set[str] = set()
-_in_flight_lock = threading.Lock()
+# Recently-processed tickets, mapped to the epoch second we first saw them.
+# Replaces the old release-on-completion mutex: the previous design freed
+# the slot as soon as the pipeline finished, so a webhook delivery arriving
+# 5 seconds later (ClickUp Automations creating subtasks, the bot's own
+# comment posts triggering taskUpdated, etc.) would pass the brief-store
+# sentinel (HubDB read-after-write lag) AND find an empty mutex AND re-run
+# the whole pipeline. Hold the claim for the full TTL window so any retry
+# within 10 minutes short-circuits at 200 immediately.
+_CLAIM_TTL_S = 600   # 10 minutes
+_recent: dict[str, float] = {}
+_recent_lock = threading.Lock()
 
 
 def _try_claim(ticket_id: str) -> bool:
-    """Return True if this caller is now the owner of `ticket_id` work.
+    """Return True if this is the first webhook delivery for `ticket_id`
+    in the last _CLAIM_TTL_S seconds.
 
-    False means another worker thread is already processing this ticket;
-    the caller should drop the request.
+    False means we've already processed (or are processing) this ticket
+    very recently — the caller should drop the request without re-running
+    the pipeline. The 10-minute TTL covers the vast majority of duplicate
+    delivery storms (ClickUp's subtask-creation cascade + comment-triggered
+    taskUpdated events both burn through in seconds) without holding the
+    claim forever — a legitimate re-fire via the manual flag after the
+    TTL expires will still be processed.
     """
-    with _in_flight_lock:
-        if ticket_id in _in_flight:
+    import time as _time
+    if not ticket_id:
+        return True
+    now = _time.time()
+    with _recent_lock:
+        ts = _recent.get(ticket_id, 0.0)
+        if now - ts < _CLAIM_TTL_S:
             return False
-        _in_flight.add(ticket_id)
+        _recent[ticket_id] = now
+        # Opportunistic GC so the dict doesn't grow without bound.
+        if len(_recent) > 1000:
+            cutoff = now - _CLAIM_TTL_S
+            for k in [k for k, v in _recent.items() if v < cutoff]:
+                _recent.pop(k, None)
         return True
 
 
-def _release_claim(ticket_id: str) -> None:
-    with _in_flight_lock:
-        _in_flight.discard(ticket_id)
+def _release_claim(ticket_id: str) -> None:  # noqa: ARG001 - kept for callers
+    """No-op. Claims expire by TTL, not on pipeline completion. See _try_claim."""
+    return None
 
 
 # ── Webhook: ClickUp ticket created/updated ────────────────────────────────
