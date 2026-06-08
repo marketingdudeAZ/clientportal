@@ -970,6 +970,8 @@ def comment_commercial_result(parsed: dict[str, Any], result: dict[str, Any]) ->
         f"HubSpot deal created: {result.get('deal_url') or result.get('deal_id')}",
         quote_line,
         f"Monthly: ${monthly:,.0f} · Setup: ${setup:,.0f}",
+        "",
+        "If you have any questions / concerns / edits to the IO please contact your AM.",
     ]
     clickup_client.post_comment(parsed["ticket_id"], "\n".join(lines))
 
