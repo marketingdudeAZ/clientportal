@@ -331,9 +331,13 @@ def _fetch_deal_line_items(deal_id: str) -> list[str]:
 def _find_or_create_contact(email: str) -> str:
     """Return the HubSpot contact id for a given email, creating one if absent.
 
-    Returns "" on any error so the caller can soft-fail. Creating with
-    just `email` is enough — HubSpot will fill in name/lifecycle stage
-    on the first inbound interaction (or the AM can edit manually).
+    Returns "" on any error so the caller can soft-fail. New contacts get
+    placeholder firstName + lastName derived from the local part of the
+    email — HubSpot's QuoteContactSigner rejects contacts that lack
+    firstName/lastName ("Cannot build QuoteContactSigner, required
+    attributes are not set [firstName, lastName]") and blows up the
+    quote-save flow at the very last step. The placeholders are
+    overridable by the AM in HubSpot any time.
     """
     if not email:
         return ""
@@ -360,12 +364,28 @@ def _find_or_create_contact(email: str) -> str:
     except requests.RequestException as e:
         logger.warning("Contact search failed for %s: %s", email_norm, e)
 
-    # Not found — create.
+    # Not found — create. Derive placeholder names from the email's
+    # local part (before @) so QuoteContactSigner construction succeeds.
+    # Pattern: "rebecca.carroll@…" → firstName="Rebecca", lastName="Carroll".
+    # Single-part locals ("test@test.com") use the local as firstName +
+    # "Contact" as lastName.
+    local_part = email_norm.split("@", 1)[0]
+    name_parts = [p for p in local_part.replace("_", ".").split(".") if p]
+    if len(name_parts) >= 2:
+        first = name_parts[0].capitalize()
+        last = " ".join(p.capitalize() for p in name_parts[1:])
+    else:
+        first = (name_parts[0] or "Contact").capitalize()
+        last = "Contact"
     try:
         r = requests.post(
             f"{API_BASE}/crm/v3/objects/contacts",
             headers=HEADERS,
-            json={"properties": {"email": email_norm}},
+            json={"properties": {
+                "email":     email_norm,
+                "firstname": first,
+                "lastname":  last,
+            }},
             timeout=10,
         )
         if r.status_code in (200, 201):

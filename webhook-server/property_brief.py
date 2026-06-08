@@ -151,6 +151,12 @@ def parse_ticket(task: dict[str, Any]) -> dict[str, Any]:
         # assignee's email this is the reliable signal for who owns the
         # deal (resolved against HubSpot owners by name).
         "account_manager": _str(cf(task, "Account Manager")),
+        # Property identity for stamping onto the HubSpot company when we
+        # auto-create one. Without these the company record stays blank
+        # and the IO renders empty "Prepared for the property:" sections.
+        "property_address": _str(cf(task, "Property Address")),
+        "property_code":    _str(cf(task, "Property Code") or cf(task, "New Property Code")),
+        "property_market":  _str(cf(task, "Market") or cf(task, "Market*")),
         # Notes: prefer task description, then portal "Notes",
         # then RPM "Additional Details from Requester" / "Other Info".
         "notes":           _str(
@@ -836,6 +842,11 @@ def match_or_create_company(parsed: dict[str, Any]) -> dict[str, Any]:
     Match order: exact-domain → name + market → name only. If the name-only
     search returns more than one company we refuse to auto-pick — the
     caller stops the workflow and flags for human review.
+
+    On CREATE: stamp address / city / property_code from the ticket so the
+    IO render has real "Prepared for the property:" content instead of a
+    blank section. Existing-matched companies are left untouched — their
+    address is owned by the team's data hygiene, not by us.
     """
     drafter = _import("brief_ai_drafter")
 
@@ -854,7 +865,13 @@ def match_or_create_company(parsed: dict[str, Any]) -> dict[str, Any]:
             f"{len(candidates)} HubSpot companies match '{name}' — needs human review"
         )
 
-    return _create_company(name=name, domain=domain)
+    return _create_company(
+        name=name,
+        domain=domain,
+        address=parsed.get("property_address") or "",
+        market=parsed.get("property_market") or "",
+        property_code=parsed.get("property_code") or "",
+    )
 
 
 def _search_companies_by_name(name: str) -> list[dict]:
@@ -894,7 +911,8 @@ def _search_companies_by_name(name: str) -> list[dict]:
     return out
 
 
-def _create_company(*, name: str, domain: str = "") -> dict:
+def _create_company(*, name: str, domain: str = "", address: str = "",
+                    market: str = "", property_code: str = "") -> dict:
     """Create a new HubSpot company and return its core identity dict.
 
     R1 (IMMUTABLE_RULES.md): we MUST NOT set `uuid` in the POST body.
@@ -914,6 +932,13 @@ def _create_company(*, name: str, domain: str = "") -> dict:
     (services/fluency_ingestion/apt_iq_reader.py) once Apt IQ assigns
     one, OR by manual HubSpot data entry. Until that lands,
     /accounts/property renders fluency_* fields as "Not yet computed".
+
+    Address fields (address / city / rpmmarket / property_code) get
+    stamped from the ticket when provided so the IO render has
+    "Prepared for the property:" content instead of a blank section.
+    Market doubles as the city when the form doesn't capture city
+    separately — RPM "Market" dropdown values are city names anyway
+    (Phoenix, Dallas, Atlanta, etc.).
     """
     import requests
     from config import HUBSPOT_API_KEY
@@ -923,6 +948,16 @@ def _create_company(*, name: str, domain: str = "") -> dict:
     properties = {"name": name}
     if domain:
         properties["domain"] = domain
+    if address:
+        properties["address"] = address
+    if market:
+        # rpmmarket = the internal RPM Market designation; city = the
+        # general HubSpot location field. Markets are city-named so we
+        # populate both so address blocks render correctly.
+        properties["rpmmarket"] = market
+        properties["city"] = market
+    if property_code:
+        properties["property_code"] = property_code
     r = requests.post(
         "https://api.hubapi.com/crm/v3/objects/companies",
         headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"},
