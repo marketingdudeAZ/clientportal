@@ -172,6 +172,23 @@ def generate_and_send_quote(
         f"{API_BASE}/crm/v3/objects/quotes/{quote_id}/associations/deals/{deal_id}/quote_to_deal"
     )
 
+    # Step 2a: quote <-> company. Without this the "Company" checkbox in
+    # the quote editor's Buyer Info step shows up UNCHECKED and the
+    # company never lands on the IO render — HubSpot only auto-includes
+    # the company when there's an explicit quote_to_company association.
+    # The association merely associates; the line below ALSO sets the
+    # association as the primary buyer association, which is what flips
+    # the checkbox to ON by default.
+    if company_id:
+        try:
+            _safe_put(
+                f"{API_BASE}/crm/v3/objects/quotes/{quote_id}/associations/companies/{company_id}/quote_to_company"
+            )
+            logger.info("Associated quote %s -> company %s (buyer)", quote_id, company_id)
+        except Exception as e:
+            logger.warning("Quote-to-company association failed for %s -> %s: %s",
+                           quote_id, company_id, e)
+
     # Step 2b: pin the RPM default quote template. Without this, the
     # quote editor flags "Your template is no longer available" and
     # the AM has to pick one manually. Skipped when no template id is
