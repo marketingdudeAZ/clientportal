@@ -139,6 +139,18 @@ def generate_and_send_quote(
             quote_props["hs_sender_lastname"] = sender["lastName"]
         if sender.get("email"):
             quote_props["hs_sender_email"] = sender["email"]
+        # Surface profile gaps in one read — if any field is missing the
+        # Quote Sender pane will show blanks for it and an AM will have
+        # to type it in manually. Almost always means the HubSpot user
+        # record for owner_id has incomplete profile setup.
+        missing = [k for k in ("firstName", "lastName", "email")
+                   if not sender.get(k)]
+        if missing:
+            logger.warning("Quote sender for owner %s missing %s — "
+                           "Quote Owner is set but Quote Sender pane will be "
+                           "blank for those fields. Fix the user's HubSpot "
+                           "profile to make this automatic.",
+                           owner_id, missing)
 
     # Sender company. RPM Living info is constant across every quote so
     # we hard-code it here. Override per-portal by pulling from a config
