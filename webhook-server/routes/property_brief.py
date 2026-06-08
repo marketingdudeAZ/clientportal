@@ -211,6 +211,15 @@ def _run_pipeline_async(parsed: dict) -> None:
                 pass
             return
 
+        # Cross-worker dedup: if run_commercial_path found that another
+        # worker already finished the pipeline for this ticket, skip both
+        # the comment AND the brief path. The original delivery handled
+        # everything; posting again would just be noise.
+        if commercial.get("already_processed"):
+            logger.info("Ticket %s already processed by another worker — "
+                        "skipping comment + brief", task_id)
+            return
+
         try:
             property_brief.comment_commercial_result(parsed, commercial)
         except Exception:

@@ -707,9 +707,29 @@ def run_commercial_path(parsed: dict[str, Any]) -> dict[str, Any]:
 
     existing_deal_id = _find_existing_deal(parsed.get("ticket_id") or "")
     if existing_deal_id:
-        logger.info("Reusing existing deal %s for ClickUp ticket %s",
-                    existing_deal_id, parsed.get("ticket_id"))
-        deal_id = existing_deal_id
+        # Cross-worker dedup: another Render worker already finished the
+        # whole pipeline for this ticket. Short-circuit and signal the
+        # caller to skip the ClickUp comment so the AM doesn't see two
+        # "HubSpot deal created" comments back-to-back. Layer 3+4 (deal
+        # + quote reuse) caught the writes; this catches the comment.
+        logger.info("Pipeline already ran for ticket %s (existing deal %s) — "
+                    "short-circuiting; no new quote or comment will be posted",
+                    parsed.get("ticket_id"), existing_deal_id)
+        portal_id = _hs_portal_id()
+        deal_url = (f"https://app.hubspot.com/contacts/{portal_id}/deal/{existing_deal_id}"
+                    if portal_id else "")
+        return {
+            "company_id":       company["id"],
+            "company_name":     company.get("name") or parsed.get("property_name") or "",
+            "deal_id":          existing_deal_id,
+            "deal_url":         deal_url,
+            "quote_id":         "",
+            "quote_url":        "",
+            "quote_error":      "",
+            "monthly_total":    0.0,
+            "setup_total":      0.0,
+            "already_processed": True,
+        }
     else:
         deal_id = deal_creator.create_deal_with_line_items(
             company_id=company["id"],
