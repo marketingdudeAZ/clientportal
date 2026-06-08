@@ -67,7 +67,8 @@ CHANNEL_SKU_MAP = {
 # $225) instead of an ad-hoc named line item. Channels not listed fall back
 # to a named "<channel> — Setup Fee" line item.
 SETUP_PRODUCT_MAP = {
-    "email_drip": "2948989326",  # Email Drip Campaign Setup
+    "email_drip":    "2948989326",  # Email Drip Campaign Setup       — $225
+    "social_posting":"1828448610",  # Social Posting Onboarding (Setup) — $500
 }
 
 

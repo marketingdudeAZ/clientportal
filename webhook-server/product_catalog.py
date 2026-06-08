@@ -75,17 +75,46 @@ CHANNEL_PRODUCT_MAP: dict[str, str] = {
     # HubSpot product export (2026-06-02); override per-portal via env.
     #
     # email_drip / eblast are single products → mapped directly.
-    # reputation / social_posting are TIER-PRICED in the catalog (Response
-    # Only vs Response+Removal; Basic/Standard/Premium) with no single
-    # "package" product, so there's no one id to pin — leave them to env
-    # until we pick a tier-resolution model. website_hosting has no product
-    # in the catalog at all.
+    # social_posting is TIER-PRICED — see _TIERED_PRODUCT_MAP below; this
+    # entry is the fallback for when tier doesn't match a known label.
+    # reputation has the Response Only vs Response+Removal split — still
+    # env-driven until we pick a tier-resolution model.
+    # website_hosting has no product in the catalog at all.
     "email_drip":     os.getenv("HS_PRODUCT_ID_EMAIL_DRIP", "2948989325"),
     "eblast":         os.getenv("HS_PRODUCT_ID_EBLAST", "2948995166"),
     "reputation":     os.getenv("HS_PRODUCT_ID_REPUTATION", ""),
     "social_posting": os.getenv("HS_PRODUCT_ID_SOCIAL_POSTING", ""),
     "website_hosting":os.getenv("HS_PRODUCT_ID_WEBSITE_HOSTING", ""),
 }
+
+# Tier-aware product lookup for channels whose tier dropdown sells distinct
+# HubSpot products (Social Posting Basic vs Standard vs Premium). When the
+# selected tier label maps to one of these, we use the tier-specific product
+# id instead of the single fallback in CHANNEL_PRODUCT_MAP.
+_TIERED_PRODUCT_MAP: dict[str, dict[str, str]] = {
+    "social_posting": {
+        "basic":    "1828422482",  # Social Posting Basic    — $300
+        "standard": "1828411696",  # Social Posting Standard — $450
+        "premium":  "1828403546",  # Social Posting Premium  — $700
+    },
+}
+
+
+def hs_product_id_for_tier(channel_key: str, tier_label: str) -> str:
+    """Resolve a HubSpot product id, preferring a tier-specific id when
+    the channel uses tier-priced catalog products.
+
+    Walks the first word of the tier label (case-insensitive) against the
+    channel's _TIERED_PRODUCT_MAP. Falls back to the single product id from
+    CHANNEL_PRODUCT_MAP when no tier match exists, OR when the channel
+    doesn't have tier-specific products configured.
+    """
+    tiered = _TIERED_PRODUCT_MAP.get(channel_key)
+    if tiered and tier_label:
+        first = str(tier_label).strip().split(" ", 1)[0].lower()
+        if first in tiered:
+            return tiered[first]
+    return hs_product_id(channel_key)
 
 # Channel keys whose monthly spend feeds the Management Fee calculation
 # (the asterisked items on the IO). Not a percentage yet — just the
@@ -230,12 +259,16 @@ def build_default_line_items(
     for channel in (selections or {}):
         if channel in included:
             continue
-        pid = hs_product_id(channel)
+        # Prefer tier-specific product when the channel sells per-tier
+        # catalog products (Social Posting Basic/Standard/Premium).
+        tier_label = (selections.get(channel) or {}).get("tier") or ""
+        pid = hs_product_id_for_tier(channel, tier_label)
         if not pid:
             logger.warning(
-                "Selected channel %r has no product id — cannot create a "
-                "catalog line item; set its HS_PRODUCT_ID_* env var. Skipping.",
-                channel,
+                "Selected channel %r (tier %r) has no product id — cannot "
+                "create a catalog line item; check _TIERED_PRODUCT_MAP or "
+                "HS_PRODUCT_ID_* env var. Skipping.",
+                channel, tier_label,
             )
             continue
         out.append({
