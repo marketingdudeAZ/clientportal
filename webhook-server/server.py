@@ -5617,6 +5617,8 @@ _ACCOUNTS_DETAIL_PROPERTIES = [
     "fluency_taglines", "fluency_brand_adjectives", "fluency_differentiators",
     "fluency_selling_points", "fluency_residents_love", "fluency_residents_dislike",
     "fluency_target_resident",
+    # v3 additions (2026-06-10)
+    "fluency_romance", "fluency_unit_level_details",
     # Strategy & Goals
     "fluency_goals", "fluency_initiatives", "fluency_challenges", "fluency_priorities",
     "fluency_onsite_developments", "fluency_local_partnerships", "fluency_onsite_events",

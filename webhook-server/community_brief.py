@@ -107,17 +107,20 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
 
     # ─── Voice & Positioning ──────────────────────────────────────────
     ("Voice & Positioning", [
-        BriefField("voice_tier", "Voice Tier", "Voice & Positioning", "dropdown",
+        BriefField("voice_tier", "Voice Tier", "Voice & Positioning", "multiselect",
                    hs_resolved="fluency_voice_tier",
                    hs_override="fluency_voice_tier_override",
-                   hint="How copy should feel for this property's price point.",
+                   hint="How copy should feel for this property's price point. "
+                        "Select all that apply — properties with sub-brands or mixed "
+                        "unit types may need more than one.",
                    options=["value", "standard", "lifestyle", "luxury"]),
-        BriefField("unit_noun", "Unit Noun", "Voice & Positioning", "dropdown",
+        BriefField("unit_noun", "Unit Noun", "Voice & Positioning", "multiselect",
                    hs_resolved="fluency_unit_noun",
                    hs_override="fluency_unit_noun_override",
-                   hint="What we call a unit in copy.",
+                   hint="What we call a unit in copy. Select ALL that apply — properties "
+                        "with multiple unit types should check every one we lease.",
                    # HubSpot's fluency_unit_noun_override enum — singular form.
-                   options=["apartment", "townhome", "loft", "home", "duplex"]),
+                   options=["apartment", "townhome", "loft", "home", "duplex", "penthouse"]),
         BriefField("advertised_name", "Advertised Name", "Voice & Positioning", "text",
                    hs_override="fluency_advertised_name_override",
                    hint="The full name used in headlines."),
@@ -140,10 +143,12 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
                    hint="3–5 adjectives that best describe the community. One per line."),
         BriefField("differentiators", "Differentiators", "Brand & Story", "textarea",
                    hs_override="fluency_differentiators",
-                   hint="Unique features / solutions that set this community apart from competitors. One per line."),
-        BriefField("selling_points", "Additional Selling Points", "Brand & Story", "textarea",
-                   hs_override="fluency_selling_points",
-                   hint="Extra points to emphasize in marketing. One per line."),
+                   hint="What sets this community apart from competitors. Be specific — "
+                        "skip generic descriptors. Work with PM to get specifics. One per line."),
+        BriefField("romance", "Romance Paragraph", "Brand & Story", "textarea",
+                   hs_override="fluency_romance",
+                   hint="Long-form prose capturing the property's story / vibe / feel. "
+                        "Fluency pulls from this for richer copy than tags alone."),
         BriefField("residents_love", "What Residents Love", "Brand & Story", "textarea",
                    hs_override="fluency_residents_love",
                    hint="What current residents love about the community. One per line."),
@@ -151,12 +156,14 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
                    hs_override="fluency_residents_dislike",
                    hint="Internal context — friction points to be aware of. Not used in ad copy.",
                    internal=True),
-        BriefField("target_resident", "Typical Resident (lifestyle / needs only)",
+        BriefField("target_resident", "Typical Resident (ICP)",
                    "Brand & Story", "textarea",
                    hs_override="fluency_target_resident",
-                   hint="Describe the typical resident by LIFESTYLE and NEEDS only — commute, amenities, "
-                        "price sensitivity. FAIR HOUSING: never age, family status, race, religion, "
-                        "national origin, or disability. Internal context, not ad copy.",
+                   hint="Describe the ICP — age, income, lifestyle, needs are all fair game "
+                        "for internal brief discussion. FAIR HOUSING: this context shapes "
+                        "strategy but the protected-class attributes (age, family status, "
+                        "race, religion, national origin, disability) NEVER reach ad "
+                        "platforms or copy. Used internally only.",
                    internal=True),
     ]),
 
@@ -169,9 +176,6 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
         BriefField("year_built", "Year Built", "Lifecycle", "readonly",
                    hs_resolved="fluency_year_built",
                    hint="From Apt IQ."),
-        BriefField("year_renovated", "Year Renovated", "Lifecycle", "readonly",
-                   hs_resolved="fluency_year_renovated",
-                   hint="From Apt IQ."),
     ]),
 
     # ─── Inventory (structured floorplans from Apt IQ floor_plan report) ─
@@ -181,6 +185,12 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
                    hs_override="fluency_floor_plans_override",
                    hint="Name, beds, baths, sq ft per plan. Auto-filled from Apt IQ; "
                         "edit a row to override. Pending until your property is onboarded."),
+        BriefField("unit_level_details", "Unit-Level Details + Sq Ft",
+                   "Inventory", "textarea",
+                   hs_override="fluency_unit_level_details",
+                   hint="Per-unit-type breakdown — e.g. 'Studio: 600 sq ft · 1BR: 800 sq ft · "
+                        "2BR: 1,200 sq ft.' One line per unit type. Add notes about specific "
+                        "unit features beyond the floor plan table."),
     ]),
 
     # ─── Amenities — split into property-level vs in-unit ──────────────
@@ -193,16 +203,6 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
                    hs_resolved="fluency_unit_features",
                    hs_override="fluency_unit_features_override",
                    hint="Inside the unit: stainless appliances, walk-in closets, etc. One per line."),
-        BriefField("marketed_amenity_names", "Marketed Amenity Names",
-                   "Amenities", "textarea",
-                   hs_resolved="fluency_marketed_amenity_names",
-                   hs_override="fluency_marketed_amenity_names_override",
-                   hint="Property-specific names from the marketing site. One per line."),
-        BriefField("amenities_descriptions", "Amenity Descriptions",
-                   "Amenities", "textarea",
-                   hs_resolved="fluency_amenities_descriptions",
-                   hs_override="fluency_amenities_descriptions_override",
-                   hint="Short prose Fluency can pull from. Optional."),
     ]),
 
     # ─── Geography — In / Near / Close To / Highlights ─────────────────
@@ -261,7 +261,9 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
         BriefField("onsite_developments", "Upcoming Onsite Developments",
                    "Strategy & Goals", "textarea",
                    hs_override="fluency_onsite_developments",
-                   hint="Renovations, rebranding, amenity closures, etc. One per line."),
+                   hint="Renovations, rebranding, amenity closures, etc. Include start + "
+                        "completion DATES (e.g. 'Pool deck reno — May 2026 to Aug 2026'). "
+                        "One per line."),
         BriefField("local_partnerships", "Local Business Partnerships",
                    "Strategy & Goals", "textarea",
                    hs_override="fluency_local_partnerships",
@@ -273,7 +275,10 @@ SECTIONS: list[tuple[str, list[BriefField]]] = [
         BriefField("website_priorities", "Website Page Priorities",
                    "Strategy & Goals", "textarea",
                    hs_override="fluency_website_priorities",
-                   hint="How to prioritize new pages (blog, landing pages, comparisons). Internal.",
+                   hint="Which pages of the property's website we CAN touch and which we "
+                        "CANNOT touch. Use this as the working agreement with PM on page-level "
+                        "edits. One page per line — e.g. 'Amenities: editable · Floor Plans: "
+                        "PM-owned · Contact: locked'. Internal.",
                    internal=True),
     ]),
 
@@ -598,8 +603,19 @@ def write_field(company_id: str, field_key: str, value: str) -> tuple[bool, str]
         return False, f"unknown field: {field_key}"
     if not field.hs_override:
         return False, f"{field.label} is not editable"
-    if field.options and value and value not in field.options:
-        return False, f"{value!r} not in allowed values"
+    if field.options and value:
+        # Multi-select fields store as a semicolon-separated string
+        # (HubSpot's native multi-enumeration format). Validate each
+        # selected option individually; single-select fields keep the
+        # legacy single-value check.
+        if field.type == "multiselect":
+            selected = [v.strip() for v in str(value).split(";") if v.strip()]
+            bad = [v for v in selected if v not in field.options]
+            if bad:
+                return False, f"{bad!r} not in allowed values"
+            value = ";".join(selected)
+        elif value not in field.options:
+            return False, f"{value!r} not in allowed values"
 
     # Structured (JSON) fields: validate it parses as a list of objects and
     # store a canonical, compact serialization. Empty clears the override.

@@ -73,6 +73,10 @@ dl.fields dd.source{color:var(--tm);font-size:11px;text-transform:uppercase;lett
 .edit-input{width:100%;font:inherit;color:var(--tp);padding:5px 8px;border:1px solid var(--bd);border-radius:5px;outline:none}
 .edit-input:focus{border-color:var(--cu)}
 textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-height:1.45}
+.edit-multiselect{display:flex;flex-direction:column;gap:6px;padding:8px;background:var(--white);border:1px solid var(--bd);border-radius:5px;max-height:240px;overflow:auto}
+.multi-row{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:13px;color:var(--tp)}
+.multi-row:hover{background:var(--cug)}
+.multi-row input[type=checkbox]{margin:0;cursor:pointer}
 .edit-row{margin-top:8px;display:flex;gap:6px;align-items:center}
 .edit-btn{padding:5px 14px;border:none;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.02em}
 .edit-btn.save{background:var(--cu);color:var(--white)}
@@ -170,30 +174,31 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
   }
 
   function renderChips(val){
-    var items = String(val || '').split(/[,\n]/).map(function(s){return s.trim();}).filter(Boolean);
+    // Split on comma, semicolon, or newline — covers chips fields,
+    // multi-select enum values (`;`-separated) and free-form text.
+    var items = String(val || '').split(/[,;\n]/).map(function(s){return s.trim();}).filter(Boolean);
     return items.map(function(s){return '<span class="chip">' + esc(s) + '</span>';}).join('');
   }
 
   // ── Field hints (sourced from community_brief.py BriefField.hint) ───
   // Mirrors the approval portal — small italic guidance under each label.
   var HINTS = {
-    voice_tier:            "How copy should feel for this property's price point.",
-    unit_noun:             "What we call a unit in copy.",
+    voice_tier:            "How copy should feel for this property's price point. Select ALL that apply — properties with sub-brands or mixed unit types may need more than one.",
+    unit_noun:             "What we call a unit in copy. Select ALL that apply — properties with multiple unit types should check every one we lease.",
     advertised_name:       "The full name used in headlines.",
     short_name:            "The shortened name used in tight UI / social copy.",
     former_property_name:  "If rebranded, the prior name — protects search equity during the transition.",
     taglines:              "Property taglines / slogans. One per line.",
     brand_adjectives:      "3–5 adjectives that best describe the community. One per line.",
-    differentiators:       "Unique features / solutions that set this community apart. One per line.",
-    selling_points:        "Extra points to emphasize in marketing. One per line.",
+    differentiators:       "What sets this community apart from competitors. Be specific — skip generic descriptors. Work with PM to get specifics. One per line.",
+    romance:               "Long-form prose capturing the property's story / vibe / feel. Fluency pulls from this for richer copy than tags alone.",
     residents_love:        "What current residents love about the community. One per line.",
     residents_dislike:     "Internal context — friction points to be aware of. Not used in ad copy.",
-    target_resident:       "Lifestyle and needs ONLY (commute, amenities, price sensitivity). Never age, family status, race, religion, national origin, or disability. Internal context only.",
+    target_resident:       "ICP — age, income, lifestyle, needs are all fair game for internal brief discussion. FAIR HOUSING: this context shapes strategy but protected-class attributes NEVER reach ad platforms or copy.",
     lifecycle_state:       "Where the property is in its leasing journey.",
+    unit_level_details:    "Per-unit-type breakdown — e.g. 'Studio: 600 sq ft · 1BR: 800 sq ft · 2BR: 1,200 sq ft.' One line per unit type.",
     property_amenities:    "Community-level: pool, fitness center, clubhouse, etc. One per line.",
     unit_features:         "Inside the unit: stainless appliances, walk-in closets, etc. One per line.",
-    marketed_amenity_names:"Property-specific amenity names from the marketing site. One per line.",
-    amenities_descriptions:"Short prose Fluency can pull from. Optional.",
     neighborhood:          "The neighborhood the property sits IN (e.g., 'South Congress', not 'Austin').",
     nearby_neighborhoods:  "Desirable areas the property is NEAR, worth name-dropping. One per line.",
     landmarks:             "Landmarks the property is CLOSE TO. One per line.",
@@ -204,10 +209,10 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
     initiatives:           "Short- and long-term initiatives. One per line.",
     challenges:            "Internal — friction points / challenges this property faces. Not used in ad copy.",
     priorities:            "Internal — additional priorities the AM should know about.",
-    onsite_developments:   "Construction, renovations, or developments happening at the property. One per line.",
+    onsite_developments:   "Renovations, rebranding, amenity closures, etc. Include start + completion DATES (e.g. 'Pool deck reno — May 2026 to Aug 2026'). One per line.",
     local_partnerships:    "Local businesses or partnerships worth highlighting. One per line.",
     onsite_events:         "Recurring events at the property worth promoting. One per line.",
-    website_priorities:    "Internal — which pages on the corporate site should be linked to.",
+    website_priorities:    "Which pages of the property's website we CAN touch and which we CANNOT touch. Working agreement with PM. One page per line.",
     excluded_neighborhoods:"Neighborhoods we should NOT target in keywords or copy.",
     client_expectations:   "Hard expectations the client has set for this account.",
     must_include:          "Copy MUST include these phrases / facts.",
@@ -237,7 +242,13 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
 
     var inner;
     if (has){
-      inner = (kind === 'chips' ? renderChips(val) : esc(val).replace(/\n/g, '<br>'));
+      if (kind === 'chips' || kind === 'multiselect') {
+        // Multi-select values are stored as `;`-separated; render each as
+        // a chip just like the chips kind so the display reads cleanly.
+        inner = renderChips(val);
+      } else {
+        inner = esc(val).replace(/\n/g, '<br>');
+      }
     } else if (lk) {
       inner = '<span class="ph">Click to add</span>';
     } else {
@@ -386,33 +397,33 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
       ['NinjaCat System ID',     'ninjacat_system_id'],
     ], p);
 
-    // 2) Voice & Positioning — overrides editable (with dropdowns for enums)
+    // 2) Voice & Positioning — multiselect for the two enums
     html += section('Voice and Positioning', [
       ['Voice Tier (auto)',      'fluency_voice_tier'],
-      ['Voice Tier (Override)',  'fluency_voice_tier_override', 'dropdown', 'voice_tier',
+      ['Voice Tier (Override)',  'fluency_voice_tier_override', 'multiselect', 'voice_tier',
         ['value','standard','lifestyle','luxury']],
       ['Unit Noun (auto)',       'fluency_unit_noun'],
-      ['Unit Noun (Override)',   'fluency_unit_noun_override',  'dropdown', 'unit_noun',
-        ['apartment','townhome','loft','home','duplex']],
+      ['Unit Noun (Override)',   'fluency_unit_noun_override',  'multiselect', 'unit_noun',
+        ['apartment','townhome','loft','home','duplex','penthouse']],
       ['Advertised Name',        'fluency_advertised_name_override',     '', 'advertised_name'],
       ['Short Name',             'fluency_short_name_override',          '', 'short_name'],
       ['Former Property Name',   'fluency_former_property_name',         '', 'former_property_name'],
     ], p);
 
-    // 3) Brand & Story — net-new in v2; all editable.
+    // 3) Brand & Story
     html += section('Brand & Story', [
       ['Taglines',                  'fluency_taglines',          'textarea', 'taglines'],
       ['Brand Adjectives',          'fluency_brand_adjectives',  'textarea', 'brand_adjectives'],
       ['Differentiators',           'fluency_differentiators',   'textarea', 'differentiators'],
-      ['Additional Selling Points', 'fluency_selling_points',    'textarea', 'selling_points'],
+      ['Romance Paragraph',         'fluency_romance',           'textarea', 'romance'],
       ['What Residents Love',       'fluency_residents_love',    'textarea', 'residents_love'],
     ], p);
 
     // 3b) Brand & Story (internal — won't reach ad copy)
     html += section('Brand & Story — Internal', [
       ["What Residents Don't Love", 'fluency_residents_dislike', 'textarea', 'residents_dislike'],
-      ['Typical Resident (lifestyle/needs)', 'fluency_target_resident', 'textarea', 'target_resident'],
-    ], p, { callout: 'internal', banner: 'Internal context only — never used in ad copy (Fair Housing).' });
+      ['Typical Resident (ICP)',    'fluency_target_resident',   'textarea', 'target_resident'],
+    ], p, { callout: 'internal', banner: 'ICP context — age, income, lifestyle are fair game internally. Protected-class attributes never reach ad platforms (Fair Housing).' });
 
     // 4) Lifecycle (dropdown for the override)
     html += section('Lifecycle', [
@@ -420,13 +431,13 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
       ['Lifecycle (Override)',     'fluency_lifecycle_state_override', 'dropdown', 'lifecycle_state',
         ['pre_lease','lease_up','stabilized','renovated']],
       ['Year Built',               'fluency_year_built'],
-      ['Year Renovated',           'fluency_year_renovated'],
     ], p);
 
-    // 5) Inventory (floor plans — JSON; advanced edit via approval portal)
-    html += section('Inventory — Floor Plans', [
+    // 5) Inventory — floor plans + unit-level details
+    html += section('Inventory', [
       ['Floor Plans (auto)',       'fluency_floor_plans_json'],
       ['Floor Plans (Override)',   'fluency_floor_plans_override'],
+      ['Unit-Level Details + Sq Ft', 'fluency_unit_level_details', 'textarea', 'unit_level_details'],
     ], p);
 
     // 6) Pricing — locked (Fair Housing)
@@ -438,14 +449,12 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
       ['Rent Percentile',          'fluency_rent_percentile'],
     ], p, { callout: 'warn', banner: 'Internal reference only. Never pushed to Fluency.' });
 
-    // 7) Amenities — split: property-level vs in-unit
+    // 7) Amenities — property-level + in-unit (these names ARE how we market them)
     html += section('Amenities', [
       ['Property Amenities (auto)',    'fluency_property_amenities',          'chips'],
       ['Property Amenities',           'fluency_property_amenities_override', 'textarea', 'property_amenities'],
       ['In-Unit Features (auto)',      'fluency_unit_features',               'chips'],
       ['In-Unit Features',             'fluency_unit_features_override',      'textarea', 'unit_features'],
-      ['Marketed Amenity Names',       'fluency_marketed_amenity_names_override', 'textarea', 'marketed_amenity_names'],
-      ['Amenity Descriptions',         'fluency_amenities_descriptions_override', 'textarea', 'amenities_descriptions'],
     ], p);
 
     // 8) Geography — In / Near / Close To / Highlights
@@ -507,14 +516,7 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
       ['Host Name',                'fluency_host_name',              '', 'host_name'],
     ], p, { callout: 'internal', banner: 'Operational reference. Not used in ad copy.' });
 
-    // 13) PM Context — locked (legacy fields, kept for AM reference)
-    html += section('PM Context', [
-      ['Lease Signal',             'fluency_lease_signal_text'],
-      ['Struggling Units',         'fluency_struggling_units'],
-      ['Insider Color',            'fluency_insider_color'],
-    ], p, { callout: 'internal', banner: 'AM context only. Not used in ad copy.' });
-
-    // 14) Operational metadata
+    // 13) Operational metadata
     html += section('Account Metadata', [
       ['Client Portfolio',          'client_portfolio'],
       ['Packages Enrolled',         'packages_enrolled'],
@@ -656,7 +658,34 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
     span.innerHTML = '';
 
     var input;
-    if (kind === 'dropdown'){
+    if (kind === 'multiselect'){
+      // Render a vertical checkbox list. Saved value is a `;`-separated
+      // string (HubSpot multi-enum format). On save we join the checked
+      // boxes the same way. Clear all = clears the override.
+      var mopts = [];
+      try { mopts = JSON.parse(span.dataset.options || '[]'); } catch(e){ mopts = []; }
+      var selected = (val ? val.split(/[;,]/) : []).map(function(s){return s.trim();}).filter(Boolean);
+      input = document.createElement('div');
+      input.className = 'edit-multiselect';
+      mopts.forEach(function(o){
+        var row = document.createElement('label');
+        row.className = 'multi-row';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = o;
+        cb.checked = selected.indexOf(o) !== -1;
+        var txt = document.createElement('span');
+        txt.textContent = o;
+        row.appendChild(cb); row.appendChild(txt);
+        input.appendChild(row);
+      });
+      input.getValue = function(){
+        return Array.prototype.map.call(
+          input.querySelectorAll('input[type=checkbox]'),
+          function(cb){ return cb.checked ? cb.value : ''; }
+        ).filter(Boolean).join(';');
+      };
+    } else if (kind === 'dropdown'){
       input = document.createElement('select');
       input.className = 'edit-input';
       var opts = [];
@@ -691,15 +720,21 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
     btnRow.appendChild(save); btnRow.appendChild(cancel); btnRow.appendChild(hint);
     span.appendChild(btnRow);
 
-    setTimeout(function(){ input.focus(); input.select(); }, 0);
+    if (kind !== 'multiselect') {
+      setTimeout(function(){ input.focus(); input.select && input.select(); }, 0);
+    }
 
     cancel.addEventListener('click', function(){ finishEdit(span, val, kind, /*saved*/false); });
     save.addEventListener('click', function(){
-      doSave(span, lk, input.value, kind);
+      var v = (kind === 'multiselect' && typeof input.getValue === 'function')
+        ? input.getValue() : input.value;
+      doSave(span, lk, v, kind);
     });
     input.addEventListener('keydown', function(e){
       if (e.key === 'Escape'){ e.preventDefault(); finishEdit(span, val, kind, false); }
-      if (e.key === 'Enter' && !e.shiftKey && input.tagName !== 'TEXTAREA'){
+      if (e.key === 'Enter' && !e.shiftKey
+          && input.tagName !== 'TEXTAREA'
+          && kind !== 'multiselect') {
         e.preventDefault(); save.click();
       }
     });
@@ -757,7 +792,11 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
     }
     var inner;
     if (has){
-      inner = (kind === 'chips' ? renderChips(val) : esc(val).replace(/\n/g, '<br>'));
+      if (kind === 'chips' || kind === 'multiselect') {
+        inner = renderChips(val);
+      } else {
+        inner = esc(val).replace(/\n/g, '<br>');
+      }
     } else {
       inner = '<span class="ph">Click to add</span>';
     }
