@@ -1018,12 +1018,12 @@ class TestClickUpWebhook(unittest.TestCase):
         self._secret_patch.start()
         # Clear in-flight mutex between tests so cross-test contamination
         # doesn't cause false "in_flight" skips.
-        routes_pb._in_flight.clear()
+        routes_pb._recent.clear()
 
     def tearDown(self):
         self._secret_patch.stop()
         from routes import property_brief as routes_pb
-        routes_pb._in_flight.clear()
+        routes_pb._recent.clear()
 
     def _signed(self, payload: bytes) -> dict:
         sig = hmac.new(self.SECRET.encode(), payload, hashlib.sha256).hexdigest()
@@ -1083,8 +1083,11 @@ class TestClickUpWebhook(unittest.TestCase):
         # re-dispatching.
         from routes import property_brief as routes_pb
         store.reset_for_tests()
-        # Manually claim the ticket as if a daemon thread is mid-pipeline
-        routes_pb._in_flight.add("abc123")
+        # Manually claim the ticket as if a daemon thread is mid-pipeline.
+        # _recent maps ticket_id -> claim-time epoch; "now" inside the TTL
+        # window is what _try_claim treats as still-claimed.
+        import time as _time
+        routes_pb._recent["abc123"] = _time.time()
         try:
             body = json.dumps({"event": "taskCreated", "task_id": "abc123"}).encode()
             with mock.patch.object(clickup_client, "get_task", return_value=_task()), \
@@ -1096,7 +1099,7 @@ class TestClickUpWebhook(unittest.TestCase):
             self.assertEqual(resp.get_json()["reason"], "in_flight")
             bg.assert_not_called()
         finally:
-            routes_pb._in_flight.discard("abc123")
+            routes_pb._recent.pop("abc123", None)
 
     def test_ambiguous_match_handled_inside_daemon(self):
         # The handler dispatches the pipeline async and returns 200
