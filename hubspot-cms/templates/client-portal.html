@@ -7105,7 +7105,12 @@ function assetHandleFiles(fileList) {
 function assetAnalyzeEntry(entry) {
   var fd = new FormData();
   fd.append('file', entry.file);
-  fetch(_assetApiBase() + '/api/asset-analyze', { method: 'POST', body: fd })
+  // Multipart upload — let the browser set Content-Type with its
+  // boundary. Auth header must be present or the route 401s.
+  fetch(_assetApiBase() + '/api/asset-analyze', {
+    method: 'POST', body: fd,
+    headers: { 'X-Portal-Email': _getEmail() },
+  })
     .then(function(r){ return r.json(); })
     .then(function(d) {
       if (d && d.category) {
@@ -7214,7 +7219,13 @@ function assetSubmitBatch() {
   })));
   ready.forEach(function(e){ fd.append('files', e.file); });
 
-  fetch(_assetApiBase() + '/api/asset-upload', { method: 'POST', body: fd })
+  // Multipart upload — let the browser set Content-Type with its
+  // boundary. Auth header must be present or the route 401s silently
+  // (was the cause of "upload not working" in production 2026-06-10).
+  fetch(_assetApiBase() + '/api/asset-upload', {
+    method: 'POST', body: fd,
+    headers: { 'X-Portal-Email': _getEmail() },
+  })
     .then(function(r){ return r.json(); })
     .then(function(d) {
       if (d.error) {
