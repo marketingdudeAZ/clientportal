@@ -1077,9 +1077,7 @@ def run_brief_path(parsed: dict[str, Any], commercial: dict[str, Any]) -> dict[s
         try:
             clickup_client.post_comment(
                 ticket_id,
-                "Community Brief generation is paused (BRIEF_LLM_ENABLED=false). "
-                "The HubSpot deal + quote were created normally; flip the env var "
-                "on and re-trigger if you want the auto-drafted brief.",
+                "More Automation to come like our Community Brief! :)",
             )
         except Exception:
             pass
