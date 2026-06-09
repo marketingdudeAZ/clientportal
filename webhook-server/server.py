@@ -5739,10 +5739,98 @@ def accounts_property_field():
     if not company_id or not key:
         return jsonify({"error": "company_id and key are required"}), 400
     import community_brief
-    ok, message = community_brief.write_field(company_id, key, str(value))
+    ok, message = community_brief.write_field(company_id, key, str(value), edited_by=email)
     if not ok:
         return jsonify({"error": message}), 400
     return jsonify({"status": "ok", "value": message, "edited_by": email})
+
+
+@app.route("/api/accounts/property/audit", methods=["GET", "OPTIONS"])
+def accounts_property_audit():
+    """Return recent audit rows for a company (newest first), so the
+    /accounts editor can show a 'Recent Edits' panel. Auth: X-Portal-Email."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = (request.args.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id is required"}), 400
+    try:
+        limit = int(request.args.get("limit") or 50)
+    except ValueError:
+        limit = 50
+    import property_brief_audit
+    rows = property_brief_audit.recent_edits(company_id, limit=limit)
+    return jsonify({"rows": rows, "count": len(rows)})
+
+
+@app.route("/api/internal/audit-daily-rollup", methods=["POST", "OPTIONS"])
+def audit_daily_rollup():
+    """Cron-driven: group last 24h of audit rows by company and post a
+    single HubSpot Note per affected company summarizing that day's edits.
+    Lives in the company's Activity timeline so AMs see brief activity
+    at a glance without us building a separate UI.
+
+    Auth: X-Internal-Key = INTERNAL_API_KEY env var.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+
+    try:
+        hours = int(request.args.get("hours") or 24)
+    except ValueError:
+        hours = 24
+
+    import property_brief_audit
+    rows = property_brief_audit.edits_since(hours=hours, limit=1000)
+    if not rows:
+        return jsonify({"posted": 0, "rows_seen": 0,
+                        "reason": "no edits in window"})
+
+    # Group by company. We trust HubDB returned them newest-first; preserve
+    # that order inside each group so the summary reads top-down.
+    by_company: dict = {}
+    for row in rows:
+        cid = str(row.get("company_id") or "")
+        if not cid:
+            continue
+        by_company.setdefault(cid, []).append(row)
+
+    posted = 0
+    errored = 0
+    for cid, edits in by_company.items():
+        cname = next((r.get("company_name") for r in edits if r.get("company_name")), "") or "(unknown)"
+        lines = [f"Brief Edits — last {hours} hours ({len(edits)} edit{'s' if len(edits) != 1 else ''})"]
+        # Up to 25 bullets per company so a Note doesn't explode.
+        for r in edits[:25]:
+            who   = r.get("edited_by")   or "unknown"
+            field = r.get("field_label") or r.get("field_key") or "?"
+            old   = (r.get("old_value")  or "").strip() or "(empty)"
+            new   = (r.get("new_value")  or "").strip() or "(empty)"
+            when  = r.get("edited_at")   or ""
+            if len(old) > 60: old = old[:59] + "…"
+            if len(new) > 60: new = new[:59] + "…"
+            lines.append(f"• {when[:16].replace('T', ' ')} UTC  ·  {who}  ·  {field}: {old} → {new}")
+        if len(edits) > 25:
+            lines.append(f"…and {len(edits) - 25} more (see HubDB rpm_brief_audits).")
+        body = "\n".join(lines)
+        if property_brief_audit.post_company_note(company_id=cid, body=body):
+            posted += 1
+        else:
+            errored += 1
+
+    return jsonify({
+        "posted":     posted,
+        "errored":    errored,
+        "rows_seen":  len(rows),
+        "companies":  len(by_company),
+        "window_hrs": hours,
+    })
 
 
 # ─── Fluency tag sync (Track 2 of /accounts spec v3) ───────────────────────

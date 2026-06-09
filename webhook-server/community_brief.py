@@ -594,8 +594,16 @@ def build_render_context(company_props: dict) -> list[dict]:
 # ── Write path ─────────────────────────────────────────────────────────────
 
 
-def write_field(company_id: str, field_key: str, value: str) -> tuple[bool, str]:
-    """PATCH the override property for a single field."""
+def write_field(company_id: str, field_key: str, value: str,
+                *, edited_by: str = "") -> tuple[bool, str]:
+    """PATCH the override property for a single field.
+
+    `edited_by` (caller-supplied — typically the X-Portal-Email from the
+    /accounts editor) is recorded on the audit log row when the write
+    succeeds. Pass "" / leave default for non-human writes (e.g., the
+    auto-capture cron's structured-extraction backfill) — those still
+    audit, just with an empty editor.
+    """
     if not company_id:
         return False, "missing company id"
     field = FIELDS.get(field_key)
@@ -631,6 +639,25 @@ def write_field(company_id: str, field_key: str, value: str) -> tuple[bool, str]
                 return False, "value must be a JSON array"
             value = json.dumps(parsed, separators=(",", ":"))
 
+    # Fetch old value + company name BEFORE the PATCH so the audit row has
+    # a real before/after diff and a human-readable property name. Best-
+    # effort; failure here doesn't block the write.
+    old_value = ""
+    company_name = ""
+    try:
+        old_r = requests.get(
+            f"{API_BASE}/crm/v3/objects/companies/{company_id}",
+            headers=_headers(),
+            params={"properties": f"{field.hs_override},name"},
+            timeout=10,
+        )
+        if old_r.status_code == 200:
+            p = old_r.json().get("properties") or {}
+            old_value = p.get(field.hs_override) or ""
+            company_name = p.get("name") or ""
+    except Exception:
+        pass
+
     payload = {"properties": {field.hs_override: value or ""}}
     try:
         r = requests.patch(
@@ -640,7 +667,26 @@ def write_field(company_id: str, field_key: str, value: str) -> tuple[bool, str]
             timeout=10,
         )
         if r.status_code in (200, 201):
-            return True, value or ""
+            # Audit only on a real change — no-op writes (same value) don't
+            # clutter the log. log_edit is a no-op when the audit table
+            # isn't configured (HUBDB_AUDIT_TABLE_ID unset).
+            new_value = value or ""
+            if str(old_value) != new_value:
+                try:
+                    import property_brief_audit
+                    property_brief_audit.log_edit(
+                        company_id=str(company_id),
+                        company_name=company_name,
+                        field_key=field_key,
+                        field_label=field.label,
+                        old_value=old_value,
+                        new_value=new_value,
+                        edited_by=edited_by,
+                    )
+                except Exception as e:
+                    logger.warning("audit write failed %s/%s: %s",
+                                   company_id, field_key, e)
+            return True, new_value
         logger.warning("write_field %s/%s -> %s %s", company_id, field_key, r.status_code, r.text[:200])
         return False, f"HubSpot {r.status_code}"
     except requests.RequestException as e:

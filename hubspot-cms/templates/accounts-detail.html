@@ -77,6 +77,19 @@ textarea.edit-input{min-height:68px;resize:vertical;font-family:inherit;line-hei
 .multi-row{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:13px;color:var(--tp)}
 .multi-row:hover{background:var(--cug)}
 .multi-row input[type=checkbox]{margin:0;cursor:pointer}
+/* Recent Edits (audit) */
+.audit-body{display:none}
+.audit-body.open{display:block}
+.audit-count{font-size:11px;color:var(--ts);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:8px}
+table.audit-table{width:100%;border-collapse:collapse;font-size:12px}
+table.audit-table th{text-align:left;font-size:10.5px;font-weight:700;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;border-bottom:1px solid var(--bdl)}
+table.audit-table td{padding:7px 8px;border-bottom:1px solid var(--bdl);vertical-align:top}
+.audit-when{font-family:'Consolas',monospace;font-size:11px;color:var(--ts);white-space:nowrap}
+.audit-who{font-weight:600;color:var(--jd);white-space:nowrap}
+.audit-field{font-weight:600;color:var(--tp);white-space:nowrap}
+.audit-diff{color:var(--tp);word-break:break-word}
+.audit-old{color:var(--ts);text-decoration:line-through}
+.audit-new{color:var(--ok-tx);font-weight:600}
 .edit-row{margin-top:8px;display:flex;gap:6px;align-items:center}
 .edit-btn{padding:5px 14px;border:none;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.02em}
 .edit-btn.save{background:var(--cu);color:var(--white)}
@@ -529,9 +542,70 @@ table.tracking input::placeholder{color:var(--tm);font-style:italic}
       ['Sync Status',               'fluency_sync_status'],
     ], p);
 
+    // 14) Recent Edits — audit panel, collapsed by default
+    html += renderAuditPanel();
+
     document.getElementById('root').innerHTML = html;
     document.title = 'RPM | ' + name;
     wireEdits();
+    // Lazy-load audit data once the panel exists in the DOM.
+    setTimeout(loadAuditPanel, 0);
+  }
+
+  // ── Recent Edits (audit) ─────────────────────────────────────────────
+  function renderAuditPanel(){
+    return '<section class="section" id="sec-audit">' +
+             '<h2 style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" ' +
+                 'onclick="document.getElementById(\'audit-body\').classList.toggle(\'open\');' +
+                          'document.getElementById(\'audit-toggle\').textContent=' +
+                          'document.getElementById(\'audit-body\').classList.contains(\'open\')?\'▾ HIDE\':\'▸ SHOW\'">' +
+               '<span>Recent Edits</span>' +
+               '<span id="audit-toggle" style="font-size:11px;color:var(--ts)">▸ SHOW</span>' +
+             '</h2>' +
+             '<div class="hint">Every override edit on this page is logged with the editor email + timestamp. Click anywhere on the title above to expand.</div>' +
+             '<div id="audit-body" class="audit-body">' +
+               '<div class="hint" id="audit-loading">Loading…</div>' +
+             '</div>' +
+           '</section>';
+  }
+
+  function loadAuditPanel(){
+    var body = document.getElementById('audit-body');
+    if (!body) return;
+    fetch(API_BASE + '/api/accounts/property/audit?company_id=' + encodeURIComponent(cid) + '&limit=50',
+          { headers: { 'X-Portal-Email': EMAIL } })
+      .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function(d){
+        var rows = (d && d.rows) || [];
+        if (!rows.length){
+          body.innerHTML = '<div class="hint">No edits logged yet for this property.</div>';
+          return;
+        }
+        var html = '<div class="audit-count">' + rows.length + ' edit' + (rows.length===1?'':'s') + ' logged</div>' +
+                   '<table class="audit-table">' +
+                     '<thead><tr><th>When (UTC)</th><th>Editor</th><th>Field</th><th>Old → New</th></tr></thead>' +
+                     '<tbody>';
+        rows.forEach(function(r){
+          var when  = (r.edited_at || '').toString().replace('T',' ').slice(0,16);
+          var who   = esc(r.edited_by || '');
+          var field = esc(r.field_label || r.field_key || '');
+          var oldV  = (r.old_value || '').toString();
+          var newV  = (r.new_value || '').toString();
+          if (oldV.length > 80) oldV = oldV.slice(0,79) + '…';
+          if (newV.length > 80) newV = newV.slice(0,79) + '…';
+          html += '<tr>' +
+                    '<td class="audit-when">' + esc(when) + '</td>' +
+                    '<td class="audit-who">' + who + '</td>' +
+                    '<td class="audit-field">' + field + '</td>' +
+                    '<td class="audit-diff"><span class="audit-old">' + esc(oldV || '(empty)') + '</span> → <span class="audit-new">' + esc(newV || '(empty)') + '</span></td>' +
+                  '</tr>';
+        });
+        html += '</tbody></table>';
+        body.innerHTML = html;
+      })
+      .catch(function(err){
+        body.innerHTML = '<div class="hint" style="color:var(--red)">Failed to load audit log (' + err + ').</div>';
+      });
   }
 
   // ── Inline edit + section save delegation ────────────────────────────
