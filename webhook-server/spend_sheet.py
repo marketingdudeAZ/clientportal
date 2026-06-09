@@ -58,13 +58,66 @@ SKU_COLUMN_MAP = {
     "Website_Hosting":            "website_hosting",
     "Eblast":                     "eblast",
     "Email_Drip_Campaign":        "email_drip",
+    # SEO tier variants (pre-SEO_Package deals)
+    "SEO_Basic":                  "seo",
+    "SEO_Standard":               "seo",
+    "SEO_Premium":                "seo",
+    # Social Posting tier variants
+    "Social_Posting_Basic":       "social_posting",
+    "Social_Posting_Standard":    "social_posting",
+    "Social_Posting_Premium":     "social_posting",
+    # Other recurring services
+    "Display_Retargeting_Campaign":   "retargeting",
+    "Search_Remarketing_Campaign":    "retargeting",
+    "Programmatic_Display_Ads":       "ctv",      # sheet groups Programmatic Display / CTV
+    "GBP_Boost_AI":                   "seo",      # recurring local-search add-on
+    "Blogging":                       "seo",      # recurring content add-on
+    "Landing_Pages":                  "seo",
+    "Landing_Page":                   "seo",
+    "Click_and_Scroll_Heatmaps":      "seo",
+    "Number_of_Bedroom_Floorplan_Page": "seo",
+    "Additional_Location_Keyword_Tracking": "seo",
     # Common name-based fallbacks (if hs_sku is empty)
     "SEO Package":                "seo",
     "Management Fee":             "mgmt_fee",
     "Paid Search Ads":            "search",
     "Paid Social Ads":            "paid_social",
     "Performance Max":            "pmax",
+    "Google Ads Performance Max": "pmax",
 }
+
+# One-time fees deliberately excluded from the monthly columns — the deal
+# carries them forever, so counting them would permanently inflate monthly
+# spend. (Eblast stays in: it's billed per send, recurring in practice.)
+SKU_SKIP = {
+    "Email_Drip_Campaign_Setup",
+    "Social_Posting_Onboarding",
+    "Social Posting Onboarding",
+}
+
+
+def _sku_column(sku: str) -> "str | None":
+    """Map a line-item SKU (or name fallback) to a spend column.
+
+    Legacy line items use display names with trailing asterisks
+    ("Paid Search Ads*") or em-dash tier names ("Social Posting — Basic");
+    normalize those to the canonical underscore form before lookup.
+    """
+    sku = (sku or "").strip()
+    if not sku or sku in SKU_SKIP:
+        return None
+    col = SKU_COLUMN_MAP.get(sku)
+    if col:
+        return col
+    norm = sku.rstrip("*").strip()
+    col = SKU_COLUMN_MAP.get(norm)
+    if col:
+        return col
+    norm = norm.replace("—", " ").replace("-", " ")
+    norm = "_".join(norm.split())
+    if norm in SKU_SKIP:
+        return None
+    return SKU_COLUMN_MAP.get(norm)
 
 _cache: dict = {}
 CACHE_TTL = 1800  # 30 minutes
@@ -474,9 +527,12 @@ def _get_line_items_for_deals(deal_ids: list) -> dict:
             sku  = (props.get("hs_sku") or props.get("name") or "").strip()
             raw  = props.get("amount") or props.get("price") or "0"
             amt  = _f(raw) or 0.0
-            col  = SKU_COLUMN_MAP.get(sku)
+            col  = _sku_column(sku)
             if col:
                 agg[col] = (agg.get(col) or 0) + amt
+            elif amt > 0:
+                logger.info("Unmapped line-item SKU %r ($%s) on deal %s — "
+                            "not counted in spend columns", sku, amt, did)
         result[did] = agg
 
     return result
