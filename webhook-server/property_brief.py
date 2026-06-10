@@ -1011,7 +1011,7 @@ def comment_commercial_result(parsed: dict[str, Any], result: dict[str, Any]) ->
 
     quote_line = (
         f"Quote: {result.get('quote_url') or result.get('quote_id')} — "
-        f"you need to send it to the RM ({parsed.get('rm_email') or 'RM'})"
+        f"Account Managers need to send it to the RM ({parsed.get('rm_email') or 'RM'})"
     )
     if not result.get("quote_id"):
         # Quote step soft-failed — say so instead of printing a blank link.
@@ -1026,7 +1026,7 @@ def comment_commercial_result(parsed: dict[str, Any], result: dict[str, Any]) ->
         quote_line,
         f"Monthly: ${monthly:,.0f} · Setup: ${setup:,.0f}",
         "",
-        "If you have any questions / concerns / edits to the IO please contact your AM.",
+        "If you have any questions / concerns / edits to the IO please contact your AM. (this is a bot not actually Kyle)",
     ]
     clickup_client.post_comment(parsed["ticket_id"], "\n".join(lines))
 
