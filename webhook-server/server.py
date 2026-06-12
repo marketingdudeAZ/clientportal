@@ -52,6 +52,13 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# Render terminates TLS at its proxy, so without this request.url is
+# http:// inside the app while callers signed/requested https://. That
+# breaks HubSpot's v3 webhook signature (HMAC over METHOD+URI+BODY+TS) —
+# every delivery 401s. Trust exactly one proxy hop (Render's).
+from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: E402
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 # CORS origins — shared with routes/ blueprints via _route_utils.ALLOWED_ORIGINS.
 from _route_utils import ALLOWED_ORIGINS  # noqa: E402
 
