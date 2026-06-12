@@ -284,6 +284,15 @@ def hubspot_company_property_change():
                 trigger="webhook",
                 payload={"new_mode": new_value},
             )
+        # Special-case: PLE Status → RPM Managed spawns the Creative
+        # Transition ClickUp task (one per company ever — dedup lives in
+        # creative_transition, keyed on creative_transition_task_id).
+        if prop_name == "plestatus" and (new_value or "").strip() == "RPM Managed":
+            try:
+                import creative_transition
+                creative_transition.handle_async(company_id, new_value)
+            except Exception:
+                logger.exception("creative_transition dispatch failed for company %s", company_id)
         # Special-case: tier change → next forecast picks up new tier
         if prop_name == "seo_tier":
             loop_writer.record(
