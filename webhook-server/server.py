@@ -5773,6 +5773,29 @@ def accounts_property_audit():
     return jsonify({"rows": rows, "count": len(rows)})
 
 
+@app.route("/api/internal/creative-transition-run", methods=["POST", "OPTIONS"])
+def creative_transition_run():
+    """Run the Creative Transition worker synchronously for one company —
+    same code path the plestatus webhook dispatches to, minus the webhook.
+    Used to smoke-test the ClickUp leg (token, list env, field mapping)
+    independently of HubSpot webhook delivery/signature.
+
+    Body: {"company_id": "..."}
+    Auth: X-Internal-Key = INTERNAL_API_KEY env var.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = (request.get_json(silent=True) or {}).get("company_id", "")
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+    import creative_transition
+    result = creative_transition.handle_plestatus_change(str(company_id), "RPM Managed")
+    return jsonify(result)
+
+
 @app.route("/api/internal/audit-daily-rollup", methods=["POST", "OPTIONS"])
 def audit_daily_rollup():
     """Cron-driven: group last 24h of audit rows by company and post a
