@@ -96,6 +96,7 @@ def parse_ticket(task: dict[str, Any]) -> dict[str, Any]:
         raise TicketParseError("Empty ClickUp task payload")
 
     cf = clickup_client.custom_field_value
+    cfv = clickup_client.custom_field_value_typed
     # First try an explicit "Selections" JSON field (portal-driven flow).
     # If absent, fall back to RPM intake-form shape (currency-per-channel
     # + tier dropdowns) — that's how the live ClickUp lists are wired.
@@ -156,7 +157,15 @@ def parse_ticket(task: dict[str, Any]) -> dict[str, Any]:
         # and the IO renders empty "Prepared for the property:" sections.
         "property_address": _str(cf(task, "Property Address")),
         "property_code":    _str(cf(task, "Property Code") or cf(task, "New Property Code")),
-        "property_market":  _str(cf(task, "Market") or cf(task, "Market*")),
+        # "Market" is a ClickUp drop_down: the typed reader resolves the
+        # option NAME (e.g. "Phoenix"); the raw reader returns the option
+        # INDEX (e.g. "7"), which used to leak straight into rpmmarket/city.
+        # Fall back to raw only when the field isn't a dropdown.
+        "property_market":  _str(
+            cfv(task, "Market", of_type="drop_down")
+            or cfv(task, "Market*", of_type="drop_down")
+            or cf(task, "Market") or cf(task, "Market*")
+        ),
         # Notes: prefer task description, then portal "Notes",
         # then RPM "Additional Details from Requester" / "Other Info".
         "notes":           _str(
@@ -970,10 +979,13 @@ def _create_company(*, name: str, domain: str = "", address: str = "",
         properties["domain"] = domain
     if address:
         properties["address"] = address
-    if market:
+    if market and not market.strip().isdigit():
         # rpmmarket = the internal RPM Market designation; city = the
         # general HubSpot location field. Markets are city-named so we
         # populate both so address blocks render correctly.
+        # Guard: never write a bare number — a real market/city is never
+        # purely digits, so a digit-only value means an unresolved ClickUp
+        # dropdown index slipped through; skip rather than pollute.
         properties["rpmmarket"] = market
         properties["city"] = market
     if property_code:
