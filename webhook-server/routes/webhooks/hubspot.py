@@ -24,6 +24,7 @@ and do NOT propagate the change.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -60,8 +61,14 @@ def _verify_signature(req) -> bool:
     except ValueError:
         return False
 
+    # HubSpot v3 signs HMAC-SHA256(method+uri+body+timestamp) and BASE64-
+    # encodes it (NOT hex). The uri must be the https URL HubSpot posted to
+    # (ProxyFix on the app makes request.url report https behind Render's
+    # proxy). Compare base64 — hexdigest here always failed → every webhook
+    # 401'd and no task was ever created.
     base = f"{req.method}{req.url}{req.get_data(as_text=True)}{ts}".encode()
-    expected = hmac.new(secret.encode(), base, hashlib.sha256).hexdigest()
+    digest = hmac.new(secret.encode(), base, hashlib.sha256).digest()
+    expected = base64.b64encode(digest).decode()
     return hmac.compare_digest(expected, sig)
 
 
