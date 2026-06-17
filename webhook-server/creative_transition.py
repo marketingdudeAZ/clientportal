@@ -170,6 +170,118 @@ def handle_async(company_id: str, new_value: str) -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
+# ── Cron scan / baseline ─────────────────────────────────────────────────────
+#
+# The webhook is instant but has blind spots: HubSpot suppresses notifications
+# for changes our own app makes, and a missed/failed delivery is silent. This
+# scan is the reliable backstop — it reads HubSpot directly and creates any
+# missing task. It's idempotent with the webhook via the same task-id stamp.
+#
+# Flood guard: there are hundreds of already-RPM-Managed companies. To honor
+# "only properties that become RPM Managed from today forward", run BASELINE
+# once — it stamps every currently-managed company as handled WITHOUT making a
+# task. After that, SCAN only ever sees genuinely-new companies. SCAN also
+# refuses to run if it finds more unstamped companies than FLOOD_THRESHOLD
+# (unless force=True), so a cron scheduled before the baseline can't dump the
+# whole portfolio onto the board.
+
+FLOOD_THRESHOLD = 25
+_BASELINE_SENTINEL_PREFIX = "baseline-pre-"
+
+
+def _fetch_rpm_managed(stamp_only: bool = True) -> list[dict]:
+    """Return [{id, name, stamped}] for every company with plestatus == RPM
+    Managed. `stamped` is True when creative_transition_task_id is set."""
+    out: list[dict] = []
+    after = None
+    while True:
+        payload = {
+            "filterGroups": [{"filters": [
+                {"propertyName": "plestatus", "operator": "EQ", "value": "RPM Managed"},
+            ]}],
+            "properties": ["name", TASK_ID_PROP],
+            "limit": 100,
+        }
+        if after:
+            payload["after"] = after
+        r = requests.post(f"{HS_BASE}/crm/v3/objects/companies/search",
+                          headers=_hs_headers(), json=payload, timeout=30)
+        r.raise_for_status()
+        d = r.json()
+        for raw in d.get("results", []):
+            p = raw.get("properties") or {}
+            out.append({
+                "id": raw.get("id"),
+                "name": p.get("name") or "",
+                "stamped": bool((p.get(TASK_ID_PROP) or "").strip()),
+            })
+        after = (d.get("paging") or {}).get("next", {}).get("after")
+        if not after:
+            break
+        time.sleep(0.1)
+    return out
+
+
+def run_scan(mode: str = "scan", *, force: bool = False, dry_run: bool = False) -> dict:
+    """Backstop scan over RPM-Managed companies.
+
+    mode="baseline": stamp all currently-managed unstamped companies as handled
+                     (sentinel id), create NO tasks. Run ONCE to set today as
+                     the go-forward cutoff.
+    mode="scan":     create a task for each unstamped RPM-Managed company.
+                     Aborts if unstamped count > FLOOD_THRESHOLD unless force.
+    """
+    if not _list_id() or not CLICKUP_API_KEY:
+        return {"error": "CLICKUP_LIST_CREATIVE_TRANSITIONS or CLICKUP_API_KEY unset"}
+    companies = _fetch_rpm_managed()
+    unstamped = [c for c in companies if not c["stamped"]]
+    summary = {"mode": mode, "rpm_managed_total": len(companies),
+               "unstamped": len(unstamped), "dry_run": dry_run}
+
+    if mode == "baseline":
+        sentinel = _BASELINE_SENTINEL_PREFIX + time.strftime("%Y-%m-%d")
+        done = 0
+        for c in unstamped:
+            if dry_run:
+                done += 1
+                continue
+            try:
+                requests.patch(f"{HS_BASE}/crm/v3/objects/companies/{c['id']}",
+                               headers=_hs_headers(),
+                               json={"properties": {TASK_ID_PROP: sentinel}}, timeout=15)
+                done += 1
+            except Exception as e:
+                logger.warning("creative_transition baseline: stamp failed for %s: %s", c["id"], e)
+        summary["baselined"] = done
+        summary["sentinel"] = sentinel
+        logger.info("creative_transition baseline: marked %d companies handled (%s)", done, sentinel)
+        return summary
+
+    # mode == "scan"
+    if len(unstamped) > FLOOD_THRESHOLD and not force:
+        summary["aborted"] = (f"{len(unstamped)} unstamped RPM-Managed companies exceeds "
+                              f"flood guard ({FLOOD_THRESHOLD}). Run mode=baseline first "
+                              f"to set today's cutoff, or pass force=true.")
+        logger.warning("creative_transition scan: %s", summary["aborted"])
+        return summary
+
+    created, skipped = [], 0
+    for c in unstamped:
+        if dry_run:
+            created.append({"company_id": c["id"], "name": c["name"], "dry_run": True})
+            continue
+        res = handle_plestatus_change(c["id"], "RPM Managed")
+        if res.get("task_id"):
+            created.append({"company_id": c["id"], "name": c["name"], "task_id": res["task_id"]})
+        else:
+            skipped += 1
+    summary["created"] = created
+    summary["created_count"] = len(created)
+    summary["skipped"] = skipped
+    logger.info("creative_transition scan: created %d tasks, skipped %d", len(created), skipped)
+    return summary
+
+
 # ── HubSpot ──────────────────────────────────────────────────────────────────
 
 def _read_company(company_id: str) -> Optional[dict]:

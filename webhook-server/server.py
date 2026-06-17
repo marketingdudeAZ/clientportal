@@ -5796,6 +5796,37 @@ def creative_transition_run():
     return jsonify(result)
 
 
+@app.route("/api/internal/creative-transition-scan", methods=["POST", "OPTIONS"])
+def creative_transition_scan():
+    """Backstop scan: create Creative Transition tasks for RPM-Managed
+    companies the webhook missed. Idempotent via the task-id stamp.
+
+    Body:
+      {"mode": "baseline"}  → stamp all current RPM-Managed companies as
+                              handled, create NO tasks (run once to set the
+                              go-forward cutoff).
+      {"mode": "scan"}      → create tasks for unstamped RPM-Managed companies
+                              (default). Aborts above the flood guard unless
+                              {"force": true}.
+      {"dry_run": true}     → report only, change nothing.
+
+    Auth: X-Internal-Key = INTERNAL_API_KEY env var.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+    body = request.get_json(silent=True) or {}
+    import creative_transition
+    result = creative_transition.run_scan(
+        mode=body.get("mode", "scan"),
+        force=bool(body.get("force")),
+        dry_run=bool(body.get("dry_run")),
+    )
+    return jsonify(result)
+
+
 @app.route("/api/internal/audit-daily-rollup", methods=["POST", "OPTIONS"])
 def audit_daily_rollup():
     """Cron-driven: group last 24h of audit rows by company and post a

@@ -243,5 +243,52 @@ class CreativeTransitionTests(unittest.TestCase):
         self.assertEqual(result.get("skipped"), "list env unset")
 
 
+class CreativeTransitionScanTests(unittest.TestCase):
+    """Cron scan / baseline + flood guard."""
+
+    def setUp(self):
+        ct._recent.clear()
+        ct._field_cache.clear()
+
+    def _companies(self, n_stamped, n_unstamped):
+        out = [{"id": f"s{i}", "name": f"Stamped {i}", "stamped": True} for i in range(n_stamped)]
+        out += [{"id": f"u{i}", "name": f"Unstamped {i}", "stamped": False} for i in range(n_unstamped)]
+        return out
+
+    def test_scan_aborts_over_flood_threshold(self):
+        with mock.patch.object(ct, "_fetch_rpm_managed", return_value=self._companies(0, 40)):
+            r = ct.run_scan(mode="scan", dry_run=True)
+        self.assertIn("aborted", r)
+        self.assertNotIn("created_count", r)
+
+    def test_scan_force_overrides_flood(self):
+        with mock.patch.object(ct, "_fetch_rpm_managed", return_value=self._companies(0, 40)):
+            r = ct.run_scan(mode="scan", force=True, dry_run=True)
+        self.assertNotIn("aborted", r)
+        self.assertEqual(r["created_count"], 40)
+
+    def test_scan_creates_only_unstamped(self):
+        seen = []
+        with mock.patch.object(ct, "_fetch_rpm_managed", return_value=self._companies(3, 2)), \
+             mock.patch.object(ct, "handle_plestatus_change",
+                               side_effect=lambda cid, v: seen.append(cid) or {"task_id": "t-" + cid}):
+            r = ct.run_scan(mode="scan")
+        self.assertEqual(r["created_count"], 2)
+        self.assertEqual(seen, ["u0", "u1"])  # stamped ones never touched
+
+    def test_baseline_stamps_without_creating_tasks(self):
+        patched = []
+        def fake_patch(url, json=None, **kw):
+            patched.append((url, json)); return _resp({})
+        with mock.patch.object(ct, "_fetch_rpm_managed", return_value=self._companies(2, 3)), \
+             mock.patch.object(ct.requests, "patch", side_effect=fake_patch), \
+             mock.patch.object(ct, "handle_plestatus_change") as create:
+            r = ct.run_scan(mode="baseline")
+        self.assertEqual(r["baselined"], 3)            # only the 3 unstamped
+        self.assertEqual(len(patched), 3)
+        create.assert_not_called()                     # baseline makes NO tasks
+        self.assertTrue(r["sentinel"].startswith("baseline-pre-"))
+
+
 if __name__ == "__main__":
     unittest.main()
