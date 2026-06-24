@@ -5796,6 +5796,39 @@ def creative_transition_run():
     return jsonify(result)
 
 
+@app.route("/api/internal/fluency-feed-sync", methods=["POST", "OPTIONS"])
+def fluency_feed_sync():
+    """Authoritative writer of the RPM Property Tag Source sheet (the data
+    source Fluency connects to). Reflects every marketing-safe Community
+    Brief field (override-wins) for every managed property with a uuid.
+
+    Body: {"dry_run": bool, "sample": int}
+      dry_run → return computed schema + a sample record, write nothing
+      sample  → limit to first N companies (testing)
+
+    Decoupled from /api/internal/fluency-tag-sync (that derives values onto
+    the HubSpot company record; this reflects the record to the sheet).
+
+    Auth: X-Internal-Key = INTERNAL_API_KEY env var. Run daily via Render Cron.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+    body = request.get_json(silent=True) or {}
+    try:
+        import fluency_feed
+        result = fluency_feed.sync(
+            dry_run=bool(body.get("dry_run")),
+            sample=int(body.get("sample") or 0),
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error("fluency-feed-sync failed: %s", e, exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/internal/creative-transition-scan", methods=["POST", "OPTIONS"])
 def creative_transition_scan():
     """Backstop scan: create Creative Transition tasks for RPM-Managed
@@ -6285,18 +6318,13 @@ def fluency_tag_sync():
         except Exception as e:
             logger.error("fluency-tag-sync HubSpot write failed: %s", e, exc_info=True)
 
-        # Sheet write — only fires if RPM_PIPELINE_SHEET_ID is set; otherwise
-        # silently skipped so the HubSpot path is independent of the sheet
-        # provisioning being complete.
-        if os.environ.get("RPM_PIPELINE_SHEET_ID"):
-            try:
-                sres = _psw.write_rows(sheet_records)
-                logger.info("fluency-tag-sync Sheet write: written=%d skipped=%d errors=%d",
-                            sres.get("written", 0), sres.get("skipped_unchanged", 0), len(sres.get("errors", [])))
-            except Exception as e:
-                logger.error("fluency-tag-sync Sheet write failed: %s", e, exc_info=True)
-        else:
-            logger.info("fluency-tag-sync: RPM_PIPELINE_SHEET_ID not set; skipping sheet write")
+        # Sheet write is now owned by fluency_feed.sync (/api/internal/
+        # fluency-feed-sync), which writes the FULL v3 marketing-safe field
+        # set. This endpoint only derives values onto the HubSpot company
+        # record (Write 1); writing the subset here too would clobber the
+        # feed's extra columns on the shared tab. Intentionally disabled.
+        logger.info("fluency-tag-sync: sheet write delegated to fluency-feed-sync "
+                    "(%d records computed, not written here)", len(sheet_records))
 
     th = _th.Thread(target=_bg_writer, daemon=True)
     th.start()

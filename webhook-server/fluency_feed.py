@@ -1,0 +1,336 @@
+"""Fluency feed builder — Community Brief → "RPM Property Tag Source" sheet.
+
+WHY THIS EXISTS
+    Fluency cannot read HubSpot or HubDB. It connects to a data source —
+    here, a uuid-keyed Google Sheet (Fluency docs: "setting up and
+    configuring data sources"). This module is the single authoritative
+    writer of that sheet's full field set.
+
+    It is deliberately DECOUPLED from the AptIQ derivation pipeline
+    (services/fluency_ingestion/*). That pipeline's job is to WRITE derived
+    values onto the company record (voice_tier, amenities, floor_plans).
+    THIS module's job is to REFLECT the company record's override-wins
+    values onto the Fluency sheet. Separation of concerns = scales.
+
+FIELD SET
+    Derived at import time from community_brief.SECTIONS, so it auto-tracks
+    the brief schema. Every NON-internal field with a resolved/override
+    property is exposed as a `data:<key>` column (Fluency's dynamic-field
+    convention). Internal fields (pricing, budget, PMS/CMS, typical
+    resident, …) are NEVER included — Fair Housing + keeps the feed lean
+    (Fluency docs: "the more data you have, the more compute/storage/sync").
+
+OVERRIDE-WINS
+    For each field: the human override value wins; otherwise the
+    auto-resolved value. Exactly what /accounts/property shows.
+
+NON-BREAKING
+    The legacy v2 columns Fluency may already reference (data:amenities,
+    data:marketed_amenity_names, data:amenities_descriptions,
+    data:year_renovated) are KEPT. data:amenities is backfilled from the
+    v3 property_amenities so it never goes blank. New v3 columns are
+    additive — the account_id join key is unchanged.
+
+RUN IT (on the server — never local)
+    POST /api/internal/fluency-feed-sync  {dry_run|sample}
+    Daily via a Render Cron Job hitting that endpoint.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import hashlib
+import json
+import logging
+import os
+import time
+from typing import Any
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+HS_BASE = "https://api.hubapi.com"
+SHEET_ID_ENV = "RPM_PIPELINE_SHEET_ID"
+TAB_NAME = "rpm_property_tag_source"
+
+PLE_INCLUDE = ["RPM Managed", "Onboarding", "Dispositioning"]
+
+# Brief keys handled as identity columns, or excluded from the feed.
+_IDENTITY_KEYS = {"name", "address", "city", "state", "zip", "domain"}
+_EXCLUDE_KEYS = {"documents", "tracking"}  # structural / not ad-copy inputs
+
+# floor_plans: the brief's hs_resolved is the raw JSON; the feed wants the
+# derived bedroom-bucket string the AptIQ pipeline writes to fluency_floor_plans.
+_RESOLVED_OVERRIDE = {
+    "floor_plans": ("fluency_floor_plans", "fluency_floor_plans_override"),
+}
+
+# Legacy v2 columns kept for non-breaking. value = how to fill (or None = blank).
+# data:amenities is backfilled from v3 property_amenities.
+_LEGACY_COLUMNS = [
+    ("data:amenities", "property_amenities"),
+    ("data:marketed_amenity_names", None),
+    ("data:amenities_descriptions", None),
+    ("data:year_renovated", None),
+]
+
+IDENTITY_COLUMNS = [
+    "account_id", "hubspot_company_id", "account_name", "account_market", "account_state",
+]
+
+
+def _brief_fields() -> list[dict]:
+    """Derive the feed field list from the live brief schema."""
+    import community_brief as cb
+    out: list[dict] = []
+    for _section, fields in cb.SECTIONS:
+        for f in fields:
+            if f.internal or f.key in _IDENTITY_KEYS or f.key in _EXCLUDE_KEYS:
+                continue
+            if not (f.hs_resolved or f.hs_override):
+                continue
+            resolved, override = f.hs_resolved, f.hs_override
+            if f.key in _RESOLVED_OVERRIDE:
+                resolved, override = _RESOLVED_OVERRIDE[f.key]
+            out.append({
+                "key": f.key, "type": f.type,
+                "resolved": resolved, "override": override,
+                "col": f"data:{f.key}",
+            })
+    return out
+
+
+def feed_schema() -> dict:
+    """Return {columns, fields, hs_properties} for the current brief schema."""
+    fields = _brief_fields()
+    legacy_cols = [c for c, _src in _LEGACY_COLUMNS]
+    # Column order: identity, derived data: cols, legacy data: cols not already
+    # present, then metadata.
+    data_cols = [f["col"] for f in fields]
+    legacy_extra = [c for c in legacy_cols if c not in data_cols]
+    columns = IDENTITY_COLUMNS + data_cols + legacy_extra + ["hash", "last_updated_at"]
+
+    # All HubSpot company properties we must fetch (resolved + override + identity).
+    props: set[str] = {"name", "uuid", "rpmmarket", "state", "plestatus"}
+    for f in fields:
+        if f["resolved"]:
+            props.add(f["resolved"])
+        if f["override"]:
+            props.add(f["override"])
+    for _col, src in _LEGACY_COLUMNS:
+        if src:  # backfill source is a brief key → its resolved/override already fetched
+            props.add(f"fluency_{src}")
+            props.add(f"fluency_{src}_override")
+    return {"columns": columns, "fields": fields, "hs_properties": sorted(props),
+            "legacy": _LEGACY_COLUMNS}
+
+
+# ── value normalization ──────────────────────────────────────────────────────
+
+def _norm(value: Any) -> str:
+    """List-ish brief values (newline / semicolon separated) → comma-joined,
+    matching the existing sheet style (e.g. 'Air Conditioning, Balcony, …')."""
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if not s:
+        return ""
+    if s.startswith("[") or s.startswith("{"):
+        return s  # JSON blob — pass through untouched (floor_plans override edge)
+    parts = [p.strip() for p in s.replace("\r", "").replace(";", "\n").split("\n")]
+    parts = [p for p in parts if p]
+    return ", ".join(parts)
+
+
+def _resolve(company_props: dict, resolved: str | None, override: str | None) -> str:
+    ov = (company_props.get(override) or "").strip() if override else ""
+    if ov:
+        return _norm(ov)
+    rv = (company_props.get(resolved) or "").strip() if resolved else ""
+    return _norm(rv)
+
+
+# ── HubSpot fetch ────────────────────────────────────────────────────────────
+
+def _headers() -> dict:
+    from config import HUBSPOT_API_KEY
+    return {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+
+
+def _fetch_companies(hs_properties: list[str], sample: int = 0) -> list[dict]:
+    url = f"{HS_BASE}/crm/v3/objects/companies/search"
+    out: list[dict] = []
+    after = None
+    while True:
+        payload = {
+            "filterGroups": [{"filters": [
+                {"propertyName": "plestatus", "operator": "IN", "values": PLE_INCLUDE},
+            ]}],
+            "properties": hs_properties,
+            "limit": 100,
+        }
+        if after:
+            payload["after"] = after
+        r = requests.post(url, headers=_headers(), json=payload, timeout=30)
+        r.raise_for_status()
+        d = r.json()
+        out.extend(d.get("results", []))
+        if sample and len(out) >= sample:
+            return out[:sample]
+        after = (d.get("paging") or {}).get("next", {}).get("after")
+        if not after:
+            break
+        time.sleep(0.1)
+    return out
+
+
+def build_records(sample: int = 0) -> tuple[list[dict], dict]:
+    """Return (records, stats). Each record = the sheet row as a dict keyed by
+    column name. Companies without a uuid are skipped (no Fluency target)."""
+    schema = feed_schema()
+    fields = schema["fields"]
+    companies = _fetch_companies(schema["hs_properties"], sample=sample)
+
+    records: list[dict] = []
+    skipped_no_uuid = 0
+    for c in companies:
+        p = c.get("properties", {}) or {}
+        uuid = (p.get("uuid") or "").strip()
+        if not uuid:
+            skipped_no_uuid += 1
+            continue
+        row: dict[str, Any] = {
+            "account_id":         uuid,
+            "hubspot_company_id": c.get("id", ""),
+            "account_name":       p.get("name") or "",
+            "account_market":     p.get("rpmmarket") or "",
+            "account_state":      p.get("state") or "",
+        }
+        for f in fields:
+            row[f["col"]] = _resolve(p, f["resolved"], f["override"])
+        # legacy backfill
+        for col, src in _LEGACY_COLUMNS:
+            if src:
+                row[col] = _resolve(p, f"fluency_{src}", f"fluency_{src}_override")
+            else:
+                row.setdefault(col, "")
+        records.append(row)
+
+    stats = {
+        "companies_fetched": len(companies),
+        "records": len(records),
+        "skipped_no_uuid": skipped_no_uuid,
+        "columns": len(schema["columns"]),
+    }
+    return records, stats
+
+
+# ── Sheet write (diff-only, batched) ─────────────────────────────────────────
+
+def _gc():
+    import gspread
+    from google.oauth2.service_account import Credentials
+    raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    info = json.loads(raw) if raw.strip().startswith("{") else json.load(open(raw))
+    creds = Credentials.from_service_account_info(info, scopes=[
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive.file",
+    ])
+    return gspread.authorize(creds)
+
+
+def _hash(values: list[str]) -> str:
+    return hashlib.sha256(json.dumps([str(v) for v in values]).encode()).hexdigest()[:16]
+
+
+def sync(dry_run: bool = False, sample: int = 0) -> dict:
+    """Build + write the feed. dry_run returns the computed schema + a sample
+    record without touching the sheet (safe to run on the server first)."""
+    schema = feed_schema()
+    columns = schema["columns"]
+    records, stats = build_records(sample=sample)
+
+    if dry_run:
+        return {"dry_run": True, "columns": columns, **stats,
+                "sample_record": records[0] if records else None}
+
+    sheet_id = os.environ.get(SHEET_ID_ENV, "").strip()
+    if not sheet_id:
+        return {"error": f"{SHEET_ID_ENV} not set", **stats}
+
+    import gspread
+    gc = _gc()
+    sh = gc.open_by_key(sheet_id)
+    try:
+        ws = sh.worksheet(TAB_NAME)
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title=TAB_NAME, rows=4000, cols=len(columns))
+        ws.update("A1", [columns])
+
+    existing = ws.get_all_values()
+    header = existing[0] if existing else []
+    # If the header changed (new v3 columns), rewrite header + force full rewrite.
+    header_changed = header != columns
+    if header_changed:
+        ws.update("A1", [columns])
+
+    hash_idx = columns.index("hash")
+    by_id: dict[str, tuple[int, str]] = {}
+    if header and not header_changed:
+        id_idx = header.index("account_id")
+        h_idx = header.index("hash") if "hash" in header else hash_idx
+        for i, row in enumerate(existing[1:], start=2):
+            if id_idx < len(row) and row[id_idx]:
+                by_id[row[id_idx]] = (i, row[h_idx] if h_idx < len(row) else "")
+
+    now_iso = dt.datetime.utcnow().isoformat() + "Z"
+    data_cols = columns[:-2]  # everything except hash, last_updated_at
+    appends: list[list[str]] = []
+    updates: list[tuple[int, list[str]]] = []
+    skipped = 0
+
+    for rec in records:
+        h = _hash([rec.get(c, "") for c in data_cols])
+        rec["hash"] = h
+        rec["last_updated_at"] = now_iso
+        row_values = [str(rec.get(c, "")) for c in columns]
+        aid = rec["account_id"]
+        if aid in by_id:
+            row_num, cur_h = by_id[aid]
+            if cur_h == h:
+                skipped += 1
+                continue
+            updates.append((row_num, row_values))
+        else:
+            appends.append(row_values)
+
+    errors: list[dict] = []
+    end_col = _col_letter(len(columns))
+    if updates:
+        try:
+            ws.batch_update([{"range": f"A{n}:{end_col}{n}", "values": [v]} for n, v in updates],
+                            value_input_option="RAW")
+        except Exception as e:
+            errors.append({"reason": str(e), "updates": len(updates)})
+    if appends:
+        try:
+            ws.append_rows(appends, value_input_option="RAW")
+        except Exception as e:
+            errors.append({"reason": str(e), "appends": len(appends)})
+
+    return {
+        "written": len(updates) + len(appends),
+        "updated": len(updates), "appended": len(appends),
+        "skipped_unchanged": skipped, "header_rewritten": header_changed,
+        "errors": errors[:20], "sheet_id": sheet_id, "tab": TAB_NAME, **stats,
+    }
+
+
+def _col_letter(n: int) -> str:
+    """1-indexed column number → spreadsheet letter (handles > 26)."""
+    s = ""
+    while n > 0:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
