@@ -221,7 +221,7 @@ def build_records(sample: int = 0) -> tuple[list[dict], dict]:
         "companies_fetched": len(companies),
         "records": len(records),
         "skipped_no_uuid": skipped_no_uuid,
-        "columns": len(schema["columns"]),
+        "column_count": len(schema["columns"]),
     }
     return records, stats
 
@@ -270,16 +270,19 @@ def sync(dry_run: bool = False, sample: int = 0) -> dict:
 
     existing = ws.get_all_values()
     header = existing[0] if existing else []
-    # If the header changed (new v3 columns), rewrite header + force full rewrite.
+    # Header migration: when the column set changes (e.g. the v2→v3 schema
+    # jump from 22→41 cols), the old rows are misaligned under the new header.
+    # CLEAR the tab and rewrite fresh — appending on top would duplicate +
+    # misalign. After a clean run the header is stable and the hash-diff
+    # below makes subsequent runs cheap.
     header_changed = header != columns
-    if header_changed:
-        ws.update("A1", [columns])
-
-    hash_idx = columns.index("hash")
     by_id: dict[str, tuple[int, str]] = {}
-    if header and not header_changed:
+    if header_changed:
+        ws.clear()
+        ws.update("A1", [columns])
+    elif header:
         id_idx = header.index("account_id")
-        h_idx = header.index("hash") if "hash" in header else hash_idx
+        h_idx = header.index("hash")
         for i, row in enumerate(existing[1:], start=2):
             if id_idx < len(row) and row[id_idx]:
                 by_id[row[id_idx]] = (i, row[h_idx] if h_idx < len(row) else "")
