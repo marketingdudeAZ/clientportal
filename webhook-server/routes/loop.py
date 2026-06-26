@@ -27,7 +27,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, render_template_string, request
 
 from _route_utils import preflight_response
 
@@ -699,3 +699,123 @@ def loop_analytics_view():
         "productization":  loop_analytics.productization_signal(since_days=days),
         "coverage":        loop_analytics.coverage_report(since_days=days),
     })
+
+
+# ── GET /loop/analytics/dashboard ────────────────────────────────────────────
+
+_ANALYTICS_DASHBOARD_TEMPLATE = """\
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loop Analytics — RPM</title>
+  <style>
+    body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+           max-width: 980px; margin: 1.5rem auto; padding: 0 1rem; color: #1a1a1a; }
+    h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+    h2 { font-size: 1.05rem; margin: 2rem 0 .6rem; border-bottom: 1px solid #e3e6ea; padding-bottom: .3rem; }
+    .sub { color: #667; margin-bottom: 1rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+    th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid #eef0f3; }
+    th { color: #556; font-weight: 600; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .bar { background: #2356c5; height: 9px; border-radius: 3px; display: inline-block; vertical-align: middle; }
+    .barwrap { background: #eef1f6; border-radius: 3px; width: 180px; display: inline-block; vertical-align: middle; margin-right: .5rem; }
+    .kpi { display: inline-block; margin-right: 2rem; }
+    .kpi b { font-size: 1.6rem; display: block; }
+    .warn { color: #b35; font-weight: 600; }
+    .ok { color: #1a6b1a; }
+    .muted { color: #889; }
+    code { background: #f4f6f8; padding: .05rem .3rem; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h1>Loop Analytics</h1>
+  <p class="sub">Portfolio-wide, last {{ days }} days. Roadmap + productization signal off the Loop event bus.</p>
+
+  <h2>Productization signal — where clients win</h2>
+  {% set rt = productization.recommendation_trust %}
+  {% if rt %}
+    <div class="kpi"><b>{{ rt.approval_rate_pct if rt.approval_rate_pct is not none else '—' }}{% if rt.approval_rate_pct is not none %}%{% endif %}</b>AI recommendation approval</div>
+    <div class="kpi"><b>{{ rt.approved }}</b>approved</div>
+    <div class="kpi"><b>{{ rt.rejected }}</b>rejected</div>
+  {% else %}<p class="muted">No recommendation events yet.</p>{% endif %}
+  {% if productization.weekly %}
+    <table><tr><th>Week</th><th>Stage</th><th class="num">Events</th></tr>
+    {% for w in productization.weekly %}<tr><td>{{ w.week }}</td><td>{{ w.stage }}</td><td class="num">{{ w.count }}</td></tr>{% endfor %}
+    </table>
+  {% endif %}
+
+  <h2>Efficiency targets — what to automate</h2>
+  {% if efficiency %}
+    <table>
+      <tr><th>Ops event</th><th class="num">Count</th><th class="num">Avg ms</th><th class="num">Fail %</th><th class="num">Manual</th></tr>
+      {% for e in efficiency %}
+      <tr><td><code>{{ e.event_type }}</code></td><td class="num">{{ e.count }}</td>
+          <td class="num">{{ e.avg_runtime_ms if e.avg_runtime_ms is not none else '—' }}</td>
+          <td class="num {{ 'warn' if e.fail_rate_pct >= 10 else '' }}">{{ e.fail_rate_pct }}</td>
+          <td class="num">{{ e.manual_count }}</td></tr>
+      {% endfor %}
+    </table>
+    <p class="muted">High count × high avg-ms × manual = best automation ROI. High fail % = reliability debt.</p>
+  {% else %}<p class="muted">No ops events in window.</p>{% endif %}
+
+  <h2>Event mix — where activity is</h2>
+  {% if mix %}
+    <table>
+    {% for m in mix[:20] %}
+      <tr><td><code>{{ m.key }}</code></td>
+          <td style="width:240px"><span class="barwrap"><span class="bar" style="width:{{ m.pct }}%"></span></span>{{ m.pct }}%</td>
+          <td class="num">{{ m.count }}</td></tr>
+    {% endfor %}
+    </table>
+  {% else %}<p class="muted">No events in window.</p>{% endif %}
+
+  <h2>Coverage &amp; write health — can I trust the numbers?</h2>
+  {% set wh = coverage.write_health %}
+  {% if wh %}
+    <div class="kpi"><b>{{ wh.succeeded }}</b>writes ok</div>
+    <div class="kpi"><b class="{{ 'warn' if wh.failed else 'ok' }}">{{ wh.failed }}</b>failed</div>
+    <div class="kpi"><b>{{ wh.skipped_no_bq }}</b>skipped (no BQ)</div>
+    <div class="kpi"><b>{{ wh.deadletter_written }}</b>dead-lettered</div>
+    {% if wh.failed and not wh.deadletter_written %}<p class="warn">Failed writes were NOT captured — set <code>LOOP_EVENTS_DEADLETTER_PATH</code> to stop losing events.</p>{% endif %}
+    {% if wh.last_error %}<p class="muted">last error: {{ wh.last_error }}</p>{% endif %}
+  {% endif %}
+  <p>Seen <b>{{ coverage.seen_total }}</b> of <b>{{ coverage.registered_total }}</b> registered event types.
+     Avg ingest lag: {{ coverage.avg_ingest_lag_ms if coverage.avg_ingest_lag_ms is not none else '—' }} ms.</p>
+  {% if coverage.never_seen %}
+    <p class="muted">Never seen (blind spots): {% for t in coverage.never_seen %}<code>{{ t }}</code> {% endfor %}</p>
+  {% endif %}
+  <p class="muted" style="margin-top:2rem">Process counters reset on restart; write_health is per-worker. JSON: <code>/api/loop/analytics</code></p>
+</body>
+</html>
+"""
+
+
+def _dashboard_authorized(req) -> bool:
+    """Internal-key via header OR ?key= (browser nav can't set headers)."""
+    expected = os.environ.get("INTERNAL_API_KEY", "")
+    if not expected:
+        return False
+    return (req.headers.get("X-Internal-Key", "") == expected
+            or req.args.get("key", "") == expected)
+
+
+@loop_bp.route("/loop/analytics/dashboard", methods=["GET"])
+def loop_analytics_dashboard():
+    """Self-contained internal HTML dashboard over the loop_analytics readers.
+    Server-rendered (no client-side auth). Auth: X-Internal-Key header or ?key=."""
+    if not _dashboard_authorized(request):
+        return "Unauthorized — internal key required.", 401
+
+    days = max(1, min(int(request.args.get("days") or 90), 365))
+    import loop_analytics
+    return render_template_string(
+        _ANALYTICS_DASHBOARD_TEMPLATE,
+        days=days,
+        mix=loop_analytics.event_mix(since_days=days),
+        efficiency=loop_analytics.efficiency_targets(since_days=days),
+        productization=loop_analytics.productization_signal(since_days=days),
+        coverage=loop_analytics.coverage_report(since_days=days),
+    )
