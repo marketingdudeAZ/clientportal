@@ -159,6 +159,36 @@ def recommend_for_property(
     return recs
 
 
+def build_channel_signals(
+    company_id: str,
+    impression_share_lost_by_channel: dict[str, float],
+    marketing_status: str | None,
+) -> list[ChannelSignal]:
+    """Assemble ChannelSignals for a property.
+
+    - current_budget + active ← spend_sheet.get_company_monthly_spend (the
+      most-recent deal's SKU line items; reuse, not a rebuild).
+    - impression_share_lost_pct ← the caller (paid-media / Google Ads connector).
+    - marketing_status ← red_light.
+
+    A channel with current spend > 0 is `active` (this slice = increases on
+    active channels). Imported lazily so the pure core stays I/O-free.
+    """
+    import spend_sheet
+    by_sku = (spend_sheet.get_company_monthly_spend(company_id) or {}).get("by_sku") or {}
+    signals: list[ChannelSignal] = []
+    for channel, is_lost in impression_share_lost_by_channel.items():
+        current = float(by_sku.get(channel, 0.0))
+        signals.append(ChannelSignal(
+            channel=channel,
+            current_budget=current,
+            impression_share_lost_pct=is_lost,
+            marketing_status=marketing_status,
+            active=current > 0,
+        ))
+    return signals
+
+
 def open_deal_channels_via_hubspot(company_id: str) -> set[str]:
     """Adapter: channels with an in-flight deal, from hubspot_client.
 

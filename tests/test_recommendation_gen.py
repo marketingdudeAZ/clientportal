@@ -109,3 +109,20 @@ def test_emit_can_be_disabled(monkeypatch):
                         lambda *a, **k: emitted.append(k))
     rg.recommend_for_property("u-1", "c-1", [_sig()], "2026-Q3", emit=False)
     assert emitted == []
+
+
+# ── ChannelSignal adapter (reuses spend_sheet for current budget) ────────────
+
+
+def test_build_channel_signals_pulls_current_budget(monkeypatch):
+    import spend_sheet
+    monkeypatch.setattr(spend_sheet, "get_company_monthly_spend",
+                        lambda cid: {"by_sku": {"paid_search": 1500.0}})
+    sigs = rg.build_channel_signals(
+        "c-1", {"paid_search": 0.28, "paid_social": 0.2}, "RED")
+    by_ch = {s.channel: s for s in sigs}
+    assert by_ch["paid_search"].current_budget == 1500.0
+    assert by_ch["paid_search"].active is True        # has spend → active
+    assert by_ch["paid_search"].impression_share_lost_pct == 0.28
+    assert by_ch["paid_social"].current_budget == 0.0
+    assert by_ch["paid_social"].active is False       # no spend → inactive
