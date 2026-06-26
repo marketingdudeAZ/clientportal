@@ -3,7 +3,18 @@
 **Author:** Kyle Shipp (with Claude office-hours session)
 **Date:** 2026-06-25
 **Branch:** `cleanup/portal-sturdy`
-**Status:** Plan for review — no execution yet beyond the cruft sweep already committed.
+**Status:** In progress on `cleanup/portal-sturdy` (not pushed; `main` untouched).
+
+### Progress log
+- ✅ Cruft sweep: removed `demo-v1.html`, dupe `AGENTS.md`, superseded v2 pptx script.
+- ✅ **Step 1 — canonical resolver.** `community_brief.resolve_value()` is the one
+  precedence rule; `_effective`, the render-context badges, and `fluency_feed._resolve`
+  all route through it. Whitespace-only override now treated as empty (drift bug fixed).
+  `tests/test_brief_resolver.py` (10 tests); 106 brief tests green.
+- ✅ **Workstream B core — event analytics.** `loop_analytics.py`
+  (event_mix / efficiency_targets / productization_signal / coverage_report) +
+  `GET /api/loop/analytics` (internal-only). `tests/test_loop_analytics*.py` (15 tests).
+- ⏭️ Next: analytics dashboard UI; then Step 2 (HubSpot client), Step 3, Step 4.
 
 ## Goal
 
