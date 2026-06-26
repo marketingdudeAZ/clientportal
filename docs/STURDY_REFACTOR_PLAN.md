@@ -11,10 +11,18 @@
   precedence rule; `_effective`, the render-context badges, and `fluency_feed._resolve`
   all route through it. Whitespace-only override now treated as empty (drift bug fixed).
   `tests/test_brief_resolver.py` (10 tests); 106 brief tests green.
-- ✅ **Workstream B core — event analytics.** `loop_analytics.py`
-  (event_mix / efficiency_targets / productization_signal / coverage_report) +
-  `GET /api/loop/analytics` (internal-only). `tests/test_loop_analytics*.py` (15 tests).
-- ⏭️ Next: analytics dashboard UI; then Step 2 (HubSpot client), Step 3, Step 4.
+- ✅ **Workstream B — event analytics (complete, end to end).**
+  - `loop_analytics.py`: event_mix / efficiency_targets / productization_signal /
+    coverage_report (portfolio-wide reads over `loop_events`).
+  - `GET /api/loop/analytics` (internal-only JSON, report selector + window clamp).
+  - `loop_writer` write-health counters + dead-letter (`LOOP_EVENTS_DEADLETTER_PATH`)
+    so silent BQ drops are visible and recoverable; surfaced in coverage_report.
+  - `GET /loop/analytics/dashboard`: self-contained internal HTML dashboard.
+  - ~28 tests across `test_loop_analytics*.py`, `test_loop_writer_health.py`,
+    `test_loop_dashboard_route.py`. 129 tests green across touched areas.
+- ⏭️ Next: Step 2 (central `hubspot_client.py`, 39 call sites), then Step 3
+  (onboarding consolidation + `property_brief` rename), Step 4 (carve `server.py`,
+  test loop_writer/migrations/signatures). Optional: dead-letter replay tool.
 
 ## Goal
 
