@@ -1,0 +1,126 @@
+{# ============================================================================
+   Loop 1 — Self-checkout recommendation cards (#5)
+
+   Renders budget-increase recommendations for the current property and lets the
+   PM accept one. GET /api/self-checkout/recommendations fetches the cards;
+   "Add" POSTs /api/self-checkout, which builds the deal + DRAFT quote and
+   returns the record link for the RM to sign.
+
+   Include in client-portal-loop.html:
+       {% include "./partials/self-checkout-recommendations.html" %}
+
+   Reads the same context the Loop page already exposes: property.hs_object_id
+   (companyId), property.uuid, contact.email (portalEmail). The whole block is
+   hidden until the API returns at least one card, so it no-ops cleanly when
+   SELF_CHECKOUT_ENABLED is off (404) or Google Ads isn't connected (empty).
+============================================================================ #}
+
+<section id="sc-recos" class="sc-recos" hidden
+         data-company-id="{{ property.hs_object_id|default('') }}"
+         data-uuid="{{ property.uuid|default('') }}"
+         data-email="{{ contact.email|default('') }}">
+  <h2 class="sc-recos__title">Recommended budget changes</h2>
+  <p class="sc-recos__sub">Based on impression share lost to budget. Adding one
+     builds the deal + quote for your RM to sign — nothing goes live until signed.</p>
+  <div class="sc-recos__list" id="sc-recos-list"></div>
+  <div class="sc-recos__empty" id="sc-recos-empty" hidden></div>
+</section>
+
+<style>
+  .sc-recos { margin: 24px 0; }
+  .sc-recos__title { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
+  .sc-recos__sub { font-size: 13px; color: #5b6770; margin: 0 0 16px; }
+  .sc-card { border: 1px solid #d7dde2; border-radius: 8px; padding: 16px;
+             margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 12px;
+             align-items: center; justify-content: space-between; }
+  .sc-card__head { font-weight: 600; text-transform: capitalize; }
+  .sc-card__money { font-size: 15px; }
+  .sc-card__money strong { color: #b25f00; }
+  .sc-card__why { flex-basis: 100%; font-size: 13px; color: #5b6770; }
+  .sc-card__actions { display: flex; gap: 8px; align-items: center; }
+  .sc-card__actions select, .sc-card__actions button {
+      font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid #c3cbd1; }
+  .sc-card__actions button { background: #2d3e50; color: #fff; border: 0; cursor: pointer; }
+  .sc-card__actions button[disabled] { opacity: .6; cursor: default; }
+  .sc-card__result { flex-basis: 100%; font-size: 13px; }
+  .sc-card__result a { color: #2d3e50; font-weight: 600; }
+  .sc-recos__empty { font-size: 13px; color: #5b6770; }
+</style>
+
+<script>
+(function () {
+  var root = document.getElementById("sc-recos");
+  if (!root) return;
+  var companyId = root.dataset.companyId, uuid = root.dataset.uuid, email = root.dataset.email;
+  if (!companyId || !email) return;
+  var H = { "X-Portal-Email": email, "Content-Type": "application/json" };
+  var money = function (n) { return "$" + Number(n).toLocaleString(); };
+
+  fetch("/api/self-checkout/recommendations?company_id=" + encodeURIComponent(companyId) +
+        "&uuid=" + encodeURIComponent(uuid), { headers: H })
+    .then(function (r) { return r.status === 404 ? null : r.json(); })
+    .then(function (data) {
+      if (!data) return;                                   // disabled → stay hidden
+      var cards = data.cards || [];
+      if (!cards.length) return;                           // empty → stay hidden
+      root.hidden = false;
+      var list = document.getElementById("sc-recos-list");
+      cards.forEach(function (c) { list.appendChild(renderCard(c)); });
+    })
+    .catch(function () { /* never break the portal page */ });
+
+  function renderCard(c) {
+    var el = document.createElement("div");
+    el.className = "sc-card";
+    el.innerHTML =
+      '<div class="sc-card__head">' + c.channel.replace(/_/g, " ") + '</div>' +
+      '<div class="sc-card__money">' + money(c.current_budget) +
+        ' &rarr; <strong>' + money(c.recommended_budget) + '/mo</strong>' +
+        ' (+' + money(c.delta) + ')</div>' +
+      '<div class="sc-card__why">' + c.rationale + '</div>' +
+      '<div class="sc-card__actions">' +
+        '<select class="sc-launch"><option value="asap">Launch ASAP</option>' +
+        '<option value="scheduled">Schedule…</option></select>' +
+        '<input type="date" class="sc-date" style="display:none" />' +
+        '<button class="sc-add">Add</button>' +
+      '</div>' +
+      '<div class="sc-card__result" hidden></div>';
+
+    var sel = el.querySelector(".sc-launch"), dateEl = el.querySelector(".sc-date");
+    sel.addEventListener("change", function () {
+      dateEl.style.display = sel.value === "scheduled" ? "" : "none";
+    });
+
+    var btn = el.querySelector(".sc-add"), result = el.querySelector(".sc-card__result");
+    btn.addEventListener("click", function () {
+      btn.disabled = true; btn.textContent = "Adding…";
+      var body = {
+        company_id: companyId, property_uuid: uuid,
+        recommendation_id: c.recommendation_id, channel: c.channel,
+        recommended_budget: c.recommended_budget, change_type: c.change_type,
+        launch_mode: sel.value
+      };
+      if (sel.value === "scheduled" && dateEl.value) body.requested_date = dateEl.value;
+      fetch("/api/self-checkout", { method: "POST", headers: H, body: JSON.stringify(body) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          result.hidden = false;
+          if (res.ok) {
+            btn.textContent = "Added";
+            result.innerHTML = 'Deal + quote built — ' +
+              '<a href="' + res.j.quote_url + '" target="_blank">open the quote to sign</a>' +
+              ' (launches ' + res.j.launch_date + ').';
+          } else {
+            btn.disabled = false; btn.textContent = "Add";
+            result.textContent = "Could not add: " + (res.j.error || "unknown error");
+          }
+        })
+        .catch(function () {
+          btn.disabled = false; btn.textContent = "Add";
+          result.hidden = false; result.textContent = "Network error — try again.";
+        });
+    });
+    return el;
+  }
+})();
+</script>

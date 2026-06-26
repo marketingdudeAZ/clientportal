@@ -77,6 +77,8 @@ LOOP_EVENT_TYPES = {
     # convert
     "lead_submitted", "tour_scheduled", "application_received",
     "lease_signed", "am_activity",
+    # convert — Loop 1 self-checkout funnel (see loop_terminal_events.py)
+    "self_checkout_submitted", "deal_created", "deal_closed_won",
     # optimize
     "forecast_run", "recommendation_proposed",
     "recommendation_approved", "recommendation_rejected",
@@ -105,6 +107,61 @@ def is_known_event_type(event_type: str) -> bool:
 _TABLE = "loop_events"
 _MAX_PAYLOAD_BYTES = 60_000
 _bq_cache: dict = {"client": None, "table_ref": None}
+
+# Write-health counters (in-process; reset on restart). These make otherwise
+# silent BQ drops visible — loop_analytics counts are a floor, not a guarantee,
+# unless we track attempted vs succeeded vs failed. Surfaced via write_stats()
+# and the /api/loop/analytics coverage report.
+#   attempted     = record() calls that intended to persist
+#   succeeded     = rows BQ accepted
+#   failed        = BQ present but insert raised / returned row errors
+#   skipped_no_bq = BQ not configured (dev/test) — not a real drop
+#   deadletter_written = failed rows appended to LOOP_EVENTS_DEADLETTER_PATH
+_write_stats: dict = {
+    "attempted": 0, "succeeded": 0, "failed": 0, "skipped_no_bq": 0,
+    "deadletter_written": 0, "last_error": None, "last_success_at": None,
+}
+
+
+def write_stats() -> dict:
+    """Snapshot of in-process write health. attempted == succeeded + failed +
+    skipped_no_bq. A nonzero `failed` with no `deadletter_written` means events
+    were lost AND not captured (set LOOP_EVENTS_DEADLETTER_PATH to capture)."""
+    return dict(_write_stats)
+
+
+def reset_write_stats() -> None:
+    """Test/ops helper — zero the counters."""
+    _write_stats.update({
+        "attempted": 0, "succeeded": 0, "failed": 0, "skipped_no_bq": 0,
+        "deadletter_written": 0, "last_error": None, "last_success_at": None,
+    })
+
+
+def _deadletter(row: dict) -> None:
+    """Best-effort: append a dropped event row to the dead-letter file so it can
+    be replayed later. No-op when LOOP_EVENTS_DEADLETTER_PATH is unset."""
+    path = os.environ.get("LOOP_EVENTS_DEADLETTER_PATH")
+    if not path:
+        return
+    try:
+        with open(path, "a") as fp:
+            fp.write(json.dumps(row, default=str) + "\n")
+        _write_stats["deadletter_written"] += 1
+    except Exception as exc:  # noqa: BLE001 — dead-letter must never raise
+        logger.debug("loop_writer deadletter append failed: %s", exc)
+
+
+def _record_success() -> None:
+    _write_stats["succeeded"] += 1
+    _write_stats["last_success_at"] = _iso(_now())
+
+
+def _record_failure(err: str, row: dict) -> None:
+    _write_stats["failed"] += 1
+    _write_stats["last_error"] = str(err)[:300]
+    logger.warning("loop_writer BQ write failed: %s", str(err)[:200])
+    _deadletter(row)
 
 
 def _bq() -> Any:
@@ -218,8 +275,10 @@ def record(
         "parent_event_id": parent_event_id,
     }
 
+    _write_stats["attempted"] += 1
     client = _bq()
     if client is None:
+        _write_stats["skipped_no_bq"] += 1
         logger.debug("loop_writer skipped (BQ unavailable): %s/%s/%s",
                      stage, event_type, property_uuid)
         return event_id
@@ -227,9 +286,11 @@ def record(
     try:
         errors = client.insert_rows_json(_bq_cache["table_ref"], [row])
         if errors:
-            logger.warning("loop_writer BQ insert errors: %s", errors[:3])
+            _record_failure(f"insert errors: {errors[:3]}", row)
+        else:
+            _record_success()
     except Exception as exc:
-        logger.warning("loop_writer BQ insert exception: %s", exc)
+        _record_failure(str(exc), row)
 
     # Phase 2 — Slack notification for high-signal events. Best-effort;
     # never blocks. The notifier internally filters to NOTIFIABLE_EVENT_TYPES
