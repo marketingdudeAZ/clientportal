@@ -201,6 +201,9 @@
   {# Plan pane — forecast + recommendations + channels #}
   {% include "partials/loop-plan.html" %}
 
+  {# Loop 1 self-checkout cards — hidden until the API returns a card #}
+  {% include "partials/self-checkout-recommendations.html" %}
+
   {# Timeline pane #}
   {% include "partials/loop-timeline.html" %}
 
