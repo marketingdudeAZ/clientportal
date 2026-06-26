@@ -248,6 +248,42 @@ change, so the resolver tests are in place when call sites move onto the client.
 2 before 3: the onboarding consolidation should sit on the central client, not
 re-bless the hand-rolled HTTP. 4 last: pure debt paydown, no feature pressure.
 
+## Workstream B — Event analytics for roadmap + productization
+
+**Why:** Owner's upside is profit share from (a) making the team more efficient and
+(b) building new sellable products off the portal. The `loop_events` spine (ADR
+0010, `loop_writer.py`) already captures the signal to drive both, but only
+per-property readers exist (`query_recent`, `query_stage_status`). The missing
+piece is a portfolio-wide, time-bucketed event-mix reader + an internal dashboard.
+
+**Emission coverage (verified):** 12 files emit across all 5 stages — convert via
+`routes/webhooks/hubspot.py` (8 sites), optimize via `forecasting.py` +
+`loop_autopilot.py`, attract/engage via `marquee_generator.py` / `aeo_writer.py` /
+`hyly_client.py`, ops via `server.py` track_job + `aptiq_token_monitor.py`. The
+data is real enough to trust for roadmap.
+
+**Build:**
+- `loop_analytics.py` (read-only, BQ): `event_mix(window, group_by, slice)` →
+  counts + % by stage/event_type over weekly/monthly buckets, portfolio-wide and
+  per-client. Two canned views:
+  - **Efficiency:** ops events ranked by count × avg `runtime_ms` × failure rate ×
+    `trigger='manual'` → automation roadmap by hours saved (`track_job` already
+    captures runtime + failure).
+  - **Productization:** convert + optimize volume by week → where client value
+    concentrates; `recommendation_approved` vs `_rejected` ratio = AI-trust gauge.
+- Internal dashboard surface (an `/accounts` analytics view or a new internal page).
+- Surface a "registered but never seen" list so taxonomy blind spots are visible.
+
+**Trust precondition:** `loop_writer` drops events silently when BQ is down (logs,
+never raises) and has zero tests. Add a drop-detector (write-success counter or
+`recorded_at` − `occurred_at` lag check) + tests before betting roadmap on counts.
+
+**Client-facing twin:** surface each client's own convert/optimize momentum over
+time in the portal Loop view (build on `query_stage_status`) — "the portal tells
+the client they're winning." This is the "generate wins for my clients" surface.
+
+**Risk:** Low (additive, read-only). **Effort:** ~2-3 days for reader + dashboard.
+
 ## Out of scope (flag, don't do here)
 
 - The 342KB single-file `demo.html` frontend is the visual twin of the `server.py`
