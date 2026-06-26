@@ -144,11 +144,12 @@ def _norm(value: Any) -> str:
 
 
 def _resolve(company_props: dict, resolved: str | None, override: str | None) -> str:
-    ov = (company_props.get(override) or "").strip() if override else ""
-    if ov:
-        return _norm(ov)
-    rv = (company_props.get(resolved) or "").strip() if resolved else ""
-    return _norm(rv)
+    # Precedence (override > resolved, whitespace-only treated as empty) is the
+    # ONE canonical rule in community_brief.resolve_value — so the feed can never
+    # silently disagree with what the portal shows. We apply feed-specific value
+    # normalization (_norm) on top.
+    import community_brief as cb
+    return _norm(cb.resolve_value(company_props, resolved, override))
 
 
 # ── HubSpot fetch ────────────────────────────────────────────────────────────

@@ -428,6 +428,34 @@ def load_company_state(company_id: str) -> dict[str, Any]:
 # ── Render context ─────────────────────────────────────────────────────────
 
 
+def _nonblank(value: Any) -> bool:
+    """True when a stored value is a real, non-whitespace value.
+
+    A whitespace-only override is NOT a human edit. Treating it as empty
+    here is what keeps the portal display and the Fluency feed in agreement
+    — historically the portal kept "  " (showed "Edited") while the feed
+    stripped it (shipped empty), so the client saw one brief and Fluency
+    ran another.
+    """
+    return value is not None and str(value).strip() != ""
+
+
+def resolve_value(props: dict, resolved_key: str | None,
+                  override_key: str | None) -> str:
+    """Override > resolved > empty — the single precedence rule for the brief.
+
+    Every surface that needs the live value of a brief field MUST route
+    through this: the portal display (build_render_context / _effective)
+    and the Fluency feed (fluency_feed._resolve). One implementation means
+    the portal and the execution layer can never silently disagree.
+    """
+    if override_key and _nonblank(props.get(override_key)):
+        return str(props.get(override_key))
+    if resolved_key and _nonblank(props.get(resolved_key)):
+        return str(props.get(resolved_key))
+    return ""
+
+
 def _split_for_pills(value: str) -> list[str]:
     """Break a multi-line / comma-separated value into pill items."""
     if not value:
@@ -544,8 +572,8 @@ def build_render_context(company_props: dict) -> list[dict]:
             override_val = company_props.get(f.hs_override) if f.hs_override else None
             resolved_val = company_props.get(f.hs_resolved) if f.hs_resolved else None
 
-            has_override = override_val not in (None, "")
-            has_resolved = resolved_val not in (None, "")
+            has_override = _nonblank(override_val)
+            has_resolved = _nonblank(resolved_val)
 
             # Effective value — what would be live in Fluency.
             value = ""
@@ -698,16 +726,8 @@ def write_field(company_id: str, field_key: str, value: str,
 
 
 def _effective(field: BriefField, props: dict) -> str:
-    """Override > resolved > empty."""
-    if field.hs_override:
-        v = props.get(field.hs_override)
-        if v not in (None, ""):
-            return str(v)
-    if field.hs_resolved:
-        v = props.get(field.hs_resolved)
-        if v not in (None, ""):
-            return str(v)
-    return ""
+    """Override > resolved > empty. Delegates to the canonical resolver."""
+    return resolve_value(props, field.hs_resolved, field.hs_override)
 
 
 def _effective_display(field: BriefField, props: dict) -> str:
