@@ -60,6 +60,9 @@ PER_DAY_CAP = int(os.environ.get("SELF_CHECKOUT_PER_DAY_CAP", "50"))
 _DEAL_BASE_URL = os.environ.get(
     "HUBSPOT_DEAL_URL", "https://app.hubspot.com/contacts/PORTAL/record/0-3"
 )
+_QUOTE_BASE_URL = os.environ.get(
+    "HUBSPOT_QUOTE_URL", "https://app.hubspot.com/contacts/PORTAL/record/0-14"
+)
 
 
 def _enabled() -> bool:
@@ -167,6 +170,7 @@ def process_self_checkout(payload: dict, actor: str, today: date | None = None) 
         "quote_id": quote_id,
         "launch_date": launch_dt.isoformat(),
         "deal_url": f"{_DEAL_BASE_URL}/{deal_id}",
+        "quote_url": f"{_QUOTE_BASE_URL}/{quote_id}",   # DRAFT — human publishes + sends
         "idempotent": False,
     }
 
