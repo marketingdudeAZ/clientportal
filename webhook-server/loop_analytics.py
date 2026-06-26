@@ -210,6 +210,7 @@ def coverage_report(*, since_days: int = 90) -> dict:
             "registered_total": len(registered),
             "seen_total": 0,
             "avg_ingest_lag_ms": None,
+            "write_health": loop_writer.write_stats(),
         }
 
     where, params = _window_where(since_days)
@@ -230,4 +231,5 @@ def coverage_report(*, since_days: int = 90) -> dict:
         "registered_total": len(registered),
         "seen_total": len(seen),
         "avg_ingest_lag_ms": round(float(lag), 1) if lag is not None else None,
+        "write_health": loop_writer.write_stats(),
     }
