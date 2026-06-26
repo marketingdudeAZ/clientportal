@@ -8,6 +8,7 @@ from .loop import loop_bp
 from .onboarding import onboarding_bp
 from .paid import paid_bp
 from .property_brief import property_brief_bp
+from .self_checkout import self_checkout_bp
 from .seo import seo_bp
 from .webhooks import register_webhook_blueprints
 
@@ -19,4 +20,7 @@ def register_all(app):
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(property_brief_bp)
     app.register_blueprint(loop_bp)
+    # Loop 1 self-checkout — every endpoint 404s until SELF_CHECKOUT_ENABLED=true,
+    # so registering here is inert until you flip the flag.
+    app.register_blueprint(self_checkout_bp)
     register_webhook_blueprints(app)

@@ -152,3 +152,63 @@ def test_route_happy_with_auth(monkeypatch):
                           headers={"X-Portal-Email": "pm@x.com"})
     assert resp.status_code == 200
     assert resp.get_json()["deal_id"] == "deal-1"
+
+
+# ── GET /recommendations + cron rearm endpoint ───────────────────────────────
+
+
+def test_recommendations_404_when_disabled(monkeypatch):
+    monkeypatch.delenv("SELF_CHECKOUT_ENABLED", raising=False)
+    resp = _client().get("/api/self-checkout/recommendations?company_id=c-1",
+                         headers={"X-Portal-Email": "pm@x.com"})
+    assert resp.status_code == 404
+
+
+def test_recommendations_empty_when_google_ads_unconfigured(monkeypatch):
+    import google_ads_islost
+    monkeypatch.setenv("SELF_CHECKOUT_ENABLED", "true")
+    monkeypatch.setattr(hubspot_client, "get_company", lambda *a, **k: {"redlight_status": "RED"})
+    monkeypatch.setattr(google_ads_islost, "fetch_islost_by_channel",
+                        lambda cid: (_ for _ in ()).throw(google_ads_islost.GoogleAdsNotConfigured("x")))
+    resp = _client().get("/api/self-checkout/recommendations?company_id=c-1",
+                         headers={"X-Portal-Email": "pm@x.com"})
+    body = resp.get_json()
+    assert resp.status_code == 200
+    assert body["cards"] == []
+    assert body["reason"] == "google_ads_not_connected"
+
+
+def test_recommendations_returns_cards(monkeypatch):
+    import google_ads_islost
+    import spend_sheet
+    monkeypatch.setenv("SELF_CHECKOUT_ENABLED", "true")
+    monkeypatch.setattr(hubspot_client, "get_company", lambda *a, **k: {"redlight_status": "RED"})
+    monkeypatch.setattr(google_ads_islost, "fetch_islost_by_channel",
+                        lambda cid: {"paid_search": 0.28})
+    monkeypatch.setattr(spend_sheet, "get_company_monthly_spend",
+                        lambda cid: {"by_sku": {"paid_search": 1500.0}})
+    resp = _client().get("/api/self-checkout/recommendations?company_id=c-1&uuid=u-1",
+                         headers={"X-Portal-Email": "pm@x.com"})
+    body = resp.get_json()
+    assert resp.status_code == 200
+    assert len(body["cards"]) == 1
+    card = body["cards"][0]
+    assert card["channel"] == "paid_search"
+    assert card["recommended_budget"] == 2083
+
+
+def test_rearm_requires_internal_key(monkeypatch):
+    monkeypatch.setenv("INTERNAL_API_KEY", "secret")
+    resp = _client().post("/api/internal/self-checkout/rearm")
+    assert resp.status_code == 401
+
+
+def test_rearm_runs_sweep(monkeypatch):
+    import launch_rearm
+    monkeypatch.setenv("INTERNAL_API_KEY", "secret")
+    monkeypatch.setattr(launch_rearm, "rearm_stranded_deals",
+                        lambda *a, **k: [{"deal_id": "d1"}])
+    resp = _client().post("/api/internal/self-checkout/rearm",
+                          headers={"X-Internal-Key": "secret"})
+    assert resp.status_code == 200
+    assert resp.get_json()["rearmed"] == 1

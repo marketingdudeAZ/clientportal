@@ -61,7 +61,12 @@ def rearm_stranded_deals(today: date | None = None) -> list[dict]:
     for deal in find_stranded_deals(today):
         deal_id = deal["id"]
         props = deal.get("properties") or {}
-        change_type = _change_type_from_stamp(props.get("clickup_ticket_id"))
+        stamp = props.get("clickup_ticket_id") or ""
+        # Safety: only ever touch self-checkout-originated deals, never some
+        # other deal that happens to sit at Ready-to-Launch with a past date.
+        if not stamp.startswith("self_checkout:"):
+            continue
+        change_type = _change_type_from_stamp(stamp)
         new_date = launch_policy.rearm_launch_date(change_type, today)
         try:
             hubspot_client.patch_deal(deal_id, {LAUNCH_DATE_PROPERTY: new_date.isoformat()})

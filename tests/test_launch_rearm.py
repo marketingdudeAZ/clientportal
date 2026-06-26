@@ -53,9 +53,20 @@ def test_new_channel_rearms_with_buffer(monkeypatch, patches):
     assert patches[0][1]["launch_date__c"] == "2026-07-06"
 
 
-def test_unknown_stamp_defaults_active(monkeypatch, patches):
+def test_non_self_checkout_deal_is_skipped(monkeypatch, patches):
+    # A deal at Ready-to-Launch that did NOT come from self-checkout is left alone.
     monkeypatch.setattr(hubspot_client, "search_deals",
-                        lambda *a, **k: [_stranded("d3", None)])
+                        lambda *a, **k: [_stranded("d3", None),
+                                         _stranded("d4", "some-clickup-12345")])
+    acted = launch_rearm.rearm_stranded_deals(today=MON)
+    assert acted == []
+    assert patches == []
+
+
+def test_malformed_self_checkout_stamp_defaults_active(monkeypatch, patches):
+    # A self-checkout deal with a truncated stamp still re-arms (defaults active).
+    monkeypatch.setattr(hubspot_client, "search_deals",
+                        lambda *a, **k: [_stranded("d5", "self_checkout:")])
     acted = launch_rearm.rearm_stranded_deals(today=MON)
     assert acted[0]["new_launch_date"] == "2026-06-29"
 

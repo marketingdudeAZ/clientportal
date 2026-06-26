@@ -41,10 +41,13 @@ from datetime import date
 from flask import Blueprint, jsonify, request
 
 import deal_creator
+import google_ads_islost
 import hubspot_client
 import launch_policy
+import launch_rearm
 import loop_terminal_events
 import quote_generator
+import recommendation_gen
 
 logger = logging.getLogger(__name__)
 
@@ -190,3 +193,60 @@ def self_checkout():
     except CheckoutError as e:
         return jsonify({"error": e.message}), e.status
     return jsonify(result), 200
+
+
+def _current_period(today: date | None = None) -> str:
+    today = today or date.today()
+    return f"{today.year}-Q{(today.month - 1) // 3 + 1}"
+
+
+def _card(rec) -> dict:
+    return {
+        "channel": rec.channel,
+        "current_budget": rec.current_budget,
+        "recommended_budget": rec.recommended_budget,
+        "delta": rec.delta,
+        "rationale": rec.rationale,
+        "recommendation_id": rec.recommendation_id,
+        "change_type": rec.change_type,
+    }
+
+
+@self_checkout_bp.route("/api/self-checkout/recommendations", methods=["GET"])
+def recommendations():
+    """Cards for a property's portal page. Empty (with a reason) until Google Ads
+    is connected — never errors the page."""
+    if not _enabled():
+        return jsonify({"error": "self-checkout disabled"}), 404
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "X-Portal-Email required"}), 401
+    company_id = (request.args.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+    property_uuid = request.args.get("uuid")
+
+    status = (hubspot_client.get_company(company_id, ["redlight_status"])
+              .get("redlight_status") or "").upper() or None
+
+    try:
+        islost = google_ads_islost.fetch_islost_by_channel(company_id)
+    except google_ads_islost.GoogleAdsNotConfigured:
+        return jsonify({"cards": [], "reason": "google_ads_not_connected"}), 200
+    if not islost:
+        return jsonify({"cards": [], "reason": "no_impression_share_loss"}), 200
+
+    signals = recommendation_gen.build_channel_signals(company_id, islost, status)
+    recs = recommendation_gen.recommend_for_property(
+        property_uuid, company_id, signals, _current_period(),
+        open_deal_channels=lambda: recommendation_gen.open_deal_channels_via_hubspot(company_id),
+    )
+    return jsonify({"cards": [_card(r) for r in recs], "reason": None}), 200
+
+
+@self_checkout_bp.route("/api/internal/self-checkout/rearm", methods=["POST"])
+def rearm():
+    """Daily re-arm sweep entry point (Render Cron hits this with X-Internal-Key)."""
+    if request.headers.get("X-Internal-Key", "") != os.environ.get("INTERNAL_API_KEY", ""):
+        return jsonify({"error": "X-Internal-Key required"}), 401
+    acted = launch_rearm.rearm_stranded_deals()
+    return jsonify({"rearmed": len(acted), "deals": acted}), 200
