@@ -77,6 +77,8 @@ LOOP_EVENT_TYPES = {
     # convert
     "lead_submitted", "tour_scheduled", "application_received",
     "lease_signed", "am_activity",
+    # convert — Loop 1 self-checkout funnel (see loop_terminal_events.py)
+    "self_checkout_submitted", "deal_created", "deal_closed_won",
     # optimize
     "forecast_run", "recommendation_proposed",
     "recommendation_approved", "recommendation_rejected",

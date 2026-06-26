@@ -53,10 +53,16 @@ IMMUTABLE_COMPANY_PROPERTIES = frozenset({"uuid"})
 
 # Identity rollup: the join keys that live on the company record. The portal
 # reads these once and joins everything else (BigQuery analytics, Fluency,
-# ClickUp) off them. Start with the keys that exist today; add foreign IDs
-# (hyly_id, ninjacat_system_id, ...) here as their syncs come online — one list,
-# single source.
-IDENTITY_PROPERTIES = ("uuid", "aptiq_property_id", "aptiq_market_id", "name")
+# ClickUp) off them — one list, single source. Property names per CLAUDE.md
+# "Identity (R1)" + the Data Stack table. Add new foreign IDs here as their
+# connectors come online.
+IDENTITY_PROPERTIES = (
+    "uuid",
+    "aptiq_property_id",
+    "aptiq_market_id",
+    "hyly_property_id",
+    "name",
+)
 
 # Dealstages considered "closed" — used to find OPEN deals for the duplicate
 # budget guard. Closed Won / Closed Lost are terminal; everything else is open.
