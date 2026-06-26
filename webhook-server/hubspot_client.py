@@ -310,3 +310,28 @@ def get_open_deals_for_company(
         d for d in read
         if (d.get("properties") or {}).get("dealstage") not in _CLOSED_DEALSTAGES
     ]
+
+
+# ── deals ────────────────────────────────────────────────────────────────────
+# No R1 guard: R1 protects the COMPANY `uuid` property only. Deal properties
+# (including launch_date__c) are free to write.
+
+
+def get_deal(deal_id: str, properties: list[str] | None = None) -> dict:
+    """Read a deal's properties."""
+    params = {"properties": ",".join(properties)} if properties else None
+    return _request("GET", f"{_DEALS}/{deal_id}", params=params).json().get("properties") or {}
+
+
+def patch_deal(deal_id: str, properties: dict) -> dict:
+    """Update a deal (e.g. set launch_date__c, advance dealstage)."""
+    return _request("PATCH", f"{_DEALS}/{deal_id}", json={"properties": properties}).json()
+
+
+def search_deals(filters: list[dict], properties: list[str] | None = None,
+                 limit: int = 100) -> list[dict]:
+    """CRM deal search — used by the re-arm sweep to find stranded deals."""
+    payload: dict[str, Any] = {"filterGroups": [{"filters": filters}], "limit": limit}
+    if properties:
+        payload["properties"] = properties
+    return _request("POST", f"{_DEALS}/search", json=payload).json().get("results", [])
