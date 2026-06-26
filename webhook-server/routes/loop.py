@@ -645,3 +645,57 @@ def loop_convert_leads():
         "leads":         leads,
         "count":         len(leads),
     })
+
+
+# ── GET /api/loop/analytics ──────────────────────────────────────────────────
+
+@loop_bp.route("/api/loop/analytics", methods=["GET", "OPTIONS"])
+def loop_analytics_view():
+    """Portfolio-wide event analytics for roadmap + productization planning.
+
+    Internal-only (cross-property data). Returns the requested report, or all
+    four when ?report is omitted:
+
+      ?report=mix            event share by ?dimension (event_type|stage|
+                             trigger|source), optionally ?stage / ?company_id
+      ?report=efficiency     ops events ranked = automation roadmap
+      ?report=productization convert/optimize volume + AI-trust gauge
+      ?report=coverage       trust check (never-seen types + ingest lag)
+
+    Common: ?days=N window (default 90, clamped 1..365).
+    """
+    if request.method == "OPTIONS":
+        return preflight_response()
+    if not _is_internal(request):
+        return jsonify({"error": "X-Internal-Key required"}), 401
+
+    days = max(1, min(int(request.args.get("days") or 90), 365))
+    report = (request.args.get("report") or "").strip().lower()
+
+    import loop_analytics
+
+    if report == "mix":
+        return jsonify({"window_days": days, "report": "mix", "mix": loop_analytics.event_mix(
+            since_days=days,
+            dimension=(request.args.get("dimension") or "event_type"),
+            stage=(request.args.get("stage") or None),
+            company_id=(request.args.get("company_id") or None),
+        )})
+    if report == "efficiency":
+        return jsonify({"window_days": days, "report": "efficiency",
+                        "efficiency": loop_analytics.efficiency_targets(since_days=days)})
+    if report == "productization":
+        return jsonify({"window_days": days, "report": "productization",
+                        "productization": loop_analytics.productization_signal(since_days=days)})
+    if report == "coverage":
+        return jsonify({"window_days": days, "report": "coverage",
+                        "coverage": loop_analytics.coverage_report(since_days=days)})
+
+    # Default: the full roadmap snapshot.
+    return jsonify({
+        "window_days":     days,
+        "mix":             loop_analytics.event_mix(since_days=days),
+        "efficiency":      loop_analytics.efficiency_targets(since_days=days),
+        "productization":  loop_analytics.productization_signal(since_days=days),
+        "coverage":        loop_analytics.coverage_report(since_days=days),
+    })
