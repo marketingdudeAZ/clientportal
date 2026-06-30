@@ -1542,12 +1542,7 @@ select.brief-input{height:34px;cursor:pointer}
     <button class="asset-tab" onclick="switchAssetTab(this,'collateral')">Collateral <span style="opacity:.6">(3)</span></button>
   </div>
   <div class="asset-grid" id="asset-grid">
-    <div class="asset-card"><div class="asset-thumb" style="background:linear-gradient(135deg,#E8D5B7,#C4A882)">Exterior Hero</div><div class="asset-info"><div class="asset-name">Main Entrance</div><div class="asset-meta">Exterior · Jan 2026</div></div></div>
-    <div class="asset-card"><div class="asset-thumb" style="background:linear-gradient(135deg,#B8C5D0,#8FA0B0)">Pool & Amenity</div><div class="asset-info"><div class="asset-name">Pool — Summer</div><div class="asset-meta">Amenity · Jun 2025</div></div></div>
-    <div class="asset-card"><div class="asset-thumb" style="background:linear-gradient(135deg,#D4C5A9,#B8A88C)">Living Room</div><div class="asset-info"><div class="asset-name">Model Unit — LR</div><div class="asset-meta">Interior · Jan 2026</div></div></div>
-    <div class="asset-card"><div class="asset-thumb" style="background:linear-gradient(135deg,#A8C4A0,#7FA878)">Aerial View</div><div class="asset-info"><div class="asset-name">Community Overview</div><div class="asset-meta">Aerial · Mar 2026</div></div></div>
-    <div class="asset-card"><div class="asset-thumb" style="background:linear-gradient(135deg,#C5B8D0,#A090B0)">Kitchen</div><div class="asset-info"><div class="asset-name">Model Unit — Kitchen</div><div class="asset-meta">Interior · Jan 2026</div></div></div>
-    <div class="asset-card"><div class="asset-thumb" style="background:linear-gradient(135deg,#8FA68E,#6E8B6D)">Courtyard</div><div class="asset-info"><div class="asset-name">Courtyard — Evening</div><div class="asset-meta">Exterior · Mar 2026</div></div></div>
+    <div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--tm);font-size:12px">Loading assets…</div>
   </div>
 </section>
 
@@ -2527,6 +2522,49 @@ function nav(id, el) {
   if (id === 'forecast')    { loadForecast(); }
   if (id === 'performance') { loadPerformance(); }
   if (id === 'activity')    { loadActivity(); }
+  if (id === 'assets')      { loadAssets(); }
+}
+
+// ── Asset Library — live from /api/property-assets ──────────────────────────
+var _assetsLoadedFor = null;
+function loadAssets() {
+  var grid = document.getElementById('asset-grid');
+  if (!grid) return;
+  var cid = window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || '';
+  if (!cid) {
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--tm);font-size:12px">Select a property to view its assets.</div>';
+    return;
+  }
+  if (_assetsLoadedFor === cid) return;
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var email = window.__PORTAL_EMAIL__ || 'demo@rpmliving.com';
+  grid.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--tm);font-size:12px">Loading assets…</div>';
+  var grads = ['linear-gradient(135deg,#E8D5B7,#C4A882)','linear-gradient(135deg,#B8C5D0,#8FA0B0)','linear-gradient(135deg,#D4C5A9,#B8A88C)','linear-gradient(135deg,#A8C4A0,#7FA878)','linear-gradient(135deg,#C5B8D0,#A090B0)','linear-gradient(135deg,#8FA68E,#6E8B6D)'];
+  fetch(API_BASE + '/api/property-assets?company_id=' + encodeURIComponent(cid), { headers: { 'X-Portal-Email': email } })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var assets = (d && d.assets) || [];
+      _assetsLoadedFor = cid;
+      if (!assets.length) {
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--tm);font-size:12px">No assets uploaded for this property yet.</div>';
+        return;
+      }
+      grid.innerHTML = assets.map(function(a, i) {
+        var name = a.asset_name || 'Untitled';
+        var meta = [a.category, a.subcategory].filter(Boolean).join(' · ') || (a.file_type || '').toUpperCase();
+        var isImg = /\.(jpe?g|png|gif|webp|avif)$/i.test(a.file_url || '') || /(jpe?g|png|gif|webp)/i.test(a.file_type || '');
+        var thumb = (a.file_url && isImg)
+          ? '<div class="asset-thumb" style="background-image:url(&quot;' + _escAttr(a.file_url) + '&quot;);background-size:cover;background-position:center"></div>'
+          : '<div class="asset-thumb" style="background:' + grads[i % grads.length] + '">' + name + '</div>';
+        var card = '<div class="asset-card">' + thumb + '<div class="asset-info"><div class="asset-name">' + name + '</div><div class="asset-meta">' + meta + '</div></div></div>';
+        return a.file_url
+          ? '<a href="' + _escAttr(a.file_url) + '" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">' + card + '</a>'
+          : card;
+      }).join('');
+    })
+    .catch(function(){
+      grid.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--tm);font-size:12px">Assets unavailable right now.</div>';
+    });
 }
 
 function switchDemo(view, btn) {
