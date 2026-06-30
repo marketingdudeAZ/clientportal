@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RPM Living · Client Portal</title>
+<style>
+:root{
+  --j:#53606C;--jd:#3D474F;--j1:#1A2530;
+  --cu:#C8964E;--cul:#D4A86A;--cug:rgba(200,150,78,0.12);
+  --sage:#8FA68E;--mint:#CDE3E0;--ml:#E8F4F2;
+  --red:#C94444;--amb:#D4910A;--grn:#3d8b40;
+  --white:#fff;--bg:#F0F2F5;
+  --tp:#1F2937;--ts:#6B7280;--tm:#9CA3AF;
+  --bd:#E5E7EB;--bdl:#F3F4F6;
+  --sh:0 1px 3px rgba(0,0,0,0.07),0 1px 2px rgba(0,0,0,0.04);
+  --shm:0 4px 16px rgba(0,0,0,0.08);--r:12px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tp);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+.wrap{max-width:1400px;margin:0 auto;padding:20px 28px 60px}
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.brand{font-size:13px;font-weight:800;color:var(--jd);letter-spacing:.5px}
+.brand span{color:var(--cu)}
+h1{font-size:26px;margin:2px 0 0}
+.sub{color:var(--ts);font-size:13px;margin-bottom:16px}
+.role{background:var(--cug);color:var(--cu);font-weight:700;font-size:12px;padding:6px 12px;border-radius:20px}
+.tabs{display:flex;gap:8px;margin:18px 0 20px}
+.tab{background:var(--white);border:1px solid var(--bd);border-radius:10px;padding:9px 16px;font-weight:600;
+     font-size:14px;color:var(--ts);cursor:pointer}
+.tab.active{background:var(--jd);color:var(--white);border-color:var(--jd)}
+.tab .pill{font-size:10px;background:var(--cu);color:#fff;border-radius:8px;padding:1px 6px;margin-left:6px}
+.panel{display:none}.panel.active{display:block}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px}
+.kpi{background:var(--white);border-radius:var(--r);box-shadow:var(--sh);padding:18px;text-align:center}
+.kpi .v{font-size:26px;font-weight:800;color:var(--jd)}
+.kpi .l{font-size:11px;color:var(--tm);font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin-top:6px}
+.card{background:var(--white);border-radius:var(--r);box-shadow:var(--sh);padding:0;overflow:hidden}
+.card-h{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--bdl)}
+.card-h h2{font-size:17px;margin:0}
+.card-h .tools{display:flex;gap:8px}
+input,select{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;font-size:13px;background:var(--white)}
+.banner{background:var(--ml);color:var(--jd);font-size:12px;padding:8px 22px;border-bottom:1px solid var(--mint)}
+.banner.warn{background:#fdf3e4;color:#8a5a12;border-color:#f0dcb8}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:11px 14px;color:var(--tm);font-size:11px;font-weight:700;letter-spacing:.5px;
+   text-transform:uppercase;border-bottom:1px solid var(--bd);background:#fafbfc}
+td{padding:11px 14px;border-bottom:1px solid var(--bdl)}
+tr:last-child td{border-bottom:none}
+.pillr{padding:2px 9px;border-radius:4px;font-size:11px;font-weight:700;color:#fff}
+.s-RED{background:var(--red)}.s-YELLOW{background:var(--amb)}.s-GREEN{background:var(--grn)}.s-UNSCORED{background:var(--tm)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.muted{color:var(--tm)}.num{font-variant-numeric:tabular-nums}
+.foot{color:var(--tm);font-size:11px;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="brand">RPM LIVING <span>DIGITAL PRODUCTS &amp; SERVICES</span></div>
+      <h1>Client Portal</h1>
+      <div class="sub"><span id="who">—</span></div>
+    </div>
+    <div class="role" id="role-badge">Marketing Manager</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-panel="portfolio">Portfolio</button>
+    <button class="tab" data-panel="spend">Spend Tracker</button>
+    <button class="tab" data-panel="redlight">Red Light <span class="pill">BETA</span></button>
+  </div>
+
+  <!-- PORTFOLIO -->
+  <div class="panel active" id="panel-portfolio">
+    <div class="kpis">
+      <div class="kpi"><div class="v" id="k-props">—</div><div class="l">Properties</div></div>
+      <div class="kpi"><div class="v" id="k-units">—</div><div class="l">Total Units</div></div>
+      <div class="kpi"><div class="v" id="k-health">—</div><div class="l">Avg Health</div></div>
+      <div class="kpi"><div class="v" id="k-spend">—</div><div class="l">Monthly Spend</div></div>
+      <div class="kpi"><div class="v" id="k-break" style="font-size:15px">—</div><div class="l">Health Breakdown</div></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Properties</h2>
+        <div class="tools"><input id="pf-search" placeholder="Search properties…"></div>
+      </div>
+      <div class="banner" id="pf-banner" style="display:none"></div>
+      <table><thead><tr>
+        <th>Property</th><th>Market</th><th>Units</th><th>Health</th><th>Mgmt</th><th>Ad Spend</th><th>Flags</th>
+      </tr></thead><tbody id="pf-body">
+        <tr><td colspan="7" class="muted" style="padding:24px;text-align:center">Loading portfolio…</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <!-- SPEND -->
+  <div class="panel" id="panel-spend">
+    <div class="card">
+      <div class="card-h"><h2>Spend Tracker</h2>
+        <div class="tools"><input id="sp-search" placeholder="Search…"></div>
+      </div>
+      <div class="banner" id="sp-banner" style="display:none"></div>
+      <div style="overflow-x:auto"><table><thead><tr>
+        <th>Property</th><th>Market</th><th>Search</th><th>PMax</th><th>Paid Social</th><th>Display</th>
+        <th>Retargeting</th><th>CTV</th><th>SEO</th><th>Total</th>
+      </tr></thead><tbody id="sp-body">
+        <tr><td colspan="10" class="muted" style="padding:24px;text-align:center">Loading spend…</td></tr>
+      </tbody></table></div>
+    </div>
+  </div>
+
+  <!-- RED LIGHT (server-rendered, always populated) -->
+  <div class="panel" id="panel-redlight">
+    __REDLIGHT_HTML__
+  </div>
+
+  <div class="foot">RPM Living · Digital Products &amp; Services · portal preview served from Render · / EXCEED EVERY NEED /</div>
+</div>
+
+<script>
+(function(){
+  var QS = new URLSearchParams(location.search);
+  var EMAIL = QS.get("email") || "marketing@rpm.com";
+  var ROLE  = QS.get("role")  || "marketing_manager";
+  document.getElementById("who").textContent = ROLE.replace(/_/g," ").replace(/\b\w/g,function(c){return c.toUpperCase()}) + " · " + EMAIL;
+  var H = {"X-Portal-Email": EMAIL};
+
+  // ----- tab switching -----
+  document.querySelectorAll(".tab").forEach(function(t){
+    t.onclick=function(){
+      document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active")});
+      document.querySelectorAll(".panel").forEach(function(x){x.classList.remove("active")});
+      t.classList.add("active");
+      document.getElementById("panel-"+t.dataset.panel).classList.add("active");
+    };
+  });
+
+  var money=function(n){return n==null?"—":"$"+Number(n).toLocaleString(undefined,{maximumFractionDigits:0})};
+  var num=function(n){return n==null?"—":Number(n).toLocaleString()};
+
+  // ----- sample fallbacks (so the page always looks like the design) -----
+  var SAMPLE_PF = [
+    {property_name:"79 West",market:"Atlanta",units:304,health:48,health_status:"RED",management:"RPM Managed",ad_spend:6200,flags:2},
+    {property_name:"The Park at Valenza",market:"Tampa",units:776,health:54,health_status:"RED",management:"RPM Managed",ad_spend:9400,flags:1},
+    {property_name:"10X Tarpon Springs",market:"Tampa",units:236,health:66,health_status:"YELLOW",management:"RPM Managed",ad_spend:4100,flags:1},
+    {property_name:"Sur Club",market:"Miami",units:296,health:78,health_status:"GREEN",management:"RPM Managed",ad_spend:5300,flags:0}
+  ];
+  var SAMPLE_SP = [
+    {property_name:"79 West",market:"Atlanta",search:2200,pmax:1200,paid_social:900,display:500,retargeting:400,ctv:600,seo:800,total:6600},
+    {property_name:"Sur Club",market:"Miami",search:1800,pmax:1000,paid_social:1100,display:300,retargeting:300,ctv:0,seo:800,total:5300}
+  ];
+
+  function pillHealth(s){return '<span class="pillr s-'+(s||"UNSCORED")+'">'+(s||"—")+'</span>'}
+
+  function renderPortfolio(rows, sample){
+    var props=rows.length, units=0, spend=0, hs=0, b={RED:0,YELLOW:0,GREEN:0};
+    var body=rows.map(function(p){
+      units+=p.units||0; spend+=p.ad_spend||0; hs+=p.health||0;
+      if(b[p.health_status]!=null)b[p.health_status]++;
+      return '<tr><td style="font-weight:600">'+p.property_name+'</td><td>'+(p.market||"—")+
+        '</td><td class="num">'+num(p.units)+'</td><td class="num">'+(p.health!=null?p.health:"—")+' '+pillHealth(p.health_status)+
+        '</td><td class="muted">'+(p.management||"—")+'</td><td class="num">'+money(p.ad_spend)+
+        '</td><td class="num">'+(p.flags?('<span class="dot" style="background:var(--red)"></span>'+p.flags):'<span class="muted">0</span>')+'</td></tr>';
+    }).join("");
+    document.getElementById("pf-body").innerHTML = body || '<tr><td colspan="7" class="muted" style="padding:24px;text-align:center">No properties.</td></tr>';
+    document.getElementById("k-props").textContent = props;
+    document.getElementById("k-units").textContent = num(units);
+    document.getElementById("k-health").textContent = props?Math.round(hs/props):"—";
+    document.getElementById("k-spend").textContent = money(spend);
+    document.getElementById("k-break").innerHTML =
+      '<span style="color:var(--red)">'+b.RED+' R</span> &middot; <span style="color:var(--amb)">'+b.YELLOW+
+      ' Y</span> &middot; <span style="color:var(--grn)">'+b.GREEN+' G</span>';
+    var ban=document.getElementById("pf-banner");
+    if(sample){ban.style.display="block";ban.className="banner warn";
+      ban.textContent="Showing sample data — live portfolio unavailable (backend not connected or no data for "+EMAIL+").";}
+    else{ban.style.display="none";}
+  }
+
+  function renderSpend(rows, sample){
+    var body=rows.map(function(r){
+      return '<tr><td style="font-weight:600">'+r.property_name+'</td><td>'+(r.market||"—")+'</td>'+
+        ['search','pmax','paid_social','display','retargeting','ctv','seo'].map(function(k){
+          return '<td class="num">'+money(r[k])+'</td>'}).join("")+
+        '<td class="num" style="font-weight:700;color:var(--cu)">'+money(r.total)+'</td></tr>';
+    }).join("");
+    document.getElementById("sp-body").innerHTML = body || '<tr><td colspan="10" class="muted" style="padding:24px;text-align:center">No spend rows.</td></tr>';
+    var ban=document.getElementById("sp-banner");
+    if(sample){ban.style.display="block";ban.className="banner warn";
+      ban.textContent="Showing sample data — live spend sheet unavailable (backend not connected).";}
+    else{ban.style.display="none";}
+  }
+
+  // ----- live fetch with graceful fallback -----
+  fetch("/api/portfolio?role="+encodeURIComponent(ROLE),{headers:H})
+    .then(function(r){if(!r.ok)throw 0;return r.json()})
+    .then(function(d){
+      var rows=(d.properties||d.companies||[]).map(function(c){return {
+        property_name:c.property_name||c.name, market:c.market||c.rpmmarket, units:c.units||c.unit_count,
+        health:c.health!=null?c.health:c.health_score, health_status:c.health_status||c.status,
+        management:c.management||c.ple_status, ad_spend:c.ad_spend||c.monthly_spend, flags:c.flags||0};});
+      if(!rows.length)throw 0;
+      renderPortfolio(rows,false);
+    })
+    .catch(function(){renderPortfolio(SAMPLE_PF,true)});
+
+  fetch("/api/spend-sheet",{headers:H})
+    .then(function(r){if(!r.ok)throw 0;return r.json()})
+    .then(function(d){var rows=d.rows||[];if(!rows.length)throw 0;renderSpend(rows,false)})
+    .catch(function(){renderSpend(SAMPLE_SP,true)});
+
+  // search filters
+  function wireSearch(id,bodyId){var i=document.getElementById(id);if(!i)return;
+    i.oninput=function(){var q=i.value.toLowerCase();
+      document.querySelectorAll("#"+bodyId+" tr").forEach(function(tr){
+        tr.style.display = tr.textContent.toLowerCase().indexOf(q)>=0?"":"none";});};}
+  wireSearch("pf-search","pf-body"); wireSearch("sp-search","sp-body");
+})();
+</script>
+</body>
+</html>

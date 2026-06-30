@@ -98,6 +98,41 @@ class TestScoreProperty(unittest.TestCase):
         self.assertIsNone(p["cost_per_lease"])
 
 
+class TestNextSteps(unittest.TestCase):
+    def test_red_funnel_yields_red_priority_step(self):
+        p = rl.score_property({"Lead to Prospect": "48%", "Prospect to Tour": "20%"})
+        steps = p["next_steps"]
+        self.assertTrue(steps)
+        self.assertEqual(steps[0]["priority"], rl.RED)         # most severe first
+        joined = " ".join(s["text"] for s in steps)
+        self.assertIn("Lead→Prospect", joined)
+        self.assertIn("Prospect→Tour", joined)
+
+    def test_two_month_occupancy_decline_flagged(self):
+        p = rl.score_property({
+            "Current Occupancy": "69.46%", "1mo Previous Occ": "72.68%",
+            "2mo Previous Occ": "74.74%",
+            "Lead to Prospect": "90%", "Prospect to Tour": "40%",
+        })
+        joined = " ".join(s["text"] for s in p["next_steps"])
+        self.assertIn("two months", joined)
+
+    def test_healthy_gets_maintain_step(self):
+        p = rl.score_property({
+            "Current Occupancy": "95%", "1mo Previous Occ": "94%",
+            "ATR": "5%", "1mo Previous ATR": "6%",
+            "Lead to Prospect": "70%", "Prospect to Tour": "45%",
+        })
+        self.assertEqual(p["next_steps"][0]["priority"], rl.GREEN)
+        self.assertIn("Maintain", p["next_steps"][0]["text"])
+
+    def test_next_steps_render_in_html(self):
+        html = rl.render_html(rl.build_report([
+            {"Property Name": "79 West", "Lead to Prospect": "48%", "Prospect to Tour": "20%"},
+        ]))
+        self.assertIn("Next steps for the marketing manager", html)
+
+
 class TestBuildReport(unittest.TestCase):
     def _rows(self):
         return [
