@@ -54,3 +54,40 @@ def require_feature(tier, feature):
             "tier": tier,
         }), 403
     return None
+
+
+def current_portal_email():
+    """The logged-in portal user's email, lowercased, or "" if absent.
+
+    Single source for reading X-Portal-Email so every route normalizes it
+    the same way.
+    """
+    return request.headers.get("X-Portal-Email", "").lower().strip()
+
+
+def require_access(feature_key, email=None):
+    """Reject unless the logged-in user may see `feature_key` (Beta/Prod).
+
+    Returns a Flask response on reject (401 if not signed in, 403 if the
+    feature isn't released to them), or None to continue. Usage mirrors
+    require_feature:
+
+        gate = require_access("redlight")
+        if gate:
+            return gate
+
+    Server-to-server callers authenticate with X-Internal-Key and should
+    be let through before this check — this gate is for portal users.
+    """
+    from feature_access import can_access, stage_for
+
+    email = current_portal_email() if email is None else (email or "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    if not can_access(email, feature_key):
+        return jsonify({
+            "error": "Feature not available for this user yet",
+            "feature": feature_key,
+            "stage": stage_for(feature_key),
+        }), 403
+    return None

@@ -60,7 +60,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: E402
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # CORS origins — shared with routes/ blueprints via _route_utils.ALLOWED_ORIGINS.
-from _route_utils import ALLOWED_ORIGINS  # noqa: E402
+from _route_utils import ALLOWED_ORIGINS, require_access  # noqa: E402
 
 
 @app.after_request
@@ -774,6 +774,12 @@ def red_light_run():
     key_ok = bool(expected_key and internal_key and _hmac.compare_digest(expected_key, internal_key))
     if not email and not key_ok:
         return jsonify({"error": "Authentication required"}), 401
+    # Portal users are gated on the redlight feature stage; server-to-server
+    # (key_ok) callers bypass the Beta/Prod gate.
+    if email and not key_ok:
+        gate = require_access("redlight", email=email)
+        if gate:
+            return gate
 
     payload = request.get_json()
     if not payload:
@@ -857,6 +863,12 @@ def red_light_v2_run():
     key_ok = bool(expected_key and internal_key and _hmac.compare_digest(expected_key, internal_key))
     if not email and not key_ok:
         return jsonify({"error": "Authentication required"}), 401
+    # Portal users are gated on the redlight feature stage; server-to-server
+    # (key_ok) callers bypass the Beta/Prod gate.
+    if email and not key_ok:
+        gate = require_access("redlight", email=email)
+        if gate:
+            return gate
 
     payload = request.get_json(silent=True) or {}
     company_id    = payload.get("company_id")
