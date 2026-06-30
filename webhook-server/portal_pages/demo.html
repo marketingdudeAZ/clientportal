@@ -3426,11 +3426,11 @@ function loadOverview() {
   var market = window.__PORTAL_MARKET || '';
 
   if (!cid) {
-    // Demo mode — use hardcoded fallbacks
+    // No property selected — honest empty state, never fabricated data.
     _renderOverview({
-      property: { name: 'The Quincy at Kierland', market: 'Scottsdale', units: 320 },
-      leasing:  { occupancy: 93.2, atr: 8.4, lease_trend_120: 34, renewal_trend_120: 28 },
-      health:   { overall: 72, status: 'WARNING', last_scored: '2026-03-01', flag_count: 4 }
+      property: { name: window.__PORTAL_PROP_NAME || 'Select a property', market: market, units: null },
+      leasing:  { occupancy: null, atr: null, lease_trend_120: null, renewal_trend_120: null },
+      health:   { overall: null, status: '', last_scored: null, flag_count: null }
     }, null, null);
     _loadOverviewActivity([], true);
     return;
@@ -3552,11 +3552,17 @@ function _renderOverview(propData, ticketsData, budgetData) {
     }
   }
 
-  // Monthly Spend KPI
+  // Monthly Spend KPI — /api/budget returns deal{amount} + line_items[];
+  // derive monthly spend from active line items, falling back to deal amount.
   if (budgetData) {
     var totalSpend = null;
-    if (budgetData.summary && budgetData.summary.total != null) totalSpend = budgetData.summary.total;
-    else if (budgetData.total != null) totalSpend = budgetData.total;
+    if (budgetData.line_items && budgetData.line_items.length) {
+      totalSpend = budgetData.line_items.reduce(function(s, li) {
+        return s + (li && li.active ? (Number(li.amount) || 0) : 0);
+      }, 0);
+    } else if (budgetData.deal && budgetData.deal.amount != null) {
+      totalSpend = Number(budgetData.deal.amount) || 0;
+    }
     if (totalSpend != null) {
       var spEl = document.getElementById('kpi-spend');
       if (spEl) spEl.textContent = '$' + Math.round(totalSpend).toLocaleString();
@@ -3900,7 +3906,7 @@ function loadPerformance() {
     return;
   }
 
-  var metricsP = fetch(API_BASE + '/api/property-metrics?company_id=' + encodeURIComponent(cid),
+  var metricsP = fetch(API_BASE + '/api/property?company_id=' + encodeURIComponent(cid),
         { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); });
   var propP = fetch(API_BASE + '/api/property?company_id=' + encodeURIComponent(cid),
         { headers: { 'X-Portal-Email': email } }).then(function(r){ return r.json(); }).catch(function(){ return null; });
@@ -4049,17 +4055,27 @@ function _renderLeasingTrendChart(propData) {
   // Destroy existing instance to allow re-render on tab revisit
   if (_leasingTrendChartInst) { _leasingTrendChartInst.destroy(); _leasingTrendChartInst = null; }
 
-  // Default demo trend data (last 6 months)
-  var labels = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
-  var occData  = [91.4, 92.0, 91.8, 92.8, 93.0, 93.2];
-  var atrData  = [9.8, 9.2, 9.0, 8.8, 8.6, 8.4];
-
-  // If real trend history available, use it (future: server provides trend arrays)
-  if (propData && propData.leasing && propData.leasing.occ_history) {
-    occData  = propData.leasing.occ_history;
-    atrData  = propData.leasing.atr_history || atrData;
-    labels   = propData.leasing.trend_labels || labels;
+  // Only render when the backend supplies real trend history — never a
+  // fabricated line. The single-point /api/property leasing snapshot has no
+  // history yet, so show an honest placeholder note instead.
+  var hasHistory = propData && propData.leasing && propData.leasing.occ_history && propData.leasing.occ_history.length;
+  var note = document.getElementById('perf-trend-note');
+  if (!hasHistory) {
+    canvas.style.display = 'none';
+    if (!note) {
+      note = document.createElement('div');
+      note.id = 'perf-trend-note';
+      note.style.cssText = 'padding:24px;text-align:center;color:var(--tm);font-size:12px;font-style:italic';
+      note.textContent = 'Historical occupancy / ATR trend coming soon — not yet available for this property.';
+      canvas.parentNode.insertBefore(note, canvas);
+    } else { note.style.display = ''; }
+    return;
   }
+  if (note) note.style.display = 'none';
+  canvas.style.display = '';
+  var labels  = propData.leasing.trend_labels || [];
+  var occData = propData.leasing.occ_history;
+  var atrData = propData.leasing.atr_history || [];
 
   var ctx = canvas.getContext('2d');
   _leasingTrendChartInst = new Chart(ctx, {
@@ -4139,40 +4155,25 @@ function _renderLeasingTrendChart(propData) {
 }
 
 function _demoReportData() {
+  // Neutral empty report — used only as a no-data fallback. Keeps the shape
+  // so renders don't crash, but contains NO fabricated property data.
   return {
-    property: { id: '', name: 'The Quincy at Kierland', market: 'Scottsdale', units: 320, status: 'RPM Managed', occupancy_status: 'Stabilized', report_date: '2026-03-01' },
+    property: { id: '', name: '', market: '', units: null, status: '', occupancy_status: '', report_date: null },
     health: {
-      overall: 68, status: 'WATCH',
+      overall: null, status: '',
       is_lease_up: false,
       leasing_score: {
-        score: 68, status: 'WATCH', is_lease_up: false, is_renovation: false,
-        occupancy_score: 70, atr_score: 60, exposure_score: 75,
-        occupancy_raw: 93.2, atr_raw: 8.4, trend_raw: 34
+        score: null, status: '', is_lease_up: false, is_renovation: false,
+        occupancy_score: null, atr_score: null, exposure_score: null,
+        occupancy_raw: null, atr_raw: null, trend_raw: null
       },
-      // Legacy pipeline scores — preserved, not displayed until pipeline runs
-      market: 78, marketing: 68, funnel: 70, experience: 67,
-      flag_count: 4,
-      digital_flags: [
-        { flag: 'CTR Below Benchmark', category: 'Paid Search', severity: 'High', notes: 'CTR at 2.8% — benchmark is 5%+. Ad copy refresh recommended.' },
-        { flag: 'Session Duration Low', category: 'Website', severity: 'Medium', notes: 'Average 0:52 — benchmark is 1:30+. Landing page UX review needed.' },
-        { flag: 'Cost Per Conversion Elevated', category: 'Paid Social', severity: 'Medium', notes: '$168 CPL vs $100 benchmark. Audience targeting may need refinement.' },
-      ],
-      pm_flags: [
-        { flag: 'ATR Above 8%', category: 'Leasing', severity: 'High', notes: 'Annualized turnover at 8.4%. Retention programs may be needed.' },
-      ],
-      recommendations: [
-        'Refresh paid search ad copy — current CTR of 2.8% is significantly below the 5% benchmark. Test 3 new headline variants.',
-        'Review landing page experience — session duration below 1:30 suggests visitors are not finding what they need quickly.',
-        'Audit Meta audience targeting — CPL of $168 is above benchmark. Test lookalike audiences based on recent lease conversions.',
-      ]
+      market: null, marketing: null, funnel: null, experience: null,
+      flag_count: null,
+      digital_flags: [],
+      pm_flags: [],
+      recommendations: []
     },
-    activity: [
-      { date: '2026-03-15', type: 'Note',  summary: 'AM reviewed March performance data — paid search impression share down 14% vs competitors.' },
-      { date: '2026-03-10', type: 'Call',  summary: 'Monthly check-in with owner. Discussed spring leasing strategy and budget reallocation.' },
-      { date: '2026-03-05', type: 'Email', summary: 'Sent February performance report and Health Score summary.' },
-      { date: '2026-02-28', type: 'Deal',  summary: 'Deal created: Reputation Management Upgrade ($3,060/yr) — pending approval.' },
-      { date: '2026-02-20', type: 'Note',  summary: 'Completed ad copy refresh for Google Search campaigns. New variants live.' },
-    ]
+    activity: []
   };
 }
 
@@ -5756,15 +5757,26 @@ document.addEventListener('click', function(e) {
 var _switcherLoaded = false;
 var PORTAL_BASE_URL = 'https://go.rpmliving.com/digital/client-portal';
 
-// Demo properties list for switcher
-var _switcherProps = [
-  { uuid: '43472867164',  name: 'The Quincy at Kierland',  market: 'Scottsdale' },
-  { uuid: '19491074342',  name: 'The District at SoCo',    market: 'Austin' },
-  { uuid: '53077040962',  name: 'Lenox Grand',             market: 'Austin' },
-  { uuid: 'demo-chicago', name: 'The Vantage at Lincoln Park', market: 'Chicago' },
-  { uuid: 'demo-denver',  name: 'Panorama Ridge',          market: 'Denver' },
-];
-var _currentUUID = 'demo';
+// Property switcher list — populated live from /api/portfolio.
+var _switcherProps = [];
+var _currentUUID = '';
+
+function loadSwitcher() {
+  if (_switcherLoaded) { renderSwitcherList(_switcherProps); return; }
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var email = window.__PORTAL_EMAIL__ || 'demo@rpmliving.com';
+  fetch(API_BASE + '/api/portfolio', { headers: { 'X-Portal-Email': email } })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var props = d.properties || [];
+      _switcherProps = props.map(function(p){
+        return { company_id: p.company_id || '', uuid: p.uuid || '', name: p.name || '', market: p.market || '' };
+      }).sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+      _switcherLoaded = true;
+      renderSwitcherList(_switcherProps);
+    })
+    .catch(function(){ renderSwitcherList(_switcherProps); });
+}
 
 function togglePropSwitcher() {
   var dd = document.getElementById('pnb-dropdown');
@@ -5774,7 +5786,7 @@ function togglePropSwitcher() {
   if (!open) {
     var s = document.getElementById('pnb-search');
     if (s) { s.value = ''; s.focus(); }
-    renderSwitcherList(_switcherProps);
+    loadSwitcher();
   }
 }
 
@@ -5793,17 +5805,23 @@ function renderSwitcherList(props) {
   el.innerHTML = props.map(function(p) {
     var initials = (p.name||'').split(' ').filter(function(w){return w.length>0;}).slice(0,2)
       .map(function(w){return w[0].toUpperCase();}).join('');
-    var isCurrent = p.name === 'The Quincy at Kierland'; // demo current property
-    return '<div class="pnb-item' + (isCurrent?' current':'') + '">' +
+    var isCurrent = p.company_id && p.company_id === window.__PORTAL_COMPANY_ID__;
+    return '<div class="pnb-item' + (isCurrent?' current':'') + '" style="cursor:pointer"' +
+      ' data-cid="'+_escAttr(p.company_id||'')+'" data-uuid="'+_escAttr(p.uuid||'')+'"' +
+      ' data-name="'+_escAttr(p.name||'')+'" data-market="'+_escAttr(p.market||'')+'">' +
       '<div class="pnb-item-chip">' + initials + '</div>' +
       '<div><div class="pnb-item-name">' + (p.name||'') + '</div>' +
       '<div class="pnb-item-market">' + (p.market||'') + '</div></div>' +
       '</div>';
   }).join('');
+  Array.prototype.forEach.call(el.querySelectorAll('.pnb-item'), function(it){
+    it.addEventListener('click', function(){
+      openProperty(it.getAttribute('data-cid'), it.getAttribute('data-uuid'),
+                   it.getAttribute('data-name'), it.getAttribute('data-market'));
+      togglePropSwitcher();
+    });
+  });
 }
-
-// Populate demo switcher on init
-renderSwitcherList(_switcherProps);
 </script>
 </body>
 </html>
