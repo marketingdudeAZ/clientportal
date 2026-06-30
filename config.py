@@ -25,6 +25,11 @@ HUBDB_GAP_RESPONSES_TABLE_ID = os.getenv("HUBDB_GAP_RESPONSES_TABLE_ID")
 HUBDB_BLUEPRINT_VARIABLES_TABLE_ID = os.getenv("HUBDB_BLUEPRINT_VARIABLES_TABLE_ID")
 HUBDB_BLUEPRINT_TAGS_TABLE_ID = os.getenv("HUBDB_BLUEPRINT_TAGS_TABLE_ID")
 HUBDB_BLUEPRINT_ASSETS_TABLE_ID = os.getenv("HUBDB_BLUEPRINT_ASSETS_TABLE_ID")
+# Portal feature access — Beta/Prod partitioning (feature_access.py).
+# Editing rows in these tables promotes a feature or grants Beta access
+# without a deploy. Schema is documented in feature_access.py.
+HUBDB_FEATURE_STAGE_TABLE_ID = os.getenv("HUBDB_FEATURE_STAGE_TABLE_ID")
+HUBDB_PORTAL_ACCESS_TABLE_ID = os.getenv("HUBDB_PORTAL_ACCESS_TABLE_ID")
 
 # --- Phase 3: Keyword Research + Trends ---
 KEYWORD_RESEARCH_MAX_RESULTS = 500
@@ -266,6 +271,14 @@ BRAND_COLOR_REQUIRE_APPROVAL = True
 # RPM Living email convention — used to derive Community Manager and
 # Regional Manager names from their emails on intake submit.
 RPM_EMAIL_DOMAIN = "rpmliving.com"
+# Non-RPM-domain logins treated as internal staff (e.g. the owner's
+# personal address). Comma-separated; lowercased. The HubDB portal-access
+# table can also mark an email internal — this env is the no-HubDB path.
+INTERNAL_EMAILS = {
+    e.strip().lower()
+    for e in os.getenv("INTERNAL_EMAILS", "").split(",")
+    if e.strip()
+}
 
 # --- Portal ---
 WEBHOOK_SERVER_URL = os.getenv("WEBHOOK_SERVER_URL", "http://localhost:8443")

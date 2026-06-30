@@ -98,15 +98,27 @@ class TestRedLightRunDualAuth(unittest.TestCase):
                                 json={"property_uuid": "p-1"})
         self.assertEqual(resp.status_code, 401)
 
-    def test_portal_email_allows_through(self):
+    def test_portal_email_with_access_allows_through(self):
+        # Internal staff (RPM domain) see the redlight Beta feature, so an
+        # authorized portal user is let through the dual-auth gate.
         with mock.patch("red_light_ingest.run_single_property",
                         return_value={"status": "ok"}):
             resp = self.client.post(
                 "/api/red-light/run",
                 json={"property_uuid": "p-1"},
-                headers={"X-Portal-Email": "kyle@rpm.test"},
+                headers={"X-Portal-Email": "kyle@rpmliving.com"},
             )
         self.assertEqual(resp.status_code, 200)
+
+    def test_portal_email_without_feature_access_returns_403(self):
+        # A client who isn't allowlisted into the redlight Beta is rejected
+        # by the feature gate even though their portal login is valid.
+        resp = self.client.post(
+            "/api/red-light/run",
+            json={"property_uuid": "p-1"},
+            headers={"X-Portal-Email": "client@acme.test"},
+        )
+        self.assertEqual(resp.status_code, 403)
 
     def test_internal_key_allows_through(self):
         with mock.patch("red_light_ingest.run_single_property",
