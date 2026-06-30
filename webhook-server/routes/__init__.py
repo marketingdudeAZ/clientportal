@@ -4,6 +4,7 @@ Add new blueprints here as they're extracted from server.py. server.py
 calls `register_all(app)` once at startup.
 """
 
+from .clickup import clickup_bp
 from .loop import loop_bp
 from .onboarding import onboarding_bp
 from .paid import paid_bp
@@ -26,6 +27,7 @@ def register_all(app):
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(property_brief_bp)
     app.register_blueprint(loop_bp)
+    app.register_blueprint(clickup_bp)
     # Loop 1 self-checkout — every endpoint 404s until SELF_CHECKOUT_ENABLED=true,
     # so registering here is inert until you flip the flag.
     app.register_blueprint(self_checkout_bp)
