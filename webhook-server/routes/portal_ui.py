@@ -1,17 +1,18 @@
-"""Flask-served portal preview — the Render link styled like demo.html.
+"""Flask-served portal — the Render link, using the real demo.html design.
 
-GET /portal
-    A self-contained portal page (Portfolio · Spend · Red Light) served
-    straight from the Flask app, so there is one URL to view without the
-    HubSpot CMS deploy/CDN-cache cycle. Portfolio and Spend fetch the live
-    APIs client-side and fall back to sample data so the page always
-    renders. The Red Light tab is rendered server-side here (always
-    populated, with marketing-manager next steps).
+GET /portal       Serves demo.html (Property · Portfolio · Spend views, the
+                  approved design) straight from the Flask app, so there is
+                  one URL to view without the HubSpot CMS deploy/CDN cycle.
+                  demo.html already carries the look + the in-page view
+                  switcher; live-data wiring is layered on per section.
 
-    Query: ?email=<portal email>  ?role=<role>
+GET /portal/lite  A lighter, fully live-wired page (Portfolio + Spend pull
+                  the APIs with sample fallback; Red Light Lite is rendered
+                  server-side with marketing-manager next steps). Kept as the
+                  data-wiring surface while demo.html sections get connected.
 
-This is a preview/staging surface. Real auth still lives on the data APIs;
-the page just supplies X-Portal-Email for the live fetches.
+The page asset is bundled under portal_pages/ so it deploys with the
+service regardless of Render's root-directory setting.
 """
 
 from __future__ import annotations
@@ -25,10 +26,12 @@ logger = logging.getLogger(__name__)
 
 portal_ui_bp = Blueprint("portal_ui", __name__)
 
-_TEMPLATE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "portal_pages", "portal.html")
+_PAGES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "portal_pages")
+_DEMO = os.path.join(_PAGES_DIR, "demo.html")
+_LITE = os.path.join(_PAGES_DIR, "portal.html")
 
 # Representative portfolio metrics for the Red Light preview — the rollout
-# dataset, so the page shows real-shaped scoring + next steps immediately.
+# dataset, so the Lite page shows real-shaped scoring + next steps.
 _SAMPLE_REDLIGHT_ROWS = [
     {"Property Name": "10X Tarpon Springs", "Unit Count": "236", "Current Occupancy": "86.02%",
      "1mo Previous Occ": "88.14%", "2mo Previous Occ": "88.56%", "ATR": "9.75%",
@@ -58,24 +61,34 @@ _SAMPLE_REDLIGHT_ROWS = [
 ]
 
 
-def _redlight_section() -> str:
-    from redlight_lite import build_report, render_html
-    # Strip the standalone doc chrome — we inject the body into the panel.
-    html = render_html(build_report(_SAMPLE_REDLIGHT_ROWS),
-                       title="Red Light Report — Lite")
-    start = html.find("<body")
-    start = html.find(">", start) + 1 if start != -1 else 0
-    end = html.find("</body>")
-    return html[start:end] if end != -1 else html
+def _serve(path: str) -> Response:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return Response(fh.read(), mimetype="text/html")
+    except OSError as e:
+        logger.error("portal asset missing (%s): %s", path, e)
+        return Response("Portal page not found", status=500)
 
 
 @portal_ui_bp.route("/portal", methods=["GET"])
 def portal_page():
+    """The approved demo.html design — Property / Portfolio / Spend views."""
+    return _serve(_DEMO)
+
+
+@portal_ui_bp.route("/portal/lite", methods=["GET"])
+def portal_lite():
+    """Live-wired Portfolio + Spend + server-rendered Red Light Lite."""
     try:
-        with open(_TEMPLATE, encoding="utf-8") as fh:
+        with open(_LITE, encoding="utf-8") as fh:
             page = fh.read()
     except OSError as e:
-        logger.error("portal template missing: %s", e)
+        logger.error("lite portal template missing: %s", e)
         return Response("Portal template not found", status=500)
-    page = page.replace("__REDLIGHT_HTML__", _redlight_section())
+    from redlight_lite import build_report, render_html
+    html = render_html(build_report(_SAMPLE_REDLIGHT_ROWS), title="Red Light Report — Lite")
+    start = html.find("<body")
+    start = html.find(">", start) + 1 if start != -1 else 0
+    end = html.find("</body>")
+    page = page.replace("__REDLIGHT_HTML__", html[start:end] if end != -1 else html)
     return Response(page, mimetype="text/html")
