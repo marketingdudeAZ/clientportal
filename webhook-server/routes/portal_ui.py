@@ -20,7 +20,9 @@ from __future__ import annotations
 import logging
 import os
 
-from flask import Blueprint, Response
+from html import escape
+
+from flask import Blueprint, Response, request
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +74,32 @@ def _serve(path: str) -> Response:
 
 @portal_ui_bp.route("/portal", methods=["GET"])
 def portal_page():
-    """The approved demo.html design — Property / Portfolio / Spend views."""
-    return _serve(_DEMO)
+    """The approved demo.html design — Property / Portfolio / Spend views.
+
+    Injects same-origin API config + the portal email so the page's live
+    fetches hit this server (no CORS, no cold-start failure) with a real
+    identity. Pass ?email= to scope to a specific portal user.
+    """
+    try:
+        with open(_DEMO, encoding="utf-8") as fh:
+            page = fh.read()
+    except OSError as e:
+        logger.error("demo asset missing: %s", e)
+        return Response("Portal page not found", status=500)
+
+    email = (request.args.get("email") or "portal@rpmliving.com").strip()
+    config_js = (
+        "<script>"
+        "window.__PORTAL_API_BASE='';window.__WEBHOOK_URL__='';"
+        f"window.__PORTAL_EMAIL__='{escape(email)}';"
+        "</script>"
+    )
+    # Inject before the first script runs.
+    if "</head>" in page:
+        page = page.replace("</head>", config_js + "</head>", 1)
+    else:
+        page = config_js + page
+    return Response(page, mimetype="text/html")
 
 
 @portal_ui_bp.route("/portal/lite", methods=["GET"])

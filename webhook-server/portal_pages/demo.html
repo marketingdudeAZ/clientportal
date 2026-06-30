@@ -3830,24 +3830,28 @@ function loadPortfolio() {
   .then(function(data) {
     _portfolioLoaded = true;
     var props = data.properties || [];
-    var summary = data.summary  || {};
+    // /api/portfolio returns rollups{} (not summary{}); accept either.
+    var summary = data.rollups || data.summary || {};
 
     // KPI row
     function setEl(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
-    setEl('port-kpi-count',  props.length || summary.count || '—');
-    setEl('port-kpi-units',  summary.total_units ? summary.total_units.toLocaleString() : '—');
-    var avgH = summary.avg_health != null ? Math.round(summary.avg_health) : null;
+    setEl('port-kpi-count',  props.length || summary.total_properties || summary.count || '—');
+    var units = summary.total_units;
+    setEl('port-kpi-units',  units ? units.toLocaleString() : '—');
+    var avgRaw = summary.avg_health_score != null ? summary.avg_health_score : summary.avg_health;
+    var avgH = avgRaw != null ? Math.round(avgRaw) : null;
     var hEl = document.getElementById('port-kpi-health');
     if (hEl && avgH != null) {
       hEl.textContent = avgH;
       hEl.style.color = avgH >= 75 ? 'var(--sage)' : avgH >= 50 ? 'var(--amb)' : '#C94444';
     }
-    if (summary.total_spend != null) {
-      setEl('port-kpi-spend', '$' + Math.round(summary.total_spend).toLocaleString());
+    var totalSpend = summary.total_monthly_spend != null ? summary.total_monthly_spend : summary.total_spend;
+    if (totalSpend != null) {
+      setEl('port-kpi-spend', '$' + Math.round(totalSpend).toLocaleString());
     }
     var flagsEl = document.getElementById('port-kpi-flags');
-    if (flagsEl && summary.health_breakdown) {
-      var hb = summary.health_breakdown;
+    var hb = summary.health_distribution || summary.health_breakdown;
+    if (flagsEl && hb) {
       flagsEl.innerHTML =
         '<span class="mflag r">' + (hb.critical || 0) + ' RED</span>' +
         '<span class="mflag y">' + (hb.warning  || 0) + ' YLW</span>' +
@@ -3860,11 +3864,13 @@ function loadPortfolio() {
     var hdotClass = function(s) { return s >= 75 ? 'h' : s >= 50 ? 'w' : 'c'; };
     var rows = props.map(function(p) {
       var score = p.health_score != null ? Math.round(p.health_score) : null;
-      var flags = p.flag_count || 0;
+      var flags = (p.flags != null ? p.flags : p.flag_count) || 0;
+      var adSpend = p.ad_spend != null ? p.ad_spend : p.monthly_spend;
       var mgmt  = p.mgmt_spend ? '$' + Math.round(p.mgmt_spend).toLocaleString() : '—';
-      var spend = p.ad_spend   ? '$' + Math.round(p.ad_spend).toLocaleString()   : '—';
+      var spend = adSpend ? '$' + Math.round(adSpend).toLocaleString() : '—';
+      var loc = p.city_state || (p.city ? (p.city + (p.state ? ', ' + p.state : '')) : '') || p.market || '';
       return '<tr>' +
-        '<td><div class="p-name">' + (p.name || '') + '</div><div class="p-loc">' + (p.city_state || p.market || '') + '</div></td>' +
+        '<td><div class="p-name">' + (p.name || '') + '</div><div class="p-loc">' + loc + '</div></td>' +
         '<td>' + (p.market || '') + '</td>' +
         '<td style="text-align:right">' + (p.units || '—') + '</td>' +
         '<td style="text-align:right">' + (score != null ? '<span class="hdot ' + hdotClass(score) + '"></span>' + score : '—') + '</td>' +
