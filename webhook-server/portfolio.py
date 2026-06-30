@@ -385,6 +385,9 @@ def format_portfolio_response(companies):
 
         properties.append({
             "uuid": props.get("uuid", ""),
+            # HubSpot company id — lets the portfolio table drill into the
+            # property detail view (which loads by company_id).
+            "company_id": props.get("hubspot_company_id", ""),
             "name": props.get("name", "Unknown"),
             "address": props.get("address", ""),
             "city": props.get("city", ""),

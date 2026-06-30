@@ -3869,7 +3869,11 @@ function loadPortfolio() {
       var mgmt  = p.mgmt_spend ? '$' + Math.round(p.mgmt_spend).toLocaleString() : '—';
       var spend = adSpend ? '$' + Math.round(adSpend).toLocaleString() : '—';
       var loc = p.city_state || (p.city ? (p.city + (p.state ? ', ' + p.state : '')) : '') || p.market || '';
-      return '<tr>' +
+      return '<tr class="port-row" style="cursor:pointer"' +
+        ' data-cid="'    + _escAttr(p.company_id || '') + '"' +
+        ' data-uuid="'   + _escAttr(p.uuid || '')       + '"' +
+        ' data-name="'   + _escAttr(p.name || '')        + '"' +
+        ' data-market="' + _escAttr(p.market || '')      + '">' +
         '<td><div class="p-name">' + (p.name || '') + '</div><div class="p-loc">' + loc + '</div></td>' +
         '<td>' + (p.market || '') + '</td>' +
         '<td style="text-align:right">' + (p.units || '—') + '</td>' +
@@ -3880,8 +3884,32 @@ function loadPortfolio() {
       '</tr>';
     });
     tbody.innerHTML = rows.join('');
+    Array.prototype.forEach.call(tbody.querySelectorAll('.port-row'), function(row){
+      row.addEventListener('click', function(){
+        openProperty(row.getAttribute('data-cid'), row.getAttribute('data-uuid'),
+                     row.getAttribute('data-name'), row.getAttribute('data-market'));
+      });
+    });
   })
   .catch(function(err){ console.warn('loadPortfolio failed:', err); });
+}
+
+// Drill from the portfolio table into a single property's detail view.
+function openProperty(cid, uuid, name, market) {
+  if (!cid) { console.warn('openProperty: no company_id for', name); return; }
+  window.__PORTAL_COMPANY_ID__ = cid;
+  window.__PORTAL_UUID__       = uuid || '';
+  window.__PORTAL_PROP_NAME    = name || '';
+  window.__PORTAL_MARKET       = market || '';
+  // Reset per-property section guards so the new property loads fresh.
+  _overviewLoaded = false; _briefLoaded = false; _budgetLoaded = false;
+  _perfLoaded = false; _activityLoaded = false;
+  ['sb-prop-name','pnb-prop-name','sb-property'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.textContent = name || '';
+  });
+  switchDemo('property');
+  var ov = document.querySelector('.nav-item[onclick*="overview"]');
+  nav('overview', ov);
 }
 
 // ── Performance gauges ──────────────────────────────────────────────────────
