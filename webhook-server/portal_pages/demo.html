@@ -2346,7 +2346,6 @@ select.brief-input{height:34px;cursor:pointer}
     <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-count">—</div><div class="dash-kpi-l">Properties</div></div>
     <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-units">—</div><div class="dash-kpi-l">Total Units</div></div>
     <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-health" style="color:var(--amb)">—</div><div class="dash-kpi-l">Avg Health</div></div>
-    <div class="dash-kpi"><div class="dash-kpi-v" id="port-kpi-spend" style="font-size:20px">—</div><div class="dash-kpi-l">Monthly Spend</div></div>
     <div class="dash-kpi">
       <div style="display:flex;justify-content:center;gap:8px;margin-bottom:4px" id="port-kpi-flags">
         <span class="mflag r">— RED</span><span class="mflag y">— YLW</span><span class="mflag g">— GRN</span>
@@ -2400,117 +2399,8 @@ select.brief-input{height:34px;cursor:pointer}
             <th style="text-align:right">Open Flags</th>
           </tr>
         </thead>
-        <tbody>
-          <tr onclick="drillToMarket('Scottsdale')">
-            <td><div class="market-name">Scottsdale</div><div class="market-sub">Arizona · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">320</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--amb)">72</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:72%;background:#D4910A"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag y">1 YLW</span></div></td>
-            <td style="text-align:right">$6,040</td>
-            <td style="text-align:right"><span class="fcount has">2</span></td>
-          </tr>
-          <tr onclick="drillToMarket('Chicago')">
-            <td><div class="market-name">Chicago</div><div class="market-sub">Illinois · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">294</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--sage)">84</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:84%;background:#8FA68E"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag g">1 GRN</span></div></td>
-            <td style="text-align:right">$5,645</td>
-            <td style="text-align:right"><span class="fcount none">0</span></td>
-          </tr>
-          <tr onclick="drillToMarket('Denver')">
-            <td><div class="market-name">Denver</div><div class="market-sub">Colorado · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">210</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--red)">58</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:58%;background:#C94444"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag r">1 RED</span></div></td>
-            <td style="text-align:right">$4,100</td>
-            <td style="text-align:right"><span class="fcount has">3</span></td>
-          </tr>
-          <tr onclick="drillToMarket('Austin')">
-            <td><div class="market-name">Austin</div><div class="market-sub">Texas · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">380</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--sage)">81</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:81%;background:#8FA68E"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag g">1 GRN</span></div></td>
-            <td style="text-align:right">$6,200</td>
-            <td style="text-align:right"><span class="fcount has">1</span></td>
-          </tr>
-          <tr onclick="drillToMarket('Charlotte')">
-            <td><div class="market-name">Charlotte</div><div class="market-sub">North Carolina · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">178</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--amb)">69</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:69%;background:#D4910A"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag y">1 YLW</span></div></td>
-            <td style="text-align:right">$3,800</td>
-            <td style="text-align:right"><span class="fcount has">2</span></td>
-          </tr>
-          <tr onclick="drillToMarket('Tampa')">
-            <td><div class="market-name">Tampa</div><div class="market-sub">Florida · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">252</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--red)">44</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:44%;background:#C94444"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag r">1 RED</span></div></td>
-            <td style="text-align:right">$3,900</td>
-            <td style="text-align:right"><span class="fcount has">4</span></td>
-          </tr>
-          <tr onclick="drillToMarket('Phoenix')">
-            <td><div class="market-name">Phoenix</div><div class="market-sub">Arizona · 1 property</div></td>
-            <td style="text-align:right">1</td>
-            <td style="text-align:right">188</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-weight:700;color:var(--sage)">79</span>
-                <div class="health-bar-wrap"><div class="health-bar-fill" style="width:79%;background:#8FA68E"></div></div>
-              </div>
-            </td>
-            <td><div class="market-flags"><span class="mflag g">1 GRN</span></div></td>
-            <td style="text-align:right">$1,900</td>
-            <td style="text-align:right"><span class="fcount none">0</span></td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr style="background:var(--bg)">
-            <td style="padding:12px 20px;font-weight:700;font-size:13px">Portfolio Total</td>
-            <td style="text-align:right;padding:12px 20px;font-weight:700">7</td>
-            <td style="text-align:right;padding:12px 20px;font-weight:700">1,822</td>
-            <td style="padding:12px 20px"><span style="font-weight:800;font-size:15px;color:var(--amb)">74</span> <span style="font-size:11px;color:var(--tm)">avg</span></td>
-            <td style="padding:12px 20px"><div class="market-flags"><span class="mflag r">2 RED</span><span class="mflag y">2 YLW</span><span class="mflag g">3 GRN</span></div></td>
-            <td style="text-align:right;padding:12px 20px;font-weight:800;color:var(--cu)">$31,585</td>
-            <td style="text-align:right;padding:12px 20px;font-weight:700;color:var(--red)">12</td>
-          </tr>
-        </tfoot>
+        <tbody id="port-markets-tbody"></tbody>
+        <tfoot id="port-markets-tfoot"></tfoot>
       </table>
     </div>
   </div>
@@ -3890,8 +3780,61 @@ function loadPortfolio() {
                      row.getAttribute('data-name'), row.getAttribute('data-market'));
       });
     });
+    renderByMarket(props);
   })
   .catch(function(err){ console.warn('loadPortfolio failed:', err); });
+}
+
+// Build the By Market table live from the same /api/portfolio properties.
+function renderByMarket(props) {
+  var tb = document.getElementById('port-markets-tbody');
+  var tf = document.getElementById('port-markets-tfoot');
+  if (!tb) return;
+  var byMkt = {};
+  props.forEach(function(p) {
+    var m = p.market || 'Unknown';
+    var g = byMkt[m] || (byMkt[m] = {market:m, state:p.state||'', count:0, units:0, spend:0, flags:0, hsum:0, hn:0, R:0, Y:0, G:0});
+    g.count++; g.units += (p.units||0);
+    g.spend += (p.monthly_spend != null ? p.monthly_spend : (p.ad_spend||0));
+    g.flags += (p.flags != null ? p.flags : (p.flag_count||0));
+    if (!g.state && p.state) g.state = p.state;
+    var s = p.health_score;
+    if (s != null) { g.hsum += s; g.hn++; if (s>=75) g.G++; else if (s>=50) g.Y++; else g.R++; }
+  });
+  function bar(avg) { var c = avg>=75?'#8FA68E':avg>=50?'#D4910A':'#C94444';
+    return '<div style="display:flex;align-items:center;gap:8px"><span style="font-weight:700;color:'+c+'">'+avg+'</span>'+
+      '<div class="health-bar-wrap"><div class="health-bar-fill" style="width:'+Math.min(avg,100)+'%;background:'+c+'"></div></div></div>'; }
+  function mix(g) { var h=''; if(g.R)h+='<span class="mflag r">'+g.R+' RED</span>'; if(g.Y)h+='<span class="mflag y">'+g.Y+' YLW</span>'; if(g.G)h+='<span class="mflag g">'+g.G+' GRN</span>'; return '<div class="market-flags">'+(h||'<span style="color:var(--tm)">—</span>')+'</div>'; }
+  function money(n) { return n ? '$'+Math.round(n).toLocaleString() : '—'; }
+  var markets = Object.keys(byMkt).map(function(k){return byMkt[k];});
+  markets.sort(function(a,b){ return b.count - a.count || a.market.localeCompare(b.market); });
+  var tot = {count:0, units:0, spend:0, flags:0, hsum:0, hn:0, R:0, Y:0, G:0};
+  tb.innerHTML = markets.map(function(g) {
+    var avg = g.hn ? Math.round(g.hsum/g.hn) : 0;
+    tot.count+=g.count; tot.units+=g.units; tot.spend+=g.spend; tot.flags+=g.flags;
+    tot.hsum+=g.hsum; tot.hn+=g.hn; tot.R+=g.R; tot.Y+=g.Y; tot.G+=g.G;
+    return '<tr style="cursor:pointer" onclick="drillToMarket(\'' + _escAttr(g.market) + '\')">' +
+      '<td><div class="market-name">'+g.market+'</div><div class="market-sub">'+(g.state||'')+' · '+g.count+' propert'+(g.count===1?'y':'ies')+'</div></td>' +
+      '<td style="text-align:right">'+g.count.toLocaleString()+'</td>' +
+      '<td style="text-align:right">'+g.units.toLocaleString()+'</td>' +
+      '<td>'+bar(avg)+'</td>' +
+      '<td>'+mix(g)+'</td>' +
+      '<td style="text-align:right">'+money(g.spend)+'</td>' +
+      '<td style="text-align:right"><span class="fcount '+(g.flags>0?'has':'none')+'">'+g.flags+'</span></td>' +
+    '</tr>';
+  }).join('');
+  if (tf) {
+    var tavg = tot.hn ? Math.round(tot.hsum/tot.hn) : 0;
+    tf.innerHTML = '<tr style="background:var(--bg)">' +
+      '<td style="padding:12px 20px;font-weight:700;font-size:13px">Portfolio Total</td>' +
+      '<td style="text-align:right;padding:12px 20px;font-weight:700">'+tot.count.toLocaleString()+'</td>' +
+      '<td style="text-align:right;padding:12px 20px;font-weight:700">'+tot.units.toLocaleString()+'</td>' +
+      '<td style="padding:12px 20px"><span style="font-weight:800;font-size:15px">'+tavg+'</span> <span style="font-size:11px;color:var(--tm)">avg</span></td>' +
+      '<td style="padding:12px 20px">'+mix(tot)+'</td>' +
+      '<td style="text-align:right;padding:12px 20px;color:var(--tm)">—</td>' +
+      '<td style="text-align:right;padding:12px 20px;font-weight:700;color:var(--red)">'+tot.flags+'</td>' +
+    '</tr>';
+  }
 }
 
 // Drill from the portfolio table into a single property's detail view.

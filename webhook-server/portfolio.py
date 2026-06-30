@@ -60,6 +60,10 @@ def _build_filter_groups(email=None, role=None):
 
     All authenticated portal members see all properties — no per-user filtering.
     The email/role params are kept for backward compatibility but are unused.
+
+    Dispositioning properties are intentionally excluded — they are on their
+    way out of the portfolio and should not surface in the dashboard, KPIs,
+    or spend.
     """
     return [
         {
@@ -67,7 +71,7 @@ def _build_filter_groups(email=None, role=None):
                 {
                     "propertyName": "plestatus",
                     "operator": "IN",
-                    "values": ["RPM Managed", "Dispositioning", "Onboarding"],
+                    "values": ["RPM Managed", "Onboarding"],
                 }
             ]
         }
