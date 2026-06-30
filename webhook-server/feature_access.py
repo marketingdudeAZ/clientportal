@@ -94,7 +94,12 @@ class Feature:
 FEATURES: dict[str, Feature] = {
     f.key: f
     for f in (
-        Feature("redlight", "Redlight Report / Health Score"),
+        # The full Red Light Report — health score, narratives, PDF, ClickUp
+        # routing. Built but gated; promote when the whole build is ready.
+        Feature("redlight", "Red Light Report (full)"),
+        # The simple "walk before we run" version — the surface we roll out
+        # first. Same Beta default; this is the GA promotion candidate.
+        Feature("redlight_lite", "Red Light Report — Lite"),
         Feature("community_brief", "Community Brief"),
         Feature("quote_all_services", "All Marketing Services on Quote"),
         Feature("clickup_loop", "ClickUp → Company Notes Loop"),

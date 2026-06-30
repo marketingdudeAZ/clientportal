@@ -9,6 +9,7 @@ from .onboarding import onboarding_bp
 from .paid import paid_bp
 from .portal import portal_bp
 from .property_brief import property_brief_bp
+from .redlight import redlight_lite_bp
 from .self_checkout import self_checkout_bp
 from .seo import seo_bp
 from .webhooks import register_webhook_blueprints
@@ -18,6 +19,7 @@ def register_all(app):
     """Register every blueprint in this package on the given Flask app."""
     app.register_blueprint(paid_bp)
     app.register_blueprint(portal_bp)
+    app.register_blueprint(redlight_lite_bp)
     app.register_blueprint(seo_bp)
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(property_brief_bp)
