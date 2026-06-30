@@ -41,8 +41,10 @@ class TestFilterGroups:
         assert f["propertyName"] == "plestatus"
         assert f["operator"] == "IN"
         assert "RPM Managed" in f["values"]
-        assert "Dispositioning" in f["values"]
         assert "Onboarding" in f["values"]
+        # Dispositioning properties are excluded — on their way out, should
+        # not surface in the dashboard/KPIs/spend.
+        assert "Dispositioning" not in f["values"]
 
     def test_role_email_ignored(self):
         """Passing different emails must produce identical filter groups."""
