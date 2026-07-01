@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Red Light — Exec Dashboard · 4 directions</title>
+<style>
+  body{margin:0;background:#eceef1;color:#0b0b0b;font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+  .frame{max-width:1160px;margin:0 auto;padding:22px 20px 90px}
+  .frame > h1{font-size:20px;margin:4px 0 2px}
+  .frame > p{color:#52514e;margin:0 0 8px;font-size:13px}
+  .vlabel{display:flex;align-items:baseline;gap:10px;margin:30px 4px 10px}
+  .vlabel b{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#C8964E}
+  .vlabel span{font-size:13px;color:#52514e}
+  /* ---- shared component tokens; each version wrapper overrides them ---- */
+  .dash{ --surface:#fcfcfb;--plane:#f9f9f7;--card:#fff;--ink:#0b0b0b;--ink2:#52514e;--mut:#898781;
+    --grid:#e1e0d9;--base:#c3c2b7;--good:#0ca30c;--warn:#fab219;--crit:#d03b3b;--up:#006300;
+    --slate:#3D474F;--slate2:#53606C;--cu:#C8964E;--track:#e1e0d9;
+    --f1:#86b6ef;--f2:#5598e7;--f3:#2a78d6;
+    border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.08);background:var(--plane);color:var(--ink);padding:0 0 4px}
+  .dash.dark{ --surface:#1a1a19;--plane:#0d0d0d;--card:#1f1f1e;--ink:#fff;--ink2:#c3c2b7;--mut:#898781;
+    --grid:#2c2c2a;--base:#383835;--up:#0ca30c;--slate:#c3c2b7;--slate2:#98a0a6;--track:#2c2c2a;
+    --f1:#184f95;--f2:#2a78d6;--f3:#5598e7}
+  .dpad{padding:18px 22px 22px}
+  .tabular{font-variant-numeric:tabular-nums}.mut{color:var(--mut)}.ink2{color:var(--ink2)}
+  .banner{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;border-radius:12px;padding:15px 20px;color:#fff}
+  .banner .name{font-size:19px;font-weight:800}.banner .meta{font-size:12px;opacity:.9}
+  .banner .status{font-size:23px;font-weight:800;text-align:right;line-height:1.1}
+  .banner .status small{display:block;font-size:11px;font-weight:600;opacity:.9}
+  h3.sec{font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--slate);margin:18px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--grid)}
+  .gauges{display:grid;gap:12px}
+  .g-card{background:var(--card);border:1px solid var(--grid);border-radius:12px;padding:10px 6px 8px;text-align:center}
+  .g-lab{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+  .g-foot{font-size:10.5px;color:var(--ink2);margin-top:1px;display:flex;justify-content:center;gap:7px;align-items:center;flex-wrap:wrap}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px}
+  .pill .dot{width:6px;height:6px;border-radius:50%}
+  .s-good{background:rgba(12,163,12,.14);color:#0a7d0a}.s-good .dot{background:var(--good)}
+  .s-warn{background:rgba(250,178,25,.18);color:#8a5a12}.s-warn .dot{background:var(--warn)}
+  .s-crit{background:rgba(208,59,59,.14);color:#c0392b}.s-crit .dot{background:var(--crit)}
+  .s-ctx{background:rgba(120,125,130,.16);color:var(--slate2)}.s-ctx .dot{background:var(--slate2)}
+  .dark .s-good{color:#4ade4a}.dark .s-warn{color:#f6c65a}.dark .s-crit{color:#f08a8a}
+  .delta{font-weight:700;white-space:nowrap}
+  .widgets{display:grid;gap:12px}
+  .w{background:var(--card);border:1px solid var(--grid);border-radius:12px;padding:12px 15px}
+  .wl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+  .wv{font-size:27px;font-weight:800;margin:1px 0}
+  .ws{font-size:11px;color:var(--ink2);display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .fstage{display:flex;align-items:center;gap:9px;margin:5px 0}
+  .fbar{height:24px;border-radius:5px;display:flex;align-items:center;padding:0 10px;color:#fff;font-weight:700;font-size:12px;min-width:36px}
+  .actions{display:grid;gap:11px}
+  .act{background:var(--card);border:1px solid var(--grid);border-radius:11px;padding:12px 15px;border-top:3px solid var(--grid)}
+  .act.d{border-top-color:var(--crit)}.act.m{border-top-color:var(--cu)}.act.p{border-top-color:var(--good)}.act.r{border-top-color:var(--slate2)}
+  .al{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);margin-bottom:5px}
+  .at{font-size:12.5px;color:var(--ink2)}.at b{color:var(--ink)}
+  .foot{color:var(--mut);font-size:11px;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="brand" style="font-size:12px;font-weight:800;letter-spacing:.5px;color:#3D474F">RPM LIVING <span style="color:#C8964E">DIGITAL PRODUCTS &amp; SERVICES</span></div>
+  <h1>Red Light — Exec Dashboard · four directions</h1>
+  <p>Same property, same walk-before-run metrics. Four treatments to react to — theme, hierarchy, density, tone.</p>
+  <div id="out"></div>
+</div>
+
+<script>
+/* ─────────── DATA ─────────── */
+const DATA={ property:{name:"The Park at Valenza",loc:"Tampa, FL",units:776,month:"March 2026"},
+  occupancy:{v:69.46,hist:[78,76.1,74.7,72.7,71,69.5],min:40,max:100,higherBetter:true},
+  atr:{v:29.51,hist:[18,20.2,22.9,25,27.4,29.5],min:0,max:45,higherBetter:false},
+  costPerLease:{v:755,hist:[590,610,650,690,720,755],min:0,max:1200,higherBetter:false},
+  leadToProspect:{v:90,min:0,max:100,green:60,yellow:50,higherBetter:true},
+  prospectToTour:{v:20,min:0,max:60,green:35,yellow:25,higherBetter:true},
+  leads:{v:398,hist:[300,325,352,368,384,398]}, lultl:{v:2.1,hist:[6,5.1,4.2,3.3,2.6,2.1]},
+  portfolio:{occupancy:88.4,atr:12.1,costPerLease:560} };
+const COL={good:'#0ca30c',warn:'#fab219',crit:'#d03b3b',slate:'#53606C',grid:'#e1e0d9'};
+
+/* ─────────── helpers ─────────── */
+const polar=(cx,cy,r,d)=>{const a=(d-90)*Math.PI/180;return[cx+r*Math.cos(a),cy+r*Math.sin(a)];};
+function arc(cx,cy,r,a,b){const[x0,y0]=polar(cx,cy,r,a),[x1,y1]=polar(cx,cy,r,b);const l=(b-a)%360>180?1:0;return `M ${x0} ${y0} A ${r} ${r} 0 ${l} 1 ${x1} ${y1}`;}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const money=v=>"$"+Math.round(v).toLocaleString(); const pct=v=>v.toFixed(1)+"%";
+function scored(m){if(m.v>=m.green)return{k:'good',label:'On target'};if(m.v>=m.yellow)return{k:'warn',label:'Below target'};return{k:'crit',label:'Needs attention'};}
+function trend(m){const h=m.hist;if(!h)return{arrow:'→',txt:'',good:null,d:0};const d=+(h[h.length-1]-h[0]).toFixed(1),up=d>0;const good=m.higherBetter==null?null:(up===!!m.higherBetter);return{arrow:Math.abs(d)<.05?'→':(up?'▲':'▼'),txt:(d>0?'+':'')+d,good,d};}
+function deltaHTML(m,s){const t=trend(m);if(!t.txt)return'';const c=t.good==null?'var(--mut)':(t.good?'var(--up)':'var(--crit)');return `<span class="delta" style="color:${c}">${t.arrow} ${t.txt}${s||''}</span>`;}
+function pill(k,l){return `<span class="pill s-${k}"><span class="dot"></span>${l}</span>`;}
+const _sev={good:0,warn:1,crit:2};
+const OA=(()=>{const a=scored(DATA.leadToProspect),b=scored(DATA.prospectToTour);const w=_sev[a.k]>=_sev[b.k]?a:b;return {good:{c:COL.good,t:'On Track'},warn:{c:COL.warn,t:'Watch'},crit:{c:COL.crit,t:'Needs Attention'}}[w.k];})();
+
+/* gauge: half-circle 180° when cfg.half, else 240° arc. */
+function gauge(cfg){
+  const half=cfg.half, A0=half?-90:-120, A1=half?90:120, R=cfg.R||70, W=200, H=half?116:132, cx=100, cy=half?100:104, SW=cfg.sw||13;
+  const ang=x=>A0+(A1-A0)*clamp((x-cfg.min)/(cfg.max-cfg.min),0,1);
+  let g='', vc;
+  if(cfg.mode==='scored'){
+    const segs=cfg.higherBetter?[[cfg.min,cfg.yellow,COL.crit],[cfg.yellow,cfg.green,COL.warn],[cfg.green,cfg.max,COL.good]]
+                               :[[cfg.min,cfg.green,COL.good],[cfg.green,cfg.yellow,COL.warn],[cfg.yellow,cfg.max,COL.crit]];
+    g=segs.map(([a,b,c])=>`<path d="${arc(cx,cy,R,ang(a),ang(b))}" stroke="${c}" stroke-width="${SW}" fill="none" opacity=".24"/>`).join('');
+    vc={good:COL.good,warn:COL.warn,crit:COL.crit}[scored(cfg).k];
+    g+=`<path d="${arc(cx,cy,R,A0,ang(cfg.v))}" stroke="${vc}" stroke-width="${SW}" fill="none" stroke-linecap="round"/>`;
+  } else {
+    g=`<path d="${arc(cx,cy,R,A0,A1)}" stroke="var(--track)" stroke-width="${SW}" fill="none"/><path d="${arc(cx,cy,R,A0,ang(cfg.v))}" stroke="var(--slate2)" stroke-width="${SW}" fill="none" stroke-linecap="round"/>`;
+    vc='var(--slate2)';
+    if(cfg.tick!=null){const[a1,b1]=polar(cx,cy,R+7,ang(cfg.tick)),[a2,b2]=polar(cx,cy,R-7,ang(cfg.tick));g+=`<line x1="${a1}" y1="${b1}" x2="${a2}" y2="${b2}" stroke="var(--ink)" stroke-width="2"/>`;}
+  }
+  const[dx,dy]=polar(cx,cy,R,ang(cfg.v));
+  g+=`<circle cx="${dx}" cy="${dy}" r="6.5" fill="${vc}" stroke="var(--surface)" stroke-width="2.5"/>`;
+  const ny=half?cy-8:cy-6;
+  g+=`<text x="${cx}" y="${ny}" text-anchor="middle" font-size="${cfg.fs||28}" font-weight="800" fill="${vc}" font-family="system-ui">${cfg.display}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-height:${H}px">${g}</svg>`;
+}
+function spark(m,w=120,h=28){const h0=m.hist,mn=Math.min(...h0),mx=Math.max(...h0),rng=(mx-mn)||1;
+  const pts=h0.map((v,i)=>`${(i/(h0.length-1)*w).toFixed(1)},${(h-(v-mn)/rng*h).toFixed(1)}`).join(' ');
+  const t=trend(m),c=t.good==null?'var(--ink2)':(t.good?'var(--good)':'var(--crit)');const[lx,ly]=pts.split(' ').pop().split(',');
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round"/><circle cx="${lx}" cy="${ly}" r="3.5" fill="${c}"/></svg>`;}
+
+/* metric gauge configs */
+const G={
+  occ:{label:'Occupancy',mode:'context',v:DATA.occupancy.v,display:pct(DATA.occupancy.v),min:40,max:100,hist:DATA.occupancy.hist,higherBetter:true,tick:DATA.portfolio.occupancy,suf:'pt'},
+  atr:{label:'ATR %',mode:'context',v:DATA.atr.v,display:pct(DATA.atr.v),min:0,max:45,hist:DATA.atr.hist,higherBetter:false,tick:DATA.portfolio.atr,suf:'pt'},
+  l2p:{label:'Lead → Prospect',mode:'scored',v:DATA.leadToProspect.v,display:pct(DATA.leadToProspect.v),min:0,max:100,green:60,yellow:50,higherBetter:true},
+  p2t:{label:'Prospect → Tour',mode:'scored',v:DATA.prospectToTour.v,display:pct(DATA.prospectToTour.v),min:0,max:60,green:35,yellow:25,higherBetter:true},
+  cpl:{label:'Cost / Lease',mode:'context',v:DATA.costPerLease.v,display:money(DATA.costPerLease.v),min:0,max:1200,hist:DATA.costPerLease.hist,higherBetter:false,tick:DATA.portfolio.costPerLease},
+};
+function gcard(cfg){const foot=cfg.mode==='scored'?pill(scored(cfg).k,scored(cfg).label):`${deltaHTML(cfg,cfg.suf||'')}${cfg.tick!=null?` <span class="mut">vs portf</span>`:''}`;
+  return `<div class="g-card"><div class="g-lab">${cfg.label}</div>${gauge(cfg)}<div class="g-foot">${foot}</div></div>`;}
+
+const D=DATA, leads=D.leads.v, prospects=Math.round(leads*D.leadToProspect.v/100), tours=Math.round(prospects*D.prospectToTour.v/100);
+function funnelRows(){
+  const st=(lab,c,w,color,conv,warn)=>{const inside=w>=32;return `<div class="fstage"><div class="fbar" style="width:${w}%;background:${color}">${inside?lab+' · '+c:''}</div>${inside?'':`<span style="font-weight:700;font-size:12px;white-space:nowrap">${lab} · ${c}</span>`}${conv!=null?`<span class="delta" style="margin-left:auto;${warn?'color:var(--crit)':'color:var(--ink2)'}">${conv}%${warn?' ⚠':''}</span>`:''}</div>`;};
+  return st('Leads',leads,100,'var(--f1)',null,false)+st('Prospects',prospects,Math.max(20,prospects/leads*100),'var(--f2)',D.leadToProspect.v,false)+st('Tours',tours,Math.max(12,tours/leads*100),'var(--f3)',D.prospectToTour.v,true);
+}
+const ACTS=`<div class="act d"><div class="al">What's driving it</div><div class="at">Strong top-of-funnel — <b>90%</b> lead→prospect — but only <b>20%</b> of prospects tour (target 35%). The leak is <b>after</b> the lead.</div></div>
+  <div class="act m"><div class="al">The one move</div><div class="at">Fix tour conversion: <b>self-guided touring</b> + faster tour-request response; add unit video/3D.</div></div>
+  <div class="act p"><div class="al">Projected impact</div><div class="at">+15 pts prospect→tour ≈ <b>+50 tours/mo</b> at current lead volume.</div></div>
+  <div class="act r"><div class="al">If nothing changes</div><div class="at">Occupancy ~1.7 pts/mo down → <b>≈ 66%</b> by summer while ATR climbs.</div></div>`;
+function bannerHTML(){return `<div class="banner" style="background:${OA.c}"><div><div class="name">${D.property.name}</div><div class="meta">${D.property.loc} · ${D.property.units} units · ${D.property.month}</div></div><div class="status">${OA.t}<small>from leasing funnel</small></div></div>`;}
+
+/* ═══════════ V1 — Command Center (dark) ═══════════ */
+function v1(){return `<div class="dash dark"><div class="dpad">${bannerHTML()}
+  <h3 class="sec">Health metrics</h3><div class="gauges" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">${[G.occ,G.atr,G.l2p,G.p2t,G.cpl].map(gcard).join('')}</div>
+  <h3 class="sec">Volume &amp; funnel</h3><div class="widgets" style="grid-template-columns:1fr 1fr 1.4fr">
+    <div class="w"><div class="wl">Leads</div><div class="wv tabular">${leads}</div><div class="ws">${deltaHTML({...D.leads,higherBetter:true})}${spark({...D.leads,higherBetter:true})}</div></div>
+    <div class="w"><div class="wl">Units left to lease</div><div class="wv tabular">${D.lultl.v.toFixed(1)}</div><div class="ws"><span class="mut">avg</span>${spark({...D.lultl,higherBetter:false})}</div></div>
+    <div class="w"><div class="wl">Funnel</div>${funnelRows()}</div></div>
+  <h3 class="sec">Conversation starter</h3><div class="actions" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${ACTS}</div>
+</div></div>`;}
+
+/* ═══════════ V2 — Hero + satellites ═══════════ */
+function v2(){const hero={...G.occ,R:80,fs:40,sw:16,display:pct(D.occupancy.v)};
+  return `<div class="dash"><div class="dpad">
+  <div style="display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:center">
+    <div class="g-card" style="padding:14px 10px 12px;border-top:3px solid ${OA.c}">
+      <div class="g-lab" style="font-size:12px">${D.property.name} · ${D.property.month}</div>
+      ${gauge(hero)}
+      <div style="font-size:15px;font-weight:800;color:${OA.c}">${OA.t}</div>
+      <div class="g-foot" style="font-size:11px">Occupancy — headline KPI · ${deltaHTML(G.occ,'pt')} in 90 days</div>
+    </div>
+    <div><div class="gauges" style="grid-template-columns:repeat(2,1fr)">${[G.l2p,G.p2t,{...G.atr,R:60},{...G.cpl,R:60}].map(gcard).join('')}</div></div>
+  </div>
+  <h3 class="sec">Leasing funnel &amp; the move</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div class="w"><div class="wl">Funnel this month</div>${funnelRows()}
+      <div class="ws" style="margin-top:8px"><span class="mut">Leads ${leads} · Prospects ${prospects} · Tours ${tours}</span></div></div>
+    <div class="actions" style="grid-template-columns:1fr 1fr">${ACTS}</div>
+  </div></div></div>`;}
+
+/* ═══════════ V3 — Instrument panel (half-gauges, dense) ═══════════ */
+function v3(){const mk=c=>gcard({...c,half:true,R:62,fs:24,sw:11});
+  return `<div class="dash"><div class="dpad">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px">
+    <div><div style="font-size:18px;font-weight:800">${D.property.name}</div><div class="mut" style="font-size:12px">${D.property.loc} · ${D.property.units} units · ${D.property.month}</div></div>
+    ${pill(OA.t==='Needs Attention'?'crit':OA.t==='Watch'?'warn':'good',OA.t)}
+  </div>
+  <div class="gauges" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px">${[G.occ,G.atr,G.l2p,G.p2t,G.cpl].map(mk).join('')}
+    <div class="g-card" style="display:flex;flex-direction:column;justify-content:center"><div class="g-lab">Leads</div><div style="font-size:26px;font-weight:800" class="tabular">${leads}</div><div class="g-foot">${deltaHTML({...D.leads,higherBetter:true})}</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px;margin-top:14px">
+    <div class="w"><div class="wl">Leasing funnel</div>${funnelRows()}</div>
+    <div class="w" style="border-left:3px solid var(--cu)"><div class="al">The one move</div><div class="at">Fix tour conversion (20% vs 35%): self-guided touring + faster response. <b>+50 tours/mo</b> projected. No action → ~66% occ by summer.</div></div>
+  </div></div></div>`;}
+
+/* ═══════════ V4 — Owner briefing (editorial) ═══════════ */
+function v4(){const mini=c=>gcard({...c,half:true,R:52,fs:20,sw:9});
+  return `<div class="dash"><div class="dpad" style="padding:26px 30px">
+    <div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--cu)">Monthly Property Health · ${D.property.month}</div>
+    <div style="font-size:26px;font-weight:800;margin:4px 0 2px">${D.property.name}</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+      <span style="font-size:19px;font-weight:800;color:${OA.c}">${OA.t}</span>
+      <span class="ink2" style="font-size:14px">— strong demand, but prospects aren't converting to tours.</span></div>
+    <p class="ink2" style="font-size:14px;max-width:76ch;margin:6px 0 14px">
+      Valenza is generating plenty of interest — <b style="color:var(--ink)">398 leads</b> this month, up steadily, with
+      <b style="color:var(--ink)">90%</b> becoming prospects. The gap is later in the journey:
+      only <b style="color:var(--ink)">20%</b> of prospects go on to tour (a healthy property runs ~35%), and occupancy has
+      slipped to <b style="color:var(--ink)">69.5%</b> as that gap compounds.</p>
+    <div class="gauges" style="grid-template-columns:repeat(5,1fr);gap:8px">${[G.occ,G.atr,G.l2p,G.p2t,G.cpl].map(mini).join('')}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:18px">
+      <div><h3 class="sec">What we'd suggest</h3><p class="at" style="font-size:13.5px">This reads as a <b>tour-conversion</b> issue, not a traffic one — so more ad spend won't fix it. The highest-leverage move is making it easier to tour: <b>self-guided touring</b>, faster response to tour requests, and video/3D for remote shoppers. At today's lead volume that could add <b>~50 tours a month</b>.</p></div>
+      <div><h3 class="sec">If nothing changes</h3><p class="at" style="font-size:13.5px">On the current path, occupancy reaches <b>≈ 66%</b> by summer while exposure (ATR) keeps climbing. These are options for your consideration — not a prescription. <span class="mut">Traffic is Digital's to drive; tour conversion is largely onsite, flagged here for the team.</span></p></div>
+    </div></div></div>`;}
+
+/* ─────────── render ─────────── */
+const V=[
+  ['V1 · Command Center','Dark, screen/TV-friendly — a live monitoring feel.',v1],
+  ['V2 · Hero + satellites','Leads with one big number (occupancy), metrics as supporting dials.',v2],
+  ['V3 · Instrument panel','Half-gauges, dense one-row cockpit — fits a lot in a small space.',v3],
+  ['V4 · Owner briefing','Editorial / narrative — reads like a one-page memo for owners.',v4],
+];
+document.getElementById('out').innerHTML = V.map(([t,d,fn])=>`<div class="vlabel"><b>${t}</b><span>${d}</span></div>${fn()}`).join('');
+</script>
+</body>
+</html>
