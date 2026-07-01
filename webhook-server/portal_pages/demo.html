@@ -1346,183 +1346,23 @@ select.brief-input{height:34px;cursor:pointer}
     </div>
   </div>
 
-  <!-- What Changed / Working / Handling -->
-  <div class="callprep-grid">
-    <div class="cp-card">
-      <div class="cp-card-label cp-label-changed">What Changed</div>
-      <div class="cp-card-text">Overall score dropped 4 points to 72 (Yellow). Biggest shift: Experience fell 8 points to 67 — driven by 23 unresponded reviews over 60 days. Market and Funnel scores held steady.</div>
-    </div>
-    <div class="cp-card">
-      <div class="cp-card-label cp-label-working">What's Working</div>
-      <div class="cp-card-text">Market position strong at 78 — Scottsdale competitive positioning is holding. SEO organic traffic up 12% after the content calendar update. Paid search impression share competitive in the submarket.</div>
-    </div>
-    <div class="cp-card">
-      <div class="cp-card-label cp-label-handling">What We're Handling</div>
-      <div class="cp-card-text">SEO and social programs running on schedule. March local pin report delivered. ILS accuracy audit in progress (AM Tickets). No client action needed on these items.</div>
-    </div>
+  <!-- Call Prep — live recommendations + honest empty states -->
+  <div class="callprep-grid" id="callprep-digest">
+    <div class="cp-card"><div class="cp-card-label cp-label-changed">What Changed</div><div class="cp-card-text" id="cp-changed">—</div></div>
+    <div class="cp-card"><div class="cp-card-label cp-label-working">What's Working</div><div class="cp-card-text" id="cp-working">—</div></div>
+    <div class="cp-card"><div class="cp-card-label cp-label-handling">What We're Handling</div><div class="cp-card-text" id="cp-handling">—</div></div>
   </div>
 
-  <!-- Needs Approval -->
   <div class="callprep-section-hdr">
     <div>
       <div class="callprep-section-title">Needs Your Approval</div>
-      <div class="callprep-section-sub">Review and approve or dismiss each item below</div>
-    </div>
-    <div class="rec-filters" style="margin-bottom:0">
-      <button class="rec-filter active" onclick="filterRecs('all',this)">All</button>
-      <button class="rec-filter" onclick="filterRecs('pending',this)">Pending <span id="pending-count" style="background:rgba(255,255,255,0.3);padding:1px 6px;border-radius:8px;margin-left:3px">2</span></button>
-      <button class="rec-filter" onclick="filterRecs('approved',this)">Approved</button>
-      <button class="rec-filter" onclick="filterRecs('dismissed',this)">Dismissed</button>
+      <div class="callprep-section-sub">Open recommendations from the latest forecast</div>
     </div>
   </div>
-
-  <!-- Rec 1: Strategy Change - Reputation -->
-  <div class="rec-card" id="rec-1" data-status="pending">
-    <div class="rec-card-head">
-      <div class="rec-meta">
-        <span class="badge badge-blue">Strategy</span>
-        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--red)">High Priority</span>
-      </div>
-      <div class="rec-title">Increase review response rate to improve resident experience score</div>
-    </div>
-    <div class="rec-body">
-      <div class="rec-body-text">Your resident experience subscore dropped 8 points to 67. The primary driver is an unresponded review backlog — 23 reviews over the past 60 days have no response. Google weighs response rate heavily in local ranking. Activating the Response + Removal tier would address this within the current billing cycle.</div>
-      <div class="rec-action-box"><span class="rec-action-box-label">What we need from you</span>Approve to create a task for your reputation management team</div>
-      <div class="rec-btns">
-        <button class="btn-approve" onclick="approveRec(1,'strategy_change','reputation','better','rec-1','rec-confirm-1')">Approve</button>
-        <button class="btn-dismiss" onclick="dismissRec('rec-1','rec-confirm-1')">Dismiss</button>
-      </div>
-      <div class="rec-confirm ok" id="rec-confirm-1"></div>
-    </div>
+  <div id="recs-list">
+    <div style="padding:24px;text-align:center;color:var(--tm);font-size:12px">Loading recommendations…</div>
   </div>
-
-  <!-- Rec 2: Budget Change - Paid Search -->
-  <div class="rec-card" id="rec-2" data-status="pending">
-    <div class="rec-card-head">
-      <div class="rec-meta">
-        <span class="badge badge-purple">Budget Change</span>
-        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--amb)">Medium Priority</span>
-      </div>
-      <div class="rec-title">Increase paid search budget ahead of peak leasing season</div>
-    </div>
-    <div class="rec-body">
-      <div class="rec-body-text">Your market subscore of 78 shows strong competitive positioning, but paid search impression share dropped 14% as two competing properties increased spend. Kierland is entering peak leasing season (April–June). Moving to the Better tier adds retargeting audiences and weekly bid optimization projected to recover impression share.</div>
-      <div class="rec-action-box"><span class="rec-action-box-label">What happens when you approve</span>Your AM will create a budget change request and a new deal will be opened for your review</div>
-      <div class="rec-btns">
-        <button class="btn-approve-go" onclick="approveRec(2,'budget_change','paid_search','better','rec-2','rec-confirm-2')">
-          Approve &amp; Configure →
-        </button>
-        <button class="btn-dismiss" onclick="dismissRec('rec-2','rec-confirm-2')">Dismiss</button>
-      </div>
-      <div class="rec-confirm ok" id="rec-confirm-2"></div>
-    </div>
-  </div>
-
-  <!-- Questions from AM to Client -->
-  <div class="callprep-section-hdr" style="margin-top:32px">
-    <div>
-      <div class="callprep-section-title">Your AM Needs Answers</div>
-      <div class="callprep-section-sub">Have these ready before your call · check off as you go</div>
-    </div>
-  </div>
-  <div class="question-list" id="question-list">
-    <div class="question-item" id="q-1">
-      <div class="question-num">1</div>
-      <div style="flex:1">
-        <div class="question-text">Are you open to increasing the paid search budget for April–June to protect impression share during peak leasing season? We need a decision before the next billing cycle.</div>
-        <div class="question-answer-area" id="qa-1">
-          <textarea placeholder="Type the client's answer here during the call…" id="qa-text-1"></textarea>
-          <div class="question-answer-saved" id="qa-saved-1">✓ Answer saved</div>
-        </div>
-        <div class="question-btns">
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px" onclick="toggleAnswer('1',this)">+ Add Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;display:none" id="qa-save-1" onclick="saveAnswer('1')">Save Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;color:var(--sage);display:none" id="qa-done-1" onclick="markAnswered('q-1',this)">✓ Mark Complete</button>
-        </div>
-      </div>
-    </div>
-    <div class="question-item" id="q-2">
-      <div class="question-num">2</div>
-      <div style="flex:1">
-        <div class="question-text">We're seeing strong lead and tour volume from campaigns, but lease conversion is running below expected. From your perspective on the ground, what do you think is happening between tour and signed lease?</div>
-        <div class="question-answer-area" id="qa-2">
-          <textarea placeholder="Type the client's answer here during the call…" id="qa-text-2"></textarea>
-          <div class="question-answer-saved" id="qa-saved-2">✓ Answer saved</div>
-        </div>
-        <div class="question-btns">
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px" onclick="toggleAnswer('2',this)">+ Add Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;display:none" id="qa-save-2" onclick="saveAnswer('2')">Save Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;color:var(--sage);display:none" id="qa-done-2" onclick="markAnswered('q-2',this)">✓ Mark Complete</button>
-        </div>
-      </div>
-    </div>
-    <div class="question-item" id="q-3">
-      <div class="question-num">3</div>
-      <div style="flex:1">
-        <div class="question-text">The spring leasing campaign creative is ready for review — we have 3 ad concepts with headline copy and imagery for Paid Search and Meta. Can you review and approve by Friday so Tom K. can launch before April 1st?</div>
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-          <a href="#" style="font-size:11px;font-weight:700;color:var(--cu);text-decoration:none" onclick="return false">View Creative Concepts →</a>
-          <span style="font-size:10px;color:var(--tm)">3 items pending your approval</span>
-        </div>
-        <div class="question-answer-area" id="qa-3">
-          <textarea placeholder="Type the client's answer here during the call…" id="qa-text-3"></textarea>
-          <div class="question-answer-saved" id="qa-saved-3">✓ Answer saved</div>
-        </div>
-        <div class="question-btns">
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px" onclick="toggleAnswer('3',this)">+ Add Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;display:none" id="qa-save-3" onclick="saveAnswer('3')">Save Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;color:var(--sage);display:none" id="qa-done-3" onclick="markAnswered('q-3',this)">✓ Mark Complete</button>
-        </div>
-      </div>
-    </div>
-    <div class="question-item" id="q-4">
-      <div class="question-num">4</div>
-      <div style="flex:1">
-        <div class="question-text">Your rent pricing is running above comparable properties in the Scottsdale submarket. Can you walk us through the value story — finishes, amenities, location advantages — so we can better build that into ad copy and campaign positioning?</div>
-        <div class="question-answer-area" id="qa-4">
-          <textarea placeholder="Type the client's answer here during the call…" id="qa-text-4"></textarea>
-          <div class="question-answer-saved" id="qa-saved-4">✓ Answer saved</div>
-        </div>
-        <div class="question-btns">
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px" onclick="toggleAnswer('4',this)">+ Add Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;display:none" id="qa-save-4" onclick="saveAnswer('4')">Save Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;color:var(--sage);display:none" id="qa-done-4" onclick="markAnswered('q-4',this)">✓ Mark Complete</button>
-        </div>
-      </div>
-    </div>
-    <div class="question-item" id="q-5">
-      <div class="question-num">5</div>
-      <div style="flex:1">
-        <div class="question-text">Are there any upcoming events, renovations, or property changes we should know about? New amenities, common area updates, or community events are great campaign hooks we can build content around.</div>
-        <div class="question-answer-area" id="qa-5">
-          <textarea placeholder="Type the client's answer here during the call…" id="qa-text-5"></textarea>
-          <div class="question-answer-saved" id="qa-saved-5">✓ Answer saved</div>
-        </div>
-        <div class="question-btns">
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px" onclick="toggleAnswer('5',this)">+ Add Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;display:none" id="qa-save-5" onclick="saveAnswer('5')">Save Answer</button>
-          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;color:var(--sage);display:none" id="qa-done-5" onclick="markAnswered('q-5',this)">✓ Mark Complete</button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="question-add">
-    <input type="text" id="new-question-input" placeholder="Add a question from your AM…" onkeydown="if(event.key==='Enter')addQuestion()">
-    <button onclick="addQuestion()">+ Add</button>
-  </div>
-
-  <!-- Submit to HubSpot -->
-  <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;gap:16px">
-    <div style="font-size:12px;color:var(--tm)">Answered questions will be saved as an activity note on your company record in HubSpot — visible to your AM.</div>
-    <button class="btn btn-primary" id="save-notes-btn" onclick="submitCallNotes()" style="flex-shrink:0">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      Save Call Notes to HubSpot
-    </button>
-  </div>
-  <div id="save-notes-confirm" style="display:none;margin-top:12px;padding:12px 16px;background:#E0F2FE;border-radius:8px;font-size:13px;font-weight:600;color:#0369A1">
-    ✓ Call notes saved to your HubSpot company record. Your AM can see them now.
-  </div>
-</section>
+  </section>
 
 <!-- ── ASSETS ── -->
 <section id="section-assets" class="section">
@@ -2523,6 +2363,50 @@ function nav(id, el) {
   if (id === 'performance') { loadPerformance(); }
   if (id === 'activity')    { loadActivity(); }
   if (id === 'assets')      { loadAssets(); }
+  if (id === 'recommendations') { loadCallPrep(); }
+}
+
+// ── Call Prep — live recommendations from /api/loop/recommendations ──────────
+var _callprepLoadedFor = null;
+function _cpEmpty(msg) {
+  return '<div style="padding:24px;text-align:center;color:var(--tm);font-size:12px">' + msg + '</div>';
+}
+function _recCard(r) {
+  var title = (r.action === 'shift_budget')
+    ? 'Shift $' + Number(r.amount || 0).toLocaleString() + ' from ' + (r.from_channel || '') + ' to ' + (r.to_channel || '')
+    : String(r.action || 'Recommendation').replace(/_/g, ' ');
+  var impact = (r.forecast_impact != null)
+    ? '<div class="rec-action-box"><span class="rec-action-box-label">Projected impact</span>' + r.forecast_impact + ' leases / 30d</div>'
+    : '';
+  return '<div class="rec-card"><div class="rec-card-head"><div class="rec-meta">' +
+    '<span class="badge badge-purple">' + String(r.action || '').replace(/_/g, ' ') + '</span></div>' +
+    '<div class="rec-title">' + title + '</div></div>' +
+    '<div class="rec-body"><div class="rec-body-text">' + (r.reason || r.rationale || '') + '</div>' + impact + '</div></div>';
+}
+function loadCallPrep() {
+  var list = document.getElementById('recs-list');
+  if (!list) return;
+  // Digest narrative + AM questions are not yet backend-generated — honest empty.
+  ['cp-changed','cp-working','cp-handling'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.textContent = 'Not yet available — will be generated from the Red Light report.';
+  });
+  var badge = document.getElementById('recs-badge');
+  var uuid = window.__PORTAL_UUID__ || '';
+  if (!uuid) { list.innerHTML = _cpEmpty('Select a property to see its recommendations.'); if (badge) badge.style.display = 'none'; return; }
+  if (_callprepLoadedFor === uuid) return;
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var email = window.__PORTAL_EMAIL__ || 'demo@rpmliving.com';
+  list.innerHTML = _cpEmpty('Loading recommendations…');
+  fetch(API_BASE + '/api/loop/recommendations?uuid=' + encodeURIComponent(uuid), { headers: { 'X-Portal-Email': email } })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      _callprepLoadedFor = uuid;
+      var recs = (d && d.recommendations) || [];
+      if (badge) { if (recs.length) { badge.textContent = recs.length; badge.style.display = ''; } else { badge.style.display = 'none'; } }
+      list.innerHTML = recs.length ? recs.map(_recCard).join('') : _cpEmpty('No open recommendations for this property right now.');
+    })
+    .catch(function(){ list.innerHTML = _cpEmpty('Recommendations unavailable right now.'); });
 }
 
 // ── Asset Library — live from /api/property-assets ──────────────────────────
@@ -3890,7 +3774,7 @@ function openProperty(cid, uuid, name, market) {
   window.__PORTAL_MARKET       = market || '';
   // Reset per-property section guards so the new property loads fresh.
   _overviewLoaded = false; _briefLoaded = false; _budgetLoaded = false;
-  _perfLoaded = false; _activityLoaded = false;
+  _perfLoaded = false; _activityLoaded = false; _callprepLoadedFor = null; _assetsLoadedFor = null;
   ['sb-prop-name','pnb-prop-name','sb-property'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.textContent = name || '';
   });
