@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Red Light — Dashboard Design Shotgun (walk-before-run)</title>
+<style>
+  /* Tokens from the dataviz reference palette (status = fixed, never themed) */
+  :root{
+    --surface:#fcfcfb; --plane:#f9f9f7; --card:#ffffff;
+    --ink:#0b0b0b; --ink2:#52514e; --mut:#898781; --grid:#e1e0d9; --base:#c3c2b7;
+    --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+    --up-good:#006300; --down-bad:#d03b3b;
+    --f1:#86b6ef; --f2:#5598e7; --f3:#2a78d6; --f4:#184f95;   /* ordinal blue (validated) */
+    --bd:rgba(11,11,11,.10);
+    --slate:#3D474F; --cu:#C8964E;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --surface:#1a1a19; --plane:#0d0d0d; --card:#1f1f1e;
+      --ink:#fff; --ink2:#c3c2b7; --mut:#898781; --grid:#2c2c2a; --base:#383835;
+      --up-good:#0ca30c; --bd:rgba(255,255,255,.10);
+      --f1:#184f95; --f2:#2a78d6; --f3:#5598e7; --f4:#86b6ef; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--plane);color:var(--ink);
+    font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+  .page{max-width:1180px;margin:0 auto;padding:24px 24px 90px}
+  header.top{border-bottom:3px solid var(--cu);padding-bottom:14px;margin-bottom:8px}
+  header.top .brand{font-size:12px;font-weight:800;letter-spacing:.5px;color:var(--slate)}
+  header.top .brand span{color:var(--cu)}
+  header.top h1{margin:6px 0 2px;font-size:22px}
+  header.top p{margin:0;color:var(--ink2);font-size:13px;max-width:70ch}
+  .lay{background:var(--surface);border:1px solid var(--bd);border-radius:14px;
+    padding:20px 22px 24px;margin:26px 0;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .lay > .tag{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--cu);margin-bottom:2px}
+  .lay > .tag .aud{color:var(--mut);font-weight:600}
+  .lay > h2{margin:2px 0 16px;font-size:19px}
+  .tabular{font-variant-numeric:tabular-nums}
+  .mut{color:var(--mut)} .ink2{color:var(--ink2)}
+  /* status pill: color + dot + LABEL (never color alone) */
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+    padding:2px 8px;border-radius:999px;line-height:1.6}
+  .pill .dot{width:7px;height:7px;border-radius:50%}
+  .s-good{background:rgba(12,163,12,.12);color:#0a7d0a} .s-good .dot{background:var(--good)}
+  .s-warn{background:rgba(250,178,25,.16);color:#8a5a12} .s-warn .dot{background:var(--warn)}
+  .s-crit{background:rgba(208,59,59,.12);color:#a52d2d} .s-crit .dot{background:var(--crit)}
+  .s-watch{background:rgba(137,135,129,.14);color:#5b5954} .s-watch .dot{background:var(--mut)}
+  .delta{font-size:12px;font-weight:700;white-space:nowrap}
+  /* stat tile */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .tile{border:1px solid var(--grid);border-radius:10px;padding:12px 14px;background:var(--card)}
+  .tile .lab{font-size:11px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+  .tile .val{font-size:26px;font-weight:800;margin:2px 0}
+  .tile .sub{font-size:11px;color:var(--ink2);display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .bucket{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--slate);
+    margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--grid)}
+  .cols{display:grid;gap:22px}
+  .cols.two{grid-template-columns:1fr 1fr}
+  .cols.wide{grid-template-columns:1.2fr .8fr}
+  h4.sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);margin:0 0 10px}
+  /* bullet row */
+  .brow{display:grid;grid-template-columns:118px 1fr 66px;gap:10px;align-items:center;margin:9px 0}
+  .brow .nm{font-size:12px;color:var(--ink2)}
+  .track{position:relative;height:16px;border-radius:4px;overflow:hidden;background:#f4f5f6}
+  .track .band{position:absolute;top:0;bottom:0}
+  .track .val{position:absolute;top:5px;height:6px;border-radius:3px;background:var(--slate)}
+  .track .tick{position:absolute;top:0;bottom:0;width:2px;background:var(--ink)}
+  .brow .rt{text-align:right;font-weight:700}
+  .callout{border:1px solid var(--grid);border-left:3px solid var(--cu);border-radius:8px;
+    background:var(--card);padding:12px 14px;font-size:13px;color:var(--ink2);margin-top:12px}
+  .callout b{color:var(--ink)}
+  .strip{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{border:1px solid var(--grid);border-radius:9px;padding:8px 12px;min-width:120px;background:var(--card)}
+  .chip .cl{font-size:10px;color:var(--mut);font-weight:700;text-transform:uppercase}
+  .chip .cv{font-size:17px;font-weight:800}
+  .funnel-stage{display:flex;align-items:center;gap:12px;margin:6px 0}
+  .funnel-bar{height:34px;border-radius:5px;display:flex;align-items:center;padding:0 12px;color:#fff;font-weight:700;font-size:13px}
+  .legend{display:flex;gap:14px;font-size:11px;color:var(--ink2);margin-top:10px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+  .hero{display:flex;gap:18px;align-items:stretch;flex-wrap:wrap}
+  .hero .big{flex:0 0 auto;border-radius:12px;padding:16px 20px;color:#fff;min-width:200px;display:flex;flex-direction:column;justify-content:center}
+  .foot{color:var(--mut);font-size:11px;margin-top:14px;border-top:1px solid var(--grid);padding-top:10px}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <div class="brand">RPM LIVING <span>DIGITAL PRODUCTS &amp; SERVICES</span></div>
+    <h1>Red Light — Dashboard Design Shotgun</h1>
+    <p>Five full dashboard layouts, one property, the walk-before-run metric set. Built to be a
+       <b>conversation starter</b> — surface the gap, explain what's driving it, frame the choice. Edit
+       the <code>DATA</code> object at the bottom and everything re-renders.</p>
+  </header>
+  <div id="views"></div>
+  <div class="foot" id="method"></div>
+</div>
+
+<script>
+/* ─────────────── DATA (one property, walk metrics) ─────────────── */
+const DATA = {
+  property:{ name:"The Park at Valenza", loc:"Tampa, FL", units:776, month:"Mar 2026" },
+  months:["Oct","Nov","Dec","Jan","Feb","Mar"],
+  // Market — reported as TREND (no submarket benchmark in the walk version)
+  occupancy:{ v:69.46, hist:[78.0,76.1,74.7,72.7,71.0,69.5], higherBetter:true },
+  atr:      { v:29.51, hist:[18.0,20.2,22.9,25.0,27.4,29.5], higherBetter:false },
+  // Marketing / volume — context
+  leads:    { v:398,  hist:[300,325,352,368,384,398] },
+  costPerLease:{ v:755, portfolioAvg:560, hist:[590,610,650,690,720,755], higherBetter:false },
+  // Leasing funnel — SCORED against approved thresholds
+  lultl:        { v:2.1, hist:[6.0,5.1,4.2,3.3,2.6,2.1] },   // leftover units left to lease (avg)
+  leadToProspect:{ v:90, green:60, yellow:50, higherBetter:true },
+  prospectToTour:{ v:20, green:35, yellow:25, higherBetter:true },
+  // portfolio comparators for context tiles
+  portfolio:{ occupancy:88.4, atr:12.1, leadToProspect:63, prospectToTour:34, costPerLease:560 },
+};
+
+/* ─────────────── helpers ─────────────── */
+const q=s=>document.createElement('div');
+const fmtPct=v=>v==null?"—":v.toFixed(1)+"%";
+const money=v=>v==null?"—":"$"+Math.round(v).toLocaleString();
+const num=v=>v==null?"—":Math.round(v).toLocaleString();
+
+// scored status for the two approved-threshold funnel metrics
+function scored(m){ const {v,green,yellow}=m;
+  if(v>=green) return {k:'good',label:'On target'};
+  if(v>=yellow) return {k:'warn',label:'Below target'};
+  return {k:'crit',label:'Needs attention'}; }
+function pill(k,label){ const cls={good:'s-good',warn:'s-warn',crit:'s-crit',watch:'s-watch'}[k];
+  return `<span class="pill ${cls}"><span class="dot"></span>${label}</span>`; }
+
+// trend delta over the series; sentiment from direction + higherBetter
+function trend(m){ const h=m.hist; if(!h||h.length<2) return {arrow:'–',txt:'',good:null};
+  const d=+(h[h.length-1]-h[0]).toFixed(1), up=d>0;
+  const good = m.higherBetter==null ? null : (up===!!m.higherBetter);
+  return {arrow: Math.abs(d)<0.05?'→':(up?'▲':'▼'), txt:(d>0?'+':'')+d, good, delta:d}; }
+function deltaSpan(m,suffix){ const t=trend(m); if(t.good==null && !t.txt) return '';
+  const col = t.good==null?'var(--mut)':(t.good?'var(--up-good)':'var(--down-bad)');
+  return `<span class="delta" style="color:${col}">${t.arrow} ${t.txt}${suffix||''}</span>`; }
+
+// sparkline: 2px line, 8px end dot, recessive; sentiment-tinted
+function spark(m,w=120,h=30){ const h0=m.hist; if(!h0) return '';
+  const mn=Math.min(...h0),mx=Math.max(...h0),rng=(mx-mn)||1;
+  const pts=h0.map((v,i)=>`${(i/(h0.length-1)*w).toFixed(1)},${(h-(v-mn)/rng*h).toFixed(1)}`).join(' ');
+  const t=trend(m), col=t.good==null?'var(--ink2)':(t.good?'var(--good)':'var(--crit)');
+  const [lx,ly]=pts.split(' ').pop().split(',');
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">`+
+    `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`+
+    `<circle cx="${lx}" cy="${ly}" r="4" fill="${col}"/></svg>`; }
+
+// bullet: value vs green/yellow/red bands + target tick (higher- or lower-better)
+function bullet(m,unit){ const max=Math.max(m.v,m.green,m.yellow)*1.25, p=v=>Math.min(100,v/max*100);
+  const bands = m.higherBetter
+    ? `<div class="band" style="left:0;width:${p(m.yellow)}%;background:rgba(208,59,59,.14)"></div>`+
+      `<div class="band" style="left:${p(m.yellow)}%;width:${p(m.green)-p(m.yellow)}%;background:rgba(250,178,25,.16)"></div>`+
+      `<div class="band" style="left:${p(m.green)}%;right:0;background:rgba(12,163,12,.14)"></div>`
+    : `<div class="band" style="left:0;width:${p(m.green)}%;background:rgba(12,163,12,.14)"></div>`+
+      `<div class="band" style="left:${p(m.green)}%;width:${p(m.yellow)-p(m.green)}%;background:rgba(250,178,25,.16)"></div>`+
+      `<div class="band" style="left:${p(m.yellow)}%;right:0;background:rgba(208,59,59,.14)"></div>`;
+  const st=scored(m);
+  return `<div class="track" title="${m.v}${unit} — target ${m.green}${unit}">${bands}`+
+    `<div class="val" style="width:${p(m.v)}%;background:var(--${st.k==='good'?'good':st.k==='warn'?'warn':'crit'})"></div>`+
+    `<div class="tick" style="left:${p(m.green)}%"></div></div>`; }
+
+/* ─────────────── overall property status (from scored funnel metrics) ─────────────── */
+const _sev={good:0,warn:1,crit:2};
+function overall(){ const a=scored(DATA.leadToProspect),b=scored(DATA.prospectToTour);
+  const worst=_sev[a.k]>=_sev[b.k]?a:b;
+  const map={good:{k:'good',t:'On Track'},warn:{k:'warn',t:'Watch'},crit:{k:'crit',t:'Needs Attention'}};
+  return map[worst.k]; }
+const OA=overall(), OACOL={good:'var(--good)',warn:'var(--warn)',crit:'var(--crit)'}[OA.k];
+
+/* ═══════════════ LAYOUT A — Scorecard (AM default) ═══════════════ */
+function layoutA(){ const D=DATA;
+  const tile=(lab,val,extra,spk)=>`<div class="tile"><div class="lab">${lab}</div>`+
+    `<div class="val tabular">${val}</div><div class="sub">${extra||''}${spk?`<span>${spk}</span>`:''}</div></div>`;
+  const market = tile('Occupancy',fmtPct(D.occupancy.v),deltaSpan(D.occupancy,'pt'),spark(D.occupancy))
+    + tile('ATR %',fmtPct(D.atr.v),deltaSpan(D.atr,'pt'),spark(D.atr));
+  const mktg = tile('Leads',num(D.leads.v),deltaSpan({...D.leads,higherBetter:true}),spark({...D.leads,higherBetter:true}))
+    + tile('Cost / Lease',money(D.costPerLease.v),`<span class="mut">portf ${money(D.portfolio.costPerLease)}</span>`,spark(D.costPerLease));
+  const lease = tile('Lead → Prospect',fmtPct(D.leadToProspect.v),pill('good',scored(D.leadToProspect).label))
+    + tile('Prospect → Tour',fmtPct(D.prospectToTour.v),pill('crit',scored(D.prospectToTour).label))
+    + tile('Units Left to Lease',D.lultl.v.toFixed(1),`<span class="mut">avg (LULTL)</span>`,spark({...D.lultl,higherBetter:false}));
+  return section('A','AM default · the monthly diagnostic','Scorecard — every metric, grouped, scannable',
+    `<div class="bucket">Market · trend</div><div class="tiles">${market}</div>`+
+    `<div class="bucket">Marketing · volume &amp; efficiency</div><div class="tiles">${mktg}</div>`+
+    `<div class="bucket">Leasing funnel · scored</div><div class="tiles">${lease}</div>`+
+    `<div class="callout"><b>Read:</b> demand is strong (leads climbing, 90% lead→prospect) but only 20% of prospects tour —
+      the leak is <b>after</b> the lead, not before it. Occupancy is sliding as that leak compounds.</div>`); }
+
+/* ═══════════════ LAYOUT B — Funnel narrative + market context ═══════════════ */
+function layoutB(){ const D=DATA;
+  const leads=D.leads.v, prospects=Math.round(leads*D.leadToProspect.v/100), tours=Math.round(prospects*D.prospectToTour.v/100),
+        apps=Math.round(tours*0.28);
+  const stages=[['Leads',leads,null,'--f1'],['Prospects',prospects,D.leadToProspect.v,'--f2'],
+    ['Tours',tours,D.prospectToTour.v,'--f3'],['Applications',apps,28,'--f4']];
+  const top=leads;
+  const funnel=stages.map(([lab,v,conv,c])=>{
+    const w=Math.max(14,v/top*100);
+    return `<div class="funnel-stage"><div class="funnel-bar" style="width:${w}%;background:var(${c})">${lab} · ${num(v)}</div>`+
+      (conv!=null?`<span class="delta ink2">${conv}%${conv<25&&lab==='Tours'?' ⚠':''}</span>`:'')+`</div>`;}).join('');
+  const ctx = `<div class="chip"><div class="cl">Occupancy</div><div class="cv tabular">${fmtPct(D.occupancy.v)}</div>${spark(D.occupancy,110,26)} ${deltaSpan(D.occupancy,'pt')}</div>`+
+    `<div class="chip"><div class="cl">ATR %</div><div class="cv tabular">${fmtPct(D.atr.v)}</div>${spark(D.atr,110,26)} ${deltaSpan(D.atr,'pt')}</div>`+
+    `<div class="chip"><div class="cl">Cost / Lease</div><div class="cv tabular">${money(D.costPerLease.v)}</div><span class="mut" style="font-size:11px">vs ${money(D.portfolio.costPerLease)} portfolio</span></div>`;
+  return section('B','Narrative · the leasing story','Funnel-first — where the demand falls out',
+    `<div class="cols wide"><div><h4 class="sec">Leasing funnel (this month)</h4>${funnel}
+        <div class="legend"><span>Conversion shown at each step · target Prospect→Tour ≥ 35%</span></div></div>
+      <div><h4 class="sec">Market context</h4><div class="strip" style="flex-direction:column">${ctx}</div></div></div>`+
+    `<div class="callout"><b>The story in one line:</b> 398 leads → 358 prospects → only <b>72 tours</b>.
+      You're paying to fill the top of the funnel; the value is leaking at the tour step (20% vs 35% target).</div>`); }
+
+/* ═══════════════ LAYOUT C — Owner: where we are / where we're going ═══════════════ */
+function layoutC(){ const D=DATA;
+  const now = `<div class="hero"><div class="big" style="background:${OACOL}">
+      <div style="font-size:12px;opacity:.85">${D.property.name} · ${D.property.units} units</div>
+      <div style="font-size:15px;font-weight:800">${OA.t}</div>
+      <div style="font-size:34px;font-weight:800;line-height:1.1">${fmtPct(D.occupancy.v)}</div>
+      <div style="font-size:12px;opacity:.9">occupancy · ${deltaHtml(D.occupancy,'pt')} in 90 days</div></div>
+    <div style="flex:1;min-width:220px">
+      ${miniRow('Available to rent (ATR)',fmtPct(D.atr.v),deltaSpan(D.atr,'pt'))}
+      ${miniRow('Leads this month',num(D.leads.v),deltaSpan({...D.leads,higherBetter:true}))}
+      ${miniRow('Lead → Prospect',fmtPct(D.leadToProspect.v),pill('good','strong'))}
+      ${miniRow('Prospect → Tour',fmtPct(D.prospectToTour.v),pill('crit','weak'))}
+    </div></div>`;
+  const going = `<h4 class="sec">Where you're going — 6-month trajectory</h4>
+    <div class="cols two">
+      ${trajCard('Occupancy',D.occupancy,'%','Sliding ~1.7 pts/mo. On this path, ≈ 66% by summer without a change.')}
+      ${trajCard('ATR %',D.atr,'%','Exposure climbing — more units hitting market than are being absorbed.')}
+    </div>`;
+  return section('C','Owner · plain-language','Where we are / where we\'re going',
+    `<h4 class="sec">Where you are — today</h4>${now}<div style="height:16px"></div>${going}`+
+    `<div class="callout"><b>Options, not prescriptions:</b> the funnel says demand exists — the question is whether to
+      invest in tour conversion (onsite + tour experience) before the occupancy slide accelerates. No action → trajectory above.</div>`); }
+function deltaHtml(m,s){const t=trend(m);const c=t.good?'#dfffe0':'#ffe0e0';return `<b style="color:${c}">${t.arrow} ${t.txt}${s}</b>`;}
+function miniRow(lab,val,right){return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--grid)">
+  <span class="ink2" style="font-size:13px">${lab}</span><span class="tabular" style="font-weight:800;font-size:16px">${val} <span style="font-weight:400">${right}</span></span></div>`;}
+function trajCard(name,m,unit,note){return `<div class="tile"><div class="lab">${name} · 6 mo</div>
+  <div style="margin:6px 0">${spark(m,240,54)}</div>
+  <div class="sub"><span class="tabular" style="font-size:20px;font-weight:800">${m.v.toFixed(1)}${unit}</span>${deltaSpan(m,unit==='%'?'pt':'')}</div>
+  <div class="mut" style="font-size:11px;margin-top:6px">${note}</div></div>`;}
+
+/* ═══════════════ LAYOUT D — Benchmark bullets (data-support) ═══════════════ */
+function layoutD(){ const D=DATA;
+  const brow=(nm,m,unit)=>`<div class="brow"><div class="nm">${nm}</div>${bullet(m,unit)}
+    <div class="rt tabular" style="color:var(--${scored(m).k==='good'?'good':scored(m).k==='warn'?'warn':'crit'})">${m.v}${unit}</div></div>`;
+  const trow=(nm,m,unit)=>`<div class="brow"><div class="nm">${nm}</div>
+    <div style="display:flex;align-items:center;gap:10px">${spark(m,150,26)} ${deltaSpan(m,unit==='%'?'pt':'')} <span class="pill s-watch"><span class="dot"></span>trend only</span></div>
+    <div class="rt tabular">${m.v}${unit}</div></div>`;
+  return section('D','Prop marketing · replaces the spreadsheet','Benchmark bullets — value vs green/yellow/red',
+    `<h4 class="sec">Scored against approved thresholds</h4>
+     ${brow('Lead → Prospect',D.leadToProspect,'%')}
+     ${brow('Prospect → Tour',D.prospectToTour,'%')}
+     <h4 class="sec" style="margin-top:16px">Reported as trend (no submarket benchmark yet)</h4>
+     ${trow('Occupancy',D.occupancy,'%')}
+     ${trow('ATR %',D.atr,'%')}
+     ${trow('Leads',{...D.leads,higherBetter:true},'')}
+     ${trow('Cost / Lease',D.costPerLease,'')}
+     <div class="legend"><span><i style="background:var(--good)"></i>Green</span>
+       <span><i style="background:var(--warn)"></i>Yellow</span>
+       <span><i style="background:var(--crit)"></i>Red</span><span>▏ = target · bars scaled per-metric</span></div>`); }
+
+/* ═══════════════ LAYOUT E — Exec strip + one action ═══════════════ */
+function layoutE(){ const D=DATA;
+  const chip=(lab,val,statusK,statusLabel)=>`<div class="chip"><div class="cl">${lab}</div>
+    <div class="cv tabular">${val}</div><div style="margin-top:3px">${pill(statusK,statusLabel)}</div></div>`;
+  const strip = chip('Occupancy',fmtPct(D.occupancy.v),'watch','▼ sliding')
+    + chip('ATR %',fmtPct(D.atr.v),'watch','▲ rising')
+    + chip('Leads',num(D.leads.v),'watch','▲ growing')
+    + chip('Lead → Prospect',fmtPct(D.leadToProspect.v),'good','On target')
+    + chip('Prospect → Tour',fmtPct(D.prospectToTour.v),'crit','Needs attention')
+    + chip('Cost / Lease',money(D.costPerLease.v),'watch','above portfolio');
+  return section('E','Exec · one-glance headline','Traffic-light strip + the one thing to do',
+    `<div class="hero" style="margin-bottom:14px"><div class="big" style="background:${OACOL};min-width:170px">
+        <div style="font-size:13px;opacity:.85">${D.property.name}</div>
+        <div style="font-size:26px;font-weight:800">${OA.t}</div>
+        <div style="font-size:12px;opacity:.9">${D.property.units} units · ${D.property.month}</div></div>
+      <div style="flex:1;min-width:300px"><h4 class="sec">The whole story, six numbers</h4><div class="strip">${strip}</div></div></div>`+
+    `<div class="callout"><b>What's driving it:</b> strong top-of-funnel, weak tour conversion (20% vs 35%).
+      <b>The one move:</b> fix tour conversion (self-guided touring + faster tour-request response) —
+      <b>projected:</b> +15 tours/mo at current lead volume. <b>If nothing changes:</b> occupancy ≈ 66% by summer.
+      <span class="mut">Digital can drive traffic; this leak is onsite — flagged for the AM.</span></div>`); }
+
+/* ─────────────── frame ─────────────── */
+function section(letter,aud,title,body){
+  return `<section class="lay"><span class="tag">Layout ${letter} · <span class="aud">${aud}</span></span>
+    <h2>${title}</h2>${body}</section>`; }
+
+document.getElementById('views').innerHTML = [layoutA(),layoutB(),layoutC(),layoutD(),layoutE()].join('');
+document.getElementById('method').innerHTML =
+  `Design system: dataviz status palette (good/warning/critical — fixed, always with a dot + label, never color alone) ·
+   funnel = validated ordinal blue · trends = 2px sparklines with sentiment tint + arrow-and-number deltas · one axis, no dual scales ·
+   text stays in ink tokens. Honest by construction: only the two approved-threshold funnel metrics are scored red/yellow/green;
+   occupancy/ATR are shown as <b>trend</b>, leads/cost as <b>context vs portfolio</b>.`;
+</script>
+</body>
+</html>
