@@ -1163,8 +1163,8 @@ select.brief-input{height:34px;cursor:pointer}
         <div class="tier-card"><div class="tier-n">Local</div><div class="tier-p">$100<span>/mo</span></div><div class="tier-d">Directory sync, citation building, monthly reporting</div></div>
         <div class="tier-card"><div class="tier-n">Lite</div><div class="tier-p">$300<span>/mo</span></div><div class="tier-d">Local SEO + off-page authority building</div></div>
         <div class="tier-card"><div class="tier-n">Basic</div><div class="tier-p">$500<span>/mo</span></div><div class="tier-d">Full local program + content calendar</div></div>
-        <div class="tier-card current-tier selected" onclick="selectTier(this,'seo')"><div class="tier-n">Standard</div><div class="tier-p">$800<span>/mo</span></div><div class="tier-d">Standard + competitor gap analysis <em>(current)</em></div></div>
-        <div class="tier-card recommended-tier" onclick="selectTier(this,'seo')"><div class="tier-n">Premium</div><div class="tier-p">$1,300<span>/mo</span></div><div class="tier-d">Full keyword program, ILS integration, local pin strategy</div><div class="tier-why">Your current standard tier doesn't include ILS schema sync. Competitors in Scottsdale ranking above you on Apartments.com are on Premium.</div></div>
+        <div class="tier-card" onclick="selectTier(this,'seo')"><div class="tier-n">Standard</div><div class="tier-p">$800<span>/mo</span></div><div class="tier-d">Standard + competitor gap analysis</div></div>
+        <div class="tier-card" onclick="selectTier(this,'seo')"><div class="tier-n">Premium</div><div class="tier-p">$1,300<span>/mo</span></div><div class="tier-d">Full keyword program, ILS integration, local pin strategy</div></div>
       </div>
     </div>
 
@@ -1178,7 +1178,7 @@ select.brief-input{height:34px;cursor:pointer}
       <div class="tier-cards">
         <div class="tier-card" onclick="selectTier(this,'social')"><div class="tier-n">Basic</div><div class="tier-p">$300<span>/mo</span></div><div class="tier-d">8 posts/mo, 2 platforms, community management</div></div>
         <div class="tier-card" onclick="selectTier(this,'social')"><div class="tier-n">Standard</div><div class="tier-p">$450<span>/mo</span></div><div class="tier-d">12 posts/mo, 3 platforms, story content</div></div>
-        <div class="tier-card current-tier selected" onclick="selectTier(this,'social')"><div class="tier-n">Premium</div><div class="tier-p">$700<span>/mo</span></div><div class="tier-d">20 posts/mo, video reels, paid boost credits <em>(current)</em></div></div>
+        <div class="tier-card" onclick="selectTier(this,'social')"><div class="tier-n">Premium</div><div class="tier-p">$700<span>/mo</span></div><div class="tier-d">20 posts/mo, video reels, paid boost credits</div></div>
       </div>
     </div>
 
@@ -1188,11 +1188,11 @@ select.brief-input{height:34px;cursor:pointer}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#991B1B" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
         <div class="channel-name">Reputation</div>
         <span class="badge badge-gray" style="margin-left:8px">Current: Response Only</span>
-        <div class="channel-hint" style="color:var(--amb)">⚠ Upgrade recommended</div>
+        <div class="channel-hint">Select a tier to upgrade or change</div>
       </div>
       <div class="tier-cards">
-        <div class="tier-card current-tier selected" id="rep-good" onclick="selectTier(this,'reputation')"><div class="tier-n">Response Only</div><div class="tier-p">$190<span>/mo</span></div><div class="tier-d">Professional responses within 48h <em>(current)</em></div></div>
-        <div class="tier-card recommended-tier" id="rep-better" onclick="selectTier(this,'reputation')"><div class="tier-n">Response + Removal</div><div class="tier-p">$255<span>/mo</span></div><div class="tier-d">24h responses + fraudulent review disputes</div><div class="tier-why">23 unresponded reviews are actively pulling your Experience score down. Response + Removal closes that gap within one billing cycle.</div></div>
+        <div class="tier-card" id="rep-good" onclick="selectTier(this,'reputation')"><div class="tier-n">Response Only</div><div class="tier-p">$190<span>/mo</span></div><div class="tier-d">Professional responses within 48h</div></div>
+        <div class="tier-card" id="rep-better" onclick="selectTier(this,'reputation')"><div class="tier-n">Response + Removal</div><div class="tier-p">$255<span>/mo</span></div><div class="tier-d">24h responses + fraudulent review disputes</div></div>
         <div class="tier-card" id="rep-best" onclick="selectTier(this,'reputation')"><div class="tier-n">Full Management</div><div class="tier-p">$400<span>/mo</span></div><div class="tier-d">Response + removal + proactive review generation</div></div>
       </div>
     </div>
@@ -1203,7 +1203,7 @@ select.brief-input{height:34px;cursor:pointer}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8964E" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/></svg>
         <div class="channel-name">Paid Search</div>
         <span class="badge badge-copper" style="margin-left:8px">Active</span>
-        <div class="channel-hint" id="ps-hint">⚠ Upgrade recommended — peak leasing season</div>
+        <div class="channel-hint" id="ps-hint">Select a tier to upgrade or change</div>
       </div>
       <div class="tier-cards" style="grid-template-columns:repeat(4,1fr)">
         <div class="tier-card" id="ps-good" onclick="selectTier(this,'paid_search')">
@@ -1212,12 +1212,12 @@ select.brief-input{height:34px;cursor:pointer}
           <div class="tier-spend">$1,000<span>/mo ad spend</span></div>
           <div class="tier-d">Branded + conquest campaigns</div>
         </div>
-        <div class="tier-card recommended-tier" id="ps-better" onclick="selectTier(this,'paid_search')">
+        <div class="tier-card" id="ps-better" onclick="selectTier(this,'paid_search')">
           <div class="tier-n">Better</div>
           <div class="tier-p-mgmt">$800<span>/mo mgmt</span></div>
           <div class="tier-spend">$2,000<span>/mo ad spend</span></div>
           <div class="tier-d">+ retargeting audiences · weekly bid optimization</div>
-          <div class="tier-why">Impression share dropped 14% vs. competitors increasing spend. Peak leasing April–June.</div>
+          
         </div>
         <div class="tier-card" id="ps-best" onclick="selectTier(this,'paid_search')">
           <div class="tier-n">Best</div>
@@ -1254,18 +1254,18 @@ select.brief-input{height:34px;cursor:pointer}
           <div class="tier-spend">$1,000<span>/mo ad spend</span></div>
           <div class="tier-d">Meta ads only</div>
         </div>
-        <div class="tier-card current-tier selected" onclick="selectTier(this,'paid_social')">
+        <div class="tier-card" onclick="selectTier(this,'paid_social')">
           <div class="tier-n">Better</div>
           <div class="tier-p-mgmt">$650<span>/mo mgmt</span></div>
           <div class="tier-spend">$2,000<span>/mo ad spend</span></div>
-          <div class="tier-d">Meta + TikTok · A/B creative testing <em>(current)</em></div>
+          <div class="tier-d">Meta + TikTok · A/B creative testing</div>
         </div>
-        <div class="tier-card recommended-tier" onclick="selectTier(this,'paid_social')">
+        <div class="tier-card" onclick="selectTier(this,'paid_social')">
           <div class="tier-n">Best</div>
           <div class="tier-p-mgmt">$1,000<span>/mo mgmt</span></div>
           <div class="tier-spend">$3,000<span>/mo ad spend</span></div>
           <div class="tier-d">Meta + TikTok + Pinterest · influencer integration</div>
-          <div class="tier-why">TikTok drives 38% of Scottsdale renter searches under 35. Strong lead-gen channel for spring season.</div>
+          
         </div>
         <div class="tier-card custom-tier" id="soc-custom" onclick="selectTierCustom(this,'paid_social')">
           <div class="tier-n">Custom</div>
@@ -1286,15 +1286,15 @@ select.brief-input{height:34px;cursor:pointer}
     <div class="config-totals" id="config-totals">
       <div class="config-total-item">
         <div class="config-total-label">Management Fees</div>
-        <div class="config-total-val" id="total-mgmt">$2,250<span style="font-size:11px;font-weight:400;color:var(--tm)">/mo</span></div>
+        <div class="config-total-val" id="total-mgmt">—<span style="font-size:11px;font-weight:400;color:var(--tm)">/mo</span></div>
       </div>
       <div class="config-total-item">
         <div class="config-total-label">Ad Spend</div>
-        <div class="config-total-val spend" id="total-spend">$3,000<span style="font-size:11px;font-weight:400;color:var(--tm)">/mo</span></div>
+        <div class="config-total-val spend" id="total-spend">—<span style="font-size:11px;font-weight:400;color:var(--tm)">/mo</span></div>
       </div>
       <div class="config-total-item">
         <div class="config-total-label">Total Program</div>
-        <div class="config-total-val" id="total-program">$5,250<span style="font-size:11px;font-weight:400;color:var(--tm)">/mo</span></div>
+        <div class="config-total-val" id="total-program">—<span style="font-size:11px;font-weight:400;color:var(--tm)">/mo</span></div>
       </div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding-top:16px;border-top:1px solid var(--bd)">
