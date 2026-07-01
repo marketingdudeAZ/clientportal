@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Red Light / Health Score — Design Shotgun</title>
+<style>
+  :root{
+    --slate:#3D474F; --slate2:#53606C; --ink:#1F2937; --sub:#6B7280; --mut:#9CA3AF;
+    --cu:#C8964E; --sage:#8FA68E; --red:#C94444; --amb:#D4910A; --grn:#3d8b40;
+    --bg:#F0F2F5; --card:#fff; --bd:#E5E7EB; --r:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+  header{padding:22px 28px;border-bottom:3px solid var(--cu);background:#fff}
+  header .brand{font-size:12px;font-weight:800;letter-spacing:.5px;color:var(--slate)}
+  header .brand span{color:var(--cu)}
+  header h1{margin:4px 0 2px;font-size:22px}
+  header .sub{color:var(--sub);font-size:13px}
+  .grid{max-width:1400px;margin:0 auto;padding:24px 28px 80px;display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:18px;align-items:start}
+  .viz{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:16px 18px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .viz h3{margin:0 0 2px;font-size:14px}
+  .viz .good{font-size:11px;color:var(--mut);margin-bottom:12px}
+  .viz .good b{color:var(--cu);font-weight:700}
+  .wide{grid-column:1/-1}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .lgd{display:flex;gap:12px;font-size:11px;color:var(--sub);margin-top:10px}
+  .lgd i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:middle}
+  text{font-family:inherit}
+  .note{max-width:1400px;margin:0 auto;padding:0 28px 40px;color:var(--sub);font-size:13px}
+  .note code{background:#eceff2;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">RPM LIVING <span>DIGITAL PRODUCTS &amp; SERVICES</span></div>
+  <h1>Red Light / Health Score — Design Shotgun</h1>
+  <div class="sub">One dataset, ~11 visual treatments. Edit the <code>DATA</code> object at the bottom; everything re-renders. Pick the language that reads fastest for AMs &amp; owners.</div>
+</header>
+
+<div class="grid" id="grid"></div>
+
+<div class="note" id="thinking"></div>
+
+<script>
+/* ───────────────────────── DATA (edit me) ─────────────────────────
+   One property + the portfolio. Mirrors the approved scoring model.        */
+const DATA = {
+  property: { name: "The Glenn at Millenia", loc: "Orlando, FL", units: 312, month: "Mar 2026" },
+  health: { score: 42, prevScore: 46, status: "RED" },   // <50 RED, 50–74 YELLOW, 75+ GREEN
+  categories: [                                            // weighted 0–100
+    { key:"Market",     score:38, weight:.25 },
+    { key:"Marketing",  score:45, weight:.30 },
+    { key:"Funnel",     score:52, weight:.25 },
+    { key:"Experience", score:58, weight:.20 },
+  ],
+  // value vs the approved green threshold; higherBetter flips the bar direction
+  metrics: [
+    { name:"Engagement Rate", val:52, unit:"%", green:58, red:48, higherBetter:true },
+    { name:"CTR",             val:2.8, unit:"%", green:5, red:3,  higherBetter:true },
+    { name:"Conv. Rate",      val:1.8, unit:"%", green:3, red:1,  higherBetter:true },
+    { name:"Lead→Prospect",   val:48, unit:"%", green:60, red:50, higherBetter:true },
+    { name:"Prospect→Tour",   val:22, unit:"%", green:35, red:25, higherBetter:true },
+    { name:"Cost / Conv",     val:125, unit:"$", green:100, red:150, higherBetter:false },
+  ],
+  funnel: [ {label:"Leads", v:1000}, {label:"Prospects", v:480}, {label:"Tours", v:106}, {label:"Applications", v:23} ],
+  trends: { labels:["Oct","Nov","Dec","Jan","Feb","Mar"],
+            occupancy:[91.0,91.2,90.1,89.0,88.0,87.0], atr:[7.8,8.1,9.0,10.2,11.4,12.0], score:[58,55,52,50,46,42] },
+  portfolio: [
+    { name:"Sur Club",              score:78, Market:80, Marketing:75, Funnel:82, Experience:74 },
+    { name:"10X Boca Raton",        score:89, Market:88, Marketing:90, Funnel:85, Experience:92 },
+    { name:"10X Tarpon Springs",    score:66, Market:70, Marketing:60, Funnel:68, Experience:65 },
+    { name:"79 West",               score:54, Market:62, Marketing:55, Funnel:44, Experience:58 },
+    { name:"The Glenn at Millenia", score:42, Market:38, Marketing:45, Funnel:52, Experience:58 },
+    { name:"The Park at Valenza",   score:48, Market:55, Marketing:47, Funnel:40, Experience:52 },
+    { name:"The Oasis at Seahaven", score:61, Market:58, Marketing:63, Funnel:66, Experience:57 },
+  ],
+};
+
+/* ───────────────────────── helpers ───────────────────────── */
+const C = getComputedStyle(document.documentElement);
+const COL = { red:C.getPropertyValue('--red').trim(), amb:C.getPropertyValue('--amb').trim(),
+              grn:C.getPropertyValue('--grn').trim(), sage:C.getPropertyValue('--sage').trim(),
+              cu:C.getPropertyValue('--cu').trim(), sub:C.getPropertyValue('--sub').trim(),
+              bd:C.getPropertyValue('--bd').trim(), mut:'#c7ccd1' };
+const zone = s => s>=75?COL.grn : s>=50?COL.amb : COL.red;
+const zoneLabel = s => s>=75?"GREEN" : s>=50?"YELLOW" : "RED";
+const svg = (w,h,inner)=>`<svg viewBox="0 0 ${w} ${h}" width="100%" style="max-height:${h}px">${inner}</svg>`;
+const polar=(cx,cy,r,deg)=>{const a=(deg-90)*Math.PI/180;return[cx+r*Math.cos(a),cy+r*Math.sin(a)];};
+function arcPath(cx,cy,r,a0,a1){const[x0,y0]=polar(cx,cy,r,a0),[x1,y1]=polar(cx,cy,r,a1);
+  const large=(a1-a0)%360>180?1:0;return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;}
+const card=(title,good,body)=>`<div class="viz"><h3>${title}</h3><div class="good">${good}</div>${body}</div>`;
+
+/* ───────────────────────── 1. Arc gauge ───────────────────────── */
+function gauge(){
+  const s=DATA.health.score, a0=-120, a1=120, frac=s/100, aScore=a0+(a1-a0)*frac;
+  const track=arcPath(90,95,70,a0,a1);
+  const bands=[[a0,-40,COL.red],[-40,40,COL.amb],[40,a1,COL.grn]].map(([b,e,c])=>
+    `<path d="${arcPath(90,95,70,b,e)}" stroke="${c}" stroke-width="14" fill="none" stroke-linecap="round" opacity=".25"/>`).join('');
+  const val=`<path d="${arcPath(90,95,70,a0,aScore)}" stroke="${zone(s)}" stroke-width="14" fill="none" stroke-linecap="round"/>`;
+  const[nx,ny]=polar(90,95,58,aScore);
+  return card("1 · Arc gauge","<b>Good for:</b> the headline. Instantly readable, owner-friendly.",
+    svg(180,130,`${bands}${val}<circle cx="90" cy="95" r="5" fill="${zone(s)}"/><line x1="90" y1="95" x2="${nx}" y2="${ny}" stroke="${zone(s)}" stroke-width="3"/>`+
+      `<text x="90" y="88" text-anchor="middle" font-size="30" font-weight="800" fill="${zone(s)}">${s}</text>`+
+      `<text x="90" y="105" text-anchor="middle" font-size="10" fill="${COL.sub}">/ 100 · ${zoneLabel(s)}</text>`));
+}
+
+/* ───────────────────────── 2. Zone bar + marker + delta ───────────────────────── */
+function zoneBar(){
+  const s=DATA.health.score, d=s-DATA.health.prevScore, x=20+(340-40)*s/100;
+  const seg=(x0,w,c)=>`<rect x="${x0}" y="40" width="${w}" height="16" fill="${c}" opacity=".85" rx="2"/>`;
+  return card("2 · Threshold bar + trend","<b>Good for:</b> where you sit vs RED/YELLOW/GREEN cutoffs, plus MoM change.",
+    svg(360,90,seg(20,150,COL.red)+seg(170,80,COL.amb)+seg(250,90,COL.grn)+
+      `<polygon points="${x},34 ${x-6},22 ${x+6},22" fill="${COL.slate||'#3D474F'}"/>`+
+      `<line x1="${x}" y1="30" x2="${x}" y2="60" stroke="#1F2937" stroke-width="2"/>`+
+      `<text x="${x}" y="18" text-anchor="middle" font-size="14" font-weight="800">${s}</text>`+
+      `<text x="20" y="74" font-size="9" fill="${COL.sub}">0</text><text x="170" y="74" font-size="9" fill="${COL.sub}">50</text>`+
+      `<text x="250" y="74" font-size="9" fill="${COL.sub}">75</text><text x="340" y="74" font-size="9" fill="${COL.sub}">100</text>`+
+      `<text x="340" y="18" text-anchor="end" font-size="11" fill="${d<0?COL.red:COL.grn}">${d>0?'▲ +':'▼ '}${d} MoM</text>`));
+}
+
+/* ───────────────────────── 3. Donut ───────────────────────── */
+function donut(){
+  const s=DATA.health.score, r=52, circ=2*Math.PI*r, off=circ*(1-s/100);
+  return card("3 · Donut","<b>Good for:</b> compact KPI tiles; drops into a card grid.",
+    svg(160,140,`<circle cx="80" cy="70" r="${r}" fill="none" stroke="${COL.bd}" stroke-width="12"/>`+
+      `<circle cx="80" cy="70" r="${r}" fill="none" stroke="${zone(s)}" stroke-width="12" stroke-linecap="round"`+
+      ` stroke-dasharray="${circ}" stroke-dashoffset="${off}" transform="rotate(-90 80 70)"/>`+
+      `<text x="80" y="66" text-anchor="middle" font-size="26" font-weight="800" fill="${zone(s)}">${s}</text>`+
+      `<text x="80" y="84" text-anchor="middle" font-size="9" fill="${COL.sub}">${zoneLabel(s)}</text>`));
+}
+
+/* ───────────────────────── 4. Category radar ───────────────────────── */
+function radar(){
+  const cats=DATA.categories, n=cats.length, cx=100, cy=105, R=68;
+  const ring=[.25,.5,.75,1].map(f=>{const pts=cats.map((_,i)=>polar(cx,cy,R*f,i*360/n).join(',')).join(' ');
+    return `<polygon points="${pts}" fill="none" stroke="${COL.bd}"/>`;}).join('');
+  const pts=cats.map((c,i)=>polar(cx,cy,R*c.score/100,i*360/n).join(',')).join(' ');
+  const labels=cats.map((c,i)=>{const[x,y]=polar(cx,cy,R+16,i*360/n);
+    return `<text x="${x}" y="${y}" text-anchor="middle" font-size="9" fill="${COL.sub}">${c.key} ${c.score}</text>`;}).join('');
+  return card("4 · Category radar","<b>Good for:</b> the <i>shape</i> of health across the 4 categories at a glance.",
+    svg(200,205,`${ring}<polygon points="${pts}" fill="${zone(DATA.health.score)}" fill-opacity=".22" stroke="${zone(DATA.health.score)}" stroke-width="2"/>${labels}`));
+}
+
+/* ───────────────────────── 5. Weighted contribution bar ───────────────────────── */
+function weighted(){
+  const cats=DATA.categories, W=340; let x=0;
+  const segs=cats.map(c=>{const w=W*c.weight, h=60*c.score/100;
+    const seg=`<g><rect x="${x}" y="10" width="${w-3}" height="60" fill="${COL.bd}" opacity=".4" rx="3"/>`+
+      `<rect x="${x}" y="${10+60-h}" width="${w-3}" height="${h}" fill="${zone(c.score)}" rx="3"/>`+
+      `<text x="${x+w/2}" y="86" text-anchor="middle" font-size="9" fill="${COL.sub}">${c.key}</text>`+
+      `<text x="${x+w/2}" y="97" text-anchor="middle" font-size="8" fill="${COL.mut}">${c.weight*100}% · ${c.score}</text></g>`;
+    x+=w;return seg;}).join('');
+  return card("5 · Weighted composition","<b>Good for:</b> shows how each category's <i>weight</i> builds the total — the 'why' behind the number.",
+    svg(340,105,segs));
+}
+
+/* ───────────────────────── 6. Category bullets ───────────────────────── */
+function catBullets(){
+  const rows=DATA.categories.map(c=>{
+    const w=260*c.score/100;
+    return `<div class="row" style="margin:6px 0"><div style="width:78px;font-size:11px;color:${COL.sub}">${c.key}</div>`+
+      `<div style="flex:1;background:${COL.bd};height:14px;border-radius:7px;position:relative">`+
+      `<div style="width:${w/260*100}%;background:${zone(c.score)};height:14px;border-radius:7px"></div>`+
+      `<div style="position:absolute;left:75%;top:-2px;bottom:-2px;width:2px;background:#1F2937" title="target 75"></div></div>`+
+      `<div style="width:26px;text-align:right;font-weight:700;color:${zone(c.score)}">${c.score}</div></div>`;
+  }).join('');
+  return card("6 · Category bullet rows","<b>Good for:</b> compact, sortable list; the tick = 'GREEN at 75' target.",rows);
+}
+
+/* ───────────────────────── 7. Metric bullet graphs (the money viz) ───────────────────────── */
+function metricBullets(){
+  const rows=DATA.metrics.map(m=>{
+    // scale each metric to its own 0..max so bands are comparable
+    const max=Math.max(m.val,m.green,m.red)*1.25;
+    const p=v=>Math.min(100,v/max*100);
+    const good = m.higherBetter
+      ? `<div style="position:absolute;left:${p(m.green)}%;right:0;top:0;bottom:0;background:${COL.grn};opacity:.16"></div>`+
+        `<div style="position:absolute;left:${p(m.red)}%;width:${p(m.green)-p(m.red)}%;top:0;bottom:0;background:${COL.amb};opacity:.16"></div>`+
+        `<div style="position:absolute;left:0;width:${p(m.red)}%;top:0;bottom:0;background:${COL.red};opacity:.16"></div>`
+      : `<div style="position:absolute;left:0;width:${p(m.green)}%;top:0;bottom:0;background:${COL.grn};opacity:.16"></div>`+
+        `<div style="position:absolute;left:${p(m.green)}%;width:${p(m.red)-p(m.green)}%;top:0;bottom:0;background:${COL.amb};opacity:.16"></div>`+
+        `<div style="position:absolute;left:${p(m.red)}%;right:0;top:0;bottom:0;background:${COL.red};opacity:.16"></div>`;
+    const st = m.higherBetter ? (m.val>=m.green?COL.grn:m.val>=m.red?COL.amb:COL.red)
+                              : (m.val<=m.green?COL.grn:m.val<=m.red?COL.amb:COL.red);
+    return `<div class="row" style="margin:7px 0"><div style="width:104px;font-size:11px;color:${COL.sub}">${m.name}</div>`+
+      `<div style="flex:1;height:16px;border-radius:3px;position:relative;overflow:hidden;background:#f6f7f8">${good}`+
+      `<div style="position:absolute;left:0;top:5px;height:6px;width:${p(m.val)}%;background:${COL.slate2||'#53606C'};border-radius:3px"></div>`+
+      `<div style="position:absolute;left:${p(m.green)}%;top:1px;bottom:1px;width:2px;background:#1F2937"></div></div>`+
+      `<div style="width:44px;text-align:right;font-weight:700;color:${st}">${m.unit==='$'?'$':''}${m.val}${m.unit==='%'?'%':''}</div></div>`;
+  }).join('');
+  return card("7 · Metric bullet graphs","<b>Good for:</b> value vs its GREEN/YELLOW/RED bands + target tick. The most information-dense honest view.",
+    rows+`<div class="lgd"><span><i style="background:${COL.grn}"></i>Green</span><span><i style="background:${COL.amb}"></i>Yellow</span><span><i style="background:${COL.red}"></i>Red</span><span>▏ = target</span></div>`);
+}
+
+/* ───────────────────────── 8. Conversion funnel ───────────────────────── */
+function funnel(){
+  const f=DATA.funnel, W=300, top=f[0].v, H=26, gap=10;
+  let y=6; const parts=f.map((s,i)=>{
+    const w=W*s.v/top, x=(W-w)/2, conv=i? Math.round(s.v/f[i-1].v*100):100;
+    const g=`<rect x="${x}" y="${y}" width="${w}" height="${H}" rx="3" fill="${zone(conv>60?80:conv>35?60:40)}" opacity=".85"/>`+
+      `<text x="${W/2}" y="${y+17}" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">${s.label} · ${s.v}</text>`+
+      (i?`<text x="${W-4}" y="${y+17}" text-anchor="end" font-size="9" fill="${COL.sub}">${conv}%</text>`:'');
+    y+=H+gap;return g;
+  }).join('');
+  return card("8 · Conversion funnel","<b>Good for:</b> the leasing story — where prospects fall out (Prospect→Tour is the leak here).",
+    svg(300,y,parts));
+}
+
+/* ───────────────────────── 9. Trend sparklines ───────────────────────── */
+function sparks(){
+  const t=DATA.trends;
+  const line=(vals,color,inv)=>{const mn=Math.min(...vals),mx=Math.max(...vals),W=150,H=34;
+    const pts=vals.map((v,i)=>`${i/(vals.length-1)*W},${H-(v-mn)/(mx-mn||1)*H}`).join(' ');
+    const last=vals[vals.length-1], first=vals[0], up=last>first;
+    return `<div class="row" style="margin:6px 0;gap:10px"><div style="width:78px;font-size:11px;color:${COL.sub}">${color.label}</div>`+
+      svg(150,34,`<polyline points="${pts}" fill="none" stroke="${color.c}" stroke-width="2"/><circle cx="${W}" cy="${H-(last-mn)/(mx-mn||1)*H}" r="3" fill="${color.c}"/>`)+
+      `<div style="width:64px;text-align:right;font-weight:700;color:${(inv?!up:up)?COL.grn:COL.red}">${last}${color.suf||''}</div></div>`;};
+  return card("9 · Trend sparklines","<b>Good for:</b> direction over 6 months inline — pairs with any headline number.",
+    line(t.score,{c:zone(DATA.health.score),label:'Health',suf:''})+
+    line(t.occupancy,{c:COL.sage,label:'Occupancy',suf:'%'})+
+    line(t.atr,{c:COL.amb,label:'ATR',suf:'%'},true));
+}
+
+/* ───────────────────────── 10. Portfolio heatmap ───────────────────────── */
+function heatmap(){
+  const cats=["Market","Marketing","Funnel","Experience"];
+  const head=`<tr><th style="text-align:left;font-size:10px;color:${COL.sub};padding:4px">Property</th>`+
+    cats.map(c=>`<th style="font-size:10px;color:${COL.sub};padding:4px">${c}</th>`).join('')+
+    `<th style="font-size:10px;color:${COL.sub};padding:4px">Score</th></tr>`;
+  const rows=DATA.portfolio.map(p=>`<tr><td style="font-size:11px;padding:4px;white-space:nowrap">${p.name}</td>`+
+    cats.map(c=>`<td style="padding:3px"><div style="background:${zone(p[c])};color:#fff;font-size:10px;font-weight:700;border-radius:4px;padding:4px 0;text-align:center">${p[c]}</div></td>`).join('')+
+    `<td style="padding:3px"><div style="border:2px solid ${zone(p.score)};color:${zone(p.score)};font-size:11px;font-weight:800;border-radius:4px;padding:3px 0;text-align:center">${p.score}</div></td></tr>`).join('');
+  return card("10 · Portfolio heatmap","<b>Good for:</b> the AM's regional view — scan 40 properties × 4 categories for hotspots.",
+    `<table style="width:100%;border-collapse:collapse">${head}${rows}</table>`);
+}
+
+/* ───────────────────────── 11. Small multiples ───────────────────────── */
+function smallMultiples(){
+  const cells=DATA.portfolio.map(p=>{const r=22,circ=2*Math.PI*r,off=circ*(1-p.score/100);
+    return `<div style="text-align:center;width:84px">`+
+      svg(64,64,`<circle cx="32" cy="32" r="${r}" fill="none" stroke="${COL.bd}" stroke-width="6"/>`+
+        `<circle cx="32" cy="32" r="${r}" fill="none" stroke="${zone(p.score)}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${off}" transform="rotate(-90 32 32)"/>`+
+        `<text x="32" y="37" text-anchor="middle" font-size="16" font-weight="800" fill="${zone(p.score)}">${p.score}</text>`)+
+      `<div style="font-size:9px;color:${COL.sub};line-height:1.2;margin-top:2px">${p.name}</div></div>`;}).join('');
+  return card("11 · Small multiples","<b>Good for:</b> portfolio at a glance without a table — great for a leadership deck.",
+    `<div class="row" style="gap:6px;justify-content:flex-start">${cells}</div>`);
+}
+
+/* ───────────────────────── 12. Distribution bar ───────────────────────── */
+function distribution(){
+  const b={RED:0,YELLOW:0,GREEN:0}; DATA.portfolio.forEach(p=>b[zoneLabel(p.score)]++);
+  const tot=DATA.portfolio.length, seg=(n,c,l)=>n?`<div style="flex:${n};background:${c};color:#fff;font-size:11px;font-weight:700;padding:8px 0;text-align:center">${n} ${l}</div>`:'';
+  return card("12 · Portfolio distribution","<b>Good for:</b> the one-line portfolio headline for exec email / dashboard top.",
+    `<div class="row" style="border-radius:8px;overflow:hidden;gap:0">${seg(b.RED,COL.red,'RED')}${seg(b.YELLOW,COL.amb,'YLW')}${seg(b.GREEN,COL.grn,'GRN')}</div>`+
+    `<div class="good" style="margin-top:8px">${tot} properties · avg ${Math.round(DATA.portfolio.reduce((a,p)=>a+p.score,0)/tot)}</div>`);
+}
+
+/* ───────────────────────── render ───────────────────────── */
+const P=DATA.property;
+document.getElementById('grid').innerHTML =
+  `<div class="viz wide" style="background:${zone(DATA.health.score)};color:#fff;border:none">
+     <div style="font-size:12px;opacity:.85">${P.loc} · ${P.units} units · ${P.month}</div>
+     <div style="font-size:22px;font-weight:800">${P.name}</div>
+     <div style="font-size:13px;opacity:.9">Health ${DATA.health.score}/100 · ${zoneLabel(DATA.health.score)} — same data, 12 ways below</div>
+   </div>`+
+  [gauge(),zoneBar(),donut(),radar(),weighted(),catBullets(),metricBullets(),funnel(),sparks(),heatmap(),smallMultiples(),distribution()].join('');
+
+document.getElementById('thinking').innerHTML = `
+  <b>How to think about it →</b> match the viz to the <i>question</i> the viewer is asking:
+  <ul>
+    <li><b>Owner ("am I ok?")</b> → #1 gauge or #3 donut + #2 trend. One number, one direction.</li>
+    <li><b>AM ("what do I raise on the call?")</b> → #7 metric bullets (value vs target) + #8 funnel to name the leak.</li>
+    <li><b>"Why did the score move?"</b> → #5 weighted composition + #9 sparklines.</li>
+    <li><b>Regional lead ("which properties?")</b> → #10 heatmap or #11 small multiples; #12 for the headline.</li>
+  </ul>
+  Principles worth stealing: color = status only (never decoration); always show the <b>target</b> (tick/threshold), not just the value;
+  reserve the big number for the headline and use <b>bullets over dials</b> for the detail (dials don't scale to 13 metrics).`;
+</script>
+</body>
+</html>
