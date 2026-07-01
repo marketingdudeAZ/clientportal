@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Red Light — Exec Dashboard (gauges)</title>
+<style>
+  :root{
+    --surface:#fcfcfb; --plane:#f9f9f7; --card:#ffffff;
+    --ink:#0b0b0b; --ink2:#52514e; --mut:#898781; --grid:#e1e0d9; --base:#c3c2b7;
+    --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+    --up-good:#006300; --down-bad:#d03b3b;
+    --f1:#86b6ef; --f2:#5598e7; --f3:#2a78d6; --f4:#184f95;
+    --slate:#3D474F; --slate2:#53606C; --cu:#C8964E; --bd:rgba(11,11,11,.10);
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --surface:#1a1a19; --plane:#0d0d0d; --card:#1f1f1e;
+    --ink:#fff; --ink2:#c3c2b7; --grid:#2c2c2a; --base:#383835; --up-good:#0ca30c;
+    --slate:#c3c2b7; --slate2:#98a0a6; --bd:rgba(255,255,255,.10);
+    --f1:#184f95; --f2:#2a78d6; --f3:#5598e7; --f4:#86b6ef; }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--plane);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+  .page{max-width:1120px;margin:0 auto;padding:22px 22px 80px}
+  .brand{font-size:12px;font-weight:800;letter-spacing:.5px;color:var(--slate)}
+  .brand span{color:var(--cu)}
+  .tabular{font-variant-numeric:tabular-nums}
+  .mut{color:var(--mut)} .ink2{color:var(--ink2)}
+  /* hero banner */
+  .banner{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between;
+    border-radius:14px;padding:18px 22px;color:#fff;margin:12px 0 18px}
+  .banner .name{font-size:20px;font-weight:800}
+  .banner .meta{font-size:13px;opacity:.9}
+  .banner .status{font-size:26px;font-weight:800;text-align:right;line-height:1.1}
+  .banner .status small{display:block;font-size:12px;font-weight:600;opacity:.9}
+  /* section head */
+  h3.sec{font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--slate);
+    margin:22px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--grid)}
+  /* gauge grid */
+  .gauges{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:14px}
+  .g-card{background:var(--card);border:1px solid var(--grid);border-radius:12px;padding:12px 8px 10px;text-align:center}
+  .g-card .g-lab{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+  .g-card .g-foot{font-size:11px;color:var(--ink2);margin-top:2px;display:flex;justify-content:center;gap:8px;align-items:center}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;line-height:1.6}
+  .pill .dot{width:7px;height:7px;border-radius:50%}
+  .s-good{background:rgba(12,163,12,.12);color:#0a7d0a}.s-good .dot{background:var(--good)}
+  .s-warn{background:rgba(250,178,25,.16);color:#8a5a12}.s-warn .dot{background:var(--warn)}
+  .s-crit{background:rgba(208,59,59,.12);color:#a52d2d}.s-crit .dot{background:var(--crit)}
+  .s-ctx{background:rgba(83,96,108,.12);color:var(--slate2)}.s-ctx .dot{background:var(--slate2)}
+  .delta{font-weight:700;white-space:nowrap}
+  /* volume + funnel widgets */
+  .widgets{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:14px}
+  .w{background:var(--card);border:1px solid var(--grid);border-radius:12px;padding:14px 16px}
+  .w .wl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+  .w .wv{font-size:30px;font-weight:800;margin:2px 0}
+  .w .ws{font-size:11px;color:var(--ink2);display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .fstage{display:flex;align-items:center;gap:10px;margin:5px 0}
+  .fbar{height:26px;border-radius:5px;display:flex;align-items:center;padding:0 10px;color:#fff;font-weight:700;font-size:12px;min-width:40px}
+  /* action cards */
+  .actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+  .act{background:var(--card);border:1px solid var(--grid);border-radius:12px;padding:14px 16px;border-top:3px solid var(--grid)}
+  .act.driver{border-top-color:var(--crit)} .act.move{border-top-color:var(--cu)}
+  .act.proj{border-top-color:var(--good)} .act.risk{border-top-color:var(--slate2)}
+  .act .al{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);margin-bottom:6px}
+  .act .at{font-size:13px;color:var(--ink2)} .act .at b{color:var(--ink)}
+  .foot{color:var(--mut);font-size:11px;margin-top:20px;border-top:1px solid var(--grid);padding-top:10px}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="brand">RPM LIVING <span>DIGITAL PRODUCTS &amp; SERVICES</span> · Red Light Report</div>
+  <div id="app"></div>
+  <div class="foot" id="foot"></div>
+</div>
+
+<script>
+/* ─────────────── DATA (walk metrics) ─────────────── */
+const DATA = {
+  property:{ name:"The Park at Valenza", loc:"Tampa, FL", units:776, month:"March 2026" },
+  occupancy:{ v:69.46, hist:[78,76.1,74.7,72.7,71,69.5], min:40, max:100, higherBetter:true },
+  atr:      { v:29.51, hist:[18,20.2,22.9,25,27.4,29.5], min:0, max:45, higherBetter:false },
+  costPerLease:{ v:755, hist:[590,610,650,690,720,755], min:0, max:1200, higherBetter:false },
+  leadToProspect:{ v:90, min:0, max:100, green:60, yellow:50, higherBetter:true },
+  prospectToTour:{ v:20, min:0, max:60, green:35, yellow:25, higherBetter:true },
+  leads:{ v:398, hist:[300,325,352,368,384,398] },
+  lultl:{ v:2.1, hist:[6,5.1,4.2,3.3,2.6,2.1] },
+  portfolio:{ occupancy:88.4, atr:12.1, costPerLease:560 },
+};
+
+/* ─────────────── helpers ─────────────── */
+const A0=-120, A1=120;                       // 240° speedometer sweep
+const polar=(cx,cy,r,deg)=>{const a=(deg-90)*Math.PI/180;return[cx+r*Math.cos(a),cy+r*Math.sin(a)];};
+function arc(cx,cy,r,a,b){const[x0,y0]=polar(cx,cy,r,a),[x1,y1]=polar(cx,cy,r,b);
+  const large=(b-a)%360>180?1:0;return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const money=v=>"$"+Math.round(v).toLocaleString();
+const pct=v=>v.toFixed(1)+"%";
+
+function scored(m){ if(m.v>=m.green)return{k:'good',label:'On target'};
+  if(m.v>=m.yellow)return{k:'warn',label:'Below target'}; return{k:'crit',label:'Needs attention'}; }
+function trend(m){ const h=m.hist; if(!h)return{arrow:'→',txt:'',good:null,d:0};
+  const d=+(h[h.length-1]-h[0]).toFixed(1),up=d>0;
+  const good=m.higherBetter==null?null:(up===!!m.higherBetter);
+  return{arrow:Math.abs(d)<.05?'→':(up?'▲':'▼'),txt:(d>0?'+':'')+d,good,d}; }
+function deltaHTML(m,suf){ const t=trend(m); if(!t.txt)return'';
+  const c=t.good==null?'var(--mut)':(t.good?'var(--up-good)':'var(--down-bad)');
+  return `<span class="delta" style="color:${c}">${t.arrow} ${t.txt}${suf||''}</span>`; }
+function pill(k,label){ const cls={good:'s-good',warn:'s-warn',crit:'s-crit',ctx:'s-ctx'}[k];
+  return `<span class="pill ${cls}"><span class="dot"></span>${label}</span>`; }
+const COL={good:'#0ca30c',warn:'#fab219',crit:'#d03b3b',slate:'#53606C',grid:'#e1e0d9'};
+
+/* ─────────────── the gauge ───────────────
+   mode 'scored'  → green/yellow/red zones + needle + status pill (approved metrics)
+   mode 'context' → neutral fill + a "vs portfolio" tick + trend delta (no invented bands)  */
+function gauge(cfg){
+  const {v,min,max}=cfg, W=200,H=134,cx=100,cy=104,R=72,SW=13;
+  const ang=x=>A0+(A1-A0)*clamp((x-min)/(max-min),0,1);
+  let zones='', valColor;
+  if(cfg.mode==='scored'){
+    const g=cfg.higherBetter?cfg.green:cfg.yellow, y=cfg.higherBetter?cfg.yellow:cfg.green;
+    // red / yellow / green spans on the arc (higher-better orientation)
+    const segs = cfg.higherBetter
+      ? [[min,cfg.yellow,COL.crit],[cfg.yellow,cfg.green,COL.warn],[cfg.green,max,COL.good]]
+      : [[min,cfg.green,COL.good],[cfg.green,cfg.yellow,COL.warn],[cfg.yellow,max,COL.crit]];
+    zones = segs.map(([a,b,c])=>`<path d="${arc(cx,cy,R,ang(a),ang(b))}" stroke="${c}" stroke-width="${SW}" fill="none" opacity=".22"/>`).join('');
+    const st=scored(cfg); valColor={good:COL.good,warn:COL.warn,crit:COL.crit}[st.k];
+    zones += `<path d="${arc(cx,cy,R,A0,ang(v))}" stroke="${valColor}" stroke-width="${SW}" fill="none" stroke-linecap="round"/>`;
+  } else {
+    zones = `<path d="${arc(cx,cy,R,A0,A1)}" stroke="${COL.grid}" stroke-width="${SW}" fill="none"/>`+
+            `<path d="${arc(cx,cy,R,A0,ang(v))}" stroke="${COL.slate}" stroke-width="${SW}" fill="none" stroke-linecap="round"/>`;
+    valColor=COL.slate;
+    if(cfg.tick!=null){ const[tx,ty]=polar(cx,cy,R+8,ang(cfg.tick)),[tx2,ty2]=polar(cx,cy,R-8,ang(cfg.tick));
+      zones += `<line x1="${tx}" y1="${ty}" x2="${tx2}" y2="${ty2}" stroke="var(--ink)" stroke-width="2"/>`; }
+  }
+  // value marker: a dot riding the arc (no center-crossing needle → no clash with the number)
+  const[dx,dy]=polar(cx,cy,R,ang(v));
+  const marker=`<circle cx="${dx}" cy="${dy}" r="7" fill="${valColor}" stroke="var(--surface)" stroke-width="2.5"/>`;
+  const big=`<text x="${cx}" y="${cy-6}" text-anchor="middle" font-size="30" font-weight="800" fill="${valColor}" font-family="system-ui">${cfg.display}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-height:${H}px">${zones}${marker}${big}</svg>`;
+}
+
+function gaugeCard(cfg){
+  const foot = cfg.mode==='scored'
+    ? pill(scored(cfg).k, scored(cfg).label)
+    : `${deltaHTML(cfg,cfg.suf||'')} ${cfg.tickLabel?`<span class="mut">${cfg.tickLabel}</span>`:''}`;
+  return `<div class="g-card"><div class="g-lab">${cfg.label}</div>${gauge(cfg)}<div class="g-foot">${foot}</div></div>`;
+}
+
+function spark(m,w=130,h=30){ const h0=m.hist; const mn=Math.min(...h0),mx=Math.max(...h0),rng=(mx-mn)||1;
+  const pts=h0.map((v,i)=>`${(i/(h0.length-1)*w).toFixed(1)},${(h-(v-mn)/rng*h).toFixed(1)}`).join(' ');
+  const t=trend(m),c=t.good==null?'var(--ink2)':(t.good?'var(--good)':'var(--crit)');
+  const[lx,ly]=pts.split(' ').pop().split(',');
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round"/><circle cx="${lx}" cy="${ly}" r="4" fill="${c}"/></svg>`; }
+
+/* ─────────────── overall status ─────────────── */
+const _sev={good:0,warn:1,crit:2};
+const OA=(()=>{const a=scored(DATA.leadToProspect),b=scored(DATA.prospectToTour);
+  const w=_sev[a.k]>=_sev[b.k]?a:b; return {good:{c:COL.good,t:'On Track'},warn:{c:COL.warn,t:'Watch'},crit:{c:COL.crit,t:'Needs Attention'}}[w.k];})();
+
+/* ─────────────── render ─────────────── */
+const D=DATA;
+const leads=D.leads.v, prospects=Math.round(leads*D.leadToProspect.v/100), tours=Math.round(prospects*D.prospectToTour.v/100);
+
+const banner=`<div class="banner" style="background:${OA.c}">
+  <div><div class="name">${D.property.name}</div><div class="meta">${D.property.loc} · ${D.property.units} units · ${D.property.month}</div></div>
+  <div class="status">${OA.t}<small>Health status · from leasing funnel</small></div></div>`;
+
+const gauges=`<h3 class="sec">Health metrics</h3><div class="gauges">
+  ${gaugeCard({label:'Occupancy',mode:'context',v:D.occupancy.v,display:pct(D.occupancy.v),min:D.occupancy.min,max:D.occupancy.max,
+      hist:D.occupancy.hist,higherBetter:true,tick:D.portfolio.occupancy,tickLabel:'portf 88%',suf:'pt'})}
+  ${gaugeCard({label:'ATR % (avail. to rent)',mode:'context',v:D.atr.v,display:pct(D.atr.v),min:D.atr.min,max:D.atr.max,
+      hist:D.atr.hist,higherBetter:false,tick:D.portfolio.atr,tickLabel:'portf 12%',suf:'pt'})}
+  ${gaugeCard({label:'Lead → Prospect',mode:'scored',v:D.leadToProspect.v,display:pct(D.leadToProspect.v),min:0,max:100,green:60,yellow:50,higherBetter:true})}
+  ${gaugeCard({label:'Prospect → Tour',mode:'scored',v:D.prospectToTour.v,display:pct(D.prospectToTour.v),min:0,max:60,green:35,yellow:25,higherBetter:true})}
+  ${gaugeCard({label:'Cost / Lease',mode:'context',v:D.costPerLease.v,display:money(D.costPerLease.v),min:D.costPerLease.min,max:D.costPerLease.max,
+      hist:D.costPerLease.hist,higherBetter:false,tick:D.portfolio.costPerLease,tickLabel:'portf $560'})}
+</div>`;
+
+const widgets=`<h3 class="sec">Volume &amp; leasing funnel</h3><div class="widgets">
+  <div class="w"><div class="wl">Leads (this month)</div><div class="wv tabular">${leads.toLocaleString()}</div>
+    <div class="ws">${deltaHTML({...D.leads,higherBetter:true})}${spark({...D.leads,higherBetter:true})}</div></div>
+  <div class="w"><div class="wl">Units left to lease</div><div class="wv tabular">${D.lultl.v.toFixed(1)}</div>
+    <div class="ws"><span class="mut">avg LULTL</span>${spark({...D.lultl,higherBetter:false})}</div></div>
+  <div class="w"><div class="wl">Funnel this month</div>
+    ${fstage('Leads',leads,100,'var(--f1)',null,false)}
+    ${fstage('Prospects',prospects,Math.max(20,prospects/leads*100),'var(--f2)',D.leadToProspect.v,false)}
+    ${fstage('Tours',tours,Math.max(12,tours/leads*100),'var(--f3)',D.prospectToTour.v,true)}
+  </div></div>`;
+
+function fstage(label,count,width,color,conv,warn){
+  const inside=width>=32;
+  const bar=`<div class="fbar" style="width:${width}%;background:${color}">${inside?label+' · '+count:''}</div>`;
+  const outside=inside?'':`<span style="font-weight:700;font-size:12px;white-space:nowrap">${label} · ${count}</span>`;
+  const c=conv!=null?`<span class="delta" style="${warn?'color:var(--crit)':'color:var(--ink2)'};margin-left:auto">${conv}%${warn?' ⚠':''}</span>`:'';
+  return `<div class="fstage">${bar}${outside}${c}</div>`;
+}
+
+const actions=`<h3 class="sec">Conversation starter</h3><div class="actions">
+  <div class="act driver"><div class="al">What's driving it</div><div class="at">Strong top-of-funnel — leads up, <b>90%</b> convert to prospects — but only <b>20%</b> of prospects tour (target 35%). The leak is <b>after</b> the lead.</div></div>
+  <div class="act move"><div class="al">The one move</div><div class="at">Fix tour conversion: enable <b>self-guided touring</b> + faster tour-request response. Add unit video/3D for remote shoppers.</div></div>
+  <div class="act proj"><div class="al">Projected impact</div><div class="at">At current lead volume, +15 pts of prospect→tour ≈ <b>+50 tours/mo</b> → materially slows the occupancy slide.</div></div>
+  <div class="act risk"><div class="al">If nothing changes</div><div class="at">Occupancy is falling ~1.7 pts/mo — trajectory reaches <b>≈ 66%</b> by summer while ATR keeps climbing.</div></div>
+</div>
+<div style="margin-top:12px;font-size:12px;color:var(--mut)">Digital can drive traffic; this leak is onsite — flagged for the AM, not an upsell.</div>`;
+
+document.getElementById('app').innerHTML = banner+gauges+widgets+actions;
+document.getElementById('foot').innerHTML =
+  `Gauges: <b>scored</b> (Lead→Prospect, Prospect→Tour) show approved green/yellow/red zones + a value marker; <b>context</b> (Occupancy, ATR, Cost/Lease)
+   use a neutral fill with a "vs portfolio" tick + trend delta — no invented benchmark. Status color always carries a dot + label. Edit <code>DATA</code> to re-render.`;
+</script>
+</body>
+</html>
