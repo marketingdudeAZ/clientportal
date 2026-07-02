@@ -1,0 +1,250 @@
+<style>
+  .map{
+    --paper:#EDEFEC; --card:#FBFCFA; --ink:#222A2E; --ink2:#5C666B; --faint:#8A9298;
+    --cu:#BE8A3D; --cu-deep:#9c6f2c; --sage:#7E9A7C; --slate:#333E44; --slate2:#465158;
+    --line:rgba(34,42,46,.12); --line2:rgba(34,42,46,.20);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:
+      radial-gradient(120% 80% at 12% -10%, rgba(126,154,124,.10), transparent 60%),
+      radial-gradient(120% 80% at 92% 0%, rgba(190,138,61,.08), transparent 55%),
+      var(--paper);
+    color:var(--ink); font-family:var(--sans); line-height:1.5;
+    min-height:100%; padding:38px clamp(18px,4vw,60px) 60px;
+  }
+  .map *{box-sizing:border-box}
+  .map ::selection{background:rgba(190,138,61,.24)}
+  .map .wrap{max-width:1200px;margin:0 auto}
+  .map .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--cu-deep)}
+  .map h1{font-size:clamp(30px,4.6vw,52px);font-weight:800;letter-spacing:-.025em;line-height:1.02;
+    margin:12px 0 0;text-wrap:balance;max-width:20ch}
+  .map .thesis{font-size:clamp(15px,1.7vw,19px);color:var(--ink2);max-width:64ch;margin:16px 0 0}
+  .map .thesis b{color:var(--ink);font-weight:600}
+  .map .rule{height:1px;background:var(--line);margin:30px 0}
+
+  /* ---- the pipeline ---- */
+  .map .flow{display:grid;grid-template-columns:1.35fr auto 1fr auto 1fr auto 1fr auto .8fr;
+    align-items:stretch;gap:0;}
+  .map .stage{padding:2px 2px}
+  .map .chev{align-self:center;color:var(--cu);font-size:26px;line-height:0;padding:0 clamp(4px,1vw,14px);opacity:.9}
+  .map .slab{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 14px 15px;height:100%;
+    box-shadow:0 1px 0 rgba(34,42,46,.03), 0 10px 26px -20px rgba(34,42,46,.35)}
+  .map .slab.hub{background:linear-gradient(180deg,#37424a,#2c353b);border-color:transparent;color:#F4F6F4;
+    box-shadow:0 14px 34px -18px rgba(34,42,46,.6)}
+  .map .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);
+    display:flex;align-items:center;gap:7px}
+  .map .slab.hub .lbl{color:#c7cdc9}
+  .map .lbl .n{font-variant-numeric:tabular-nums;color:var(--cu);border:1px solid rgba(190,138,61,.5);border-radius:4px;
+    padding:0 5px;font-size:9.5px}
+  .map .slab.hub .lbl .n{color:var(--cu);border-color:rgba(190,138,61,.6)}
+  .map .stitle{font-weight:700;font-size:14px;margin:8px 0 11px;letter-spacing:-.01em}
+  .map .slab.hub .stitle{font-size:15px}
+  .map .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .map .chip{font-size:11.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line2);
+    border-radius:7px;padding:4px 8px;white-space:nowrap}
+  .map .chip.mut{color:var(--ink2)}
+  .map .chip.ghost{color:var(--faint);border-style:dashed;background:transparent}
+  .map .col-chips{display:flex;flex-direction:column;gap:6px}
+  .map .col-chips .chip{white-space:normal}
+  /* hub interior */
+  .map .hubcore{display:flex;flex-direction:column;gap:9px}
+  .map .hubcard{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:9px 11px}
+  .map .hubcard .h{font-weight:700;font-size:13.5px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .map .hubcard .s{font-size:11px;color:#bcc3bf;margin-top:2px}
+  .map .tagcu{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#0f1416;
+    background:var(--cu);border-radius:4px;padding:2px 6px;font-weight:700}
+  .map .aud{display:flex;flex-direction:column;gap:7px}
+  .map .aud .a{background:#fff;border:1px solid var(--line2);border-left:3px solid var(--sage);border-radius:7px;padding:7px 10px}
+  .map .aud .a b{font-size:13px} .map .aud .a span{display:block;font-size:10.5px;color:var(--ink2);margin-top:1px}
+  .map .connote{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--faint);text-align:center;
+    max-width:110px;margin:6px auto 0;text-transform:uppercase}
+
+  /* ---- identity rail ---- */
+  .map .rail{margin-top:16px;border-radius:12px;padding:14px 18px;color:#F4F6F4;position:relative;overflow:hidden;
+    background:linear-gradient(90deg,#2c353b, #37424a);border:1px solid transparent}
+  .map .rail .glow{position:absolute;inset:0;background:
+    repeating-linear-gradient(90deg, transparent 0 60px, rgba(190,138,61,.16) 60px 61px);
+    -webkit-mask:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);
+            mask:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
+  .map .rail .inner{position:relative;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .map .rail .key{font-family:var(--mono);font-size:12px;color:var(--cu);border:1px solid rgba(190,138,61,.55);
+    border-radius:6px;padding:5px 10px;white-space:nowrap;background:rgba(190,138,61,.08)}
+  .map .rail .rt{font-size:13.5px;color:#dfe4e0} .map .rail .rt b{color:#fff;font-weight:700}
+
+  /* ---- lower: unlocks + loop ---- */
+  .map .grid2{display:grid;grid-template-columns:1.5fr 1fr;gap:22px;margin-top:30px;align-items:start}
+  .map .unlocks{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .map .u{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:15px 16px}
+  .map .u .k{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--cu-deep)}
+  .map .u h3{font-size:15px;margin:7px 0 5px;letter-spacing:-.01em}
+  .map .u p{font-size:12.5px;color:var(--ink2);margin:0}
+  .map .loop{background:linear-gradient(180deg,#f3efe6,#efeae0);border:1px solid rgba(190,138,61,.35);
+    border-radius:12px;padding:16px 18px}
+  .map .loop .k{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--cu-deep)}
+  .map .loop h3{font-size:16px;margin:6px 0 8px;letter-spacing:-.01em}
+  .map .loop ol{margin:0;padding-left:0;list-style:none;counter-reset:s}
+  .map .loop li{counter-increment:s;font-size:12.5px;color:var(--ink);padding:5px 0 5px 26px;position:relative}
+  .map .loop li::before{content:counter(s);position:absolute;left:0;top:4px;width:18px;height:18px;border-radius:5px;
+    background:var(--cu);color:#0f1416;font-family:var(--mono);font-size:10px;font-weight:700;display:grid;place-items:center}
+  .map .loop li b{font-weight:700}
+
+  .map .foot{margin-top:34px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+
+  @media (max-width:920px){
+    .map .flow{grid-template-columns:1fr}
+    .map .chev{transform:rotate(90deg);padding:8px 0}
+    .map .connote{max-width:none}
+    .map .grid2{grid-template-columns:1fr}
+    .map .unlocks{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .map .rail .glow{animation:drift 14s linear infinite}
+    @keyframes drift{to{background-position:122px 0}}
+  }
+  .map a:focus-visible,.map [tabindex]:focus-visible{outline:2px solid var(--cu);outline-offset:2px}
+</style>
+
+<div class="map">
+ <div class="wrap">
+
+  <header>
+    <div class="eyebrow">RPM Living · Digital Products &amp; Services</div>
+    <h1>One platform. Every property. One ID that ties it together.</h1>
+    <p class="thesis">The tools your teams already use each hold a piece of the picture. We connect them into a single
+      <b>client portal — powered by HubSpot</b> — where every property is one identity, its data is one source of truth,
+      and the work your teams do flows back onto the record automatically.</p>
+  </header>
+
+  <div class="rule"></div>
+
+  <!-- ========== the pipeline ========== -->
+  <div class="flow">
+
+    <!-- 1 · Platforms -->
+    <div class="stage">
+      <div class="slab">
+        <div class="lbl"><span class="n">01</span> Platforms your teams already use</div>
+        <div class="stitle">Where the data lives today</div>
+        <div class="chips">
+          <span class="chip">GA4</span><span class="chip">Google Ads</span><span class="chip">Apartment IQ</span>
+          <span class="chip">Hyly</span><span class="chip">DataForSEO</span><span class="chip">Fluency</span>
+          <span class="chip">SOCi</span><span class="chip">ClickUp</span><span class="chip">Yardi / CRM IQ</span>
+          <span class="chip mut">Google Sheets</span><span class="chip ghost">NinjaCat · sunsetting</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="chev">▸<div class="connote">Connectors normalize each source</div></div>
+
+    <!-- 2 · Hub -->
+    <div class="stage">
+      <div class="slab hub">
+        <div class="lbl"><span class="n">02</span> The hub</div>
+        <div class="stitle">Identity &amp; source of truth</div>
+        <div class="hubcore">
+          <div class="hubcard">
+            <div class="h">HubSpot <span class="tagcu">Identity</span></div>
+            <div class="s">Live CRM + the one place a property is defined. Every platform ID lives on the company record.</div>
+          </div>
+          <div class="hubcard">
+            <div class="h">BigQuery <span class="tagcu">Warehouse</span></div>
+            <div class="s">Normalized history — paid, SEO, reputation, leads, market snapshots.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chev">▸<div class="connote">Keyed to the property ID</div></div>
+
+    <!-- 3 · Intelligence -->
+    <div class="stage">
+      <div class="slab">
+        <div class="lbl"><span class="n">03</span> Shared intelligence</div>
+        <div class="stitle">Turns data into decisions</div>
+        <div class="col-chips">
+          <span class="chip">Property Resolver</span>
+          <span class="chip">Red Light / Health Score</span>
+          <span class="chip">Forecasting</span>
+          <span class="chip">Report &amp; Alert Engine</span>
+          <span class="chip">LLM Gateway (AI)</span>
+          <span class="chip">Access &amp; RBAC</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="chev">▸<div class="connote">Rendered for the reader</div></div>
+
+    <!-- 4 · Portal -->
+    <div class="stage">
+      <div class="slab">
+        <div class="lbl"><span class="n">04</span> Client Portal · powered by HubSpot</div>
+        <div class="stitle">The single surface</div>
+        <div class="col-chips">
+          <span class="chip">Portfolio Dashboard</span>
+          <span class="chip">Red Light Report</span>
+          <span class="chip">Services &amp; Quotes</span>
+          <span class="chip">Client Brief</span>
+          <span class="chip">Call Prep</span>
+          <span class="chip">Asset Library</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="chev">▸<div class="connote">Right view, right person</div></div>
+
+    <!-- 5 · People -->
+    <div class="stage">
+      <div class="slab">
+        <div class="lbl"><span class="n">05</span> Who it serves</div>
+        <div class="stitle">One story, three lenses</div>
+        <div class="aud">
+          <div class="a"><b>Owners</b><span>Health &amp; options, no jargon</span></div>
+          <div class="a"><b>Asset Managers</b><span>Diagnose early, back budgets</span></div>
+          <div class="a"><b>Property Marketing</b><span>Automated, portfolio-wide</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- identity rail -->
+  <div class="rail">
+    <div class="glow"></div>
+    <div class="inner">
+      <span class="key">uuid → HubSpot company</span>
+      <div class="rt"><b>One property = one ID.</b> The same key joins every platform, every dataset, and every view —
+        so nothing is stitched by hand and no client ever sees another client's data.</div>
+    </div>
+  </div>
+
+  <!-- unlocks + loop -->
+  <div class="grid2">
+    <div class="unlocks">
+      <div class="u"><div class="k">Why it matters</div><h3>One source of truth</h3>
+        <p>Stop reconciling ten dashboards. Every number traces back to one property record.</p></div>
+      <div class="u"><div class="k">Why it matters</div><h3>Insight, automatically</h3>
+        <p>Health scores, forecasts and alerts generate monthly — replacing manual spreadsheet reviews.</p></div>
+      <div class="u"><div class="k">Why it matters</div><h3>Proactive, not reactive</h3>
+        <p>Clients self-serve services and see the work we're already doing on their account.</p></div>
+    </div>
+
+    <div class="loop">
+      <div class="k">The Loop · it closes</div>
+      <h3>Action in, proof out</h3>
+      <ol>
+        <li>A client <b>approves or orders</b> a service in the portal.</li>
+        <li>It becomes <b>fulfillment work in ClickUp</b>, routed to the right team.</li>
+        <li>Progress writes <b>back onto the HubSpot record</b> as a note —</li>
+        <li>and surfaces in the portal as <b>proactive work done</b>.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>Layer 1 Connectors · Layer 2 Shared Skills · Layer 3 Portal &amp; Agents</span>
+    <span>RPM Living · Digital Products &amp; Services</span>
+  </div>
+
+ </div>
+</div>
