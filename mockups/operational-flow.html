@@ -1,0 +1,386 @@
+<style>
+  .ops{
+    --paper:#EDEFEC; --card:#FBFCFA; --ink:#222A2E; --ink2:#5C666B; --faint:#8A9298;
+    --cu:#BE8A3D; --cu-deep:#9c6f2c; --sage:#7E9A7C; --sage-deep:#5f7d5d;
+    --slate:#333E44; --slate2:#465158;
+    --built:#5f7d5d; --built-bg:#eef3ed; --built-line:rgba(95,125,93,.45);
+    --gap:#c0722b; --gap-bg:#fbf1e6; --gap-line:rgba(192,114,43,.55);
+    --line:rgba(34,42,46,.12); --line2:rgba(34,42,46,.20);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:
+      radial-gradient(120% 80% at 10% -8%, rgba(126,154,124,.10), transparent 58%),
+      radial-gradient(120% 80% at 94% 0%, rgba(190,138,61,.09), transparent 55%),
+      var(--paper);
+    color:var(--ink); font-family:var(--sans); line-height:1.5;
+    min-height:100%; padding:40px clamp(16px,4vw,60px) 72px;
+  }
+  .ops *{box-sizing:border-box}
+  .ops ::selection{background:rgba(190,138,61,.24)}
+  .ops .wrap{max-width:1240px;margin:0 auto}
+
+  /* ---- header ---- */
+  .ops .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--cu-deep)}
+  .ops h1{font-size:clamp(28px,4.4vw,50px);font-weight:800;letter-spacing:-.025em;line-height:1.03;
+    margin:12px 0 0;text-wrap:balance;max-width:22ch}
+  .ops .thesis{font-size:clamp(15px,1.7vw,19px);color:var(--ink2);max-width:70ch;margin:16px 0 0}
+  .ops .thesis b{color:var(--ink);font-weight:600}
+  .ops .rule{height:1px;background:var(--line);margin:26px 0}
+
+  /* ---- legend / control ---- */
+  .ops .legend{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;margin-top:18px}
+  .ops .key{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink2)}
+  .ops .dot{width:11px;height:11px;border-radius:3px;flex:none}
+  .ops .dot.b{background:var(--built)}
+  .ops .dot.g{background:var(--gap);border:1px dashed #fff;box-shadow:0 0 0 1px var(--gap)}
+  .ops .dot.x{background:#fff;border:1px solid var(--line2)}
+  .ops .spacer{flex:1;min-width:20px}
+  .ops .toggle{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);cursor:pointer;user-select:none;
+    border:1px solid var(--line2);border-radius:999px;padding:7px 13px;background:var(--card)}
+  .ops .toggle .sw{width:30px;height:16px;border-radius:999px;background:var(--line2);position:relative;transition:background .2s}
+  .ops .toggle .sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;
+    background:#fff;transition:transform .2s}
+  .ops.focus .toggle .sw{background:var(--gap)}
+  .ops.focus .toggle .sw::after{transform:translateX(14px)}
+
+  /* ---- flow section ---- */
+  .ops .flowsec{margin-top:30px}
+  .ops .fhead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .ops .ftag{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+    color:#fff;background:var(--slate);border-radius:5px;padding:3px 9px}
+  .ops .flowsec.b .ftag{background:var(--cu-deep)}
+  .ops .ftitle{font-size:19px;font-weight:750;letter-spacing:-.015em}
+  .ops .fsub{font-size:13px;color:var(--faint);font-family:var(--mono)}
+
+  /* the horizontal step rail */
+  .ops .railwrap{overflow-x:auto;padding:4px 2px 10px;scrollbar-width:thin}
+  .ops .rail{display:grid;grid-template-columns:repeat(6,minmax(0,1fr) auto) minmax(0,1fr);
+    align-items:stretch;gap:0;min-width:940px}
+  .ops .step{display:flex;flex-direction:column;min-width:0}
+  .ops .chev{align-self:center;color:var(--cu);font-size:21px;line-height:0;padding:0 5px}
+
+  .ops .node{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 12px 11px;
+    height:100%;display:flex;flex-direction:column;gap:8px;position:relative;
+    box-shadow:0 1px 0 rgba(34,42,46,.03),0 10px 24px -20px rgba(34,42,46,.4);transition:opacity .25s,filter .25s}
+  .ops .node.hub{background:linear-gradient(180deg,#37424a,#2c353b);border-color:transparent;color:#F4F6F4}
+  .ops .ntop{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .ops .nsys{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+  .ops .node.hub .nsys{color:#aeb6b2}
+  .ops .ntitle{font-weight:700;font-size:13.5px;letter-spacing:-.01em;line-height:1.2}
+  .ops .ndesc{font-size:11.5px;color:var(--ink2);line-height:1.4}
+  .ops .node.hub .ndesc{color:#c7cdc9}
+  .ops .code{font-family:var(--mono);font-size:10px;color:var(--cu-deep);word-break:break-all;
+    background:rgba(190,138,61,.09);border-radius:5px;padding:3px 6px;margin-top:auto}
+  .ops .node.hub .code{color:#e7cfa1;background:rgba(255,255,255,.08)}
+
+  /* status badge */
+  .ops .badge{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9.5px;font-weight:700;
+    letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:3px 8px 3px 6px;align-self:flex-start}
+  .ops .badge.built{color:var(--built);background:var(--built-bg);border:1px solid var(--built-line)}
+  .ops .badge.gap{color:var(--gap);background:var(--gap-bg);border:1px solid var(--gap-line)}
+  .ops .badge.ext{color:var(--ink2);background:#fff;border:1px dashed var(--line2)}
+  .ops .badge .ic{width:12px;height:12px;border-radius:50%;display:inline-grid;place-items:center;font-size:9px;color:#fff}
+  .ops .badge.built .ic{background:var(--built)}
+  .ops .badge.gap .ic{background:var(--gap);border-radius:3px}
+
+  /* gap node styling */
+  .ops .node.isgap{border:1.5px dashed var(--gap-line);background:var(--gap-bg)}
+  .ops .node.isgap .ntitle{color:var(--gap)}
+  .ops .chev.togap{color:var(--gap);font-weight:700}
+
+  /* focus mode dims built, spotlights gaps */
+  .ops.focus .node:not(.isgap){opacity:.42;filter:saturate(.4)}
+  .ops.focus .chev:not(.togap){opacity:.3}
+  .ops.focus .node.isgap{box-shadow:0 0 0 3px rgba(192,114,43,.16),0 12px 26px -16px rgba(192,114,43,.5)}
+  @media (prefers-reduced-motion:no-preference){
+    .ops.focus .node.isgap{animation:pulse 2.4s ease-in-out infinite}
+  }
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(192,114,43,.14),0 12px 26px -16px rgba(192,114,43,.45)}
+    50%{box-shadow:0 0 0 5px rgba(192,114,43,.24),0 12px 30px -14px rgba(192,114,43,.6)}}
+
+  /* ---- shared spine note ---- */
+  .ops .spine{margin-top:26px;display:flex;align-items:center;gap:14px;background:linear-gradient(90deg,#37424a,#2c353b);
+    border-radius:12px;padding:14px 18px;color:#eef1ef;flex-wrap:wrap}
+  .ops .spine .k{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--cu)}
+  .ops .spine .uuid{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(190,138,61,.22);
+    border:1px solid rgba(190,138,61,.5);border-radius:6px;padding:3px 9px}
+  .ops .spine .txt{font-size:13px;color:#cdd3cf;flex:1;min-width:240px}
+  .ops .spine .txt b{color:#fff;font-weight:600}
+
+  /* ---- bridges to build ---- */
+  .ops .bridges{margin-top:34px;background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:22px clamp(16px,3vw,28px) 24px;box-shadow:0 14px 40px -30px rgba(34,42,46,.5)}
+  .ops .bridges h2{font-size:20px;font-weight:780;letter-spacing:-.02em;margin:0;display:flex;align-items:center;gap:10px}
+  .ops .bridges h2 .pill{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--gap);background:var(--gap-bg);border:1px solid var(--gap-line);border-radius:999px;padding:3px 9px}
+  .ops .bridges .lede{font-size:13.5px;color:var(--ink2);margin:8px 0 18px;max-width:78ch}
+  .ops .bgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .ops .bcard{border:1px solid var(--line);border-left:3px solid var(--gap);border-radius:11px;padding:14px 15px;background:#fff}
+  .ops .bcard .bn{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gap);letter-spacing:.06em}
+  .ops .bcard .bt{font-weight:720;font-size:14.5px;margin:6px 0 6px;letter-spacing:-.01em}
+  .ops .bcard .bd{font-size:12.5px;color:var(--ink2);line-height:1.5}
+  .ops .bcard .bd code{font-family:var(--mono);font-size:11px;background:rgba(34,42,46,.06);border-radius:4px;padding:1px 4px;color:var(--slate)}
+  .ops .bcard .bwhy{font-size:11.5px;color:var(--sage-deep);margin-top:9px;padding-top:9px;border-top:1px dashed var(--line)}
+  .ops .bcard .bwhy b{color:var(--built)}
+  .ops .foot{margin-top:16px;font-size:12px;color:var(--faint);font-family:var(--mono);display:flex;gap:8px;align-items:baseline}
+  .ops .foot .star{color:var(--cu)}
+
+  @media (max-width:820px){
+    .ops .bgrid{grid-template-columns:1fr}
+    .ops .rail{min-width:max-content}
+  }
+</style>
+
+<div class="ops" id="ops">
+  <div class="wrap">
+    <div class="eyebrow">RPM Digital Platform · Operating Model</div>
+    <h1>From client click to fulfillment — the two loops that run the account</h1>
+    <p class="thesis">Two lifecycles carry a property from the client portal into HubSpot and out to the people
+      who do the work. <b>Selling</b> a service (self-checkout → deal → quote) and <b>briefing</b> a service
+      (community brief → Fluency). Both are largely built. The value we haven't captured yet lives in
+      <b>three bridges</b> — where HubSpot should hand off to the fulfillment team in ClickUp, and where the
+      brief should reach Fluency the moment it changes.</p>
+
+    <div class="legend">
+      <span class="key"><span class="dot b"></span> Built &amp; running today</span>
+      <span class="key"><span class="dot g"></span> Gap — the bridge to build</span>
+      <span class="key"><span class="dot x"></span> External system we feed</span>
+      <span class="spacer"></span>
+      <span class="toggle" id="focusBtn" role="button" tabindex="0" aria-pressed="false">
+        <span class="sw"></span> Spotlight the gaps
+      </span>
+    </div>
+
+    <div class="rule"></div>
+
+    <!-- ======================= FLOW A ======================= -->
+    <div class="flowsec a">
+      <div class="fhead">
+        <span class="ftag">Loop A · Sell</span>
+        <span class="ftitle">Self-checkout → deal → quote → fulfillment</span>
+        <span class="fsub">the money path</span>
+      </div>
+      <div class="railwrap">
+        <div class="rail">
+
+          <div class="step">
+            <div class="node">
+              <div class="ntop"><span class="nsys">Client Portal</span></div>
+              <div class="ntitle">Recommendation</div>
+              <div class="ndesc">Property sees a recommended channel &amp; budget and clicks approve.</div>
+              <span class="badge built"><span class="ic">✓</span>Built</span>
+            </div>
+          </div>
+          <div class="chev">›</div>
+
+          <div class="step">
+            <div class="node">
+              <div class="ntop"><span class="nsys">Flask API</span></div>
+              <div class="ntitle">Self-Checkout</div>
+              <div class="ndesc">Guards: idempotency, open-deal check, per-day cap.</div>
+              <span class="badge built"><span class="ic">✓</span>Built</span>
+              <div class="code">POST /api/self-checkout</div>
+            </div>
+          </div>
+          <div class="chev">›</div>
+
+          <div class="step">
+            <div class="node hub">
+              <div class="ntop"><span class="nsys">HubSpot</span></div>
+              <div class="ntitle">Deal created</div>
+              <div class="ndesc">Pipeline + stage set, amount computed, associated to the company.</div>
+              <span class="badge built"><span class="ic">✓</span>Built</span>
+              <div class="code">deal_creator.py</div>
+            </div>
+          </div>
+          <div class="chev">›</div>
+
+          <div class="step">
+            <div class="node hub">
+              <div class="ntop"><span class="nsys">HubSpot</span></div>
+              <div class="ntitle">SKUs &amp; net price</div>
+              <div class="ndesc">13 default line items, each an <b>hs_product_id</b> + monthly net price.</div>
+              <span class="badge built"><span class="ic">✓</span>Built</span>
+              <div class="code">product_catalog.py</div>
+            </div>
+          </div>
+          <div class="chev">›</div>
+
+          <div class="step">
+            <div class="node hub">
+              <div class="ntop"><span class="nsys">HubSpot</span></div>
+              <div class="ntitle">Quote drafted</div>
+              <div class="ndesc">Quote generated &amp; associated to deal + contact. AM publishes / sends.</div>
+              <span class="badge built"><span class="ic">✓</span>Built · manual send</span>
+              <div class="code">quote_generator.py</div>
+            </div>
+          </div>
+          <div class="chev">›</div>
+
+          <div class="step">
+            <div class="node">
+              <div class="ntop"><span class="nsys">Platform</span></div>
+              <div class="ntitle">Launch + Loop log</div>
+              <div class="ndesc">Launch date drives the go-live automation; Loop events recorded.</div>
+              <span class="badge built"><span class="ic">✓</span>Built</span>
+            </div>
+          </div>
+          <div class="chev togap">›</div>
+
+          <div class="step">
+            <div class="node isgap">
+              <div class="ntop"><span class="nsys">ClickUp · Fulfillment</span></div>
+              <div class="ntitle">Fulfillment task</div>
+              <div class="ndesc">Auto-create the task that hands the new deal to the fulfillment team.</div>
+              <span class="badge gap"><span class="ic">!</span>Bridge 1</span>
+              <div class="code">clickup_ticket_id = stamp only</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================= FLOW B ======================= -->
+    <div class="flowsec b">
+      <div class="fhead">
+        <span class="ftag">Loop B · Brief</span>
+        <span class="ftitle">Community brief → HubSpot → Fluency → fulfillment</span>
+        <span class="fsub">the content path</span>
+      </div>
+      <div class="railwrap">
+        <div class="rail">
+
+          <div class="step">
+            <div class="node">
+              <div class="ntop"><span class="nsys">Client Portal</span></div>
+              <div class="ntitle">Community Brief</div>
+              <div class="ndesc">Client / AM edits a brief field (voice, amenities, differentiators…).</div>
+              <span class="badge built"><span class="ic">✓</span>Built</span>
+              <div class="code">PATCH /api/accounts/property/field</div>
+            </div>
+          </div>
+          <div class="chev">›</div>
+
+          <div class="step">
+            <div class="node hub">
+              <div class="ntop"><span class="nsys">HubSpot</span></div>
+              <div class="ntitle">Override-wins write</div>
+              <div class="ndesc">Sets <b>fluency_*_override</b> on the company + audit row. Override &gt; resolved.</div>
+              <span class="badge built"><span class="ic">✓</span>Built</span>
+              <div class="code">community_brief.write_field</div>
+            </div>
+          </div>
+          <div class="chev togap">›</div>
+
+          <div class="step">
+            <div class="node isgap">
+              <div class="ntop"><span class="nsys">Event bridge</span></div>
+              <div class="ntitle">Real-time push</div>
+              <div class="ndesc">A brief edit should update Fluency now — not wait for tomorrow's batch.</div>
+              <span class="badge gap"><span class="ic">!</span>Bridge 2</span>
+            </div>
+          </div>
+          <div class="chev">›</div>
+
+          <div class="step">
+            <div class="node">
+              <div class="ntop"><span class="nsys">Fluency Feed</span></div>
+              <div class="ntitle">uuid-keyed sheet</div>
+              <div class="ndesc">Daily batch writes the "RPM Property Tag Source" sheet, keyed by <b>uuid</b>.</div>
+              <span class="badge built"><span class="ic">✓</span>Built · batch</span>
+              <div class="code">fluency_feed.sync</div>
+            </div>
+          </div>
+          <div class="chev">›</div>
+
+          <div class="step">
+            <div class="node">
+              <div class="ntop"><span class="nsys">Fluency</span></div>
+              <div class="ntitle">Paid media exec</div>
+              <div class="ndesc">Reads the sheet; the brief drives live ad copy &amp; targeting.</div>
+              <span class="badge ext">External</span>
+            </div>
+          </div>
+          <div class="chev togap">›</div>
+
+          <div class="step">
+            <div class="node isgap">
+              <div class="ntop"><span class="nsys">ClickUp · Fulfillment</span></div>
+              <div class="ntitle">Keep-in-the-know</div>
+              <div class="ndesc">Notify fulfillment when a brief changes / is fed to Fluency. Today it only posts a HubSpot note.</div>
+              <span class="badge gap"><span class="ic">!</span>Bridge 3</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================= SHARED SPINE ======================= -->
+    <div class="spine">
+      <span class="k">One spine</span>
+      <span class="uuid">company.uuid</span>
+      <span class="txt">Both loops write through <b>HubSpot</b> and address every property by the same
+        <b>uuid</b> (Immutable Rule R1). That's why the deal, the quote, the brief, the Fluency sheet, and the
+        ClickUp task can all point at the same property without cross-client leakage.</span>
+    </div>
+
+    <!-- ======================= BRIDGES ======================= -->
+    <div class="bridges">
+      <h2>The three bridges to build <span class="pill">Account team → Fulfillment</span></h2>
+      <p class="lede">Each bridge closes a handoff that's manual or delayed today. All three reuse code that
+        already exists — this is wiring, not new systems.</p>
+      <div class="bgrid">
+
+        <div class="bcard">
+          <div class="bn">Bridge 1</div>
+          <div class="bt">Deal → ClickUp fulfillment task</div>
+          <div class="bd">When self-checkout creates a deal, auto-spawn the fulfillment task. Today <code>clickup_ticket_id</code>
+            on the deal is just an idempotency <b>string</b> — no real task is created, so the fulfillment team never
+            gets pinged.</div>
+          <div class="bwhy"><b>Reuses:</b> <code>clickup_client.create_task</code> + the deal payload already in hand.</div>
+        </div>
+
+        <div class="bcard">
+          <div class="bn">Bridge 2</div>
+          <div class="bt">Brief edit → real-time Fluency</div>
+          <div class="bd">Have <code>write_field</code> trigger a <b>per-property</b> sheet upsert on save, instead of the
+            client's change waiting for the next daily <code>fluency-feed-sync</code>. Needs a single-company sync path
+            in the feed.</div>
+          <div class="bwhy"><b>Reuses:</b> <code>fluency_feed.sync</code> logic, scoped to one uuid.</div>
+        </div>
+
+        <div class="bcard">
+          <div class="bn">Bridge 3</div>
+          <div class="bt">Brief / feed → ClickUp notice</div>
+          <div class="bd">Post a ClickUp comment or task when a brief changes and when it's fed to Fluency, so fulfillment
+            sees it. The change digest exists — it just posts to a <b>HubSpot note</b> today, not ClickUp.</div>
+          <div class="bwhy"><b>Reuses:</b> the existing brief-audit digest + <code>clickup_client.post_comment</code>.</div>
+        </div>
+
+      </div>
+      <div class="foot"><span class="star">★</span>
+        <span>One thing to verify first: confirm the daily <code style="font-family:var(--mono)">fluency-feed-sync</code>
+        cron is actually scheduled in Render — otherwise even the batch path never reaches the sheet.</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  (function(){
+    var ops = document.getElementById('ops');
+    var btn = document.getElementById('focusBtn');
+    function toggle(){
+      var on = ops.classList.toggle('focus');
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    btn.addEventListener('click', toggle);
+    btn.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); }
+    });
+  })();
+</script>
