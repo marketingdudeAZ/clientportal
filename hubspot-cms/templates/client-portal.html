@@ -3982,80 +3982,157 @@ function maybeLogPaidTrustSignal(value) {
 // ── Client Brief ──
 var _briefLoaded = false;
 function loadClientBrief() {
+  // v3 (Kyle 2026-07-06): render the FULL Community Brief — the identical
+  // section/row model the /accounts/property editor uses — via
+  // /api/accounts/property/brief. Edits PATCH the same override-wins
+  // write path (audit-logged with the editor's email). The old static
+  // cards (v2 fields, incl. removed ones) are replaced wholesale.
   if (_briefLoaded) return;
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '';
   var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
-  fetch(API_BASE + '/api/client-brief?company_id=' + COMPANY_ID, {
+  // "Open Full Brief" → the /accounts editor for this property
+  var docLink = document.getElementById('brief-doc-link');
+  if (docLink) docLink.href = 'https://digital.rpmliving.com/accounts/property?company_id=' + encodeURIComponent(COMPANY_ID);
+
+  var grid = document.querySelector('#section-brief .brief-grid');
+  if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:28px;text-align:center;color:var(--tm)">Loading the Community Brief…</div>';
+
+  fetch(API_BASE + '/api/accounts/property/brief?company_id=' + COMPANY_ID, {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
   .then(function(r){ return r.json(); })
   .then(function(d) {
-    if (d.error) return;
     _briefLoaded = true;
-
-    // Always write to the element. If the API returned empty, explicitly render an em-dash
-    // (vs leaving whatever was in the HTML) so clients never see stale placeholder text.
-    function set(id, val) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      el.textContent = (val != null && val !== '') ? val : '—';
-    }
-    function setHtml(id, val) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      el.innerHTML = (val != null && val !== '') ? val : '—';
-    }
-    function pills(str) {
-      return (str || '').split(/[;,\n]/).map(function(s){ return s.trim(); }).filter(Boolean)
-        .map(function(p){ return '<span class="brief-pill">'+p+'</span>'; }).join('');
-    }
-
-    set('b-voice', d.voice_and_tone);
-    set('b-pms', d.pms);
-    set('b-cms', d.website_cms);
-    set('b-bot', d.bot_on_website);
-
-    if (d.budget_finalized === true || d.budget_finalized === 'true' || d.budget_finalized === 1) {
-      setHtml('b-budget-fin', '<span style="color:var(--sage);font-weight:700">Yes</span>');
-    } else if (d.budget_finalized === false || d.budget_finalized === 'false' || d.budget_finalized === 0) {
-      setHtml('b-budget-fin', '<span style="color:var(--amb);font-weight:700">No</span>');
-    } else {
-      setHtml('b-budget-fin', '<span style="color:var(--tm);font-weight:600">—</span>');
-    }
-
-    if (d.units_offered) setHtml('b-units', pills(d.units_offered));
-    if (d.neighborhoods) setHtml('b-hoods', pills(d.neighborhoods));
-    set('b-landmarks', d.landmarks);
-
-    if (d.taglines) {
-      var lines = d.taglines.split(/[;,\n]/).map(function(s){ return s.trim(); }).filter(Boolean);
-      setHtml('b-taglines', lines.map(function(l, i) {
-        return '<div style="font-weight:600;color:var(--jd)' + (i > 0 ? ';margin-top:2px' : '') + '">"' + l + '"</div>';
-      }).join(''));
-    }
-
-    set('b-unique', d.unique_solutions);
-    set('b-adjectives', d.adjectives);
-    set('b-selling', d.additional_selling_points);
-    set('b-goals', d.goals);
-    set('b-challenges', d.challenges);
-    set('b-onsite', d.onsite_upcoming);
-
-    if (d.competitors) setHtml('b-comps', pills(d.competitors));
-
-    set('b-track-search', d.tracking_search);
-    set('b-track-social', d.tracking_social);
-    set('b-track-fb', d.tracking_facebook);
-    set('b-track-display', d.tracking_display);
-    set('b-track-apple', d.tracking_apple);
-
-    if (d.brief_doc_link) {
-      var link = document.getElementById('brief-doc-link');
-      if (link) link.href = d.brief_doc_link;
-    }
+    if (!grid) return;
+    var sections = d.sections || [];
+    if (!sections.length) { grid.innerHTML = '<div style="grid-column:1/-1;padding:28px;text-align:center;color:var(--tm)">No brief data yet for this property.</div>'; return; }
+    window.__BRIEF_SECTIONS__ = sections;
+    grid.innerHTML = sections.map(function(sec, si) { return _renderBriefSection(sec, si); }).join('');
   })
-  .catch(function(err){ console.warn('loadClientBrief failed:', err); });
+  .catch(function(err){
+    console.warn('loadClientBrief failed:', err);
+    if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:28px;text-align:center;color:var(--tm)">Could not load the brief. Please refresh.</div>';
+  });
+}
+
+function _briefEsc(v) {
+  return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _renderBriefValue(row) {
+  var v = (row.value || '').trim();
+  if (!v) return '<span style="color:var(--tm)">—</span>';
+  var t = row.type || 'text';
+  if (t === 'multiselect') {
+    return v.split(/[;,]/).map(function(x){ return x.trim(); }).filter(Boolean)
+      .map(function(x){ return '<span style="display:inline-block;background:var(--bgs,#F2F3F5);border:1px solid var(--bd);border-radius:100px;padding:2px 10px;font-size:11px;font-weight:600;margin:2px 4px 2px 0">' + _briefEsc(x) + '</span>'; }).join('');
+  }
+  if (t === 'floorplan_table' || t === 'tracking_table' || t === 'documents') {
+    var n = 0;
+    try { var j = JSON.parse(v); n = Array.isArray(j) ? j.length : Object.keys(j).length; } catch (e) {}
+    return '<span style="color:var(--ts)">' + (n ? n + ' entr' + (n === 1 ? 'y' : 'ies') : 'set') + '</span> <a href="https://digital.rpmliving.com/accounts/property?company_id=' + encodeURIComponent(window.__PORTAL_COMPANY_ID__ || '') + '" target="_blank" style="font-size:11px;color:var(--cu);font-weight:700">edit in full brief →</a>';
+  }
+  // textarea list-ish values → line items
+  if (t === 'textarea' && /[\n;]/.test(v)) {
+    return v.split(/[\n;]+/).map(function(x){ return x.trim(); }).filter(Boolean)
+      .map(function(x){ return '<div style="padding:2px 0">· ' + _briefEsc(x) + '</div>'; }).join('');
+  }
+  return _briefEsc(v);
+}
+
+function _renderBriefSection(sec, si) {
+  var rows = (sec.rows || sec.fields || []);
+  var body = rows.map(function(row, ri) {
+    var badge = '';
+    if (row.badge_kind === 'override') badge = '<span style="font-size:9px;font-weight:800;letter-spacing:.05em;color:#fff;background:var(--cu);border-radius:8px;padding:1px 7px;margin-left:8px">EDITED</span>';
+    else if (row.badge_kind === 'pipeline') badge = '<span style="font-size:9px;font-weight:800;letter-spacing:.05em;color:var(--ts);background:var(--bgs,#F2F3F5);border:1px solid var(--bd);border-radius:8px;padding:1px 7px;margin-left:8px">PIPELINE</span>';
+    var internal = row.internal ? '<span style="font-size:9px;font-weight:800;letter-spacing:.05em;color:#E6C68A;background:#243240;border-radius:8px;padding:1px 7px;margin-left:8px">INTERNAL</span>' : '';
+    var editBtn = '';
+    var t = row.type || 'text';
+    var editableInline = row.editable && t !== 'floorplan_table' && t !== 'tracking_table' && t !== 'documents' && t !== 'readonly';
+    if (editableInline) {
+      editBtn = '<button onclick="briefEditRow(' + si + ',' + ri + ',this)" style="margin-left:auto;background:none;border:1px solid var(--bd);border-radius:6px;padding:2px 10px;font-size:10px;font-weight:700;color:var(--ts);cursor:pointer">Edit</button>';
+    }
+    return '<div data-brief-row="' + si + '-' + ri + '" style="padding:10px 0;border-bottom:1px solid var(--bd)">' +
+      '<div style="display:flex;align-items:center;margin-bottom:4px">' +
+        '<span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--ts)">' + _briefEsc(row.label) + '</span>' + badge + internal + editBtn +
+      '</div>' +
+      '<div class="brief-v3-val" style="font-size:13px;color:var(--tp);line-height:1.5">' + _renderBriefValue(row) + '</div>' +
+      (row.hint ? '<div style="font-size:10.5px;color:var(--tm);margin-top:3px;font-style:italic">' + _briefEsc(row.hint) + '</div>' : '') +
+    '</div>';
+  }).join('');
+  return '<div class="brief-card brief-card-full" style="grid-column:1/-1">' +
+    '<div class="brief-section-label">' + _briefEsc(sec.title || sec.section || '') + '</div>' + body + '</div>';
+}
+
+function briefEditRow(si, ri, btn) {
+  var sec = (window.__BRIEF_SECTIONS__ || [])[si] || {};
+  var row = (sec.rows || sec.fields || [])[ri];
+  if (!row) return;
+  var host = document.querySelector('[data-brief-row="' + si + '-' + ri + '"] .brief-v3-val');
+  if (!host) return;
+  var t = row.type || 'text';
+  var cur = row.value || '';
+  var editorHtml = '';
+  if (t === 'multiselect' && row.options) {
+    editorHtml = row.options.map(function(o){
+      var on = cur.split(/[;,]/).map(function(x){return x.trim().toLowerCase();}).indexOf(String(o).toLowerCase()) !== -1;
+      return '<label style="display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:12px"><input type="checkbox" value="' + _briefEsc(o) + '"' + (on ? ' checked' : '') + '>' + _briefEsc(o) + '</label>';
+    }).join('');
+  } else if (t === 'dropdown' && row.options) {
+    editorHtml = '<select class="form-input" style="width:100%;max-width:320px">' +
+      '<option value="">—</option>' +
+      row.options.map(function(o){ return '<option value="' + _briefEsc(o) + '"' + (String(o) === cur ? ' selected' : '') + '>' + _briefEsc(o) + '</option>'; }).join('') + '</select>';
+  } else if (t === 'textarea') {
+    editorHtml = '<textarea class="form-textarea" style="width:100%;min-height:96px">' + _briefEsc(cur) + '</textarea>';
+  } else {
+    editorHtml = '<input class="form-input" style="width:100%;max-width:420px" value="' + _briefEsc(cur) + '">';
+  }
+  host.innerHTML = editorHtml +
+    '<div style="margin-top:8px;display:flex;gap:8px">' +
+      '<button onclick="briefSaveRow(' + si + ',' + ri + ',this)" class="btn btn-primary btn-sm">Save</button>' +
+      '<button onclick="briefCancelRow(' + si + ',' + ri + ')" class="btn btn-secondary btn-sm">Cancel</button>' +
+    '</div>';
+}
+
+function briefCancelRow(si, ri) {
+  var sec = (window.__BRIEF_SECTIONS__ || [])[si] || {};
+  var row = (sec.rows || sec.fields || [])[ri];
+  var host = document.querySelector('[data-brief-row="' + si + '-' + ri + '"] .brief-v3-val');
+  if (host && row) host.innerHTML = _renderBriefValue(row);
+}
+
+function briefSaveRow(si, ri, btn) {
+  var sec = (window.__BRIEF_SECTIONS__ || [])[si] || {};
+  var row = (sec.rows || sec.fields || [])[ri];
+  var wrap = document.querySelector('[data-brief-row="' + si + '-' + ri + '"] .brief-v3-val');
+  if (!row || !wrap) return;
+  var t = row.type || 'text';
+  var value = '';
+  if (t === 'multiselect') {
+    value = Array.prototype.slice.call(wrap.querySelectorAll('input[type=checkbox]:checked'))
+      .map(function(cb){ return cb.value; }).join(';');
+  } else {
+    var el = wrap.querySelector('select, textarea, input');
+    value = el ? el.value : '';
+  }
+  btn.disabled = true; btn.textContent = 'Saving…';
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  fetch(API_BASE + '/api/accounts/property/field', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' },
+    body: JSON.stringify({ company_id: window.__PORTAL_COMPANY_ID__ || '', key: row.key, value: value })
+  })
+  .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+  .then(function(res) {
+    if (!res.ok) { alert('Save failed: ' + (res.j.error || 'unknown error')); briefCancelRow(si, ri); return; }
+    row.value = value; row.badge_kind = 'override';
+    var rowEl = document.querySelector('[data-brief-row="' + si + '-' + ri + '"]');
+    if (rowEl) rowEl.outerHTML = '';  // re-render whole section keeps badges honest
+    _briefLoaded = false; loadClientBrief();
+  })
+  .catch(function(e){ alert('Save failed — check your connection.'); briefCancelRow(si, ri); });
 }
 
 // ── Budget & SKUs ──

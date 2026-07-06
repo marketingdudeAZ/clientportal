@@ -612,6 +612,7 @@ def build_render_context(company_props: dict) -> list[dict]:
                 "structured": _structured_for(f, value) if is_table else [],
                 "options":    f.options,
                 "editable":   editable,
+                "internal":   f.internal,
                 "badge":      badge,
                 "badge_kind": badge_kind,
             })
