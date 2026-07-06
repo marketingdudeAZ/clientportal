@@ -5832,6 +5832,45 @@ def creative_transition_run():
     return jsonify(result)
 
 
+@app.route("/api/internal/red-light-v2-batch", methods=["POST", "OPTIONS"])
+def red_light_v2_batch_route():
+    """Portfolio sweep of Red Light v2 PDF reports (monthly cron).
+
+    Body: {"max_age_days": 25, "limit": 0}
+    Skips companies with a report newer than max_age_days and companies
+    without an aptiq_property_id. Dispatches async; returns counts.
+    Auth: X-Internal-Key.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+    body = request.get_json(silent=True) or {}
+    import batch_runs
+    return jsonify(batch_runs.red_light_v2_batch(
+        max_age_days=int(body.get("max_age_days") or 25),
+        limit=int(body.get("limit") or 0),
+    ))
+
+
+@app.route("/api/internal/forecast-batch", methods=["POST", "OPTIONS"])
+def forecast_batch_route():
+    """Portfolio sweep of Loop forecasts (daily cron).
+
+    Body: {"limit": 0}. Dispatches async; returns counts.
+    Auth: X-Internal-Key.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+    body = request.get_json(silent=True) or {}
+    import batch_runs
+    return jsonify(batch_runs.forecast_batch(limit=int(body.get("limit") or 0)))
+
+
 @app.route("/api/internal/fluency-feed-sync", methods=["POST", "OPTIONS"])
 def fluency_feed_sync():
     """Authoritative writer of the RPM Property Tag Source sheet (the data
