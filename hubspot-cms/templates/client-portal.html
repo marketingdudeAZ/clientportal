@@ -26,6 +26,71 @@
 <html lang="en">
 <head>
   {{ standard_header_includes }}
+  <script>window.__CLERK_PK__ = '';  /* paste pk_... publishable key to enable Clerk */</script>
+  <script>
+  /* ── Clerk auth gate (ADR 0002) ─────────────────────────────────────────
+     Set CLERK_PK to the pk_... publishable key to enable. Empty = disabled
+     (legacy X-Portal-Email behavior, page renders ungated).
+     - Wraps window.fetch: API calls wait for the Clerk session, then carry
+       Authorization: Bearer <session JWT> (verified server-side) plus the
+       legacy X-Portal-Email for back-compat.
+     - No session -> full-screen sign-in overlay; app JS still boots but its
+       API calls resolve only after sign-in. */
+  (function () {
+    var CLERK_PK = window.__CLERK_PK__ || '';
+    if (!CLERK_PK || CLERK_PK.indexOf('pk_') !== 0) return;
+    if (window.__CLERK_GATE_INSTALLED__) return;
+    window.__CLERK_GATE_INSTALLED__ = true;
+    var API_HOSTS = ['rpm-portal-server.onrender.com'];
+    var readyResolve;
+    var ready = new Promise(function (res) { readyResolve = res; });
+    var _fetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      var isApi = false;
+      for (var i = 0; i < API_HOSTS.length; i++) if (url.indexOf(API_HOSTS[i]) !== -1) isApi = true;
+      if (!isApi) return _fetch(input, init);
+      return ready.then(function () {
+        return window.Clerk.session.getToken().then(function (t) {
+          init = init || {};
+          var h = new Headers(init.headers || {});
+          if (t) h.set('Authorization', 'Bearer ' + t);
+          if (window.__PORTAL_EMAIL__) h.set('X-Portal-Email', window.__PORTAL_EMAIL__);
+          init.headers = h;
+          return _fetch(url, init);
+        });
+      });
+    };
+    function finishAuth() {
+      var u = window.Clerk.user;
+      window.__PORTAL_EMAIL__ = (u && u.primaryEmailAddress && u.primaryEmailAddress.emailAddress) || '';
+      var g = document.getElementById('clerk-gate'); if (g) g.remove();
+      readyResolve(true);
+    }
+    function showGate() {
+      var d = document.createElement('div');
+      d.id = 'clerk-gate';
+      d.style.cssText = 'position:fixed;inset:0;background:#1A2530;z-index:2147483000;display:flex;align-items:center;justify-content:center;';
+      var m = document.createElement('div'); m.id = 'clerk-signin-mount'; d.appendChild(m);
+      document.body.appendChild(d);
+      window.Clerk.mountSignIn(m);
+      window.Clerk.addListener(function (r) { if (r.user) finishAuth(); });
+    }
+    function boot() {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+      s.async = true; s.crossOrigin = 'anonymous';
+      s.addEventListener('load', function () {
+        var clerk = (typeof window.Clerk === 'function') ? new window.Clerk(CLERK_PK) : window.Clerk;
+        window.Clerk = clerk;
+        clerk.load().then(function () { clerk.user ? finishAuth() : showGate(); });
+      });
+      document.head.appendChild(s);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  })();
+  </script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RPM Living | Client Portal — {{ property.name }}</title>
@@ -9180,6 +9245,71 @@ setTimeout(loadPropertySwitcher, 1500);
 <html lang="en">
 <head>
   {{ standard_header_includes }}
+  <script>window.__CLERK_PK__ = '';  /* paste pk_... publishable key to enable Clerk */</script>
+  <script>
+  /* ── Clerk auth gate (ADR 0002) ─────────────────────────────────────────
+     Set CLERK_PK to the pk_... publishable key to enable. Empty = disabled
+     (legacy X-Portal-Email behavior, page renders ungated).
+     - Wraps window.fetch: API calls wait for the Clerk session, then carry
+       Authorization: Bearer <session JWT> (verified server-side) plus the
+       legacy X-Portal-Email for back-compat.
+     - No session -> full-screen sign-in overlay; app JS still boots but its
+       API calls resolve only after sign-in. */
+  (function () {
+    var CLERK_PK = window.__CLERK_PK__ || '';
+    if (!CLERK_PK || CLERK_PK.indexOf('pk_') !== 0) return;
+    if (window.__CLERK_GATE_INSTALLED__) return;
+    window.__CLERK_GATE_INSTALLED__ = true;
+    var API_HOSTS = ['rpm-portal-server.onrender.com'];
+    var readyResolve;
+    var ready = new Promise(function (res) { readyResolve = res; });
+    var _fetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      var isApi = false;
+      for (var i = 0; i < API_HOSTS.length; i++) if (url.indexOf(API_HOSTS[i]) !== -1) isApi = true;
+      if (!isApi) return _fetch(input, init);
+      return ready.then(function () {
+        return window.Clerk.session.getToken().then(function (t) {
+          init = init || {};
+          var h = new Headers(init.headers || {});
+          if (t) h.set('Authorization', 'Bearer ' + t);
+          if (window.__PORTAL_EMAIL__) h.set('X-Portal-Email', window.__PORTAL_EMAIL__);
+          init.headers = h;
+          return _fetch(url, init);
+        });
+      });
+    };
+    function finishAuth() {
+      var u = window.Clerk.user;
+      window.__PORTAL_EMAIL__ = (u && u.primaryEmailAddress && u.primaryEmailAddress.emailAddress) || '';
+      var g = document.getElementById('clerk-gate'); if (g) g.remove();
+      readyResolve(true);
+    }
+    function showGate() {
+      var d = document.createElement('div');
+      d.id = 'clerk-gate';
+      d.style.cssText = 'position:fixed;inset:0;background:#1A2530;z-index:2147483000;display:flex;align-items:center;justify-content:center;';
+      var m = document.createElement('div'); m.id = 'clerk-signin-mount'; d.appendChild(m);
+      document.body.appendChild(d);
+      window.Clerk.mountSignIn(m);
+      window.Clerk.addListener(function (r) { if (r.user) finishAuth(); });
+    }
+    function boot() {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+      s.async = true; s.crossOrigin = 'anonymous';
+      s.addEventListener('load', function () {
+        var clerk = (typeof window.Clerk === 'function') ? new window.Clerk(CLERK_PK) : window.Clerk;
+        window.Clerk = clerk;
+        clerk.load().then(function () { clerk.user ? finishAuth() : showGate(); });
+      });
+      document.head.appendChild(s);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  })();
+  </script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>RPM Living | Client Portal — Properties</title>

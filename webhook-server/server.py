@@ -63,6 +63,30 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 from _route_utils import ALLOWED_ORIGINS, require_access  # noqa: E402
 
 
+@app.before_request
+def _clerk_identity():
+    """Clerk auth (ADR 0002): verify a Bearer session JWT and back-fill the
+    X-Portal-Email header with the cryptographically-verified email, so every
+    existing endpoint's `request.headers.get("X-Portal-Email")` check works
+    unchanged — but on trusted input. A caller-supplied X-Portal-Email is
+    OVERWRITTEN whenever a Bearer token is present (verified beats asserted);
+    with no Bearer token, legacy header behavior is preserved."""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer ") and not auth[7:].startswith("pat-"):
+        try:
+            import clerk_auth
+            ident = clerk_auth.verify_bearer(auth)
+        except Exception:
+            ident = None
+        if ident:
+            request.environ["HTTP_X_PORTAL_EMAIL"] = ident["email"]
+            request.environ["HTTP_X_PORTAL_USER_ID"] = ident["user_id"]
+        elif os.environ.get("CLERK_SECRET_KEY"):
+            # A Bearer token was presented but failed verification — do not
+            # let a stale spoofable header ride along beside a bad token.
+            request.environ.pop("HTTP_X_PORTAL_EMAIL", None)
+
+
 @app.after_request
 def add_cors(response):
     """Add CORS headers to all responses."""
@@ -71,7 +95,7 @@ def add_cors(response):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email, Authorization"
     return response
 
 
@@ -121,7 +145,7 @@ def _preflight_response():
     if origin in ALLOWED_ORIGINS:
         resp.headers["Access-Control-Allow-Origin"] = origin
         resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
-        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email, Authorization"
         resp.headers["Access-Control-Allow-Credentials"] = "true"
         resp.headers["Access-Control-Max-Age"] = "86400"
     return resp

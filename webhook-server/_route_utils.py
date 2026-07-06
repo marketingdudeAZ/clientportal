@@ -33,7 +33,7 @@ def preflight_response():
         resp.headers["Access-Control-Allow-Credentials"] = "true"
         resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
         resp.headers["Access-Control-Allow-Headers"] = (
-            "Content-Type, X-Portal-Email, X-Internal-Key, X-Hub-Signature-256"
+            "Content-Type, X-Portal-Email, X-Internal-Key, X-Hub-Signature-256, Authorization"
         )
     return resp
 
