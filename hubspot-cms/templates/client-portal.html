@@ -1141,21 +1141,34 @@ body{line-height:1.55}
         Video Creative
         <span class="nav-badge" id="video-new-badge" style="display:none">NEW</span>
       </div>
+      <div class="nav-item" onclick="nav('recommendations',this)" title="Approvals + AM questions (now also in Plan &amp; Spend)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      Call Prep
+      </div>
+      <div class="nav-item" onclick="nav('brief',this)" title="Property profile and brief">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Property profile
+      </div>
+      <div class="nav-item" id="nav-forecast" onclick="nav('forecast',this)" title="Performance forecast simulator">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+      Forecast
+      </div>
+      <div class="nav-item" onclick="nav('activity',this)" title="Timeline of deals, reports, calls">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Activity &amp; Deals
+      </div>
     </div>
 
     <!-- Advanced: legacy nav items kept reachable for power users.
          Most are now sub-tabs of the seven above; this drawer is a
          safety net during the rollout. Hidden by default. -->
-    <div class="sb-nav-group" id="sb-advanced-group">
+    <div class="sb-nav-group" id="sb-advanced-group" style="display:none">
       <button type="button" class="sb-advanced-toggle" id="sb-advanced-toggle" onclick="toggleAdvancedNav()" aria-expanded="false">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="sb-advanced-chevron" style="transition:transform .2s"><polyline points="9 18 15 12 9 6"/></svg>
         Advanced
       </button>
       <div id="sb-advanced-list" style="display:none">
-        <div class="nav-item" onclick="nav('recommendations',this)" title="Approvals + AM questions (now also in Plan &amp; Spend)">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-          Call Prep
-        </div>
+
         <div class="nav-item" id="nav-content" onclick="nav('content',this)" style="display:none" title="Topic clusters and briefs">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
           Content
@@ -1169,10 +1182,7 @@ body{line-height:1.55}
           Onboarding
           <span class="nav-badge" id="onboarding-badge" style="display:none">!</span>
         </div>
-        <div class="nav-item" onclick="nav('brief',this)" title="Property profile and brief">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          Property profile
-        </div>
+
         <div class="nav-item" id="nav-paid" onclick="nav('paid',this)" title="Paid media compliance + targeting">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
           Paid Media
@@ -1181,14 +1191,8 @@ body{line-height:1.55}
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
           Budget &amp; SKUs
         </div>
-        <div class="nav-item" id="nav-forecast" onclick="nav('forecast',this)" title="Performance forecast simulator">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-          Forecast
-        </div>
-        <div class="nav-item" onclick="nav('activity',this)" title="Timeline of deals, reports, calls">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Activity &amp; Deals
-        </div>
+
+
       </div>
     </div>
   </nav>
@@ -1206,7 +1210,9 @@ body{line-height:1.55}
     }
     (function() {
       try {
-        if (localStorage.getItem('rpm_nav_advanced') !== '0') toggleAdvancedNav();  // default OPEN (Kyle 2026-07-06)
+        // Advanced drawer hidden (Kyle 2026-07-06): Call Prep, Property profile,
+        // Forecast, Activity & Deals promoted to the main nav; Paid Media +
+        // Budget & SKUs parked in the hidden drawer for later re-enable.
       } catch (e) {}
     })();
   </script>
