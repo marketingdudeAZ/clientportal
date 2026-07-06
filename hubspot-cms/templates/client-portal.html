@@ -77,15 +77,34 @@
       window.Clerk.addListener(function (r) { if (r.user) finishAuth(); });
     }
     function boot() {
+      // Canonical Clerk loader: script served from the instance's frontend API
+      // with data-clerk-publishable-key auto-initializes window.Clerk as an
+      // INSTANCE. Poll rather than trusting the script load event — the
+      // bundle finishes its async chunks slightly after 'load' fires.
+      var domain = '';
+      try { domain = atob(CLERK_PK.split('_').pop() + '='.repeat((4 - CLERK_PK.split('_').pop().length % 4) % 4)).replace(/\$$/, ''); } catch (e) {}
       var s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+      s.src = 'https://' + (domain || 'cdn.jsdelivr.net/npm') + (domain ? '' : '/@clerk/clerk-js@5/dist') + (domain ? '/npm/@clerk/clerk-js@5/dist/clerk.browser.js' : '/clerk.browser.js');
       s.async = true; s.crossOrigin = 'anonymous';
-      s.addEventListener('load', function () {
-        var clerk = (typeof window.Clerk === 'function') ? new window.Clerk(CLERK_PK) : window.Clerk;
-        window.Clerk = clerk;
-        clerk.load().then(function () { clerk.user ? finishAuth() : showGate(); });
-      });
+      s.setAttribute('data-clerk-publishable-key', CLERK_PK);
       document.head.appendChild(s);
+      var tries = 0;
+      var timer = setInterval(function () {
+        tries++;
+        var C = window.Clerk;
+        if (C && (typeof C.load === 'function')) {
+          clearInterval(timer);
+          C.load({ publishableKey: CLERK_PK }).then(function () {
+            C.user ? finishAuth() : showGate();
+          }).catch(function (e) { console.warn('Clerk load failed', e); });
+        } else if (C && typeof C === 'function') {
+          clearInterval(timer);
+          var inst = new C(CLERK_PK);
+          window.Clerk = inst;
+          inst.load().then(function () { inst.user ? finishAuth() : showGate(); })
+            .catch(function (e) { console.warn('Clerk load failed', e); });
+        } else if (tries > 100) { clearInterval(timer); console.warn('Clerk never initialized'); }
+      }, 150);
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
   })();
@@ -1187,7 +1206,7 @@ body{line-height:1.55}
     }
     (function() {
       try {
-        if (localStorage.getItem('rpm_nav_advanced') === '1') toggleAdvancedNav();
+        if (localStorage.getItem('rpm_nav_advanced') !== '0') toggleAdvancedNav();  // default OPEN (Kyle 2026-07-06)
       } catch (e) {}
     })();
   </script>
@@ -9296,15 +9315,34 @@ setTimeout(loadPropertySwitcher, 1500);
       window.Clerk.addListener(function (r) { if (r.user) finishAuth(); });
     }
     function boot() {
+      // Canonical Clerk loader: script served from the instance's frontend API
+      // with data-clerk-publishable-key auto-initializes window.Clerk as an
+      // INSTANCE. Poll rather than trusting the script load event — the
+      // bundle finishes its async chunks slightly after 'load' fires.
+      var domain = '';
+      try { domain = atob(CLERK_PK.split('_').pop() + '='.repeat((4 - CLERK_PK.split('_').pop().length % 4) % 4)).replace(/\$$/, ''); } catch (e) {}
       var s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+      s.src = 'https://' + (domain || 'cdn.jsdelivr.net/npm') + (domain ? '' : '/@clerk/clerk-js@5/dist') + (domain ? '/npm/@clerk/clerk-js@5/dist/clerk.browser.js' : '/clerk.browser.js');
       s.async = true; s.crossOrigin = 'anonymous';
-      s.addEventListener('load', function () {
-        var clerk = (typeof window.Clerk === 'function') ? new window.Clerk(CLERK_PK) : window.Clerk;
-        window.Clerk = clerk;
-        clerk.load().then(function () { clerk.user ? finishAuth() : showGate(); });
-      });
+      s.setAttribute('data-clerk-publishable-key', CLERK_PK);
       document.head.appendChild(s);
+      var tries = 0;
+      var timer = setInterval(function () {
+        tries++;
+        var C = window.Clerk;
+        if (C && (typeof C.load === 'function')) {
+          clearInterval(timer);
+          C.load({ publishableKey: CLERK_PK }).then(function () {
+            C.user ? finishAuth() : showGate();
+          }).catch(function (e) { console.warn('Clerk load failed', e); });
+        } else if (C && typeof C === 'function') {
+          clearInterval(timer);
+          var inst = new C(CLERK_PK);
+          window.Clerk = inst;
+          inst.load().then(function () { inst.user ? finishAuth() : showGate(); })
+            .catch(function (e) { console.warn('Clerk load failed', e); });
+        } else if (tries > 100) { clearInterval(timer); console.warn('Clerk never initialized'); }
+      }, 150);
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
   })();
