@@ -25,6 +25,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  {{ standard_header_includes }}
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RPM Living | Client Portal — {{ property.name }}</title>
@@ -9171,12 +9172,14 @@ setTimeout(loadPropertySwitcher, 1500);
 })();
 </script>
 
+  {{ standard_footer_includes }}
 </body>
 </html>
 {% else %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  {{ standard_header_includes }}
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>RPM Living | Client Portal — Properties</title>
@@ -10286,6 +10289,7 @@ loadPropList();
   document.addEventListener('DOMContentLoaded', function () { setTimeout(loadMyTickets, 1000); });
 })();
 </script>
+  {{ standard_footer_includes }}
 </body>
 </html>
 {% endif %}{# /uuid_param #}
