@@ -1121,12 +1121,12 @@ body{line-height:1.55}
       <div class="nav-item" onclick="nav('services',this)" title="Plan, spend, recommendations, paid media">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
         Plan &amp; Spend
-        <span class="nav-badge" id="recs-badge">2</span>
+        <span class="nav-badge" id="recs-badge" style="display:none"></span>
       </div>
       <div class="nav-item" onclick="nav('tickets',this)" title="Open tickets and team threads">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         Tickets
-        <span class="nav-badge amber" id="tickets-badge">3</span>
+        <span class="nav-badge amber" id="tickets-badge" style="display:none"></span>
       </div>
       <div class="nav-item" onclick="nav('assets',this)" title="Photos, videos, brand files">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -1987,7 +1987,7 @@ body{line-height:1.55}
     </div>
     <div class="rec-filters" style="margin-bottom:0">
       <button class="rec-filter active" onclick="filterRecs('all',this)">All</button>
-      <button class="rec-filter" onclick="filterRecs('pending',this)">Pending <span id="pending-count" style="background:rgba(255,255,255,0.3);padding:1px 6px;border-radius:8px;margin-left:3px">2</span></button>
+      <button class="rec-filter" onclick="filterRecs('pending',this)">Pending <span id="pending-count" style="background:rgba(255,255,255,0.3);padding:1px 6px;border-radius:8px;margin-left:3px">0</span></button>
       <button class="rec-filter" onclick="filterRecs('approved',this)">Approved</button>
       <button class="rec-filter" onclick="filterRecs('dismissed',this)">Dismissed</button>
     </div>
@@ -3396,6 +3396,7 @@ function updatePendingCount() {
   if (count) count.textContent = pending;
   if (badge) {
     badge.textContent = pending;
+    badge.style.display = pending > 0 ? '' : 'none';
     badge.style.display = pending === 0 ? 'none' : '';
   }
 }
@@ -4636,9 +4637,11 @@ function _renderOverview(propData, ticketsData, budgetData) {
     if (tdEl) tdEl.textContent = openCount + ' open' + (inProg ? ' \u00B7 ' + inProg + ' in progress' : '');
     var qaTickSub = document.getElementById('qa-tickets-sub');
     if (qaTickSub) qaTickSub.textContent = openCount + ' open item' + (openCount === 1 ? '' : 's');
-    var btnRecs = document.getElementById('btn-pending-recs');
-    if (btnRecs) {
-      // Keep rec count from static HTML logic — tickets don't affect this
+    // Sidebar Tickets badge — real open count (was hardcoded '3')
+    var tBadge = document.getElementById('tickets-badge');
+    if (tBadge) {
+      tBadge.textContent = openCount;
+      tBadge.style.display = openCount > 0 ? '' : 'none';
     }
   }
 
@@ -6564,7 +6567,7 @@ function _renderEnrollmentLanding(el) {
     '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px;text-align:center">',
     ['Data Collection','Script Generation','Video Production','Review &amp; Approve'].map(function(s,i){
       return '<div style="background:#fff;border:1px solid var(--bd);border-radius:10px;padding:16px 12px">' +
-        '<div style="font-size:22px;font-weight:800;color:var(--bdl);margin-bottom:8px">'+(i+1)+'</div>' +
+        '<div style="font-size:22px;font-weight:800;color:var(--cu);margin-bottom:8px">'+(i+1)+'</div>' +
         '<div style="font-size:12px;font-weight:700;color:var(--tp)">'+s+'</div></div>';
     }).join(''),
     '</div>',
