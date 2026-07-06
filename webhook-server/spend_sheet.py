@@ -293,6 +293,11 @@ def _base_row(company: dict) -> dict:
         "market":            company.get("market", ""),
         "marketing_manager": company.get("manager", ""),
         "ple_status":        company.get("ple_status", ""),
+        # ILS spends — company-level, not deal line items
+        "zillow_per_month":  company.get("zillow_per_month"),
+        "zillow_per_lease":  company.get("zillow_per_lease"),
+        "costar_package":    company.get("costar_package", ""),
+        "cx_bundle":         company.get("cx_bundle", False),
         # line-item columns default to None
         "seo": None, "search": None, "pmax": None, "paid_social": None,
         "tiktok": None, "geofence": None, "mgmt_fee": None,
@@ -335,7 +340,11 @@ def _get_managed_companies() -> list[dict]:
     # with no deal aren't billable / managed surface — exclude them.
     props = ["name", "rpmmarket", "marketing_manager",
              "marketing_manager_email", "plestatus",
-             "num_associated_deals"]
+             "num_associated_deals",
+             # ILS spends (populated from the Marketing Spends tracker,
+             # Kyle 2026-07-06) — surfaced as spend-sheet columns.
+             "zillow_per_month", "zillow_spend", "costar_package",
+             "customerexperiencebundle"]
 
     for _ in range(50):  # safety: max 5,000 companies
         params = {
@@ -376,6 +385,10 @@ def _get_managed_companies() -> list[dict]:
                 "market":     cp.get("rpmmarket", ""),
                 "manager":    cp.get("marketing_manager") or cp.get("marketing_manager_email", ""),
                 "ple_status": status,
+                "zillow_per_month": _f(cp.get("zillow_per_month")),
+                "zillow_per_lease": _f(cp.get("zillow_spend")),
+                "costar_package":   cp.get("costar_package") or "",
+                "cx_bundle":        (cp.get("customerexperiencebundle") or "") in ("true", "True"),
             })
 
         after = data.get("paging", {}).get("next", {}).get("after")

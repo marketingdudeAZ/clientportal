@@ -3099,11 +3099,14 @@ body{line-height:1.55}
               <th class="s-num" style="min-width:105px">Social Content</th>
               <th class="s-num" style="min-width:75px">Eblasts</th>
               <th class="s-num" style="min-width:95px">Email Drips</th>
+              <th class="s-num" style="min-width:90px">Zillow /mo</th>
+              <th class="s-num" style="min-width:95px">Zillow /lease</th>
+              <th style="min-width:90px">CoStar Pkg</th>
               <th class="s-num" style="min-width:100px;color:var(--cu)">Total</th>
             </tr>
           </thead>
           <tbody id="spend-tbody">
-            <tr><td colspan="16" style="text-align:center;padding:48px;color:var(--tm);font-size:12px">
+            <tr><td colspan="19" style="text-align:center;padding:48px;color:var(--tm);font-size:12px">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px;display:block;margin-left:auto;margin-right:auto"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               Loading spend data…
             </td></tr>
@@ -4377,7 +4380,7 @@ function _renderSpendSheet(rows) {
   var badge = document.getElementById('sf-count');
 
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;padding:40px;color:var(--tm)">No results match your filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="19" style="text-align:center;padding:40px;color:var(--tm)">No results match your filters.</td></tr>';
     if (tfoot) tfoot.style.display = 'none';
     if (badge) { badge.textContent = '0 properties'; badge.style.display = ''; }
     return;
@@ -4397,7 +4400,7 @@ function _renderSpendSheet(rows) {
     var skuTotal = (r.search||0) + (r.pmax||0) + (r.paid_social||0) +
                    (r.geofence||0) + (r.display||0) + (r.retargeting||0) +
                    (r.ctv||0) + (r.seo||0) + (r.social_posting||0) +
-                   (r.eblast||0) + (r.email_drip||0);
+                   (r.eblast||0) + (r.email_drip||0) + (r.zillow_per_month||0);
     var total = skuTotal
       ? '<span style="font-weight:700;color:var(--cu)">$'+Math.round(skuTotal).toLocaleString('en-US')+'</span>'
       : '—';
@@ -4417,6 +4420,9 @@ function _renderSpendSheet(rows) {
       '<td class="s-num">' + fmtAmt(r.social_posting) + '</td>' +
       '<td class="s-num">' + fmtAmt(r.eblast) + '</td>' +
       '<td class="s-num">' + fmtAmt(r.email_drip) + '</td>' +
+      '<td class="s-num">' + fmtAmt(r.zillow_per_month) + '</td>' +
+      '<td class="s-num">' + fmtAmt(r.zillow_per_lease) + '</td>' +
+      '<td>' + (r.costar_package||'—') + '</td>' +
       '<td class="s-num s-total">' + total + '</td>' +
       '</tr>';
   }).join('');
@@ -9760,11 +9766,14 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
           <th class="s-num" style="min-width:105px">Social Content</th>
           <th class="s-num" style="min-width:75px">Eblasts</th>
           <th class="s-num" style="min-width:95px">Email Drips</th>
+          <th class="s-num" style="min-width:90px">Zillow /mo</th>
+          <th class="s-num" style="min-width:95px">Zillow /lease</th>
+          <th style="min-width:90px">CoStar Pkg</th>
           <th class="s-num" style="min-width:100px;color:var(--cu)">Total</th>
         </tr>
       </thead>
       <tbody id="spend-tbody">
-        <tr><td colspan="16" style="text-align:center;padding:48px;color:var(--tm);font-size:12px">
+        <tr><td colspan="19" style="text-align:center;padding:48px;color:var(--tm);font-size:12px">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px;display:block;margin-left:auto;margin-right:auto"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           Loading spend data…
         </td></tr>
@@ -10048,7 +10057,7 @@ function loadSpendSheet(force) {
     .catch(function(err) {
       console.warn('loadSpendSheet failed:', err);
       var el = document.getElementById('spend-tbody');
-      if (el) el.innerHTML = '<tr><td colspan="16" style="padding:32px;text-align:center;color:var(--tm)">Could not load spend data.</td></tr>';
+      if (el) el.innerHTML = '<tr><td colspan="19" style="padding:32px;text-align:center;color:var(--tm)">Could not load spend data.</td></tr>';
     });
 }
 
@@ -10071,13 +10080,14 @@ function renderSpendSheet(rows) {
   var tbody = document.getElementById('spend-tbody');
   if (!tbody) return;
   function fmt(v) { return v ? '$' + Math.round(v).toLocaleString() : '—'; }
-  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="16" style="padding:32px;text-align:center;color:var(--tm)">No results.</td></tr>'; return; }
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="19" style="padding:32px;text-align:center;color:var(--tm)">No results.</td></tr>'; return; }
   tbody.innerHTML = rows.map(function(r) {
     var pname = r.property_name || r.name || '';
     var rowTotal = (r.search||0) + (r.pmax||0) + (r.paid_social||0) +
                    (r.geofence||0) + (r.display||0) + (r.retargeting||0) +
                    (r.ctv||0) + (r.seo||0) + (r.social_posting||r.social_content||0) +
-                   (r.eblast||r.eblasts||0) + (r.email_drip||r.email_drips||0);
+                   (r.eblast||r.eblasts||0) + (r.email_drip||r.email_drips||0) +
+                   (r.zillow_per_month||0);
     return '<tr>' +
       '<td><span class="s-prop-name" title="'+pname+'">'+pname+'</span></td>' +
       '<td>' + (r.ple_status||r.plestatus||r.status||'') + '</td>' +
@@ -10094,6 +10104,9 @@ function renderSpendSheet(rows) {
       '<td class="s-num">' + fmt(r.social_posting||r.social_content) + '</td>' +
       '<td class="s-num">' + fmt(r.eblast||r.eblasts) + '</td>' +
       '<td class="s-num">' + fmt(r.email_drip||r.email_drips) + '</td>' +
+      '<td class="s-num">' + fmt(r.zillow_per_month) + '</td>' +
+      '<td class="s-num">' + fmt(r.zillow_per_lease) + '</td>' +
+      '<td>' + (r.costar_package||'—') + '</td>' +
       '<td class="s-num s-total" style="color:var(--cu);font-weight:700">' + fmt(rowTotal) + '</td>' +
       '</tr>';
   }).join('');
