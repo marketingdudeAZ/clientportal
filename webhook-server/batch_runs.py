@@ -100,23 +100,49 @@ def red_light_v2_batch(max_age_days: int = 25, limit: int = 0,
     if limit:
         eligible = eligible[:limit]
 
+    def _run_one_with_timeout(cid: str, timeout_s: int = 300) -> str:
+        """Run one report in a worker thread with a hard timeout.
+
+        A single property whose AptIQ bulk job never completes must not
+        wedge the whole portfolio sweep (it did — the first full sweep
+        produced 0 reports because company #1 hung). Timed-out threads are
+        abandoned (daemon) and the sweep moves on.
+        """
+        import redlight_v2_run
+        result = {"state": "timeout"}
+
+        def _target():
+            try:
+                redlight_v2_run.run(company_id=cid)
+                result["state"] = "ok"
+            except Exception as e:
+                result["state"] = f"fail: {e}"
+
+        t = threading.Thread(target=_target, daemon=True)
+        t.start()
+        t.join(timeout_s)
+        return result["state"]
+
     def _sweep():
         with _locks["red_light_v2"]:
-            import redlight_v2_run
-            ok = fail = 0
+            ok = fail = timed_out = 0
+            logger.info("red-light-v2-batch: sweep starting, %d eligible", len(eligible))
             for i, cid in enumerate(eligible, 1):
-                try:
-                    redlight_v2_run.run(company_id=cid)
+                if i <= 5 or i % 25 == 0:
+                    logger.info("red-light-v2-batch: [%d/%d] running company %s",
+                                i, len(eligible), cid)
+                state = _run_one_with_timeout(cid)
+                if state == "ok":
                     ok += 1
-                except Exception as e:
+                elif state == "timeout":
+                    timed_out += 1
+                    logger.warning("red-light-v2-batch: %s TIMED OUT (300s) — skipped", cid)
+                else:
                     fail += 1
-                    logger.warning("red-light-v2-batch: %s failed: %s", cid, e)
-                if i % 25 == 0:
-                    logger.info("red-light-v2-batch: %d/%d (ok=%d fail=%d)",
-                                i, len(eligible), ok, fail)
+                    logger.warning("red-light-v2-batch: %s %s", cid, state)
                 time.sleep(pause_seconds)
-            logger.info("red-light-v2-batch DONE: %d ok, %d failed of %d",
-                        ok, fail, len(eligible))
+            logger.info("red-light-v2-batch DONE: %d ok, %d failed, %d timed out of %d",
+                        ok, fail, timed_out, len(eligible))
 
     threading.Thread(target=_sweep, daemon=True).start()
     return {"status": "dispatched", "eligible": len(eligible),
