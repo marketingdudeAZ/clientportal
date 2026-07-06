@@ -116,17 +116,34 @@ def fetch_portfolio(email, role):
         logger.debug("Cache hit for %s", cache_key)
         return cached[1]
 
-    filter_groups = _build_filter_groups(email, role)
+    # LIST endpoint enumeration (2026-07-06): the /search endpoint's
+    # pagination stops short non-deterministically at portfolio size — the
+    # Properties tab showed 874 while the true 2-status count is much
+    # higher. Same flakiness spend_sheet + triage already worked around.
+    # We enumerate every company via the fully-consistent LIST endpoint and
+    # filter plestatus client-side.
+    _ = _build_filter_groups(email, role)  # kept for back-compat/tests
+    allowed = {"RPM Managed", "Onboarding"}
 
-    # Paginate through all results
     all_companies = []
     seen_ids = set()
     after = None
-
-    for _ in range(100):  # Safety cap: max 10,000 companies (100 pages × 100 per page)
-        results, after = _search_companies(filter_groups, after)
+    for _ in range(100):  # Safety cap: max 10,000 companies
+        params = {"limit": 100, "properties": ",".join(COMPANY_PROPS)}
+        if after:
+            params["after"] = after
+        resp = requests.get(
+            f"{API_BASE}/crm/v3/objects/companies",
+            headers=HEADERS, params=params, timeout=25,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("results", [])
+        after = data.get("paging", {}).get("next", {}).get("after")
         for company in results:
             cid = company["id"]
+            if (company.get("properties", {}).get("plestatus") or "").strip() not in allowed:
+                continue
             if cid not in seen_ids:
                 seen_ids.add(cid)
                 all_companies.append(company)
@@ -165,6 +182,35 @@ def _safe_int(val, default=0):
         return int(float(val))
     except (ValueError, TypeError):
         return default
+
+
+def _spend_by_company():
+    """{company_id: monthly $} from the deal-line-item engine (spend_sheet).
+
+    The authoritative monthly spend lives on deal line items — the legacy
+    company-level *_monthly_spend fields this module used to sum are only
+    sparsely populated, which undercounted the dashboard KPI (showed $339k
+    portfolio-wide). spend_sheet keeps its own 30-min cache, so this join
+    is cheap after the first call. Empty dict on any failure — callers fall
+    back to the legacy per-property computation.
+    """
+    try:
+        from spend_sheet import get_spend_sheet_data, _SPEND_COLUMN_KEYS
+        out = {}
+        for row in get_spend_sheet_data():
+            total = 0.0
+            for k in _SPEND_COLUMN_KEYS:
+                v = row.get(k)
+                if v:
+                    try:
+                        total += float(v)
+                    except (TypeError, ValueError):
+                        pass
+            out[str(row.get("company_id"))] = total
+        return out
+    except Exception as e:
+        logger.warning("portfolio: spend_sheet join unavailable (%s) — legacy spend fields", e)
+        return {}
 
 
 def _compute_monthly_spend(props):
@@ -212,6 +258,8 @@ def compute_rollups(companies):
     atr_scores = []
     lease_trend_total = 0
 
+    spend_map = _spend_by_company()  # deal-line-item truth; {} on failure
+
     for props in companies:
         # Units
         total_units += _safe_int(props.get("totalunits"))
@@ -219,8 +267,9 @@ def compute_rollups(companies):
         # Flags
         total_flags += _safe_int(props.get("redlight_flag_count"))
 
-        # Spend
-        total_spend += _compute_monthly_spend(props)
+        # Spend — deal line items when available, legacy fields otherwise
+        cid = str(props.get("hubspot_company_id") or "")
+        total_spend += spend_map.get(cid) if cid in spend_map else _compute_monthly_spend(props)
 
         # Health score — prefer pipeline score, fall back to leasing score
         rl = props.get("redlight_report_score")
@@ -367,8 +416,10 @@ def format_portfolio_response(companies):
 
     # Format individual properties for the table
     properties = []
+    _smap = _spend_by_company()
     for props in companies:
-        monthly = _compute_monthly_spend(props)
+        _cid = str(props.get("hubspot_company_id") or "")
+        monthly = _smap.get(_cid) if _cid in _smap else _compute_monthly_spend(props)
         rl_score = props.get("redlight_report_score")
 
         occ_raw = props.get("occupancy__")
