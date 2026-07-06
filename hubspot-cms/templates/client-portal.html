@@ -1785,6 +1785,97 @@ body{line-height:1.55}
   <!-- Configurator — empty state until /api/budget-tiers is wired to HUBDB_BUDGET_TIERS_TABLE_ID.
        The previous static tier cards / prices / "320 unit" included-services table were demo-only and
        have been removed to avoid showing fake pricing to clients. -->
+  <!-- Loop 1 self-checkout cards (SELF_CHECKOUT_ENABLED) — hidden until the
+       cards API returns at least one recommendation. Company/email resolve at
+       runtime from the portal globals (Clerk login), not HubL. -->
+  <section id="sc-recos" class="card card-p" hidden style="margin-bottom:16px">
+    <div style="font-size:16px;font-weight:700;color:var(--jd);margin-bottom:4px">Recommended budget changes</div>
+    <div style="font-size:12px;color:var(--tm);margin-bottom:16px">Based on impression share lost to budget. Adding one builds the deal + quote for your RM to sign &mdash; nothing goes live until signed.</div>
+    <div id="sc-recos-list"></div>
+  </section>
+  <style>
+    .sc-card{border:1px solid var(--bd);border-radius:10px;padding:16px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;background:#fff}
+    .sc-card__head{font-weight:700;text-transform:capitalize;color:var(--jd)}
+    .sc-card__money{font-size:14px}
+    .sc-card__money strong{color:var(--cu)}
+    .sc-card__why{flex-basis:100%;font-size:12.5px;color:var(--ts)}
+    .sc-card__actions{display:flex;gap:8px;align-items:center}
+    .sc-card__actions select,.sc-card__actions input,.sc-card__actions button{font:inherit;font-size:12.5px;padding:8px 12px;border-radius:8px;border:1px solid var(--bd)}
+    .sc-card__actions button{background:var(--j);color:#fff;border:0;cursor:pointer;font-weight:700}
+    .sc-card__actions button[disabled]{opacity:.6;cursor:default}
+    .sc-card__result{flex-basis:100%;font-size:12.5px}
+    .sc-card__result a{color:var(--cu);font-weight:700}
+  </style>
+  <script>
+  function loadSelfCheckoutCards() {
+    var root = document.getElementById("sc-recos");
+    if (!root || root.dataset.loaded) return;
+    var companyId = window.__PORTAL_COMPANY_ID__ || "";
+    var uuid = new URLSearchParams(location.search).get("uuid") || companyId;
+    if (!companyId) return;
+    var API = window.__PORTAL_API_BASE || "https://rpm-portal-server.onrender.com";
+    var H = { "X-Portal-Email": window.__PORTAL_EMAIL__ || "", "Content-Type": "application/json" };
+    var money = function (n) { return "$" + Number(n).toLocaleString(); };
+    fetch(API + "/api/self-checkout/recommendations?company_id=" + encodeURIComponent(companyId) +
+          "&uuid=" + encodeURIComponent(uuid), { headers: H })
+      .then(function (r) { return r.status === 404 ? null : r.json(); })
+      .then(function (data) {
+        root.dataset.loaded = "1";
+        if (!data) return;                     // flag off -> stay hidden
+        var cards = data.cards || [];
+        if (!cards.length) return;             // no signals -> stay hidden
+        root.hidden = false;
+        var list = document.getElementById("sc-recos-list");
+        cards.forEach(function (c) { list.appendChild(_scRenderCard(c, companyId, uuid, API, H, money)); });
+      })
+      .catch(function () { /* never break the page */ });
+  }
+  function _scRenderCard(c, companyId, uuid, API, H, money) {
+    var el = document.createElement("div");
+    el.className = "sc-card";
+    el.innerHTML =
+      '<div class="sc-card__head">' + c.channel.replace(/_/g, " ") + '</div>' +
+      '<div class="sc-card__money">' + money(c.current_budget) +
+        ' &rarr; <strong>' + money(c.recommended_budget) + '/mo</strong>' +
+        ' (+' + money(c.delta) + ')</div>' +
+      '<div class="sc-card__why">' + c.rationale + '</div>' +
+      '<div class="sc-card__actions">' +
+        '<select class="sc-launch"><option value="asap">Launch ASAP</option>' +
+        '<option value="scheduled">Schedule\u2026</option></select>' +
+        '<input type="date" class="sc-date" style="display:none" />' +
+        '<button class="sc-add">Add</button>' +
+      '</div>' +
+      '<div class="sc-card__result" hidden></div>';
+    var sel = el.querySelector(".sc-launch"), dateEl = el.querySelector(".sc-date");
+    sel.addEventListener("change", function () { dateEl.style.display = sel.value === "scheduled" ? "" : "none"; });
+    var btn = el.querySelector(".sc-add"), result = el.querySelector(".sc-card__result");
+    btn.addEventListener("click", function () {
+      btn.disabled = true; btn.textContent = "Adding\u2026";
+      var body = { company_id: companyId, property_uuid: uuid,
+        recommendation_id: c.recommendation_id, channel: c.channel,
+        recommended_budget: c.recommended_budget, change_type: c.change_type,
+        launch_mode: sel.value };
+      if (sel.value === "scheduled" && dateEl.value) body.requested_date = dateEl.value;
+      fetch(API + "/api/self-checkout", { method: "POST", headers: H, body: JSON.stringify(body) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          result.hidden = false;
+          if (res.ok) {
+            btn.textContent = "Added";
+            result.innerHTML = 'Deal + quote built \u2014 ' +
+              '<a href="' + res.j.quote_url + '" target="_blank">open the quote to sign</a>' +
+              ' (launches ' + res.j.launch_date + ').';
+          } else {
+            btn.disabled = false; btn.textContent = "Add";
+            result.textContent = "Could not add: " + (res.j.error || "unknown error");
+          }
+        })
+        .catch(function () { btn.disabled = false; btn.textContent = "Add";
+          result.hidden = false; result.textContent = "Network error \u2014 try again."; });
+    });
+    return el;
+  }
+  </script>
   <div class="card card-p" id="budget-configurator-empty">
     <div style="font-size:16px;font-weight:700;color:var(--jd);margin-bottom:4px">Budget Configurator</div>
     <div style="font-size:12px;color:var(--tm);margin-bottom:24px">Preview and request changes to your marketing program</div>
@@ -3270,7 +3361,8 @@ function nav(id, el) {
   if (id === 'overview')         { loadOverview(); }
   if (id === 'tickets')          { loadTickets(); }
   if (id === 'brief')            { loadClientBrief(); }
-  if (id === 'budget')           { loadBudget(); }
+  if (id === 'budget')           { loadBudget(); loadSelfCheckoutCards(); }
+  if (id === 'services')         { if (typeof loadSelfCheckoutCards==='function') loadSelfCheckoutCards(); }
   if (id === 'video')            { loadVideoCreative(); }
   if (id === 'forecast')         { loadForecast(); }
   if (id === 'performance')      { loadPerformance(); }
