@@ -435,6 +435,11 @@ def _compute_leasing_score(props):
     if is_renovation:
         return {"score": None, "status": "Renovation", "is_lease_up": False}
 
+    # Per-property occupancy target (default 95). Stabilized properties score
+    # against THIS, not a global 95 — offsets below preserve the old bands when
+    # target == 95 and shift for a custom target (e.g. 92 for a rent-push asset).
+    target_occ = _fv("target_occupancy") or 95.0
+
     def _occ_score(o):
         if o is None: return 75
         if is_lease_up:
@@ -444,10 +449,10 @@ def _compute_leasing_score(props):
             if o >= 45: return 45
             return 30
         else:
-            if o >= 95: return 100
-            if o >= 93: return 85
-            if o >= 90: return 70
-            if o >= 87: return 55
+            if o >= target_occ:      return 100
+            if o >= target_occ - 2:  return 85
+            if o >= target_occ - 5:  return 70
+            if o >= target_occ - 8:  return 55
             return 35
 
     def _atr_score(a):
@@ -505,7 +510,9 @@ def _compute_leasing_score(props):
 
     # A real ramp already returned early; here ramp is always None (stabilized,
     # graduated, or a lease-up missing its takeover date).
-    return {"score": overall, "status": status, "is_lease_up": is_lease_up, "ramp": None}
+    return {"score": overall, "status": status, "is_lease_up": is_lease_up, "ramp": None,
+            "occ_target": target_occ,
+            "occ_gap": (round(occ - target_occ, 1) if occ is not None else None)}
 
 
 def format_portfolio_response(companies):

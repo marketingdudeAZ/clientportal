@@ -4913,8 +4913,11 @@ function renderExecDashboard(d){
   var spendMax = (bench&&bench.avg_spend) ? Math.max(spend||0, bench.avg_spend)*1.35 : ((spend||1000)*2);
   var g=[];
   g.push(_egCard({label:'Health Score', value:score, display:(score==null?'—':String(score)), min:0,max:100, mode:'scored', higherBetter:true, green:75, yellow:50}));
+  var occTarget=(health&&health.occ_target)||null, occGap=(health&&health.occ_gap);
+  var occFoot = (ramp||!occTarget) ? (prop.occupancy_status||'Physical occupancy')
+    : ('vs '+Math.round(occTarget)+'% target'+(occGap!=null?(' · '+(occGap>=0?'+':'')+occGap+' pts'):''));
   g.push(_egCard({label:'Occupancy', value:leasing.occupancy, display:_egPctDisplay(leasing.occupancy), min:40,max:100, mode:'context',
-    footNote:(prop.occupancy_status||'Physical occupancy')}));
+    tick:(ramp?null:occTarget), footNote:occFoot}));
   g.push(_egCard({label:'ATR · lower is better', value:leasing.atr, display:_egPctDisplay(leasing.atr), min:0,max:45, mode:'context', footNote:'Available to rent'}));
   g.push(_egCard({label:'Monthly Spend', value:spend, display:(spend!=null?_svcFmtK(spend):'—'), min:0,max:spendMax, mode:'context',
     tick:(bench?bench.avg_spend:null), footNote:(bench&&bench.avg_spend?('city avg '+_svcFmtK(bench.avg_spend)):'enrolled /mo')}));

@@ -356,6 +356,9 @@ def _compute_leasing_score(props):
             "occupancy_raw": occ, "atr_raw": atr, "trend_raw": None,
         }
 
+    # Per-property occupancy target (default 95). Stabilized scores against this.
+    target_occ = _fv("target_occupancy") or 95.0
+
     def _occ_score(o):
         if o is None:
             return 75
@@ -366,10 +369,10 @@ def _compute_leasing_score(props):
             if o >= 45: return 45
             return 30
         else:
-            if o >= 95: return 100
-            if o >= 93: return 85
-            if o >= 90: return 70
-            if o >= 87: return 55
+            if o >= target_occ:      return 100
+            if o >= target_occ - 2:  return 85
+            if o >= target_occ - 5:  return 70
+            if o >= target_occ - 8:  return 55
             return 35
 
     def _atr_score(a):
@@ -447,6 +450,8 @@ def _compute_leasing_score(props):
         "atr_raw":         atr,
         "trend_raw":       int(trend) if trend is not None else None,
         "ramp":            None,  # real ramps return early; None here by construction
+        "occ_target":      target_occ,
+        "occ_gap":         (round(occ - target_occ, 1) if occ is not None else None),
     }
 
 
@@ -635,6 +640,9 @@ def get_property_metrics():
                 "is_lease_up": ls["is_lease_up"] if ls else False,
                 # Lease-up ramp (surfaced at top level for the exec dashboard strip)
                 "ramp": (ls or {}).get("ramp"),
+                # Stabilized target-vs-actual occupancy (per-property target)
+                "occ_target": (ls or {}).get("occ_target"),
+                "occ_gap": (ls or {}).get("occ_gap"),
             },
         })
     except Exception as e:
