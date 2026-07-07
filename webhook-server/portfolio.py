@@ -42,7 +42,8 @@ COMPANY_PROPS = [
     "brf___renewal_leases_120_trend",     # Renewal lease 120-day trend
     "occupancy_status",                   # Lease-Up / Stabilized / In-Transition / Renovation
     # Lease-up ramp inputs (time-aware occupancy target)
-    "managementstart",                    # takeover date = lease-up ramp start
+    "lease_up_start_date",                # ramp start (delivery/reposition); preferred
+    "managementstart",                    # fallback ramp start (new construction ≈ delivery)
     "if_it_s_a_new_acquisition__what_is_the_management_start_date_",  # acquisition fallback
     "target_occupancy",                   # per-property target % (override; default 95)
     "lease_up_ramp_months",               # per-property ramp length (override; default 12)
@@ -479,7 +480,8 @@ def _compute_leasing_score(props):
     # Lease-up: score against the linear ramp from takeover date, not fixed bands.
     ramp_info = None
     if is_lease_up:
-        takeover = (props.get("managementstart")
+        takeover = (props.get("lease_up_start_date")
+                    or props.get("managementstart")
                     or props.get("if_it_s_a_new_acquisition__what_is_the_management_start_date_"))
         ramp_info = _lr.lease_up_ramp(occ, takeover, _fv("target_occupancy"), _fv("lease_up_ramp_months"))
         if ramp_info.get("applies") and not ramp_info.get("graduated"):

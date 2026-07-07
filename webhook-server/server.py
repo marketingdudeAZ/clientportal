@@ -405,7 +405,8 @@ def _compute_leasing_score(props):
     # bands (ATR dropped — early lease-ups have naturally high availability).
     ramp_info = None
     if is_lease_up:
-        takeover = (props.get("managementstart")
+        takeover = (props.get("lease_up_start_date")
+                    or props.get("managementstart")
                     or props.get("if_it_s_a_new_acquisition__what_is_the_management_start_date_"))
         ramp_info = _lr.lease_up_ramp(occ, takeover, _fv("target_occupancy"), _fv("lease_up_ramp_months"))
         if ramp_info.get("applies") and not ramp_info.get("graduated"):
@@ -488,7 +489,7 @@ def get_property_metrics():
         # Property type / occupancy status (for scoring model selection)
         "occupancy_status",
         # Lease-up ramp inputs (time-aware occupancy target)
-        "managementstart",
+        "lease_up_start_date", "managementstart",
         "if_it_s_a_new_acquisition__what_is_the_management_start_date_",
         "target_occupancy", "lease_up_ramp_months",
         # Red Light scores (pipeline-generated — may be null)
@@ -600,7 +601,8 @@ def get_property_metrics():
                 "occupancy_status": props.get("occupancy_status", ""),
                 "score_context_note": props.get("score_context_note", ""),
                 # Lease-up ramp inputs (for the Property Targets editor)
-                "takeover_date": _lr_date(props.get("managementstart")
+                "takeover_date": _lr_date(props.get("lease_up_start_date")
+                                          or props.get("managementstart")
                                           or props.get("if_it_s_a_new_acquisition__what_is_the_management_start_date_")),
                 "target_occupancy": _f("target_occupancy"),
                 "ramp_months": _f("lease_up_ramp_months"),
@@ -6101,7 +6103,7 @@ def property_targets():
                 _dt.datetime.strptime(td, "%Y-%m-%d")
             except ValueError:
                 return jsonify({"error": "takeover_date must be YYYY-MM-DD"}), 400
-        updates["managementstart"] = td  # blank clears it
+        updates["lease_up_start_date"] = td  # never overwrite managementstart; blank clears it
     if "target_occupancy" in payload:
         v = payload.get("target_occupancy")
         if v in (None, ""):
