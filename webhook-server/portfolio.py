@@ -41,6 +41,11 @@ COMPANY_PROPS = [
     "trending_120_days_lease_expiration", # Leases expiring in 120-day window
     "brf___renewal_leases_120_trend",     # Renewal lease 120-day trend
     "occupancy_status",                   # Lease-Up / Stabilized / In-Transition / Renovation
+    # Lease-up ramp inputs (time-aware occupancy target)
+    "managementstart",                    # takeover date = lease-up ramp start
+    "if_it_s_a_new_acquisition__what_is_the_management_start_date_",  # acquisition fallback
+    "target_occupancy",                   # per-property target % (override; default 95)
+    "lease_up_ramp_months",               # per-property ramp length (override; default 12)
     # Red Light score fields
     "red_light_report_score", "red_light_report_status",
     "red_light_market_score", "red_light_marketing_score",
@@ -421,9 +426,10 @@ def _compute_leasing_score(props):
     if occ is None and atr is None:
         return None
 
-    occ_status    = (props.get("occupancy_status") or "").strip()
-    is_lease_up   = occ_status in ("Lease-Up", "In-Transition")
-    is_renovation = occ_status == "Renovation"
+    import leasing_ramp as _lr
+    _cls = _lr.normalize_occupancy_status(props.get("occupancy_status"))
+    is_lease_up   = _cls == "lease_up"
+    is_renovation = _cls == "renovation"
 
     if is_renovation:
         return {"score": None, "status": "Renovation", "is_lease_up": False}
@@ -470,8 +476,21 @@ def _compute_leasing_score(props):
     a_score = _atr_score(atr)
     e_score = _exposure_score(trend, units)
 
+    # Lease-up: score against the linear ramp from takeover date, not fixed bands.
+    ramp_info = None
     if is_lease_up:
-        overall = round(o_score * 0.60 + a_score * 0.40)
+        takeover = (props.get("managementstart")
+                    or props.get("if_it_s_a_new_acquisition__what_is_the_management_start_date_"))
+        ramp_info = _lr.lease_up_ramp(occ, takeover, _fv("target_occupancy"), _fv("lease_up_ramp_months"))
+        if ramp_info.get("applies") and not ramp_info.get("graduated"):
+            return {"score": ramp_info["score"], "status": ramp_info["status"],
+                    "is_lease_up": True, "ramp": ramp_info}
+        if ramp_info.get("graduated"):
+            is_lease_up = False  # hit the ramp end at/above target — score as stabilized
+
+    if is_lease_up:
+        # Lease-up with no takeover date on file: fixed occupancy bands, ATR dropped.
+        overall = o_score
     else:
         overall = round(o_score * 0.50 + a_score * 0.30 + e_score * 0.20)
 
@@ -482,7 +501,9 @@ def _compute_leasing_score(props):
     else:
         status = "NEEDS ATTENTION"
 
-    return {"score": overall, "status": status, "is_lease_up": is_lease_up}
+    # A real ramp already returned early; here ramp is always None (stabilized,
+    # graduated, or a lease-up missing its takeover date).
+    return {"score": overall, "status": status, "is_lease_up": is_lease_up, "ramp": None}
 
 
 def format_portfolio_response(companies):

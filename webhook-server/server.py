@@ -343,9 +343,10 @@ def _compute_leasing_score(props):
     if occ is None and atr is None:
         return None
 
-    occ_status   = (props.get("occupancy_status") or "").strip()
-    is_lease_up  = occ_status in ("Lease-Up", "In-Transition")
-    is_renovation = occ_status == "Renovation"
+    import leasing_ramp as _lr
+    _cls = _lr.normalize_occupancy_status(props.get("occupancy_status"))
+    is_lease_up  = _cls == "lease_up"
+    is_renovation = _cls == "renovation"
 
     if is_renovation:
         return {
@@ -400,8 +401,26 @@ def _compute_leasing_score(props):
     a_score = _atr_score(atr)
     e_score = _exposure_score(trend, units)
 
+    # Lease-up: score against the linear ramp from the takeover date, not fixed
+    # bands (ATR dropped — early lease-ups have naturally high availability).
+    ramp_info = None
     if is_lease_up:
-        overall = round(o_score * 0.60 + a_score * 0.40)
+        takeover = (props.get("managementstart")
+                    or props.get("if_it_s_a_new_acquisition__what_is_the_management_start_date_"))
+        ramp_info = _lr.lease_up_ramp(occ, takeover, _fv("target_occupancy"), _fv("lease_up_ramp_months"))
+        if ramp_info.get("applies") and not ramp_info.get("graduated"):
+            return {
+                "score": ramp_info["score"], "status": ramp_info["status"],
+                "is_lease_up": True, "is_renovation": False,
+                "occupancy_score": o_score, "atr_score": None, "exposure_score": None,
+                "exposure_pct": None, "occupancy_raw": occ, "atr_raw": atr, "trend_raw": None,
+                "ramp": ramp_info,
+            }
+        if ramp_info.get("graduated"):
+            is_lease_up = False  # hit ramp end at/above target — score as stabilized
+
+    if is_lease_up:
+        overall = o_score  # lease-up, no takeover date on file: occ bands, ATR dropped
     else:
         overall = round(o_score * 0.50 + a_score * 0.30 + e_score * 0.20)
 
@@ -426,6 +445,7 @@ def _compute_leasing_score(props):
         "occupancy_raw":   occ,
         "atr_raw":         atr,
         "trend_raw":       int(trend) if trend is not None else None,
+        "ramp":            None,  # real ramps return early; None here by construction
     }
 
 
@@ -467,6 +487,10 @@ def get_property_metrics():
         "brf___renewal_leases_120_trend",
         # Property type / occupancy status (for scoring model selection)
         "occupancy_status",
+        # Lease-up ramp inputs (time-aware occupancy target)
+        "managementstart",
+        "if_it_s_a_new_acquisition__what_is_the_management_start_date_",
+        "target_occupancy", "lease_up_ramp_months",
         # Red Light scores (pipeline-generated — may be null)
         "red_light_report_score", "red_light_report_status",
         "red_light_market_score", "red_light_marketing_score",
