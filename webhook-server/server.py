@@ -5832,6 +5832,45 @@ def creative_transition_run():
     return jsonify(result)
 
 
+@app.route("/api/internal/warm-caches", methods=["GET", "POST", "OPTIONS"])
+def warm_caches_route():
+    """Keep-warm: pre-populate the expensive portal caches so the first real
+    user request after an idle window is fast, not a cold 3-5s HubSpot sweep.
+
+    Warms: portfolio (874-company query), spend_sheet (deal line items),
+    triage ('What needs you'). Lauren's #1 pilot complaint was load speed;
+    a Render cron hitting this every ~10 min keeps every cache hot.
+    Auth: X-Internal-Key. Cheap + idempotent.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+    import time as _t
+    out = {}
+    t0 = _t.time()
+    try:
+        from portfolio import fetch_portfolio, format_portfolio_response
+        format_portfolio_response(fetch_portfolio("keep-warm@rpmliving.com", "marketing_director"))
+        out["portfolio"] = "ok"
+    except Exception as e:
+        out["portfolio"] = f"err: {e}"
+    try:
+        from spend_sheet import get_spend_sheet_data
+        out["spend_sheet_rows"] = len(get_spend_sheet_data())
+    except Exception as e:
+        out["spend_sheet"] = f"err: {e}"
+    try:
+        from triage import get_portfolio_triage
+        get_portfolio_triage()
+        out["triage"] = "ok"
+    except Exception as e:
+        out["triage"] = f"err: {e}"
+    out["elapsed_s"] = round(_t.time() - t0, 1)
+    return jsonify(out)
+
+
 @app.route("/api/internal/red-light-v2-batch", methods=["GET", "POST", "OPTIONS"])
 def red_light_v2_batch_route():
     """Portfolio sweep of Red Light v2 PDF reports (monthly cron).
