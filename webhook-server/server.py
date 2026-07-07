@@ -5858,6 +5858,7 @@ def property_context_note():
         note = ""
     if len(str(note)) > 2000:
         return jsonify({"error": "note too long (max 2000 chars)"}), 400
+    import requests as req
     try:
         r = req.patch(
             f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
