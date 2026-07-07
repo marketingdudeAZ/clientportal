@@ -73,7 +73,17 @@
       d.style.cssText = 'position:fixed;inset:0;background:#1A2530;z-index:2147483000;display:flex;align-items:center;justify-content:center;';
       var m = document.createElement('div'); m.id = 'clerk-signin-mount'; d.appendChild(m);
       document.body.appendChild(d);
-      window.Clerk.mountSignIn(m);
+      // Keep the user on the page they were signing into. Clerk's dev instance
+      // otherwise redirects to its default After-sign-in URL ("/"), which 404s
+      // because the portal lives at /client-portal, not the domain root.
+      // Pass both v5 (forceRedirectUrl/fallbackRedirectUrl) and legacy
+      // (afterSignInUrl/afterSignUpUrl) prop names for compatibility.
+      window.Clerk.mountSignIn(m, {
+        forceRedirectUrl: window.location.href,
+        fallbackRedirectUrl: window.location.href,
+        afterSignInUrl: window.location.href,
+        afterSignUpUrl: window.location.href
+      });
       window.Clerk.addListener(function (r) { if (r.user) finishAuth(); });
     }
     function boot() {
@@ -9789,7 +9799,17 @@ setTimeout(loadPropertySwitcher, 1500);
       d.style.cssText = 'position:fixed;inset:0;background:#1A2530;z-index:2147483000;display:flex;align-items:center;justify-content:center;';
       var m = document.createElement('div'); m.id = 'clerk-signin-mount'; d.appendChild(m);
       document.body.appendChild(d);
-      window.Clerk.mountSignIn(m);
+      // Keep the user on the page they were signing into. Clerk's dev instance
+      // otherwise redirects to its default After-sign-in URL ("/"), which 404s
+      // because the portal lives at /client-portal, not the domain root.
+      // Pass both v5 (forceRedirectUrl/fallbackRedirectUrl) and legacy
+      // (afterSignInUrl/afterSignUpUrl) prop names for compatibility.
+      window.Clerk.mountSignIn(m, {
+        forceRedirectUrl: window.location.href,
+        fallbackRedirectUrl: window.location.href,
+        afterSignInUrl: window.location.href,
+        afterSignUpUrl: window.location.href
+      });
       window.Clerk.addListener(function (r) { if (r.user) finishAuth(); });
     }
     function boot() {
