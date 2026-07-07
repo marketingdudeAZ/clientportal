@@ -203,6 +203,32 @@ def clerk_health():
     })
 
 
+@app.route("/api/whoami", methods=["GET", "OPTIONS"])
+def whoami():
+    """Diagnostic: echo what the auth layer resolved for THIS request. Called
+    from the portal console with the real Clerk token to see exactly why (or
+    whether) verification succeeds. No secrets returned."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    auth = request.headers.get("Authorization", "")
+    bearer_present = auth.startswith("Bearer ")
+    verify = None
+    if bearer_present:
+        import clerk_auth
+        try:
+            ident = clerk_auth.verify_bearer(auth)
+            verify = {"verified": bool(ident), "email": (ident or {}).get("email", ""),
+                      "user_id": (ident or {}).get("user_id", "")}
+        except Exception as e:
+            verify = {"verified": False, "error": str(e)[:200]}
+    return jsonify({
+        "bearer_present": bearer_present,
+        # Post-hook value: blank if a bad token got the asserted email stripped.
+        "resolved_x_portal_email": request.headers.get("X-Portal-Email", ""),
+        "verify_bearer": verify,
+    })
+
+
 @app.route("/api/resolve-uuid", methods=["GET", "OPTIONS"])
 def resolve_uuid_route():
     """uuid → { company_id, name }. The portal bootstrap calls this first so
