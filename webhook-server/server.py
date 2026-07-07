@@ -538,8 +538,14 @@ def get_property_metrics():
         # Overall score: prefer pipeline score if populated, else use computed leasing score
         rl_overall = _f("red_light_report_score")
         rl_status  = props.get("red_light_report_status", "")
-        display_overall = rl_overall if rl_overall is not None else (ls["score"] if ls else None)
-        display_status  = rl_status  if rl_status  else (ls["status"] if ls else "Not Scored")
+        if ls and ls.get("ramp"):
+            # Lease-up on a ramp: the ramp score is the current truth — it wins
+            # over any (stabilized-oriented) pipeline score so banner = strip.
+            display_overall = ls["score"]
+            display_status  = ls["status"]
+        else:
+            display_overall = rl_overall if rl_overall is not None else (ls["score"] if ls else None)
+            display_status  = rl_status  if rl_status  else (ls["status"] if ls else "Not Scored")
 
         # Build channel package list for the Performance Forecast simulator.
         # Each entry: {channel, label, budget}
@@ -625,6 +631,8 @@ def get_property_metrics():
                 # Computed leasing score (always present when data available)
                 "leasing_score": ls,
                 "is_lease_up": ls["is_lease_up"] if ls else False,
+                # Lease-up ramp (surfaced at top level for the exec dashboard strip)
+                "ramp": (ls or {}).get("ramp"),
             },
         })
     except Exception as e:
