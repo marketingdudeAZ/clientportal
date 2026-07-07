@@ -181,6 +181,28 @@ def _resolve_company_id_by_uuid(uuid):
     return cid
 
 
+@app.route("/api/internal/clerk-health", methods=["GET", "OPTIONS"])
+def clerk_health():
+    """Diagnostic: is the backend's Clerk config aligned with the frontend
+    instance that issues the tokens? Exposes only public values (the
+    publishable key + frontend domain are already public in the page HTML) —
+    never the secret key. If the derived domain doesn't match the template's
+    Clerk instance, every browser JWT fails verify_bearer() and the
+    before_request hook strips X-Portal-Email → 401 on every call."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    import clerk_auth
+    pk = os.environ.get("CLERK_PUBLISHABLE_KEY", "").strip()
+    return jsonify({
+        "clerk_publishable_key_present": bool(pk),
+        "clerk_publishable_key": pk,  # public value (also embedded in page HTML)
+        "clerk_secret_key_present": bool(os.environ.get("CLERK_SECRET_KEY", "").strip()),
+        "clerk_jwks_url_override_present": bool(os.environ.get("CLERK_JWKS_URL", "").strip()),
+        "derived_frontend_api_domain": clerk_auth._frontend_api_domain(),
+        "derived_jwks_url": clerk_auth._jwks_url(),
+    })
+
+
 @app.route("/api/resolve-uuid", methods=["GET", "OPTIONS"])
 def resolve_uuid_route():
     """uuid → { company_id, name }. The portal bootstrap calls this first so
