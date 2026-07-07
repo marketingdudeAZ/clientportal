@@ -1242,6 +1242,24 @@ body{line-height:1.55}
     </div>
   </div>
 
+  <!-- Health-score context note (Lauren pilot feedback #7): AM explains special cases -->
+  <div id="score-context-card" style="display:none;background:#FBF7EF;border:1px solid var(--cu);border-radius:12px;padding:14px 18px;margin-bottom:16px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div style="flex:1">
+        <div style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--cu);margin-bottom:4px">Score context</div>
+        <div id="score-context-display" style="font-size:13px;color:var(--tp);line-height:1.5;white-space:pre-wrap"></div>
+        <div id="score-context-edit" style="display:none">
+          <textarea id="score-context-input" class="form-textarea" style="width:100%;min-height:64px;font-size:13px" placeholder="Explain the score for this property (e.g. '88% occupied by design — remainder in remodel through Aug')…"></textarea>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" onclick="saveScoreContext()">Save</button>
+            <button class="btn btn-secondary btn-sm" onclick="cancelScoreContext()">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <button id="score-context-editbtn" class="btn btn-secondary btn-sm" onclick="editScoreContext()">Edit</button>
+    </div>
+  </div>
+
   <!-- 30-second summary card (consolidates Health, Leads, CPL + active issues) -->
   <div class="summary-card status-inactive" id="summary-card">
     <div class="summary-card-header">
@@ -3281,6 +3299,8 @@ function populateSidebar() {
       var leasing = (d && d.leasing)   || {};
       var health  = (d && d.health)    || {};
 
+      if (typeof renderScoreContext === 'function') renderScoreContext(prop.score_context_note || '');
+
       var sbName = document.querySelector('.sb-prop-name');
       if (sbName && prop.name) sbName.textContent = prop.name;
 
@@ -4650,6 +4670,43 @@ var _simMode        = 'channel';
 var _simBudgets     = {};      // { channel: budget }
 var _baseBudgets    = {};      // current-state budgets (read-only reference)
 var _currentPerf    = {};      // { leads, cpl, channels: {ch: {leads,spend}} }
+
+// ── Score context note (Lauren pilot feedback #7) ──
+function _scNoteApi(){ return window.__PORTAL_API_BASE || "https://rpm-portal-server.onrender.com"; }
+function renderScoreContext(note){
+  var card=document.getElementById("score-context-card"); if(!card) return;
+  var disp=document.getElementById("score-context-display");
+  var edit=document.getElementById("score-context-edit");
+  var btn=document.getElementById("score-context-editbtn");
+  window.__SCORE_NOTE__ = note || "";
+  if(edit) edit.style.display="none";
+  if(btn) btn.style.display="";
+  if((note||"").trim()){
+    card.style.display="block";
+    if(disp){ disp.textContent=note; disp.style.display="block"; }
+  } else {
+    // no note yet — keep the card hidden but reachable via the score glossary / Edit affordance
+    card.style.display="none";
+  }
+}
+function editScoreContext(){
+  var card=document.getElementById("score-context-card"); if(card) card.style.display="block";
+  document.getElementById("score-context-display").style.display="none";
+  document.getElementById("score-context-editbtn").style.display="none";
+  document.getElementById("score-context-edit").style.display="block";
+  document.getElementById("score-context-input").value = window.__SCORE_NOTE__ || "";
+}
+function cancelScoreContext(){ renderScoreContext(window.__SCORE_NOTE__ || ""); }
+function saveScoreContext(){
+  var note=document.getElementById("score-context-input").value;
+  var cid=window.__PORTAL_COMPANY_ID__ || "";
+  fetch(_scNoteApi()+"/api/property/context-note",{method:"POST",
+    headers:{"Content-Type":"application/json","X-Portal-Email":window.__PORTAL_EMAIL__||""},
+    body:JSON.stringify({company_id:cid,note:note})})
+   .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
+   .then(function(res){ if(res.ok){ renderScoreContext(note); } else { alert("Save failed: "+(res.j.error||"unknown")); } })
+   .catch(function(){ alert("Network error saving note."); });
+}
 var _propContext    = {};      // { unit_count, market, occupancy, health_score, size_band }
 var _forecastCtx    = null;   // result from /api/forecast-context
 
@@ -5840,6 +5897,7 @@ function _buildReportHTML(d) {
         <span style="color:#D4910A">50&ndash;74 WATCH</span>
         <span style="color:#C94444">&lt;50 NEEDS ATTENTION</span>
       </div>
+      <p style="margin:0 0 12px"><a href="#" onclick="closeScoreGlossary();editScoreContext();return false;" style="color:var(--cu);font-weight:700;font-size:12.5px">+ Add / edit a context note for this property &rarr;</a></p>
       <p style="margin:0;font-size:11.5px;color:var(--tm)">These bands also drive the dashboard RED/YLW/GRN mix and the &ldquo;What needs you today&rdquo; severity. The fuller 4-category Red Light score (marketing / market / funnel / experience) is being re-enabled as its data feed is rebuilt.</p>
     </div>
   </div>

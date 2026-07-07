@@ -343,6 +343,8 @@ def get_property_metrics():
         # Budget channels (drives Performance Forecast simulator)
         "seo_budget", "paid_search_monthly_spend", "paid_social_monthly_spend",
         "video_pipeline_tier",
+        # AM-entered context explaining the score for special cases (#7)
+        "score_context_note",
     ]
 
     try:
@@ -414,6 +416,7 @@ def get_property_metrics():
                 "uuid": props.get("uuid", ""),
                 "hubspot_company_id": company_id,
                 "occupancy_status": props.get("occupancy_status", ""),
+                "score_context_note": props.get("score_context_note", ""),
             },
             "packages": _packages,
             "current_perf": current_perf,
@@ -5830,6 +5833,44 @@ def creative_transition_run():
     import creative_transition
     result = creative_transition.handle_plestatus_change(str(company_id), "RPM Managed")
     return jsonify(result)
+
+
+@app.route("/api/property/context-note", methods=["POST", "OPTIONS"])
+def property_context_note():
+    """Save the AM-entered Health Score context note on a company (#7).
+
+    A visible explanation for special cases (e.g. '88% occupied by design —
+    remainder in remodel') so the score is understood without a manual
+    override. Written to the score_context_note company property.
+    Auth: X-Portal-Email (any authenticated portal user).
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    payload = request.get_json(silent=True) or {}
+    company_id = (payload.get("company_id") or "").strip()
+    note = payload.get("note", "")
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+    if note is None:
+        note = ""
+    if len(str(note)) > 2000:
+        return jsonify({"error": "note too long (max 2000 chars)"}), 400
+    try:
+        r = req.patch(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"},
+            json={"properties": {"score_context_note": str(note)}},
+            timeout=15,
+        )
+        if r.status_code >= 400:
+            return jsonify({"error": "HubSpot write failed", "detail": r.text[:200]}), 502
+    except Exception as e:
+        logger.error("context-note write failed: %s", e)
+        return jsonify({"error": "write failed"}), 500
+    return jsonify({"status": "ok", "note": str(note), "edited_by": email})
 
 
 @app.route("/api/internal/warm-caches", methods=["GET", "POST", "OPTIONS"])
