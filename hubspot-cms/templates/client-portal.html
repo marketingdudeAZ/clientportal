@@ -1265,8 +1265,16 @@ body{line-height:1.55}
        averages $7K" story, without leaving the property. -->
   <div id="spend-vs-city-card" style="display:none;background:var(--cd);border:1px solid var(--bd);border-radius:12px;padding:16px 18px;margin-bottom:16px"></div>
 
+  <!-- ═══ EXEC DASHBOARD (variation E) ═══
+       Colored status banner + speedometer gauges (live data) + volume/funnel
+       (gated on NinjaCat) + conversation-starter cards. Rendered by
+       renderExecDashboard() off the portal-data-ready event. The legacy
+       summary-card + leasing row below are kept in the DOM (hidden) so their
+       existing populators don't null-error. -->
+  <div id="exec-dashboard" style="margin-bottom:20px"></div>
+
   <!-- 30-second summary card (consolidates Health, Leads, CPL + active issues) -->
-  <div class="summary-card status-inactive" id="summary-card">
+  <div class="summary-card status-inactive" id="summary-card" style="display:none">
     <div class="summary-card-header">
       <div class="summary-status-pill" id="summary-status-pill">
         <span class="summary-status-dot"></span>
@@ -1306,8 +1314,8 @@ body{line-height:1.55}
     </div>
   </div>
 
-  <!-- Leasing Health Row -->
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">
+  <!-- Leasing Health Row (legacy — hidden; superseded by the exec dashboard gauges) -->
+  <div style="display:none;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">
     <div class="kpi" id="kpi-occ-card" style="border-top:3px solid var(--sage)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--sage)">Occupancy</div>
@@ -4781,6 +4789,127 @@ function renderSpendVsCity(prop){
     .then(function(b){ window.__BENCHMARKS__=b; _paintSpendVsCity(prop, b); })
     .catch(function(){ /* leave hidden on failure — never blocks the page */ });
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  EXEC DASHBOARD (variation E) — speedometer gauges + status banner
+//  Driven off the portal-data-ready event (payload = /api/property response).
+//  Live metrics render real gauges; funnel/leads gauges show an honest
+//  "Awaiting NinjaCat" state until that pipeline connects.
+// ═══════════════════════════════════════════════════════════════════════════
+var _EG = {
+  A0:-120, A1:120,
+  C:{ good:'#0CA30C', warn:'#D4910A', crit:'#C94444', slate:'#53606C', grid:'#E5E7EB', ink:'#1F2937', mut:'#9CA3AF' }
+};
+function _egPolar(cx,cy,r,deg){ var a=(deg-90)*Math.PI/180; return [cx+r*Math.cos(a), cy+r*Math.sin(a)]; }
+function _egArc(cx,cy,r,a,b){ var p0=_egPolar(cx,cy,r,a), p1=_egPolar(cx,cy,r,b); var lg=((b-a)%360)>180?1:0;
+  return 'M '+p0[0].toFixed(1)+' '+p0[1].toFixed(1)+' A '+r+' '+r+' 0 '+lg+' 1 '+p1[0].toFixed(1)+' '+p1[1].toFixed(1); }
+function _egClamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function _egState(cfg){ var C=_EG.C, v=cfg.value;
+  if(cfg.higherBetter){ if(v>=cfg.green) return {label:'On target',color:C.good};
+    if(v>=cfg.yellow) return {label:'Watch',color:C.warn}; return {label:'Needs attention',color:C.crit}; }
+  if(v<=cfg.green) return {label:'On target',color:C.good};
+  if(v<=cfg.yellow) return {label:'Watch',color:C.warn}; return {label:'Needs attention',color:C.crit};
+}
+function _egGaugeSvg(cfg){
+  var W=200,H=126,cx=100,cy=100,R=70,SW=13, C=_EG.C;
+  if(cfg.empty || cfg.value==null){
+    var base='<path d="'+_egArc(cx,cy,R,_EG.A0,_EG.A1)+'" stroke="'+C.grid+'" stroke-width="'+SW+'" fill="none" opacity=".6"/>';
+    return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-height:'+H+'px">'+base+
+      '<text x="'+cx+'" y="'+(cy-4)+'" text-anchor="middle" font-size="24" font-weight="800" fill="'+C.mut+'">—</text></svg>';
+  }
+  var v=cfg.value, ang=function(x){ return _EG.A0+(_EG.A1-_EG.A0)*_egClamp((x-cfg.min)/(cfg.max-cfg.min),0,1); };
+  var zones='', valColor;
+  if(cfg.mode==='scored'){
+    var segs = cfg.higherBetter
+      ? [[cfg.min,cfg.yellow,C.crit],[cfg.yellow,cfg.green,C.warn],[cfg.green,cfg.max,C.good]]
+      : [[cfg.min,cfg.green,C.good],[cfg.green,cfg.yellow,C.warn],[cfg.yellow,cfg.max,C.crit]];
+    zones = segs.map(function(s){ return '<path d="'+_egArc(cx,cy,R,ang(s[0]),ang(s[1]))+'" stroke="'+s[2]+'" stroke-width="'+SW+'" fill="none" opacity=".22"/>'; }).join('');
+    valColor=_egState(cfg).color;
+    zones += '<path d="'+_egArc(cx,cy,R,_EG.A0,ang(v))+'" stroke="'+valColor+'" stroke-width="'+SW+'" fill="none" stroke-linecap="round"/>';
+  } else {
+    zones = '<path d="'+_egArc(cx,cy,R,_EG.A0,_EG.A1)+'" stroke="'+C.grid+'" stroke-width="'+SW+'" fill="none"/>'
+          + '<path d="'+_egArc(cx,cy,R,_EG.A0,ang(v))+'" stroke="'+C.slate+'" stroke-width="'+SW+'" fill="none" stroke-linecap="round"/>';
+    valColor=C.slate;
+    if(cfg.tick!=null && cfg.tick>=cfg.min && cfg.tick<=cfg.max){ var t1=_egPolar(cx,cy,R+8,ang(cfg.tick)), t2=_egPolar(cx,cy,R-8,ang(cfg.tick));
+      zones += '<line x1="'+t1[0].toFixed(1)+'" y1="'+t1[1].toFixed(1)+'" x2="'+t2[0].toFixed(1)+'" y2="'+t2[1].toFixed(1)+'" stroke="'+C.ink+'" stroke-width="2"/>'; }
+  }
+  var dot=_egPolar(cx,cy,R,ang(v));
+  return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-height:'+H+'px">'+zones+
+    '<circle cx="'+dot[0].toFixed(1)+'" cy="'+dot[1].toFixed(1)+'" r="7" fill="'+valColor+'" stroke="#fff" stroke-width="2.5"/>'+
+    '<text x="'+cx+'" y="'+(cy-2)+'" text-anchor="middle" font-size="27" font-weight="800" fill="'+valColor+'">'+cfg.display+'</text></svg>';
+}
+function _egPill(color,label){ return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px;background:'+color+'1f;color:'+color+'"><span style="width:7px;height:7px;border-radius:50%;background:'+color+'"></span>'+label+'</span>'; }
+function _egCard(cfg){
+  var foot;
+  if(cfg.empty || cfg.value==null){ foot='<span style="font-size:10.5px;color:var(--tm)">'+(cfg.emptyNote||'Awaiting data')+'</span>'; }
+  else if(cfg.mode==='scored'){ var st=_egState(cfg); foot=_egPill(st.color, st.label); }
+  else { foot='<span style="font-size:11px;color:var(--ts)">'+(cfg.footNote||'')+'</span>'; }
+  return '<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:12px 8px 10px;text-align:center">'+
+    '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--tm)">'+cfg.label+'</div>'+
+    _egGaugeSvg(cfg)+
+    '<div style="font-size:11px;color:var(--ts);margin-top:2px;min-height:18px;display:flex;justify-content:center;align-items:center;gap:8px">'+foot+'</div></div>';
+}
+function _egPctDisplay(v){ return v!=null ? (Math.round(v*10)/10)+'%' : '—'; }
+function renderExecDashboard(d){
+  var host=document.getElementById('exec-dashboard'); if(!host) return;
+  var prop=(d&&d.property)||{}, leasing=(d&&d.leasing)||{}, health=(d&&d.health)||{}, C=_EG.C;
+  var score = (health.overall!=null) ? Math.round(health.overall) : null;
+  var statusWord = health.status || (score==null?'Not scored':(score>=75?'On Track':score>=50?'Watch':'Needs Attention'));
+  var bColor = score==null?C.slate:(score>=75?C.good:score>=50?C.warn:C.crit);
+  var meta=[prop.market, prop.units?prop.units+' units':'', prop.city_key].filter(Boolean).join(' · ');
+  var banner='<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;border-radius:14px;padding:18px 22px;color:#fff;margin-bottom:16px;background:'+bColor+'">'+
+    '<div><div style="font-size:20px;font-weight:800">'+(prop.name||'This property')+'</div><div style="font-size:13px;opacity:.9">'+(meta||'&nbsp;')+'</div></div>'+
+    '<div style="text-align:right;line-height:1.1"><div style="font-size:24px;font-weight:800">'+statusWord+'</div><small style="font-size:11.5px;font-weight:600;opacity:.9">Property health status</small></div></div>';
+
+  // Live gauges
+  var bench=(window.__BENCHMARKS__&&window.__BENCHMARKS__.by_city&&prop.city_key)?window.__BENCHMARKS__.by_city[prop.city_key]:null;
+  var spend=(prop.monthly_spend!=null)?prop.monthly_spend:null;
+  var spendMax = (bench&&bench.avg_spend) ? Math.max(spend||0, bench.avg_spend)*1.35 : ((spend||1000)*2);
+  var g=[];
+  g.push(_egCard({label:'Health Score', value:score, display:(score==null?'—':String(score)), min:0,max:100, mode:'scored', higherBetter:true, green:75, yellow:50}));
+  g.push(_egCard({label:'Occupancy', value:leasing.occupancy, display:_egPctDisplay(leasing.occupancy), min:40,max:100, mode:'context',
+    footNote:(prop.occupancy_status||'Physical occupancy')}));
+  g.push(_egCard({label:'ATR · lower is better', value:leasing.atr, display:_egPctDisplay(leasing.atr), min:0,max:45, mode:'context', footNote:'Available to rent'}));
+  g.push(_egCard({label:'Monthly Spend', value:spend, display:(spend!=null?_svcFmtK(spend):'—'), min:0,max:spendMax, mode:'context',
+    tick:(bench?bench.avg_spend:null), footNote:(bench&&bench.avg_spend?('city avg '+_svcFmtK(bench.avg_spend)):'enrolled /mo')}));
+  // Funnel gauges — gated until NinjaCat lands
+  var perf=(d&&d.current_perf)||null;
+  g.push(_egCard({label:'Lead → Tour', empty:!(perf&&perf.lead_to_tour!=null), value:(perf?perf.lead_to_tour:null), display:(perf&&perf.lead_to_tour!=null?perf.lead_to_tour+'%':'—'), min:0,max:100, mode:'scored', higherBetter:true, green:35, yellow:25, emptyNote:'Awaiting NinjaCat'}));
+  g.push(_egCard({label:'Cost / Lease', empty:!(perf&&perf.cost_per_lease!=null), value:(perf?perf.cost_per_lease:null), display:(perf&&perf.cost_per_lease!=null?_svcFmtK(perf.cost_per_lease):'—'), min:0,max:1200, mode:'context', emptyNote:'Awaiting NinjaCat'}));
+
+  var gauges='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px">'+g.join('')+'</div>';
+
+  // Volume & funnel strip — honest gated state
+  var funnelStrip = (perf&&perf.leads!=null)
+    ? ''  // (real funnel render would go here once data lands)
+    : '<div style="display:flex;align-items:center;gap:12px;background:var(--bg);border:1px dashed var(--bd);border-radius:12px;padding:14px 18px;margin-bottom:18px">'+
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--tm)" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>'+
+        '<div style="font-size:12.5px;color:var(--ts)"><b>Leads &amp; leasing funnel</b> — Lead→Prospect→Tour conversion, volume and cost-per-lease unlock automatically when the NinjaCat sync connects. Everything above is live.</div></div>';
+
+  // Conversation starter — derived from real sub-scores, no invented funnel claims
+  var subs=[{k:'Market',v:health.market},{k:'Marketing',v:health.marketing},{k:'Funnel',v:health.funnel},{k:'Experience',v:health.experience}]
+    .filter(function(s){ return s.v!=null; });
+  var drag = subs.length ? subs.slice().sort(function(a,b){return a.v-b.v;})[0] : null;
+  var spendStory = (bench&&bench.avg_spend&&spend!=null)
+    ? (spend>=bench.avg_spend ? ('Spend is <b>'+Math.round((spend/bench.avg_spend-1)*100)+'% above</b> the '+prop.city_key+' average ('+_svcFmtK(bench.avg_spend)+'/mo).')
+                              : ('Spend is <b>'+Math.round((1-spend/bench.avg_spend)*100)+'% below</b> the '+prop.city_key+' average ('+_svcFmtK(bench.avg_spend)+'/mo) — room to scale if the funnel supports it.'))
+    : 'Spend benchmarking appears once the city has enough comparable properties.';
+  var cards='<h3 style="font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--jd);margin:0 0 10px;padding-bottom:5px;border-bottom:1px solid var(--bd)">Conversation starter</h3>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">'+
+      '<div style="background:var(--white);border:1px solid var(--bd);border-top:3px solid '+bColor+';border-radius:12px;padding:14px 16px">'+
+        '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--jd);margin-bottom:6px">Where it stands</div>'+
+        '<div style="font-size:13px;color:var(--ts)">Health <b>'+(score==null?'not scored':score+' · '+statusWord)+'</b>. Occupancy <b>'+_egPctDisplay(leasing.occupancy)+'</b>, ATR <b>'+_egPctDisplay(leasing.atr)+'</b>'+(leasing.lease_trend_120!=null?', <b>'+leasing.lease_trend_120+'</b> leases needed in 120d':'')+'.</div></div>'+
+      '<div style="background:var(--white);border:1px solid var(--bd);border-top:3px solid var(--cu);border-radius:12px;padding:14px 16px">'+
+        '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--jd);margin-bottom:6px">Biggest drag</div>'+
+        '<div style="font-size:13px;color:var(--ts)">'+(drag?('<b>'+drag.k+'</b> is the lowest sub-score at <b>'+Math.round(drag.v)+'</b> — the first lever to pull.'):'Sub-scores populate with the next Red Light run.')+'</div></div>'+
+      '<div style="background:var(--white);border:1px solid var(--bd);border-top:3px solid var(--sage);border-radius:12px;padding:14px 16px">'+
+        '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--jd);margin-bottom:6px">Spend position</div>'+
+        '<div style="font-size:13px;color:var(--ts)">'+spendStory+'</div></div>'+
+    '</div>';
+
+  host.innerHTML = banner + gauges + funnelStrip + cards;
+}
+document.addEventListener('portal-data-ready', function(ev){ try{ renderExecDashboard(ev.detail); }catch(e){ console.warn('exec dashboard render failed', e); } });
 
 var _propContext    = {};      // { unit_count, market, occupancy, health_score, size_band }
 var _forecastCtx    = null;   // result from /api/forecast-context
