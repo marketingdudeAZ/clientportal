@@ -1260,6 +1260,11 @@ body{line-height:1.55}
     </div>
   </div>
 
+  <!-- Spend vs. city benchmark (Lauren pilot feedback #3): this property's monthly
+       spend against the RPM average in the same city — the "we're at $4K, Tempe
+       averages $7K" story, without leaving the property. -->
+  <div id="spend-vs-city-card" style="display:none;background:var(--cd);border:1px solid var(--bd);border-radius:12px;padding:16px 18px;margin-bottom:16px"></div>
+
   <!-- 30-second summary card (consolidates Health, Leads, CPL + active issues) -->
   <div class="summary-card status-inactive" id="summary-card">
     <div class="summary-card-header">
@@ -3300,6 +3305,7 @@ function populateSidebar() {
       var health  = (d && d.health)    || {};
 
       if (typeof renderScoreContext === 'function') renderScoreContext(prop.score_context_note || '');
+      if (typeof renderSpendVsCity === 'function') renderSpendVsCity(prop);
 
       var sbName = document.querySelector('.sb-prop-name');
       if (sbName && prop.name) sbName.textContent = prop.name;
@@ -4707,6 +4713,59 @@ function saveScoreContext(){
    .then(function(res){ if(res.ok){ renderScoreContext(note); } else { alert("Save failed: "+(res.j.error||"unknown")); } })
    .catch(function(){ alert("Network error saving note."); });
 }
+
+// ── Spend vs. city benchmark (Lauren pilot feedback #3) ──────────────────────
+function _svcFmtK(n){
+  if(n==null) return '—'; n=Math.round(n);
+  return n>=1000 ? '$'+(n/1000).toFixed(n>=10000?0:1).replace(/\.0$/,'')+'K' : '$'+n;
+}
+// Render a compact "this property $X vs {city} RPM avg $Y (n)" card on Overview.
+function _paintSpendVsCity(prop, benchmarks){
+  var card=document.getElementById('spend-vs-city-card'); if(!card) return;
+  var cityKey=prop.city_key||''; var mine=prop.monthly_spend;
+  var g=(benchmarks && benchmarks.by_city && cityKey) ? benchmarks.by_city[cityKey] : null;
+  if(!cityKey || !g || g.avg_spend==null){ card.style.display='none'; return; }  // no benchmark → hide silently
+  var avg=g.avg_spend, mineNum=(mine!=null?mine:0);
+  var pct = avg>0 ? Math.round((mineNum/avg)*100) : null;
+  var pos = mineNum>=avg;
+  var deltaTxt = pct==null ? '' :
+    (pos ? pct-100 + '% above' : (100-pct) + '% below') + ' the ' + cityKey + ' average';
+  // Two proportional bars (mine vs avg), scaled to the larger of the two.
+  var scale=Math.max(mineNum,avg,1);
+  var mineW=Math.round(mineNum/scale*100), avgW=Math.round(avg/scale*100);
+  var accent = pos ? 'var(--gd,#2E7D32)' : 'var(--jd)';
+  card.style.display='block';
+  card.innerHTML=
+    '<div style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--tm);margin-bottom:10px">Monthly spend vs. '+cityKey+'</div>'+
+    '<div style="display:flex;flex-direction:column;gap:9px">'+
+      '<div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
+          '<span style="font-weight:700;color:var(--tp)">This property</span>'+
+          '<span style="font-weight:800;color:'+accent+'">'+_svcFmtK(mineNum)+'</span></div>'+
+        '<div style="height:8px;background:var(--bd);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+mineW+'%;background:'+accent+'"></div></div>'+
+      '</div>'+
+      '<div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
+          '<span style="color:var(--tm)">RPM avg · '+g.count+' propert'+(g.count===1?'y':'ies')+'</span>'+
+          '<span style="font-weight:700;color:var(--tp)">'+_svcFmtK(avg)+'</span></div>'+
+        '<div style="height:8px;background:var(--bd);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+avgW+'%;background:var(--tm)"></div></div>'+
+      '</div>'+
+    '</div>'+
+    (deltaTxt ? '<div style="font-size:11.5px;color:var(--tm);margin-top:10px">You&#39;re <b style="color:'+accent+'">'+deltaTxt+'</b>'+
+      (g.avg_spend_per_unit!=null ? ' · city runs ~$'+g.avg_spend_per_unit.toFixed(0)+'/unit' : '')+'.</div>' : '');
+}
+function renderSpendVsCity(prop){
+  if(!prop || !prop.city_key){ var c=document.getElementById('spend-vs-city-card'); if(c) c.style.display='none'; return; }
+  if(window.__BENCHMARKS__){ _paintSpendVsCity(prop, window.__BENCHMARKS__); return; }
+  // Deep link straight to a property — benchmarks not loaded yet. Fetch the thin endpoint.
+  var API_BASE=window.__PORTAL_API_BASE||'https://rpm-portal-server.onrender.com';
+  var email=window.__PORTAL_EMAIL__||'portal@rpmliving.com';
+  fetch(API_BASE+'/api/portfolio/benchmarks',{headers:{'X-Portal-Email':email}})
+    .then(function(r){return r.json();})
+    .then(function(b){ window.__BENCHMARKS__=b; _paintSpendVsCity(prop, b); })
+    .catch(function(){ /* leave hidden on failure — never blocks the page */ });
+}
+
 var _propContext    = {};      // { unit_count, market, occupancy, health_score, size_band }
 var _forecastCtx    = null;   // result from /api/forecast-context
 
@@ -9914,8 +9973,11 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
   <!-- Search + filter bar -->
   <div class="prop-list-search-bar">
     <input id="pl-search" class="form-input" style="width:260px" placeholder="Search properties…" oninput="filterPropList()">
-    <select id="pl-market" class="form-input" style="width:180px" onchange="filterPropList()">
+    <select id="pl-market" class="form-input" style="width:180px" onchange="onMarketFilterChange()">
       <option value="">All Markets</option>
+    </select>
+    <select id="pl-city" class="form-input" style="width:180px" onchange="filterPropList()">
+      <option value="">All Cities</option>
     </select>
     <select id="pl-health" class="form-input" style="width:180px" onchange="filterPropList()">
       <option value="">All Health Status</option>
@@ -9927,6 +9989,8 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
   </div>
   <!-- Saved views (Lauren pilot feedback #2) — per-user, localStorage keyed on login -->
   <div id="pl-saved-views" style="display:flex;gap:8px;flex-wrap:wrap;margin:-8px 0 18px"></div>
+  <!-- Market spend benchmark (Lauren pilot feedback #3) — shows when a city is filtered -->
+  <div id="pl-bench-banner" style="display:none;margin:0 0 18px"></div>
   <!-- Properties table -->
   <div class="prop-list-table-card">
     <table class="pl-table">
@@ -10107,6 +10171,7 @@ function loadPropList() {
     .then(function(d) {
       _propListLoaded = true;
       _propListData = (d.properties || []).sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+      window.__BENCHMARKS__ = d.benchmarks || { by_city: {}, by_market: {} };
 
       // User label
       var u = d.user || {};
@@ -10124,6 +10189,9 @@ function loadPropList() {
       var sel = document.getElementById('pl-market');
       if (sel) markets.forEach(function(m){ var o=document.createElement('option'); o.value=m; o.textContent=m; sel.appendChild(o); });
 
+      // City filter options (cascade from selected market — populated here for "All Markets")
+      populateCityOptions('');
+
       renderPropList(_propListData);
       renderSavedViews();
     })
@@ -10140,17 +10208,20 @@ function _svLoad(){ try { return JSON.parse(localStorage.getItem(_svKey()) || "[
 function _svSave(list){ try { localStorage.setItem(_svKey(), JSON.stringify(list)); } catch(e){} }
 function saveCurrentView(){
   var mkt = document.getElementById("pl-market") ? document.getElementById("pl-market").value : "";
+  var cty = document.getElementById("pl-city") ? document.getElementById("pl-city").value : "";
   var hea = document.getElementById("pl-health") ? document.getElementById("pl-health").value : "";
-  if(!mkt && !hea){ alert("Pick a market and/or health status first, then save it as a view."); return; }
-  var name = prompt("Name this view (e.g. \"CO + NM\", \"Phoenix criticals\"):", mkt || "My view");
+  if(!mkt && !cty && !hea){ alert("Pick a market, city, and/or health status first, then save it as a view."); return; }
+  var name = prompt("Name this view (e.g. \"CO + NM\", \"Phoenix criticals\"):", cty || mkt || "My view");
   if(!name) return;
   var list = _svLoad();
   list = list.filter(function(v){ return v.name !== name; });
-  list.push({ name: name, market: mkt, health: hea });
+  list.push({ name: name, market: mkt, city: cty, health: hea });
   _svSave(list); renderSavedViews();
 }
 function applySavedView(v){
   if(document.getElementById("pl-market")) document.getElementById("pl-market").value = v.market || "";
+  populateCityOptions(v.market || "");
+  if(document.getElementById("pl-city")) document.getElementById("pl-city").value = v.city || "";
   if(document.getElementById("pl-health")) document.getElementById("pl-health").value = v.health || "";
   filterPropList();
 }
@@ -10173,13 +10244,77 @@ function renderSavedViews(){
   }).join("");
 }
 
+// City key matches the benchmark key format: "City, State" (or just city).
+function _cityKey(p) {
+  var c = (p.city||'').trim(), s = (p.state||'').trim();
+  return c ? (s ? c + ', ' + s : c) : '';
+}
+
+// Populate the City dropdown from properties in the (optionally) selected market.
+function populateCityOptions(market) {
+  var sel = document.getElementById('pl-city');
+  if (!sel) return;
+  var cur = sel.value;
+  var pool = market ? _propListData.filter(function(p){ return (p.market||'') === market; }) : _propListData;
+  var cities = [...new Set(pool.map(_cityKey).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All Cities</option>' +
+    cities.map(function(c){ return '<option value="'+c.replace(/"/g,'&quot;')+'">'+c+'</option>'; }).join('');
+  // Keep the current city selected if it still exists in the new pool
+  if (cur && cities.indexOf(cur) !== -1) sel.value = cur;
+}
+
+function onMarketFilterChange() {
+  var market = document.getElementById('pl-market') ? document.getElementById('pl-market').value : '';
+  populateCityOptions(market);
+  filterPropList();
+}
+
+// "$4.2K" style compactor for benchmark copy.
+function _fmtK(n) {
+  if (n == null) return '—';
+  n = Math.round(n);
+  return n >= 1000 ? '$' + (n/1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/,'') + 'K' : '$' + n;
+}
+
+// Nightingale story: when a single city is filtered, show how the RPM-wide
+// average spend in that city compares — "10 in Tempe average ~$7K/mo".
+function renderBenchBanner(cityKey) {
+  var el = document.getElementById('pl-bench-banner');
+  if (!el) return;
+  var b = (window.__BENCHMARKS__ && window.__BENCHMARKS__.by_city) || {};
+  var g = cityKey ? b[cityKey] : null;
+  if (!cityKey || !g) { el.style.display = 'none'; return; }
+  if (g.avg_spend == null) {
+    el.style.display = '';
+    el.innerHTML = '<div style="background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px 16px;font-size:12.5px;color:var(--tm)">' +
+      'Only <b>' + g.count + '</b> RPM propert' + (g.count===1?'y':'ies') + ' in <b>' + cityKey + '</b> — too few to publish a spend benchmark.</div>';
+    return;
+  }
+  el.style.display = '';
+  el.innerHTML =
+    '<div style="background:linear-gradient(180deg,var(--bg),transparent);border:1px solid var(--bd);border-left:3px solid var(--jd);border-radius:10px;padding:14px 18px">' +
+      '<div style="font-size:11px;font-weight:800;letter-spacing:.6px;color:var(--jd);text-transform:uppercase;margin-bottom:8px">RPM benchmark · ' + cityKey + '</div>' +
+      '<div style="display:flex;gap:28px;flex-wrap:wrap;align-items:baseline">' +
+        '<div><span style="font-size:24px;font-weight:800;color:var(--tp)">' + _fmtK(g.avg_spend) + '</span>' +
+          '<span style="font-size:12px;color:var(--tm)">/mo avg</span></div>' +
+        '<div><span style="font-size:16px;font-weight:700;color:var(--tp)">' + _fmtK(g.median_spend) + '</span>' +
+          '<span style="font-size:12px;color:var(--tm)"> median</span></div>' +
+        (g.avg_spend_per_unit != null ? '<div><span style="font-size:16px;font-weight:700;color:var(--tp)">$' + g.avg_spend_per_unit.toFixed(0) + '</span>' +
+          '<span style="font-size:12px;color:var(--tm)">/unit</span></div>' : '') +
+        '<div style="font-size:12px;color:var(--tm)">across <b>' + g.count + '</b> propert' + (g.count===1?'y':'ies') + '</div>' +
+      '</div>' +
+    '</div>';
+}
+
 function filterPropList() {
   var q      = (document.getElementById('pl-search')  ? document.getElementById('pl-search').value  : '').toLowerCase();
   var market = document.getElementById('pl-market')  ? document.getElementById('pl-market').value  : '';
+  var city   = document.getElementById('pl-city')    ? document.getElementById('pl-city').value    : '';
   var health = document.getElementById('pl-health')  ? document.getElementById('pl-health').value  : '';
   var filtered = _propListData.filter(function(p) {
     if (q && !(p.name||'').toLowerCase().includes(q) && !(p.market||'').toLowerCase().includes(q)) return false;
     if (market && (p.market||'') !== market) return false;
+    if (city && _cityKey(p) !== city) return false;
     if (health) {
       var sc = p.health_score != null ? Math.round(p.health_score) : null;
       if (health === 'on-track'    && (sc == null || sc < 75))  return false;
@@ -10188,6 +10323,7 @@ function filterPropList() {
     }
     return true;
   });
+  renderBenchBanner(city);
   renderPropList(filtered);
 }
 

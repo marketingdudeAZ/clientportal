@@ -245,6 +245,82 @@ def _compute_monthly_spend(props):
     return total
 
 
+# Minimum group size before per-city/market spend averages are exposed. Below
+# this, an "average" is effectively one property's spend — suppress the money
+# fields (count is still shown so the UI can say "only 2 in this city").
+BENCHMARK_MIN_N = 3
+
+
+def _median(vals):
+    s = sorted(vals)
+    n = len(s)
+    if n == 0:
+        return None
+    mid = n // 2
+    return s[mid] if n % 2 else (s[mid - 1] + s[mid]) / 2.0
+
+
+def compute_benchmarks(companies, spend_map=None):
+    """Spend benchmarks grouped by city and by RPM market, across the full
+    managed portfolio (all RPM Managed + Onboarding — not role-scoped).
+
+    Powers the "10 properties in Tempe spend ~$7K/mo, you're at $4K" story.
+    Per group we return count, mean + median monthly spend, and spend-per-unit
+    (sum spend / sum units — an honest size-normalized figure that a raw mean
+    hides). Money fields are null when count < BENCHMARK_MIN_N.
+    """
+    if spend_map is None:
+        spend_map = _spend_by_company()
+
+    def _blank():
+        return {"count": 0, "units": 0, "spend_total": 0.0, "spends": []}
+
+    by_city = {}
+    by_market = {}
+    for props in companies:
+        cid = str(props.get("hubspot_company_id") or "")
+        monthly = spend_map.get(cid) if cid in spend_map else _compute_monthly_spend(props)
+        units = _safe_int(props.get("totalunits"))
+
+        city = (props.get("city") or "").strip()
+        state = (props.get("state") or "").strip()
+        if city:
+            key = f"{city}, {state}" if state else city
+            g = by_city.setdefault(key, _blank())
+            g["count"] += 1
+            g["units"] += units
+            g["spend_total"] += monthly
+            g["spends"].append(monthly)
+
+        market = (props.get("rpmmarket") or "").strip()
+        if market:
+            g = by_market.setdefault(market, _blank())
+            g["count"] += 1
+            g["units"] += units
+            g["spend_total"] += monthly
+            g["spends"].append(monthly)
+
+    def _finalize(groups):
+        out = {}
+        for key, g in groups.items():
+            n = g["count"]
+            entry = {"count": n, "total_units": g["units"]}
+            if n >= BENCHMARK_MIN_N:
+                entry["avg_spend"] = round(g["spend_total"] / n, 2)
+                entry["median_spend"] = round(_median(g["spends"]), 2)
+                entry["avg_spend_per_unit"] = (
+                    round(g["spend_total"] / g["units"], 2) if g["units"] else None
+                )
+            else:
+                entry["avg_spend"] = None
+                entry["median_spend"] = None
+                entry["avg_spend_per_unit"] = None
+            out[key] = entry
+        return out
+
+    return {"by_city": _finalize(by_city), "by_market": _finalize(by_market)}
+
+
 def compute_rollups(companies):
     """Compute portfolio-level rollup KPIs from a list of company property dicts."""
     total_properties = len(companies)
@@ -417,6 +493,7 @@ def format_portfolio_response(companies):
     # Format individual properties for the table
     properties = []
     _smap = _spend_by_company()
+    benchmarks = compute_benchmarks(companies, _smap)
     for props in companies:
         _cid = str(props.get("hubspot_company_id") or "")
         monthly = _smap.get(_cid) if _cid in _smap else _compute_monthly_spend(props)
@@ -468,4 +545,5 @@ def format_portfolio_response(companies):
     return {
         "rollups": rollups,
         "properties": properties,
+        "benchmarks": benchmarks,
     }

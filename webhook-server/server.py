@@ -138,6 +138,28 @@ def get_portfolio():
         return jsonify({"error": "Failed to load portfolio"}), 500
 
 
+@app.route("/api/portfolio/benchmarks", methods=["GET", "OPTIONS"])
+def get_portfolio_benchmarks():
+    """City / market spend benchmarks across the full managed portfolio.
+
+    Thin sibling of /api/portfolio for the property Overview spend-comparison
+    mini-view when the full portfolio wasn't loaded first (deep link). Reuses
+    the same 5-min portfolio cache, so it's cheap.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    try:
+        from portfolio import fetch_portfolio, compute_benchmarks
+        companies = fetch_portfolio(email, "marketing_director")
+        return jsonify(compute_benchmarks(companies))
+    except Exception as e:
+        logger.error("Benchmarks fetch failed: %s", e, exc_info=True)
+        return jsonify({"error": "Failed to load benchmarks"}), 500
+
+
 def _preflight_response():
     """Handle CORS preflight requests."""
     origin = request.headers.get("Origin", "")
@@ -326,7 +348,7 @@ def get_property_metrics():
     from config import HUBSPOT_API_KEY
 
     PROPERTY_FIELDS = [
-        "name", "uuid", "rpmmarket", "totalunits",
+        "name", "uuid", "rpmmarket", "totalunits", "city", "state",
         # Leasing health
         "occupancy__", "atr__", "atr__formatted",
         "trending_120_days_lease_expiration",
@@ -408,6 +430,18 @@ def get_property_metrics():
         except Exception as _e:
             logger.warning("current_perf lookup failed for %s: %s", company_id, _e)
 
+        # Authoritative monthly spend from the deal-line-item engine (same source
+        # as the portfolio + benchmarks), so the Overview spend-vs-city view
+        # compares like-for-like. Falls back to 0 if not in the spend sheet.
+        _monthly_spend = 0.0
+        try:
+            from spend_sheet import get_company_monthly_spend
+            _monthly_spend = round(get_company_monthly_spend(company_id).get("total", 0.0) or 0.0, 2)
+        except Exception as _e:
+            logger.warning("monthly_spend lookup failed for %s: %s", company_id, _e)
+
+        _city = (props.get("city") or "").strip()
+        _state = (props.get("state") or "").strip()
         return jsonify({
             "property": {
                 "name": props.get("name", ""),
@@ -417,6 +451,10 @@ def get_property_metrics():
                 "hubspot_company_id": company_id,
                 "occupancy_status": props.get("occupancy_status", ""),
                 "score_context_note": props.get("score_context_note", ""),
+                "city": _city,
+                "state": _state,
+                "city_key": (f"{_city}, {_state}" if _city and _state else _city),
+                "monthly_spend": _monthly_spend,
             },
             "packages": _packages,
             "current_perf": current_perf,
