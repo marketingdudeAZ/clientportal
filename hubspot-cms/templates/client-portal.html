@@ -3339,7 +3339,8 @@ function populateSidebar() {
       var health  = (d && d.health)    || {};
 
       if (typeof renderScoreContext === 'function') renderScoreContext(prop.score_context_note || '');
-      if (typeof renderSpendVsCity === 'function') renderSpendVsCity(prop);
+      // Spend-vs-city now lives inside the exec dashboard (Monthly Spend gauge +
+      // Spend position card); the standalone top bar would be redundant.
 
       var sbName = document.querySelector('.sb-prop-name');
       if (sbName && prop.name) sbName.textContent = prop.name;
@@ -4863,6 +4864,18 @@ function _egPctDisplay(v){ return v!=null ? (Math.round(v*10)/10)+'%' : '—'; }
 function renderExecDashboard(d){
   var host=document.getElementById('exec-dashboard'); if(!host) return;
   var prop=(d&&d.property)||{}, leasing=(d&&d.leasing)||{}, health=(d&&d.health)||{}, C=_EG.C;
+  // Load city benchmarks before painting the spend gauge + "Spend position"
+  // card, so we don't flash the "not enough comparables" fallback while they
+  // fetch. Paint once now, then repaint when they land.
+  if(!window.__BENCHMARKS__ && prop.city_key && !renderExecDashboard._benchPending){
+    renderExecDashboard._benchPending=true;
+    var _api=window.__PORTAL_API_BASE||'https://rpm-portal-server.onrender.com';
+    fetch(_api+'/api/portfolio/benchmarks',{headers:{'X-Portal-Email':window.__PORTAL_EMAIL__||''}})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(b){ if(b) window.__BENCHMARKS__=b; })
+      .catch(function(){})
+      .then(function(){ renderExecDashboard._benchPending=false; renderExecDashboard(d); });
+  }
   var score = (health.overall!=null) ? Math.round(health.overall) : null;
   var statusWord = health.status || (score==null?'Not scored':(score>=75?'On Track':score>=50?'Watch':'Needs Attention'));
   var bColor = score==null?C.slate:(score>=75?C.good:score>=50?C.warn:C.crit);
@@ -4887,7 +4900,7 @@ function renderExecDashboard(d){
   g.push(_egCard({label:'Lead → Tour', empty:!(perf&&perf.lead_to_tour!=null), value:(perf?perf.lead_to_tour:null), display:(perf&&perf.lead_to_tour!=null?perf.lead_to_tour+'%':'—'), min:0,max:100, mode:'scored', higherBetter:true, green:35, yellow:25, emptyNote:'Awaiting NinjaCat'}));
   g.push(_egCard({label:'Cost / Lease', empty:!(perf&&perf.cost_per_lease!=null), value:(perf?perf.cost_per_lease:null), display:(perf&&perf.cost_per_lease!=null?_svcFmtK(perf.cost_per_lease):'—'), min:0,max:1200, mode:'context', emptyNote:'Awaiting NinjaCat'}));
 
-  var gauges='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px">'+g.join('')+'</div>';
+  var gauges='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px">'+g.join('')+'</div>';
 
   // Volume & funnel strip — honest gated state
   var funnelStrip = (perf&&perf.leads!=null)
