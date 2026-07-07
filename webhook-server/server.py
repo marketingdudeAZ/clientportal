@@ -138,6 +138,70 @@ def get_portfolio():
         return jsonify({"error": "Failed to load portfolio"}), 500
 
 
+# uuid → company_id is immutable (R1), so cache it forever per process.
+_UUID_TO_CID_CACHE = {}
+
+
+def _resolve_company_id_by_uuid(uuid):
+    """Resolve an RPM property uuid to its HubSpot company_id via CRM search.
+
+    crm_objects() returns blank in the templates/ CMS path, so the portal
+    template falls back to using the uuid itself as company_id — which only
+    works when the two happen to be equal. This gives the frontend a reliable
+    server-side resolution instead. Returns "" on miss.
+    """
+    uuid = (uuid or "").strip()
+    if not uuid:
+        return ""
+    if uuid in _UUID_TO_CID_CACHE:
+        return _UUID_TO_CID_CACHE[uuid]
+    import requests as req
+    from config import HUBSPOT_API_KEY
+    try:
+        r = req.post(
+            "https://api.hubapi.com/crm/v3/objects/companies/search",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "filterGroups": [{"filters": [{"propertyName": "uuid", "operator": "EQ", "value": uuid}]}],
+                "properties": ["name", "uuid"],
+                "limit": 1,
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+        results = r.json().get("results", [])
+        cid = results[0]["id"] if results else ""
+        name = (results[0]["properties"].get("name") if results else "") or ""
+    except Exception as e:
+        logger.warning("uuid resolve failed for %s: %s", uuid, e)
+        return ""
+    if cid:
+        _UUID_TO_CID_CACHE[uuid] = cid
+        _UUID_TO_CID_CACHE.setdefault(f"__name__{uuid}", name)
+    return cid
+
+
+@app.route("/api/resolve-uuid", methods=["GET", "OPTIONS"])
+def resolve_uuid_route():
+    """uuid → { company_id, name }. The portal bootstrap calls this first so
+    every downstream API call uses the true company_id, not the uuid fallback.
+
+    Auth: X-Portal-Email (any authenticated portal user)."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    uuid = (request.args.get("uuid") or "").strip()
+    if not uuid:
+        return jsonify({"error": "uuid required"}), 400
+    cid = _resolve_company_id_by_uuid(uuid)
+    if not cid:
+        return jsonify({"error": "not found", "uuid": uuid}), 404
+    return jsonify({"company_id": cid, "uuid": uuid,
+                    "name": _UUID_TO_CID_CACHE.get(f"__name__{uuid}", "")})
+
+
 @app.route("/api/portfolio/benchmarks", methods=["GET", "OPTIONS"])
 def get_portfolio_benchmarks():
     """City / market spend benchmarks across the full managed portfolio.

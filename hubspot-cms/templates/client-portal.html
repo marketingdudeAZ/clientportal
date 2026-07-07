@@ -3275,10 +3275,26 @@ window.__PORTAL_PROP_PACKAGES = [];
 window.__PORTAL_CURRENT_PERF  = {};
 
 // Auto-load overview on page init (it's the default active section)
+// crm_objects() returns blank in the templates/ CMS path, so HubL falls back to
+// using the uuid as company_id (line __PORTAL_COMPANY_ID__). That only works
+// when uuid == company_id; otherwise EVERY /api call gets a bad id and the page
+// hangs on "Loading…". Resolve uuid → real company_id first, overwrite the
+// global, THEN fire the loaders so they all use the correct id.
+function _bootstrapResolveThenLoad() {
+  var uuid  = window.__PORTAL_UUID__ || '';
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var email = window.__PORTAL_EMAIL__ || '';
+  function go() { populateSidebar(); prefetchCallPrep(); loadOverview(); }
+  if (!uuid) { go(); return; }
+  fetch(API_BASE + '/api/resolve-uuid?uuid=' + encodeURIComponent(uuid), { headers: { 'X-Portal-Email': email } })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) { if (d && d.company_id) window.__PORTAL_COMPANY_ID__ = d.company_id; })
+    .catch(function() { /* fall back to the HubL value */ })
+    .then(function() { go(); });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-  populateSidebar();  // populate property name + gauges regardless of which tab is active
-  prefetchCallPrep(); // pre-warm monthly call prep data so Call Prep tab loads instantly
-  loadOverview();
+  _bootstrapResolveThenLoad();  // resolve uuid→company_id, then load
 
   // Stamp the "You viewed the client portal" activity row with real time (not hardcoded 2:34 PM)
   var tlTime = document.getElementById('tl-session-time');
