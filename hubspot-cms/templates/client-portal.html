@@ -4876,13 +4876,36 @@ function renderExecDashboard(d){
       .catch(function(){})
       .then(function(){ renderExecDashboard._benchPending=false; renderExecDashboard(d); });
   }
+  window.__PORTAL_PROP_DATA = d;          // for the Property Targets editor
+  var ramp = (health && health.ramp) || null;
   var score = (health.overall!=null) ? Math.round(health.overall) : null;
   var statusWord = health.status || (score==null?'Not scored':(score>=75?'On Track':score>=50?'Watch':'Needs Attention'));
   var bColor = score==null?C.slate:(score>=75?C.good:score>=50?C.warn:C.crit);
   var meta=[prop.market, prop.units?prop.units+' units':'', prop.city_key].filter(Boolean).join(' · ');
-  var banner='<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;border-radius:14px;padding:18px 22px;color:#fff;margin-bottom:16px;background:'+bColor+'">'+
+  var banner='<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;border-radius:14px;padding:18px 22px;color:#fff;margin-bottom:'+(ramp?'0':'16px')+';background:'+bColor+'">'+
     '<div><div style="font-size:20px;font-weight:800">'+(prop.name||'This property')+'</div><div style="font-size:13px;opacity:.9">'+(meta||'&nbsp;')+'</div></div>'+
-    '<div style="text-align:right;line-height:1.1"><div style="font-size:24px;font-weight:800">'+statusWord+'</div><small style="font-size:11.5px;font-weight:600;opacity:.9">Property health status</small></div></div>';
+    '<div style="text-align:right;line-height:1.1"><div style="font-size:24px;font-weight:800">'+statusWord+'</div>'+
+      '<small style="font-size:11.5px;font-weight:600;opacity:.9">Property health status</small>'+
+      '<div style="margin-top:6px"><a href="#" onclick="openTargetsModal();return false;" style="color:#fff;opacity:.85;font-size:11px;font-weight:600;text-decoration:underline">&#9881; Set targets</a></div>'+
+    '</div></div>';
+
+  // Lease-up ramp strip — where the property should be vs. where it is.
+  var rampStrip='';
+  if(ramp){
+    var rscale=Math.max(ramp.target||95,leasing.occupancy||0,1);
+    var expW=Math.round((ramp.expected/rscale)*100), actW=Math.round(((leasing.occupancy||0)/rscale)*100);
+    var rColor= ramp.status==='ON TRACK' ? C.good : ramp.status==='WATCH' ? C.warn : C.crit;
+    var paceTxt= ramp.gap>=0 ? ('<b style="color:'+C.good+'">'+ramp.gap.toFixed(0)+' pts ahead of pace</b>')
+                             : ('<b style="color:'+rColor+'">'+Math.abs(ramp.gap).toFixed(0)+' pts behind pace</b>');
+    rampStrip='<div style="background:var(--white);border:1px solid var(--bd);border-top:none;border-radius:0 0 12px 12px;padding:14px 20px;margin-bottom:16px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">'+
+        '<span style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--jd)">Lease-up ramp · month '+Math.round(ramp.months_in)+' of '+ramp.ramp_months+'</span>'+
+        '<span style="font-size:12px;color:var(--ts)">target '+ramp.target+'% by month '+ramp.ramp_months+'</span></div>'+
+      '<div style="position:relative;height:10px;background:var(--bd);border-radius:6px;margin-bottom:6px">'+
+        '<div style="position:absolute;left:0;top:0;height:100%;width:'+actW+'%;background:'+rColor+';border-radius:6px"></div>'+
+        '<div style="position:absolute;left:'+expW+'%;top:-3px;height:16px;width:2px;background:var(--ink,#1F2937)" title="expected"></div></div>'+
+      '<div style="font-size:12px;color:var(--ts)">At <b>'+_egPctDisplay(leasing.occupancy)+'</b>, expected <b>'+ramp.expected+'%</b> by now — '+paceTxt+'.</div></div>';
+  }
 
   // Live gauges
   var bench=(window.__BENCHMARKS__&&window.__BENCHMARKS__.by_city&&prop.city_key)?window.__BENCHMARKS__.by_city[prop.city_key]:null;
@@ -4930,7 +4953,7 @@ function renderExecDashboard(d){
         '<div style="font-size:13px;color:var(--ts)">'+spendStory+'</div></div>'+
     '</div>';
 
-  host.innerHTML = banner + gauges + funnelStrip + cards;
+  host.innerHTML = banner + rampStrip + gauges + funnelStrip + cards;
 }
 document.addEventListener('portal-data-ready', function(ev){ try{ renderExecDashboard(ev.detail); }catch(e){ console.warn('exec dashboard render failed', e); } });
 
@@ -11145,6 +11168,85 @@ loadPropList();
 <script>
   function openScoreGlossary(){var m=document.getElementById('score-glossary');if(m)m.style.display='flex';}
   function closeScoreGlossary(){var m=document.getElementById('score-glossary');if(m)m.style.display='none';}
+</script>
+
+<!-- Property Targets editor (lease-up ramp + occupancy target) -->
+<div id="targets-modal" style="display:none;position:fixed;inset:0;background:rgba(15,20,25,.55);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeTargetsModal()">
+  <div style="background:#fff;max-width:480px;width:100%;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--bd)">
+      <div style="font-size:17px;font-weight:800;color:var(--jd)">Property targets</div>
+      <button onclick="closeTargetsModal()" style="background:none;border:none;font-size:22px;line-height:1;color:var(--tm);cursor:pointer">&times;</button>
+    </div>
+    <div style="padding:20px 22px">
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Occupancy status</label>
+        <select id="tm-status" class="form-input" style="width:100%" onchange="_tmToggleLeaseUp()">
+          <option value="">— (stabilized)</option>
+          <option value="Stabilized">Stabilized</option>
+          <option value="Lease-Up">Lease-Up</option>
+          <option value="Renovation">Renovation</option>
+        </select>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Target occupancy %</label>
+        <input id="tm-target" type="number" min="1" max="100" step="0.5" placeholder="95" class="form-input" style="width:100%">
+      </div>
+      <div id="tm-leaseup-fields" style="display:none">
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Takeover date <span style="font-weight:400;text-transform:none;color:var(--tm)">(ramp start)</span></label>
+          <input id="tm-takeover" type="date" class="form-input" style="width:100%">
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Ramp length (months)</label>
+          <input id="tm-ramp" type="number" min="1" max="60" step="1" placeholder="12" class="form-input" style="width:100%">
+        </div>
+        <div style="font-size:11.5px;color:var(--tm);background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:6px">A lease-up is scored against a linear ramp from the takeover date to the target over this many months — being behind pace flags it, ahead of pace scores higher.</div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="saveTargets()">Save</button>
+        <button class="btn btn-secondary btn-sm" onclick="closeTargetsModal()">Cancel</button>
+        <span id="tm-msg" style="font-size:12px;color:var(--tm);align-self:center"></span>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  function _tmToggleLeaseUp(){
+    var st=document.getElementById('tm-status').value;
+    var lu=(st==='Lease-Up'||st==='In-Transition');
+    document.getElementById('tm-leaseup-fields').style.display= lu ? 'block':'none';
+  }
+  function openTargetsModal(){
+    var d=(window.__PORTAL_PROP_DATA&&window.__PORTAL_PROP_DATA.property)||{};
+    document.getElementById('tm-status').value = d.occupancy_status||'';
+    document.getElementById('tm-target').value = (d.target_occupancy!=null?d.target_occupancy:'');
+    document.getElementById('tm-takeover').value = d.takeover_date||'';
+    document.getElementById('tm-ramp').value = (d.ramp_months!=null?d.ramp_months:'');
+    document.getElementById('tm-msg').textContent='';
+    _tmToggleLeaseUp();
+    var m=document.getElementById('targets-modal'); if(m)m.style.display='flex';
+  }
+  function closeTargetsModal(){var m=document.getElementById('targets-modal');if(m)m.style.display='none';}
+  function saveTargets(){
+    var API=window.__PORTAL_API_BASE||'https://rpm-portal-server.onrender.com';
+    var cid=window.__PORTAL_COMPANY_ID__||'';
+    var body={company_id:cid,
+      occupancy_status:document.getElementById('tm-status').value,
+      target_occupancy:document.getElementById('tm-target').value,
+      takeover_date:document.getElementById('tm-takeover').value,
+      ramp_months:document.getElementById('tm-ramp').value};
+    document.getElementById('tm-msg').textContent='Saving…';
+    fetch(API+'/api/property/targets',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Portal-Email':window.__PORTAL_EMAIL__||''},
+      body:JSON.stringify(body)})
+      .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
+      .then(function(res){
+        if(res.ok){ document.getElementById('tm-msg').textContent='Saved — refreshing…';
+          setTimeout(function(){ if(typeof populateSidebar==='function'){ _overviewLoaded=false; populateSidebar(); } closeTargetsModal(); }, 600); }
+        else { document.getElementById('tm-msg').textContent='Error: '+(res.j.error||'save failed'); }
+      })
+      .catch(function(){ document.getElementById('tm-msg').textContent='Network error.'; });
+  }
 </script>
   {{ standard_footer_includes }}
 </body>

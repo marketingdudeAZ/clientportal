@@ -527,6 +527,12 @@ def get_property_metrics():
             except (ValueError, TypeError):
                 return v
 
+        def _lr_date(v):
+            """HubSpot date value → YYYY-MM-DD (or '') for the date input."""
+            import leasing_ramp as _lr
+            dt = _lr.parse_date(v)
+            return dt.isoformat() if dt else ""
+
         ls = _compute_leasing_score(props)
 
         # Overall score: prefer pipeline score if populated, else use computed leasing score
@@ -587,6 +593,11 @@ def get_property_metrics():
                 "hubspot_company_id": company_id,
                 "occupancy_status": props.get("occupancy_status", ""),
                 "score_context_note": props.get("score_context_note", ""),
+                # Lease-up ramp inputs (for the Property Targets editor)
+                "takeover_date": _lr_date(props.get("managementstart")
+                                          or props.get("if_it_s_a_new_acquisition__what_is_the_management_start_date_")),
+                "target_occupancy": _f("target_occupancy"),
+                "ramp_months": _f("lease_up_ramp_months"),
                 "city": _city,
                 "state": _state,
                 "city_key": (f"{_city}, {_state}" if _city and _state else _city),
@@ -6047,6 +6058,85 @@ def property_context_note():
         logger.error("context-note write failed: %s", e)
         return jsonify({"error": "write failed"}), 500
     return jsonify({"status": "ok", "note": str(note), "edited_by": email})
+
+
+@app.route("/api/property/targets", methods=["POST", "OPTIONS"])
+def property_targets():
+    """Save per-property occupancy target inputs (lease-up ramp).
+
+    Body (all optional except company_id): occupancy_status, takeover_date
+    (YYYY-MM-DD → managementstart), target_occupancy (0-100), ramp_months (1-60).
+    Only the provided keys are written. Auth: X-Portal-Email.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    payload = request.get_json(silent=True) or {}
+    company_id = (payload.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    updates = {}
+    if "occupancy_status" in payload:
+        st = (payload.get("occupancy_status") or "").strip()
+        allowed = {"", "Stabilized", "Lease-Up", "Renovation", "In-Transition"}
+        if st not in allowed:
+            return jsonify({"error": f"occupancy_status must be one of {sorted(allowed)}"}), 400
+        updates["occupancy_status"] = st
+    if "takeover_date" in payload:
+        td = (payload.get("takeover_date") or "").strip()
+        if td:
+            import datetime as _dt
+            try:
+                _dt.datetime.strptime(td, "%Y-%m-%d")
+            except ValueError:
+                return jsonify({"error": "takeover_date must be YYYY-MM-DD"}), 400
+        updates["managementstart"] = td  # blank clears it
+    if "target_occupancy" in payload:
+        v = payload.get("target_occupancy")
+        if v in (None, ""):
+            updates["target_occupancy"] = ""
+        else:
+            try:
+                fv = float(v)
+            except (ValueError, TypeError):
+                return jsonify({"error": "target_occupancy must be a number"}), 400
+            if not (0 < fv <= 100):
+                return jsonify({"error": "target_occupancy must be between 0 and 100"}), 400
+            updates["target_occupancy"] = fv
+    if "ramp_months" in payload:
+        v = payload.get("ramp_months")
+        if v in (None, ""):
+            updates["lease_up_ramp_months"] = ""
+        else:
+            try:
+                iv = int(float(v))
+            except (ValueError, TypeError):
+                return jsonify({"error": "ramp_months must be a number"}), 400
+            if not (1 <= iv <= 60):
+                return jsonify({"error": "ramp_months must be between 1 and 60"}), 400
+            updates["lease_up_ramp_months"] = iv
+
+    if not updates:
+        return jsonify({"error": "no fields to update"}), 400
+
+    import requests as req
+    from config import HUBSPOT_API_KEY
+    try:
+        r = req.patch(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"},
+            json={"properties": updates},
+            timeout=15,
+        )
+        if r.status_code >= 400:
+            return jsonify({"error": "HubSpot write failed", "detail": r.text[:300]}), 502
+    except Exception as e:
+        logger.error("property-targets write failed: %s", e)
+        return jsonify({"error": "write failed"}), 500
+    return jsonify({"status": "ok", "updated": list(updates.keys()), "edited_by": email})
 
 
 @app.route("/api/internal/warm-caches", methods=["GET", "POST", "OPTIONS"])
