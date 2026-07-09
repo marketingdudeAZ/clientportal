@@ -9776,6 +9776,118 @@ setTimeout(loadPropertySwitcher, 1500);
 })();
 </script>
 
+<!-- Health-score glossary (Lauren pilot feedback #5) -->
+<div id="score-glossary" style="display:none;position:fixed;inset:0;background:rgba(15,20,25,.55);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeScoreGlossary()">
+  <div style="background:#fff;max-width:640px;width:100%;max-height:86vh;overflow-y:auto;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--bd)">
+      <div style="font-size:18px;font-weight:800;color:var(--jd)">How the Health Score works</div>
+      <button onclick="closeScoreGlossary()" style="background:none;border:none;font-size:22px;line-height:1;color:var(--tm);cursor:pointer">&times;</button>
+    </div>
+    <div style="padding:20px 24px;font-size:13px;color:var(--tp);line-height:1.6">
+      <p style="margin:0 0 14px">Computed nightly from leasing operations data. Three inputs &mdash; <b>physical occupancy&nbsp;%</b>, <b>ATR&nbsp;%</b> (available-to-rent; lower is better), and <b>exposure</b> (leases expiring in the next 120 days as a % of units). Thresholds differ for stabilized vs. lease-up properties.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px">
+        <thead><tr style="background:var(--bg)"><th style="text-align:left;padding:7px 8px;border-bottom:2px solid var(--cu)">Input</th><th style="text-align:left;padding:7px 8px;border-bottom:2px solid var(--cu)">Stabilized</th><th style="text-align:left;padding:7px 8px;border-bottom:2px solid var(--cu)">Lease-Up</th></tr></thead>
+        <tbody>
+          <tr><td style="padding:7px 8px;border-bottom:1px solid var(--bd);font-weight:700">Occupancy&nbsp;%</td><td style="padding:7px 8px;border-bottom:1px solid var(--bd)">&ge;95&rarr;100 &middot; &ge;93&rarr;85 &middot; &ge;90&rarr;70 &middot; &ge;87&rarr;55 &middot; else 35</td><td style="padding:7px 8px;border-bottom:1px solid var(--bd)">&ge;88&rarr;90 &middot; &ge;75&rarr;75 &middot; &ge;60&rarr;60 &middot; &ge;45&rarr;45 &middot; else 30</td></tr>
+          <tr><td style="padding:7px 8px;border-bottom:1px solid var(--bd);font-weight:700">ATR&nbsp;% <span style="font-weight:400;color:var(--tm)">(lower better)</span></td><td style="padding:7px 8px;border-bottom:1px solid var(--bd)">&le;4&rarr;100 &middot; &le;6&rarr;80 &middot; &le;9&rarr;60 &middot; &le;13&rarr;40 &middot; else 20</td><td style="padding:7px 8px;border-bottom:1px solid var(--bd)">&le;10&rarr;90 &middot; &le;20&rarr;75 &middot; &le;35&rarr;55 &middot; &le;50&rarr;35 &middot; else 20</td></tr>
+          <tr><td style="padding:7px 8px;border-bottom:1px solid var(--bd);font-weight:700">Exposure <span style="font-weight:400;color:var(--tm)">(120d exp &divide; units)</span></td><td style="padding:7px 8px;border-bottom:1px solid var(--bd)">&le;8%&rarr;100 &middot; &le;15%&rarr;75 &middot; &le;22%&rarr;50 &middot; else 25</td><td style="padding:7px 8px;border-bottom:1px solid var(--bd);color:var(--tm)">not used</td></tr>
+          <tr><td style="padding:7px 8px;font-weight:700">Weighting</td><td style="padding:7px 8px">Occ 50% &middot; ATR 30% &middot; Exposure 20%</td><td style="padding:7px 8px">Occ 60% &middot; ATR 40%</td></tr>
+        </tbody>
+      </table>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;font-weight:700;margin-bottom:8px">
+        <span style="color:#8FA68E">&ge;75 ON TRACK</span>
+        <span style="color:#D4910A">50&ndash;74 WATCH</span>
+        <span style="color:#C94444">&lt;50 NEEDS ATTENTION</span>
+      </div>
+      <p style="margin:0 0 12px"><a href="#" onclick="closeScoreGlossary();editScoreContext();return false;" style="color:var(--cu);font-weight:700;font-size:12.5px">+ Add / edit a context note for this property &rarr;</a></p>
+      <p style="margin:0;font-size:11.5px;color:var(--tm)">These bands also drive the dashboard RED/YLW/GRN mix and the &ldquo;What needs you today&rdquo; severity. The fuller 4-category Red Light score (marketing / market / funnel / experience) is being re-enabled as its data feed is rebuilt.</p>
+    </div>
+  </div>
+</div>
+<script>
+  function openScoreGlossary(){var m=document.getElementById('score-glossary');if(m)m.style.display='flex';}
+  function closeScoreGlossary(){var m=document.getElementById('score-glossary');if(m)m.style.display='none';}
+</script>
+
+<!-- Property Targets editor (lease-up ramp + occupancy target) -->
+<div id="targets-modal" style="display:none;position:fixed;inset:0;background:rgba(15,20,25,.55);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeTargetsModal()">
+  <div style="background:#fff;max-width:480px;width:100%;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--bd)">
+      <div style="font-size:17px;font-weight:800;color:var(--jd)">Property targets</div>
+      <button onclick="closeTargetsModal()" style="background:none;border:none;font-size:22px;line-height:1;color:var(--tm);cursor:pointer">&times;</button>
+    </div>
+    <div style="padding:20px 22px">
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Occupancy status</label>
+        <select id="tm-status" class="form-input" style="width:100%" onchange="_tmToggleLeaseUp()">
+          <option value="">— (stabilized)</option>
+          <option value="Stabilized">Stabilized</option>
+          <option value="Lease-Up">Lease-Up</option>
+          <option value="Renovation">Renovation</option>
+        </select>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Target occupancy %</label>
+        <input id="tm-target" type="number" min="1" max="100" step="0.5" placeholder="95" class="form-input" style="width:100%">
+      </div>
+      <div id="tm-leaseup-fields" style="display:none">
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Lease-up start date <span style="font-weight:400;text-transform:none;color:var(--tm)">(ramp anchor; defaults to takeover)</span></label>
+          <input id="tm-takeover" type="date" class="form-input" style="width:100%">
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Ramp length (months)</label>
+          <input id="tm-ramp" type="number" min="1" max="60" step="1" placeholder="12" class="form-input" style="width:100%">
+        </div>
+        <div style="font-size:11.5px;color:var(--tm);background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:6px">A lease-up is scored against a linear ramp from the takeover date to the target over this many months — being behind pace flags it, ahead of pace scores higher.</div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="saveTargets()">Save</button>
+        <button class="btn btn-secondary btn-sm" onclick="closeTargetsModal()">Cancel</button>
+        <span id="tm-msg" style="font-size:12px;color:var(--tm);align-self:center"></span>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  function _tmToggleLeaseUp(){
+    var st=document.getElementById('tm-status').value;
+    var lu=(st==='Lease-Up'||st==='In-Transition');
+    document.getElementById('tm-leaseup-fields').style.display= lu ? 'block':'none';
+  }
+  function openTargetsModal(){
+    var d=(window.__PORTAL_PROP_DATA&&window.__PORTAL_PROP_DATA.property)||{};
+    document.getElementById('tm-status').value = d.occupancy_status||'';
+    document.getElementById('tm-target').value = (d.target_occupancy!=null?d.target_occupancy:'');
+    document.getElementById('tm-takeover').value = d.takeover_date||'';
+    document.getElementById('tm-ramp').value = (d.ramp_months!=null?d.ramp_months:'');
+    document.getElementById('tm-msg').textContent='';
+    _tmToggleLeaseUp();
+    var m=document.getElementById('targets-modal'); if(m)m.style.display='flex';
+  }
+  function closeTargetsModal(){var m=document.getElementById('targets-modal');if(m)m.style.display='none';}
+  function saveTargets(){
+    var API=window.__PORTAL_API_BASE||'https://rpm-portal-server.onrender.com';
+    var cid=window.__PORTAL_COMPANY_ID__||'';
+    var body={company_id:cid,
+      occupancy_status:document.getElementById('tm-status').value,
+      target_occupancy:document.getElementById('tm-target').value,
+      takeover_date:document.getElementById('tm-takeover').value,
+      ramp_months:document.getElementById('tm-ramp').value};
+    document.getElementById('tm-msg').textContent='Saving…';
+    fetch(API+'/api/property/targets',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Portal-Email':window.__PORTAL_EMAIL__||''},
+      body:JSON.stringify(body)})
+      .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
+      .then(function(res){
+        if(res.ok){ document.getElementById('tm-msg').textContent='Saved — refreshing…';
+          setTimeout(function(){ if(typeof populateSidebar==='function'){ _overviewLoaded=false; populateSidebar(); } closeTargetsModal(); }, 600); }
+        else { document.getElementById('tm-msg').textContent='Error: '+(res.j.error||'save failed'); }
+      })
+      .catch(function(){ document.getElementById('tm-msg').textContent='Network error.'; });
+  }
+</script>
+
   {{ standard_footer_includes }}
 </body>
 </html>
@@ -11165,117 +11277,6 @@ loadPropList();
   }
   document.addEventListener('DOMContentLoaded', function () { setTimeout(loadMyTickets, 1000); });
 })();
-</script>
-<!-- Health-score glossary (Lauren pilot feedback #5) -->
-<div id="score-glossary" style="display:none;position:fixed;inset:0;background:rgba(15,20,25,.55);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeScoreGlossary()">
-  <div style="background:#fff;max-width:640px;width:100%;max-height:86vh;overflow-y:auto;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--bd)">
-      <div style="font-size:18px;font-weight:800;color:var(--jd)">How the Health Score works</div>
-      <button onclick="closeScoreGlossary()" style="background:none;border:none;font-size:22px;line-height:1;color:var(--tm);cursor:pointer">&times;</button>
-    </div>
-    <div style="padding:20px 24px;font-size:13px;color:var(--tp);line-height:1.6">
-      <p style="margin:0 0 14px">Computed nightly from leasing operations data. Three inputs &mdash; <b>physical occupancy&nbsp;%</b>, <b>ATR&nbsp;%</b> (available-to-rent; lower is better), and <b>exposure</b> (leases expiring in the next 120 days as a % of units). Thresholds differ for stabilized vs. lease-up properties.</p>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px">
-        <thead><tr style="background:var(--bg)"><th style="text-align:left;padding:7px 8px;border-bottom:2px solid var(--cu)">Input</th><th style="text-align:left;padding:7px 8px;border-bottom:2px solid var(--cu)">Stabilized</th><th style="text-align:left;padding:7px 8px;border-bottom:2px solid var(--cu)">Lease-Up</th></tr></thead>
-        <tbody>
-          <tr><td style="padding:7px 8px;border-bottom:1px solid var(--bd);font-weight:700">Occupancy&nbsp;%</td><td style="padding:7px 8px;border-bottom:1px solid var(--bd)">&ge;95&rarr;100 &middot; &ge;93&rarr;85 &middot; &ge;90&rarr;70 &middot; &ge;87&rarr;55 &middot; else 35</td><td style="padding:7px 8px;border-bottom:1px solid var(--bd)">&ge;88&rarr;90 &middot; &ge;75&rarr;75 &middot; &ge;60&rarr;60 &middot; &ge;45&rarr;45 &middot; else 30</td></tr>
-          <tr><td style="padding:7px 8px;border-bottom:1px solid var(--bd);font-weight:700">ATR&nbsp;% <span style="font-weight:400;color:var(--tm)">(lower better)</span></td><td style="padding:7px 8px;border-bottom:1px solid var(--bd)">&le;4&rarr;100 &middot; &le;6&rarr;80 &middot; &le;9&rarr;60 &middot; &le;13&rarr;40 &middot; else 20</td><td style="padding:7px 8px;border-bottom:1px solid var(--bd)">&le;10&rarr;90 &middot; &le;20&rarr;75 &middot; &le;35&rarr;55 &middot; &le;50&rarr;35 &middot; else 20</td></tr>
-          <tr><td style="padding:7px 8px;border-bottom:1px solid var(--bd);font-weight:700">Exposure <span style="font-weight:400;color:var(--tm)">(120d exp &divide; units)</span></td><td style="padding:7px 8px;border-bottom:1px solid var(--bd)">&le;8%&rarr;100 &middot; &le;15%&rarr;75 &middot; &le;22%&rarr;50 &middot; else 25</td><td style="padding:7px 8px;border-bottom:1px solid var(--bd);color:var(--tm)">not used</td></tr>
-          <tr><td style="padding:7px 8px;font-weight:700">Weighting</td><td style="padding:7px 8px">Occ 50% &middot; ATR 30% &middot; Exposure 20%</td><td style="padding:7px 8px">Occ 60% &middot; ATR 40%</td></tr>
-        </tbody>
-      </table>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;font-weight:700;margin-bottom:8px">
-        <span style="color:#8FA68E">&ge;75 ON TRACK</span>
-        <span style="color:#D4910A">50&ndash;74 WATCH</span>
-        <span style="color:#C94444">&lt;50 NEEDS ATTENTION</span>
-      </div>
-      <p style="margin:0 0 12px"><a href="#" onclick="closeScoreGlossary();editScoreContext();return false;" style="color:var(--cu);font-weight:700;font-size:12.5px">+ Add / edit a context note for this property &rarr;</a></p>
-      <p style="margin:0;font-size:11.5px;color:var(--tm)">These bands also drive the dashboard RED/YLW/GRN mix and the &ldquo;What needs you today&rdquo; severity. The fuller 4-category Red Light score (marketing / market / funnel / experience) is being re-enabled as its data feed is rebuilt.</p>
-    </div>
-  </div>
-</div>
-<script>
-  function openScoreGlossary(){var m=document.getElementById('score-glossary');if(m)m.style.display='flex';}
-  function closeScoreGlossary(){var m=document.getElementById('score-glossary');if(m)m.style.display='none';}
-</script>
-
-<!-- Property Targets editor (lease-up ramp + occupancy target) -->
-<div id="targets-modal" style="display:none;position:fixed;inset:0;background:rgba(15,20,25,.55);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeTargetsModal()">
-  <div style="background:#fff;max-width:480px;width:100%;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--bd)">
-      <div style="font-size:17px;font-weight:800;color:var(--jd)">Property targets</div>
-      <button onclick="closeTargetsModal()" style="background:none;border:none;font-size:22px;line-height:1;color:var(--tm);cursor:pointer">&times;</button>
-    </div>
-    <div style="padding:20px 22px">
-      <div style="margin-bottom:14px">
-        <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Occupancy status</label>
-        <select id="tm-status" class="form-input" style="width:100%" onchange="_tmToggleLeaseUp()">
-          <option value="">— (stabilized)</option>
-          <option value="Stabilized">Stabilized</option>
-          <option value="Lease-Up">Lease-Up</option>
-          <option value="Renovation">Renovation</option>
-        </select>
-      </div>
-      <div style="margin-bottom:14px">
-        <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Target occupancy %</label>
-        <input id="tm-target" type="number" min="1" max="100" step="0.5" placeholder="95" class="form-input" style="width:100%">
-      </div>
-      <div id="tm-leaseup-fields" style="display:none">
-        <div style="margin-bottom:14px">
-          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Lease-up start date <span style="font-weight:400;text-transform:none;color:var(--tm)">(ramp anchor; defaults to takeover)</span></label>
-          <input id="tm-takeover" type="date" class="form-input" style="width:100%">
-        </div>
-        <div style="margin-bottom:14px">
-          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ts);margin-bottom:5px">Ramp length (months)</label>
-          <input id="tm-ramp" type="number" min="1" max="60" step="1" placeholder="12" class="form-input" style="width:100%">
-        </div>
-        <div style="font-size:11.5px;color:var(--tm);background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:6px">A lease-up is scored against a linear ramp from the takeover date to the target over this many months — being behind pace flags it, ahead of pace scores higher.</div>
-      </div>
-      <div style="margin-top:16px;display:flex;gap:8px">
-        <button class="btn btn-primary btn-sm" onclick="saveTargets()">Save</button>
-        <button class="btn btn-secondary btn-sm" onclick="closeTargetsModal()">Cancel</button>
-        <span id="tm-msg" style="font-size:12px;color:var(--tm);align-self:center"></span>
-      </div>
-    </div>
-  </div>
-</div>
-<script>
-  function _tmToggleLeaseUp(){
-    var st=document.getElementById('tm-status').value;
-    var lu=(st==='Lease-Up'||st==='In-Transition');
-    document.getElementById('tm-leaseup-fields').style.display= lu ? 'block':'none';
-  }
-  function openTargetsModal(){
-    var d=(window.__PORTAL_PROP_DATA&&window.__PORTAL_PROP_DATA.property)||{};
-    document.getElementById('tm-status').value = d.occupancy_status||'';
-    document.getElementById('tm-target').value = (d.target_occupancy!=null?d.target_occupancy:'');
-    document.getElementById('tm-takeover').value = d.takeover_date||'';
-    document.getElementById('tm-ramp').value = (d.ramp_months!=null?d.ramp_months:'');
-    document.getElementById('tm-msg').textContent='';
-    _tmToggleLeaseUp();
-    var m=document.getElementById('targets-modal'); if(m)m.style.display='flex';
-  }
-  function closeTargetsModal(){var m=document.getElementById('targets-modal');if(m)m.style.display='none';}
-  function saveTargets(){
-    var API=window.__PORTAL_API_BASE||'https://rpm-portal-server.onrender.com';
-    var cid=window.__PORTAL_COMPANY_ID__||'';
-    var body={company_id:cid,
-      occupancy_status:document.getElementById('tm-status').value,
-      target_occupancy:document.getElementById('tm-target').value,
-      takeover_date:document.getElementById('tm-takeover').value,
-      ramp_months:document.getElementById('tm-ramp').value};
-    document.getElementById('tm-msg').textContent='Saving…';
-    fetch(API+'/api/property/targets',{method:'POST',
-      headers:{'Content-Type':'application/json','X-Portal-Email':window.__PORTAL_EMAIL__||''},
-      body:JSON.stringify(body)})
-      .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
-      .then(function(res){
-        if(res.ok){ document.getElementById('tm-msg').textContent='Saved — refreshing…';
-          setTimeout(function(){ if(typeof populateSidebar==='function'){ _overviewLoaded=false; populateSidebar(); } closeTargetsModal(); }, 600); }
-        else { document.getElementById('tm-msg').textContent='Error: '+(res.j.error||'save failed'); }
-      })
-      .catch(function(){ document.getElementById('tm-msg').textContent='Network error.'; });
-  }
 </script>
   {{ standard_footer_includes }}
 </body>
