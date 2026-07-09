@@ -4881,6 +4881,44 @@ function _egCard(cfg){
     '<div style="font-size:11px;color:var(--ts);margin-top:2px;min-height:18px;display:flex;justify-content:center;align-items:center;gap:8px">'+foot+'</div></div>';
 }
 function _egPctDisplay(v){ return v!=null ? (Math.round(v*10)/10)+'%' : '—'; }
+// "Why this score" — the factor-by-factor breakdown behind the health number.
+function _egScoreBreakdown(health){
+  var ls=(health&&health.leasing_score)||null, ramp=(health&&health.ramp)||null, C=_EG.C;
+  if(!ls || ls.score==null || health.overall==null) return '';
+  var rows=[];
+  if(ramp){
+    rows.push({label:'Occupancy vs ramp', val:_egPctDisplay(ls.occupancy_raw),
+      detail:'expected '+ramp.expected+'% by month '+Math.round(ramp.months_in)+' of '+ramp.ramp_months, score:ramp.score, weight:100});
+  } else if(ls.is_lease_up){
+    rows.push({label:'Occupancy', val:_egPctDisplay(ls.occupancy_raw), detail:'lease-up bands', score:ls.occupancy_score, weight:100});
+  } else {
+    rows.push({label:'Occupancy', val:_egPctDisplay(ls.occupancy_raw), detail:'vs '+Math.round(health.occ_target||95)+'% target', score:ls.occupancy_score, weight:50});
+    rows.push({label:'ATR', val:_egPctDisplay(ls.atr_raw), detail:'ideal &le;6%', score:ls.atr_score, weight:30});
+    rows.push({label:'Exposure (120d)', val:(ls.exposure_pct!=null?ls.exposure_pct+'%':'—'),
+      detail:(ls.trend_raw!=null?ls.trend_raw+' leases expiring / units':'ideal &le;8% of units'), score:ls.exposure_score, weight:20});
+  }
+  var total=Math.round(health.overall);
+  var rowsHtml=rows.map(function(r){
+    var contrib=Math.round((r.score||0)*r.weight/100*10)/10;
+    var col=(r.score>=85)?C.good:(r.score>=55)?C.warn:C.crit;
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bdl)">'+
+      '<div style="flex:0 0 140px"><div style="font-size:12.5px;font-weight:700;color:var(--tp)">'+r.label+'</div>'+
+        '<div style="font-size:10.5px;color:var(--tm)">'+r.detail+'</div></div>'+
+      '<div style="flex:0 0 62px;font-size:14px;font-weight:800;color:var(--tp)">'+r.val+'</div>'+
+      '<div style="flex:1;min-width:60px;height:8px;background:var(--bd);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+(r.score||0)+'%;background:'+col+'"></div></div>'+
+      '<div style="flex:0 0 52px;text-align:right;font-size:12px;color:var(--ts)">'+(r.score!=null?r.score:'—')+'/100</div>'+
+      '<div style="flex:0 0 44px;text-align:right;font-size:11px;color:var(--tm)">&times;'+r.weight+'%</div>'+
+      '<div style="flex:0 0 44px;text-align:right;font-size:13px;font-weight:800;color:'+col+'">'+contrib+'</div>'+
+    '</div>';
+  }).join('');
+  var bcolor= total>=75?C.good:total>=50?C.warn:C.crit;
+  return '<h3 style="font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--jd);margin:22px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--bd)">Why '+total+'? &middot; how the score is built</h3>'+
+    '<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:14px 18px">'+
+      rowsHtml+
+      '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-top:10px;font-size:13px;color:var(--ts)">Weighted total <span style="font-size:18px;font-weight:800;color:'+bcolor+'">'+total+'</span></div>'+
+      '<div style="font-size:11px;color:var(--tm);margin-top:6px;line-height:1.5">Each factor is scored 0&ndash;100 against its national standard, then weighted. Occupancy scores against this property&#39;s target; ATR ideal &le;6% (lower is better); exposure = leases expiring in the next 120 days as a % of units, ideal &le;8%.</div>'+
+    '</div>';
+}
 function renderExecDashboard(d){
   var host=document.getElementById('exec-dashboard'); if(!host) return;
   var prop=(d&&d.property)||{}, leasing=(d&&d.leasing)||{}, health=(d&&d.health)||{}, C=_EG.C;
@@ -4982,7 +5020,7 @@ function renderExecDashboard(d){
         '<div style="font-size:13px;color:var(--ts)">'+spendStory+'</div></div>'+
     '</div>';
 
-  host.innerHTML = banner + rampStrip + gauges + funnelStrip + cards;
+  host.innerHTML = banner + rampStrip + gauges + funnelStrip + cards + _egScoreBreakdown(health);
 }
 document.addEventListener('portal-data-ready', function(ev){ try{ renderExecDashboard(ev.detail); }catch(e){ console.warn('exec dashboard render failed', e); } });
 
