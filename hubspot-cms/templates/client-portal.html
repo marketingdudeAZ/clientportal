@@ -4850,10 +4850,30 @@ function _egGaugeSvg(cfg){
     '<text x="'+cx+'" y="'+(cy-2)+'" text-anchor="middle" font-size="27" font-weight="800" fill="'+valColor+'">'+cfg.display+'</text></svg>';
 }
 function _egPill(color,label){ return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px;background:'+color+'1f;color:'+color+'"><span style="width:7px;height:7px;border-radius:50%;background:'+color+'"></span>'+label+'</span>'; }
+
+// National-standard ideal ranges. dir: 'higher'|'lower' = which way is better.
+// ideal = in-range threshold, watch = the amber cutoff. Occupancy's ideal comes
+// from the per-property target (occ_target), so it's not fixed here.
+var NATIONAL_STD = {
+  atr:            { ideal:6,   watch:9,   dir:'lower'  },
+  cost_per_lease: { ideal:750, watch:900, dir:'lower'  },
+  lead_to_tour:   { ideal:35,  watch:25,  dir:'higher' }
+};
+// Returns a colored In-range / Watch / Out-of-range pill for a raw value.
+function _egRangePill(value, ideal, watch, dir){
+  if(value==null || ideal==null) return '';
+  var C=_EG.C, ok, mid;
+  if(dir==='lower'){ ok = value<=ideal; mid = value<=watch; }
+  else             { ok = value>=ideal; mid = value>=watch; }
+  if(ok)  return _egPill(C.good, 'In range');
+  if(mid) return _egPill(C.warn, 'Watch');
+  return _egPill(C.crit, 'Out of range');
+}
 function _egCard(cfg){
   var foot;
   if(cfg.empty || cfg.value==null){ foot='<span style="font-size:10.5px;color:var(--tm)">'+(cfg.emptyNote||'Awaiting data')+'</span>'; }
   else if(cfg.mode==='scored'){ var st=_egState(cfg); foot=_egPill(st.color, st.label); }
+  else if(cfg.rangePill){ foot=cfg.rangePill+(cfg.rangeNote?'<span style="font-size:10px;color:var(--tm)">'+cfg.rangeNote+'</span>':''); }
   else { foot='<span style="font-size:11px;color:var(--ts)">'+(cfg.footNote||'')+'</span>'; }
   return '<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:12px 8px 10px;text-align:center">'+
     '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--tm)">'+cfg.label+'</div>'+
@@ -4914,11 +4934,17 @@ function renderExecDashboard(d){
   var g=[];
   g.push(_egCard({label:'Health Score', value:score, display:(score==null?'—':String(score)), min:0,max:100, mode:'scored', higherBetter:true, green:75, yellow:50}));
   var occTarget=(health&&health.occ_target)||null, occGap=(health&&health.occ_gap);
-  var occFoot = (ramp||!occTarget) ? (prop.occupancy_status||'Physical occupancy')
-    : ('vs '+Math.round(occTarget)+'% target'+(occGap!=null?(' · '+(occGap>=0?'+':'')+occGap+' pts'):''));
+  // Occupancy in-range = within 2 pts of target (matches the score bands),
+  // watch to 5 below, out beyond that.
+  var occPill = (ramp||occTarget==null||leasing.occupancy==null) ? '' :
+    _egRangePill(leasing.occupancy, occTarget-2, occTarget-5, 'higher');
   g.push(_egCard({label:'Occupancy', value:leasing.occupancy, display:_egPctDisplay(leasing.occupancy), min:40,max:100, mode:'context',
-    tick:(ramp?null:occTarget), footNote:occFoot}));
-  g.push(_egCard({label:'ATR · lower is better', value:leasing.atr, display:_egPctDisplay(leasing.atr), min:0,max:45, mode:'context', footNote:'Available to rent'}));
+    tick:(ramp?null:occTarget),
+    rangePill: occPill, rangeNote:(occTarget?Math.round(occTarget)+'% target':''),
+    footNote:(prop.occupancy_status||'Physical occupancy')}));
+  var atrPill=_egRangePill(leasing.atr, NATIONAL_STD.atr.ideal, NATIONAL_STD.atr.watch, 'lower');
+  g.push(_egCard({label:'ATR · lower is better', value:leasing.atr, display:_egPctDisplay(leasing.atr), min:0,max:45, mode:'context',
+    rangePill: atrPill, rangeNote:'&le;'+NATIONAL_STD.atr.ideal+'% ideal', footNote:'Available to rent'}));
   g.push(_egCard({label:'Monthly Spend', value:spend, display:(spend!=null?_svcFmtK(spend):'—'), min:0,max:spendMax, mode:'context',
     tick:(bench?bench.avg_spend:null), footNote:(bench&&bench.avg_spend?('city avg '+_svcFmtK(bench.avg_spend)):'enrolled /mo')}));
   // Funnel gauges — gated until NinjaCat lands
