@@ -567,44 +567,45 @@ def get_property_market():
     if not subj_row:
         return jsonify({"available": False, "reason": "not_in_csv"}), 200
 
-    def _num(row, key):
-        return _air._to_float(_air._resolve_col(row, key))
+    def _num(row, col):                      # handles "$1,575" and "97.3%"
+        return _air._to_float(row.get(col))
+
+    def _has_concession(row):
+        c = (row.get("Concessions") or "").strip()
+        d = (row.get("Concession Details") or "").strip()
+        return bool((c and c not in ("$0", "0", "-")) or d)
 
     subj = {
-        "occupancy": _num(subj_row, "occupancy_pct"),
-        "exposure":  _num(subj_row, "exposure_90d_pct"),
-        "rent":      _num(subj_row, "avg_rent"),
-        "submarket": _air._resolve_col(subj_row, "submarket_name"),
-        "market":    _air._resolve_col(subj_row, "market_name") or props.get("aptiq_market_name", ""),
+        "occupancy": _num(subj_row, "Advertised Occupancy %"),
+        "exposure":  _num(subj_row, "Exposure %"),
+        "rent":      _num(subj_row, "Avg Rent"),
+        "ner":       _num(subj_row, "Avg NER"),
+        "concession": (subj_row.get("Concession Details") or "").strip() or None,
+        "comp_score": _num(subj_row, "Comp Score"),
+        "market":    subj_row.get("Market Name") or props.get("aptiq_market_name", ""),
     }
-    submarket = (subj["submarket"] or "").strip().lower()
+    # Group by the AptIQ Market ID (the market on the company record).
+    market_id = (props.get("aptiq_market_id") or subj_row.get("Market ID") or "").strip()
 
-    # Aggregate every AptIQ property in the same submarket.
-    def _agg(rows, key):
-        vals = [v for v in (_num(r, key) for r in rows) if v is not None]
-        return (round(sum(vals) / len(vals), 1) if vals else None, len(vals))
+    peers = [r for _rid, r in _csv.get_all_rows().items()
+             if (r.get("Market ID") or "").strip() == market_id] if market_id else []
 
-    peers = []
-    if submarket:
-        for _rid, row in _csv.get_all_rows().items():
-            sm = (_air._resolve_col(row, "submarket_name") or "").strip().lower()
-            if sm == submarket:
-                peers.append(row)
+    def _avg(col):
+        vals = [v for v in (_num(r, col) for r in peers) if v is not None]
+        return round(sum(vals) / len(vals), 1) if vals else None
 
-    occ_avg, occ_n = _agg(peers, "occupancy_pct")
-    exp_avg, _     = _agg(peers, "exposure_90d_pct")
-    rent_avg, _    = _agg(peers, "avg_rent")
-
+    conc_ct = sum(1 for r in peers if _has_concession(r))
     payload = {
         "available": True,
         "market_name": subj["market"],
-        "submarket_name": subj["submarket"],
         "subject": subj,
-        "submarket": {
+        "market": {
             "count": len(peers),
-            "avg_occupancy": occ_avg,
-            "avg_exposure": exp_avg,
-            "avg_rent": rent_avg,
+            "avg_occupancy": _avg("Advertised Occupancy %"),
+            "avg_exposure": _avg("Exposure %"),
+            "avg_rent": _avg("Avg Rent"),
+            "avg_ner": _avg("Avg NER"),
+            "pct_offering_concessions": (round(conc_ct / len(peers) * 100) if peers else None),
         },
     }
     _APTIQ_MARKET_CACHE[company_id] = (_t.time(), payload)
