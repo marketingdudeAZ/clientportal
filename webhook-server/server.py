@@ -460,6 +460,39 @@ _APTIQ_MARKET_CACHE = {}
 _APTIQ_MARKET_TTL = 6 * 3600
 
 
+@app.route("/api/internal/aptiq-probe", methods=["GET", "OPTIONS"])
+def aptiq_probe():
+    """Diagnostic: what does the live AptIQ REST API return for our IDs?
+    Surfaces token presence + raw status of property-details / market-narrative
+    so we know whether the account can see comp/narrative data. No secrets."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "auth"}), 401
+    pid = (request.args.get("aptiq_property_id") or "").strip()
+    mid = (request.args.get("aptiq_market_id") or "").strip()
+    out = {}
+    import os as _os
+    out["token_present"] = bool(_os.getenv("ApartmentIQ_Token"))
+    import requests as req
+    tok = _os.getenv("ApartmentIQ_Token", "")
+    base = "https://data.apartmentiq.io/apartmentiq/api/v1"
+    hdr = {"Authorization": f"Bearer {tok}"}
+    if pid:
+        try:
+            r = req.get(f"{base}/properties/bulk_details", headers=hdr, params={"property_ids": pid}, timeout=15)
+            out["property_details"] = {"status": r.status_code, "body": r.text[:400]}
+        except Exception as e:
+            out["property_details"] = {"error": str(e)[:200]}
+    if mid:
+        try:
+            r = req.get(f"{base}/markets/narratives", headers=hdr, params={"geo_boundary_id": mid}, timeout=15)
+            out["market_narrative"] = {"status": r.status_code, "body": r.text[:400]}
+        except Exception as e:
+            out["market_narrative"] = {"error": str(e)[:200]}
+    return jsonify(out)
+
+
 @app.route("/api/property/market", methods=["GET", "OPTIONS"])
 def get_property_market():
     """AptIQ market context for a property: its own AptIQ read (rent/NER/occ/
