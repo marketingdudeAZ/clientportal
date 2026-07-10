@@ -2118,10 +2118,10 @@ body{line-height:1.55}
   </div>
 
   <!-- Needs Approval -->
-  <div class="callprep-section-hdr">
+  <div class="callprep-section-hdr" id="approval-recs-hdr">
     <div>
       <div class="callprep-section-title">Needs Your Approval</div>
-      <div class="callprep-section-sub">Review and approve or dismiss each item below</div>
+      <div class="callprep-section-sub">Budget changes that create a deal + IO for your signature</div>
     </div>
     <div class="rec-filters" style="margin-bottom:0">
       <button class="rec-filter active" onclick="filterRecs('all',this)">All</button>
@@ -2172,6 +2172,16 @@ body{line-height:1.55}
       <div class="rec-confirm ok" id="rec-confirm-2"></div>
     </div>
   </div>
+
+  <!-- What we recommend / what we need from you (non-budget) — VP reframe:
+       optimizations the team runs are not a client approval gate. -->
+  <div class="callprep-section-hdr" id="action-recs-hdr" style="margin-top:32px;display:none">
+    <div>
+      <div class="callprep-section-title">What we recommend &middot; next steps</div>
+      <div class="callprep-section-sub">Optimizations we run for you — tell us what we need and we move</div>
+    </div>
+  </div>
+  <div id="action-recs-container"></div>
 
   <!-- Questions from AM to Client -->
   <div class="callprep-section-hdr" style="margin-top:32px">
@@ -8074,43 +8084,45 @@ function _renderCallPrep(d) {
   var handlingEl = document.getElementById('cp-handling');
   if (handlingEl) handlingEl.textContent = summary.handling || '—';
 
-  // Recommendations: populate cards rec-1 .. rec-N.
-  // The existing HTML has two static shells (rec-1, rec-2); expand or trim.
-  var recContainer = document.getElementById('rec-1') ? document.getElementById('rec-1').parentElement : null;
-  if (recContainer) {
-    // Remove all existing rec-* cards (keep children that aren't rec cards)
-    Array.prototype.slice.call(recContainer.querySelectorAll('.rec-card')).forEach(function(el){ el.parentElement.removeChild(el); });
-    recs.forEach(function(rec, idx) {
-      var n = idx + 1;
-      var isBudget = rec.type === 'budget_change';
-      var statusCls = rec.status === 'approved' ? 'approved' : rec.status === 'dismissed' ? 'dismissed' : 'pending';
-      var actioned = statusCls !== 'pending' ? ' actioned' : '';
-      var badgeCls = isBudget ? 'badge-purple' : 'badge-blue';
-      var badgeLabel = isBudget ? 'Budget Change' : 'Strategy';
-      var priColor  = rec.priority === 'High' ? 'var(--red)' : 'var(--amb)';
-      var approveBtn = isBudget
-        ? '<button class="btn-approve-go" onclick="approveRec(\'' + _escAttr(rec.rec_id) + '\',\'rec-' + n + '\',\'rec-confirm-' + n + '\',true)">Approve &amp; Configure →</button>'
-        : '<button class="btn-approve" onclick="approveRec(\'' + _escAttr(rec.rec_id) + '\',\'rec-' + n + '\',\'rec-confirm-' + n + '\',false)">Approve</button>';
-      var html = '<div class="rec-card' + actioned + '" id="rec-' + n + '" data-status="' + statusCls + '" data-rec-id="' + _escAttr(rec.rec_id||'') + '">' +
-        '<div class="rec-card-head">' +
-          '<div class="rec-meta">' +
-            '<span class="badge ' + badgeCls + '">' + _escHtml(badgeLabel) + '</span>' +
-            '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:' + priColor + '">' + _escHtml(rec.priority || 'Medium') + ' Priority</span>' +
-            '<span class="rec-cycle-badge">' + _escHtml(cycleLabel) + '</span>' +
-          '</div>' +
-          '<div class="rec-title" id="rec-' + n + '-title">' + _escHtml(rec.title || '') + '</div>' +
-        '</div>' +
-        '<div class="rec-body">' +
-          '<div class="rec-body-text" id="rec-' + n + '-body">' + _escHtml(rec.body || '') + '</div>' +
-          '<div class="rec-btns">' +
-            approveBtn +
-            '<button class="btn-dismiss" onclick="dismissRec(\'' + _escAttr(rec.rec_id) + '\',\'rec-' + n + '\',\'rec-confirm-' + n + '\')">Dismiss</button>' +
-          '</div>' +
-          '<div class="rec-confirm ok" id="rec-confirm-' + n + '">' + (statusCls === 'approved' ? 'Approved.' : statusCls === 'dismissed' ? 'Dismissed.' : '') + '</div>' +
-        '</div></div>';
-      recContainer.insertAdjacentHTML('beforeend', html);
-    });
+  // VP reframe: budget changes need client approval (they create a deal + IO);
+  // everything else is "what we recommend / what we need from you" — the team
+  // runs it, so it is not a client approval gate.
+  var budgetRecs = recs.filter(function(r){ return r.type === 'budget_change'; });
+  var actionRecs = recs.filter(function(r){ return r.type !== 'budget_change'; });
+  var section = document.getElementById('section-recommendations');
+  if (section) Array.prototype.slice.call(section.querySelectorAll('.rec-card')).forEach(function(el){ el.parentElement.removeChild(el); });
+
+  function _recCard(rec, n, isBudget) {
+    var statusCls = rec.status === 'approved' ? 'approved' : rec.status === 'dismissed' ? 'dismissed' : 'pending';
+    var actioned = statusCls !== 'pending' ? ' actioned' : '';
+    var priColor = rec.priority === 'High' ? 'var(--red)' : 'var(--amb)';
+    var btn = isBudget
+      ? '<button class="btn-approve-go" onclick="approveRec(\'' + _escAttr(rec.rec_id) + '\',\'rec-' + n + '\',\'rec-confirm-' + n + '\',true)">Approve &amp; Configure →</button>'
+      : '<button class="btn-approve" onclick="approveRec(\'' + _escAttr(rec.rec_id) + '\',\'rec-' + n + '\',\'rec-confirm-' + n + '\',false)">Confirm &amp; note</button>';
+    var box = isBudget
+      ? '<div class="rec-action-box"><span class="rec-action-box-label">What happens when you approve</span>We draft the deal and IO for your signature.</div>'
+      : '<div class="rec-action-box"><span class="rec-action-box-label">What we need from you</span>' + _escHtml(rec.action_needed || 'Confirm the direction (add a note if there is a constraint) and we run it.') + '</div>';
+    return '<div class="rec-card' + actioned + '" id="rec-' + n + '" data-status="' + statusCls + '" data-rec-id="' + _escAttr(rec.rec_id||'') + '">' +
+      '<div class="rec-card-head"><div class="rec-meta">' +
+        '<span class="badge ' + (isBudget ? 'badge-purple' : 'badge-blue') + '">' + (isBudget ? 'Budget Change' : 'Recommendation') + '</span>' +
+        '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:' + priColor + '">' + _escHtml(rec.priority || 'Medium') + ' Priority</span>' +
+        '<span class="rec-cycle-badge">' + _escHtml(cycleLabel) + '</span>' +
+      '</div><div class="rec-title" id="rec-' + n + '-title">' + _escHtml(rec.title || '') + '</div></div>' +
+      '<div class="rec-body"><div class="rec-body-text" id="rec-' + n + '-body">' + _escHtml(rec.body || '') + '</div>' +
+        box +
+        '<div class="rec-btns">' + btn + '<button class="btn-dismiss" onclick="dismissRec(\'' + _escAttr(rec.rec_id) + '\',\'rec-' + n + '\',\'rec-confirm-' + n + '\')">Dismiss</button></div>' +
+        '<div class="rec-confirm ok" id="rec-confirm-' + n + '">' + (statusCls === 'approved' ? 'Approved.' : statusCls === 'dismissed' ? 'Dismissed.' : '') + '</div>' +
+      '</div></div>';
   }
+
+  var approvalHdr = document.getElementById('approval-recs-hdr');
+  if (approvalHdr) {
+    approvalHdr.style.display = budgetRecs.length ? '' : 'none';
+    if (budgetRecs.length) approvalHdr.insertAdjacentHTML('afterend', budgetRecs.map(function(r, i){ return _recCard(r, i + 1, true); }).join(''));
+  }
+  var actionHdr = document.getElementById('action-recs-hdr'), actionCt = document.getElementById('action-recs-container');
+  if (actionHdr) actionHdr.style.display = actionRecs.length ? '' : 'none';
+  if (actionCt) actionCt.innerHTML = actionRecs.map(function(r, i){ return _recCard(r, budgetRecs.length + i + 1, false); }).join('');
 
   // Pending count badge
   var pendingCountEl = document.getElementById('pending-count');
