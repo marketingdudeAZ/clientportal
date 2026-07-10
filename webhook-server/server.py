@@ -493,6 +493,45 @@ def aptiq_probe():
     return jsonify(out)
 
 
+@app.route("/api/internal/bq-health", methods=["GET", "OPTIONS"])
+def bq_health():
+    """Diagnostic: is BigQuery configured, and is ninjacat_metrics populated?
+    Explains why the portal shows 'Awaiting NinjaCat'. No secrets."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "auth"}), 401
+    import os as _os
+    out = {}
+    try:
+        from config import BIGQUERY_PROJECT_ID, BIGQUERY_SERVICE_ACCOUNT_JSON, BIGQUERY_DATASET_PROD, BIGQUERY_DATASET_DEV
+        sa = BIGQUERY_SERVICE_ACCOUNT_JSON or ""
+        out["project_id_set"] = bool(BIGQUERY_PROJECT_ID)
+        out["sa_value_kind"] = ("empty" if not sa else
+                                "json_inline" if sa.strip().startswith("{") else
+                                "path_exists" if _os.path.exists(sa) else "path_missing")
+        out["datasets"] = {"prod": BIGQUERY_DATASET_PROD, "dev": BIGQUERY_DATASET_DEV}
+    except Exception as e:
+        out["config_error"] = str(e)[:200]
+    try:
+        import bigquery_client as bq
+        out["is_bigquery_configured"] = bq.is_bigquery_configured()
+        if out["is_bigquery_configured"]:
+            from config import BIGQUERY_PROJECT_ID
+            ds = bq._dataset()
+            sql = (f"SELECT COUNT(*) AS rows, COUNT(DISTINCT property_uuid) AS props, "
+                   f"MIN(date) AS min_date, MAX(date) AS max_date "
+                   f"FROM `{BIGQUERY_PROJECT_ID}.{ds}.ninjacat_metrics`")
+            try:
+                r = bq.query(sql, [])
+                out["ninjacat_metrics"] = (r[0] if r else {})
+            except Exception as e:
+                out["ninjacat_metrics_error"] = str(e)[:250]
+    except Exception as e:
+        out["bq_error"] = str(e)[:250]
+    return jsonify(out)
+
+
 @app.route("/api/internal/aptiq-csv", methods=["GET", "OPTIONS"])
 def aptiq_csv_diag():
     """Diagnostic: AptIQ CSV column names + a sample row, so we can map the
