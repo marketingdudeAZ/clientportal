@@ -519,12 +519,18 @@ def bq_health():
         if out["is_bigquery_configured"]:
             from config import BIGQUERY_PROJECT_ID
             ds = bq._dataset()
-            sql = (f"SELECT COUNT(*) AS rows, COUNT(DISTINCT property_uuid) AS props, "
-                   f"MIN(date) AS min_date, MAX(date) AS max_date "
+            sql = (f"SELECT COUNT(*) AS n_rows, COUNT(DISTINCT property_uuid) AS n_props, "
+                   f"MIN(date) AS min_date, MAX(date) AS max_date, "
+                   f"COUNT(DISTINCT channel) AS n_channels "
                    f"FROM `{BIGQUERY_PROJECT_ID}.{ds}.ninjacat_metrics`")
             try:
                 r = bq.query(sql, [])
                 out["ninjacat_metrics"] = (r[0] if r else {})
+                # A property_uuid actually present, to test the join
+                s2 = (f"SELECT property_uuid, COUNT(*) AS n, MAX(date) AS last "
+                      f"FROM `{BIGQUERY_PROJECT_ID}.{ds}.ninjacat_metrics` "
+                      f"GROUP BY property_uuid ORDER BY last DESC LIMIT 3")
+                out["sample_uuids"] = bq.query(s2, [])
             except Exception as e:
                 out["ninjacat_metrics_error"] = str(e)[:250]
     except Exception as e:
