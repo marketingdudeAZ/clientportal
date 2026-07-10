@@ -519,18 +519,14 @@ def bq_health():
         if out["is_bigquery_configured"]:
             from config import BIGQUERY_PROJECT_ID
             ds = bq._dataset()
-            sql = (f"SELECT COUNT(*) AS n_rows, COUNT(DISTINCT property_uuid) AS n_props, "
-                   f"MIN(date) AS min_date, MAX(date) AS max_date, "
-                   f"COUNT(DISTINCT channel) AS n_channels "
-                   f"FROM `{BIGQUERY_PROJECT_ID}.{ds}.ninjacat_metrics`")
             try:
-                r = bq.query(sql, [])
-                out["ninjacat_metrics"] = (r[0] if r else {})
-                # A property_uuid actually present, to test the join
-                s2 = (f"SELECT property_uuid, COUNT(*) AS n, MAX(date) AS last "
-                      f"FROM `{BIGQUERY_PROJECT_ID}.{ds}.ninjacat_metrics` "
-                      f"GROUP BY property_uuid ORDER BY last DESC LIMIT 3")
-                out["sample_uuids"] = bq.query(s2, [])
+                cols = bq.query(
+                    f"SELECT column_name, data_type FROM `{BIGQUERY_PROJECT_ID}.{ds}.INFORMATION_SCHEMA.COLUMNS` "
+                    f"WHERE table_name = 'ninjacat_metrics' ORDER BY ordinal_position", [])
+                out["ninjacat_columns"] = cols
+                out["row_count"] = (bq.query(f"SELECT COUNT(*) AS c FROM `{BIGQUERY_PROJECT_ID}.{ds}.ninjacat_metrics`", [])[0].get("c"))
+                sample = bq.query(f"SELECT * FROM `{BIGQUERY_PROJECT_ID}.{ds}.ninjacat_metrics` LIMIT 1", [])
+                out["sample_row"] = ({k: str(v)[:40] for k, v in sample[0].items()} if sample else None)
             except Exception as e:
                 out["ninjacat_metrics_error"] = str(e)[:250]
     except Exception as e:
