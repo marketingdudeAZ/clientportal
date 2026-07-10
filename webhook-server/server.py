@@ -5570,7 +5570,12 @@ def get_activity_all():
                 if not ts:
                     return None
                 etype = (eng.get("type", "") or "").capitalize()
-                summ = (meta.get("subject") or meta.get("title") or (meta.get("body") or "")[:140] or "").strip()
+                import re as _re
+                raw = meta.get("subject") or meta.get("title") or meta.get("body") or ""
+                raw = _re.sub(r"<[^>]+>", " ", raw)          # strip HTML tags
+                raw = (raw.replace("&nbsp;", " ").replace("&amp;", "&")
+                          .replace("&lt;", "<").replace("&gt;", ">").replace("&#39;", "'"))
+                summ = _re.sub(r"\s+", " ", raw).strip()[:160]
                 return {"date": _dt.datetime.utcfromtimestamp(ts / 1000).strftime("%Y-%m-%d"),
                         "type": etype, "summary": summ, "kind": "activity"}
             except Exception:
