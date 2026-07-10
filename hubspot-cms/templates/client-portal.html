@@ -3224,7 +3224,12 @@ body{line-height:1.55}
             <option value="">All Managers</option>
           </select>
         </div>
+        <div class="spend-filter-group" style="justify-content:flex-end">
+          <label class="spend-filter-label">&nbsp;</label>
+          <button class="btn btn-secondary btn-sm" onclick="saveSpendDefault()" title="Load this market by default next time (per user)">&#9733; Set as my default</button>
+        </div>
         <span class="sf-count-badge" id="sf-count" style="display:none"></span>
+        <span id="sf-default-note" style="font-size:11px;color:var(--tm);align-self:center"></span>
       </div>
 
       <!-- Table card -->
@@ -4589,6 +4594,7 @@ function loadSpendSheet(force) {
     _spendLoaded = true;
     _spendRows = d.rows;
     _populateSpendFilters(_spendRows);
+    _applySpendDefault();   // per-user default market (VP: load your view, not the whole thing)
     filterSpendSheet();
   })
   .catch(function(err) {
@@ -4598,6 +4604,25 @@ function loadSpendSheet(force) {
       : 'Spend data unavailable — server not connected.';
     tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;padding:40px;color:var(--tm)">' + msg + '</td></tr>';
   });
+}
+
+// Per-user default market for the spend sheet (VP #1/#2: load your saved view,
+// not the whole portfolio). Stored in localStorage keyed on the login.
+function _sfDefaultKey(){ return "rpm_spend_default_market_" + (window.__PORTAL_EMAIL__ || "anon"); }
+function _applySpendDefault(){
+  var sel=document.getElementById('sf-market'); if(!sel) return;
+  var saved=null; try{ saved=localStorage.getItem(_sfDefaultKey()); }catch(e){}
+  var note=document.getElementById('sf-default-note');
+  if(saved && Array.prototype.some.call(sel.options,function(o){return o.value===saved;})){
+    sel.value=saved; if(note) note.textContent='Showing your default: '+saved;
+  } else if(note){ note.textContent=''; }
+}
+function saveSpendDefault(){
+  var sel=document.getElementById('sf-market'); if(!sel) return;
+  var v=sel.value;
+  try{ if(v) localStorage.setItem(_sfDefaultKey(),v); else localStorage.removeItem(_sfDefaultKey()); }catch(e){}
+  var note=document.getElementById('sf-default-note');
+  if(note) note.textContent = v ? ('✓ Default set to '+v) : 'Default cleared — showing all';
 }
 
 function _populateSpendFilters(rows) {
@@ -4860,6 +4885,18 @@ function _egGaugeSvg(cfg){
     '<text x="'+cx+'" y="'+(cy-2)+'" text-anchor="middle" font-size="27" font-weight="800" fill="'+valColor+'">'+cfg.display+'</text></svg>';
 }
 function _egPill(color,label){ return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px;background:'+color+'1f;color:'+color+'"><span style="width:7px;height:7px;border-radius:50%;background:'+color+'"></span>'+label+'</span>'; }
+// Letter grade + color from a 0–100 sub-score (report card).
+function _egGrade(score){
+  if(score==null) return {g:'—', c:_EG.C.mut};
+  var C=_EG.C, col = score>=80?C.good:score>=60?C.warn:C.crit;
+  var g = score>=93?'A':score>=90?'A-':score>=87?'B+':score>=83?'B':score>=80?'B-':
+          score>=77?'C+':score>=73?'C':score>=70?'C-':score>=60?'D':'F';
+  return {g:g, c:col};
+}
+function _egGradeBadge(score){
+  var gr=_egGrade(score);
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;padding:0 6px;border-radius:6px;font-size:14px;font-weight:800;background:'+gr.c+'1f;color:'+gr.c+'">'+gr.g+'</span>';
+}
 
 // National-standard ideal ranges. dir: 'higher'|'lower' = which way is better.
 // ideal = in-range threshold, watch = the amber cutoff. Occupancy's ideal comes
@@ -4915,17 +4952,20 @@ function _egScoreBreakdown(health){
       '<div style="flex:0 0 140px"><div style="font-size:12.5px;font-weight:700;color:var(--tp)">'+r.label+'</div>'+
         '<div style="font-size:10.5px;color:var(--tm)">'+r.detail+'</div></div>'+
       '<div style="flex:0 0 62px;font-size:14px;font-weight:800;color:var(--tp)">'+r.val+'</div>'+
-      '<div style="flex:1;min-width:60px;height:8px;background:var(--bd);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+(r.score||0)+'%;background:'+col+'"></div></div>'+
-      '<div style="flex:0 0 52px;text-align:right;font-size:12px;color:var(--ts)">'+(r.score!=null?r.score:'—')+'/100</div>'+
-      '<div style="flex:0 0 44px;text-align:right;font-size:11px;color:var(--tm)">&times;'+r.weight+'%</div>'+
+      '<div style="flex:1;min-width:50px;height:8px;background:var(--bd);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+(r.score||0)+'%;background:'+col+'"></div></div>'+
+      '<div style="flex:0 0 40px;text-align:center">'+_egGradeBadge(r.score)+'</div>'+
+      '<div style="flex:0 0 48px;text-align:right;font-size:11px;color:var(--tm)">'+(r.score!=null?r.score:'—')+' &times;'+r.weight+'%</div>'+
       '<div style="flex:0 0 44px;text-align:right;font-size:13px;font-weight:800;color:'+col+'">'+contrib+'</div>'+
     '</div>';
   }).join('');
   var bcolor= total>=75?C.good:total>=50?C.warn:C.crit;
-  return '<h3 style="font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--jd);margin:22px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--bd)">Why '+total+'? &middot; how the score is built</h3>'+
+  var overallGrade=_egGrade(total);
+  return '<h3 style="font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--jd);margin:22px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--bd)">Report card &middot; why '+total+'?</h3>'+
     '<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:14px 18px">'+
+      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:8px;padding-bottom:10px;border-bottom:1px solid var(--bdl)">'+
+        '<div style="display:flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:12px;font-size:26px;font-weight:800;background:'+overallGrade.c+'1f;color:'+overallGrade.c+'">'+overallGrade.g+'</div>'+
+        '<div><div style="font-size:15px;font-weight:800;color:var(--tp)">Overall grade '+overallGrade.g+'</div><div style="font-size:12px;color:var(--tm)">Weighted health score '+total+' / 100</div></div></div>'+
       rowsHtml+
-      '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-top:10px;font-size:13px;color:var(--ts)">Weighted total <span style="font-size:18px;font-weight:800;color:'+bcolor+'">'+total+'</span></div>'+
       '<div style="font-size:11px;color:var(--tm);margin-top:6px;line-height:1.5">Each factor is scored 0&ndash;100 against its national standard, then weighted. Occupancy scores against this property&#39;s target; ATR ideal &le;6% (lower is better); exposure = leases expiring in the next 120 days as a % of units, ideal &le;8%.</div>'+
     '</div>';
 }
