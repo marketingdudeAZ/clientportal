@@ -455,6 +455,68 @@ def _compute_leasing_score(props):
     }
 
 
+# AptIQ market context — cached 6h (rate-limited API, slow-moving data).
+_APTIQ_MARKET_CACHE = {}
+_APTIQ_MARKET_TTL = 6 * 3600
+
+
+@app.route("/api/property/market", methods=["GET", "OPTIONS"])
+def get_property_market():
+    """AptIQ market context for a property: its own AptIQ read (rent/NER/occ/
+    exposure/class) + the submarket narrative (rent performance, occupancy,
+    supply pipeline, demographics). Grounds the “how do we compare to the
+    submarket” story (VP #1 ask)."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = (request.args.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    import time as _t
+    hit = _APTIQ_MARKET_CACHE.get(company_id)
+    if hit and (_t.time() - hit[0]) < _APTIQ_MARKET_TTL:
+        return jsonify(hit[1])
+
+    import requests as req
+    from config import HUBSPOT_API_KEY
+    try:
+        r = req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
+            "?properties=aptiq_property_id,aptiq_market_id,aptiq_market_name",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"}, timeout=10,
+        )
+        r.raise_for_status()
+        props = r.json().get("properties", {})
+    except Exception as e:
+        logger.error("market: HubSpot fetch failed for %s: %s", company_id, e)
+        return jsonify({"error": "lookup failed"}), 502
+
+    pid = (props.get("aptiq_property_id") or "").strip()
+    mid = (props.get("aptiq_market_id") or "").strip()
+    if not pid and not mid:
+        return jsonify({"available": False, "reason": "no_aptiq_ids"}), 200
+
+    try:
+        import apartmentiq_client as aptiq
+        ctx = aptiq.get_comp_context(pid, mid)
+    except Exception as e:
+        logger.error("market: AptIQ failed for %s: %s", company_id, e)
+        return jsonify({"available": False, "reason": "aptiq_error"}), 200
+
+    payload = {
+        "available": bool(ctx.get("property") or ctx.get("market_narrative")),
+        "market_name": props.get("aptiq_market_name", ""),
+        "property": ctx.get("property"),
+        "market_narrative": ctx.get("market_narrative"),
+    }
+    if payload["available"]:
+        _APTIQ_MARKET_CACHE[company_id] = (_t.time(), payload)
+    return jsonify(payload)
+
+
 @app.route("/api/property", methods=["GET", "OPTIONS"])
 def get_property_metrics():
     """Return all key metrics for a single property, keyed by HubSpot company ID.
