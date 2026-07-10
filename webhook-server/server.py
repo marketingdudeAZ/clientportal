@@ -493,6 +493,28 @@ def aptiq_probe():
     return jsonify(out)
 
 
+@app.route("/api/internal/aptiq-csv", methods=["GET", "OPTIONS"])
+def aptiq_csv_diag():
+    """Diagnostic: AptIQ CSV column names + a sample row, so we can map the
+    submarket/occupancy/rent columns correctly."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "auth"}), 401
+    try:
+        from services.fluency_ingestion import apt_iq_csv_client as _csv
+        cols = _csv.column_names()
+        rows = _csv.get_all_rows()
+        sample = None
+        for _rid, r in rows.items():
+            sample = {k: r.get(k) for k in list(r.keys())}
+            break
+        return jsonify({"row_count": len(rows), "columns": cols,
+                        "sample_row": {k: str(v)[:40] for k, v in (sample or {}).items()}})
+    except Exception as e:
+        return jsonify({"error": str(e)[:300]})
+
+
 @app.route("/api/property/market", methods=["GET", "OPTIONS"])
 def get_property_market():
     """AptIQ market context for a property: its own AptIQ read (rent/NER/occ/
