@@ -5412,17 +5412,23 @@ function loadActivity() {
     return;
   }
 
-  fetch(API_BASE + '/api/report-data?company_id=' + encodeURIComponent(cid),
+  fetch(API_BASE + '/api/property/activity-all?company_id=' + encodeURIComponent(cid),
         { headers: { 'X-Portal-Email': email } })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     _activityLoaded = true;
     if (loadingEl) loadingEl.style.display = 'none';
     var acts = data.activity || [];
-    if (acts.length === 0) return;
-
-    var typeColors = { Note:'var(--ts)', Call:'var(--sage)', Email:'var(--cu)', Deal:'#7B9EC9', Email_reply:'var(--cu)' };
-    var tagColors  = { Note:'notes', Call:'notes', Email:'portal', Deal:'deal', Email_reply:'portal' };
+    // Full history now comes from HubSpot — hide the staged "Today" demo rows so
+    // the feed shows only real events (VP feedback: real-only).
+    var sg = document.getElementById('tl-session-group'); if (sg) sg.style.display = 'none';
+    if (acts.length === 0) {
+      var tl0 = document.getElementById('activity-timeline');
+      if (tl0) tl0.insertAdjacentHTML('beforeend', '<div style="padding:24px;text-align:center;color:var(--tm);font-size:13px;font-style:italic">No activity or deals on this record yet.</div>');
+      return;
+    }
+    var typeColors = { Note:'var(--ts)', Call:'var(--sage)', Email:'var(--cu)', Deal:'#7B9EC9', Meeting:'var(--sage)', Email_reply:'var(--cu)' };
+    var tagColors  = { Note:'notes', Call:'notes', Email:'portal', Deal:'deal', Meeting:'notes', Email_reply:'portal' };
 
     // Group by date
     var groups = {};

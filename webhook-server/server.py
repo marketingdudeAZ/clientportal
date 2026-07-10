@@ -5527,6 +5527,88 @@ def get_report_data():
     })
 
 
+_ACTIVITY_ALL_CACHE = {}
+_ACTIVITY_ALL_TTL = 300
+
+
+@app.route("/api/property/activity-all", methods=["GET", "OPTIONS"])
+def get_activity_all():
+    """Full history of activity + deals on a company — the VP ask, "everything
+    that's ever happened on this record." No 90-day cutoff. Deals via one batch
+    read. Cached 5 min. Powers the Activity & Deals tab."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = (request.args.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    import time as _t
+    hit = _ACTIVITY_ALL_CACHE.get(company_id)
+    if hit and (_t.time() - hit[0]) < _ACTIVITY_ALL_TTL:
+        return jsonify(hit[1])
+
+    import requests as req, datetime as _dt, concurrent.futures
+    from config import HUBSPOT_API_KEY
+    hs = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
+    base = "https://api.hubapi.com/crm/v3/objects/companies"
+    items = []
+
+    # ── Engagements (calls / notes / emails / meetings) — up to 150, no cutoff ──
+    try:
+        assoc = req.get(f"{base}/{company_id}/associations/engagements", headers=hs, params={"limit": 150}, timeout=12)
+        eng_ids = [i["id"] for i in assoc.json().get("results", [])] if assoc.ok else []
+
+        def _fetch(eid):
+            try:
+                r = req.get(f"https://api.hubapi.com/engagements/v1/engagements/{eid}", headers=hs, timeout=6)
+                if not r.ok:
+                    return None
+                d = r.json(); eng = d.get("engagement", {}); meta = d.get("metadata", {})
+                ts = eng.get("createdAt", 0)
+                if not ts:
+                    return None
+                etype = (eng.get("type", "") or "").capitalize()
+                summ = (meta.get("subject") or meta.get("title") or (meta.get("body") or "")[:140] or "").strip()
+                return {"date": _dt.datetime.utcfromtimestamp(ts / 1000).strftime("%Y-%m-%d"),
+                        "type": etype, "summary": summ, "kind": "activity"}
+            except Exception:
+                return None
+
+        if eng_ids:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+                futs = [pool.submit(_fetch, e) for e in eng_ids]
+                done, _ = concurrent.futures.wait(futs, timeout=22)
+                items += [f.result() for f in done if f.result()]
+    except Exception as e:
+        logger.warning("activity-all engagements failed for %s: %s", company_id, e)
+
+    # ── Deals — all associated, one batch read ──
+    try:
+        dassoc = req.get(f"{base}/{company_id}/associations/deals", headers=hs, params={"limit": 100}, timeout=12)
+        deal_ids = [i["id"] for i in dassoc.json().get("results", [])] if dassoc.ok else []
+        if deal_ids:
+            br = req.post("https://api.hubapi.com/crm/v3/objects/deals/batch/read", headers={**hs, "Content-Type": "application/json"},
+                         json={"inputs": [{"id": x} for x in deal_ids],
+                               "properties": ["dealname", "dealstage", "amount", "createdate", "closedate", "pipeline"]}, timeout=15)
+            for d in (br.json().get("results", []) if br.ok else []):
+                p = d.get("properties", {})
+                raw = (p.get("createdate") or "")[:10]
+                amt = p.get("amount")
+                summ = (p.get("dealname") or "Deal") + (f" — ${int(float(amt)):,}/mo" if amt else "")
+                items.append({"date": raw or "", "type": "Deal", "summary": summ, "kind": "deal",
+                              "stage": p.get("dealstage", ""), "amount": (float(amt) if amt else None)})
+    except Exception as e:
+        logger.warning("activity-all deals failed for %s: %s", company_id, e)
+
+    items = [it for it in items if it.get("date")]
+    items.sort(key=lambda x: x["date"], reverse=True)
+    payload = {"activity": items, "count": len(items)}
+    _ACTIVITY_ALL_CACHE[company_id] = (_t.time(), payload)
+    return jsonify(payload)
+
+
 # ─── Portal identity helper + report data ───────────────────────────────────
 
 
