@@ -528,25 +528,64 @@ def get_property_market():
         return jsonify({"error": "lookup failed"}), 502
 
     pid = (props.get("aptiq_property_id") or "").strip()
-    mid = (props.get("aptiq_market_id") or "").strip()
-    if not pid and not mid:
-        return jsonify({"available": False, "reason": "no_aptiq_ids"}), 200
+    if not pid:
+        return jsonify({"available": False, "reason": "no_aptiq_id"}), 200
 
+    # Source from the AptIQ daily CSV (APT_IQ_DAILY_SHEET_URL) — the live sheet,
+    # not the expired REST token. Every property's occupancy / rent / exposure /
+    # submarket is in there, so we can build the submarket comparison directly.
     try:
-        import apartmentiq_client as aptiq
-        ctx = aptiq.get_comp_context(pid, mid)
+        from services.fluency_ingestion import apt_iq_csv_client as _csv
+        from services.fluency_ingestion import apt_iq_reader as _air
     except Exception as e:
-        logger.error("market: AptIQ failed for %s: %s", company_id, e)
-        return jsonify({"available": False, "reason": "aptiq_error"}), 200
+        logger.error("market: AptIQ CSV client import failed: %s", e)
+        return jsonify({"available": False, "reason": "csv_unavailable"}), 200
+
+    subj_row = _csv.get_property_row(pid)
+    if not subj_row:
+        return jsonify({"available": False, "reason": "not_in_csv"}), 200
+
+    def _num(row, key):
+        return _air._to_float(_air._resolve_col(row, key))
+
+    subj = {
+        "occupancy": _num(subj_row, "occupancy_pct"),
+        "exposure":  _num(subj_row, "exposure_90d_pct"),
+        "rent":      _num(subj_row, "avg_rent"),
+        "submarket": _air._resolve_col(subj_row, "submarket_name"),
+        "market":    _air._resolve_col(subj_row, "market_name") or props.get("aptiq_market_name", ""),
+    }
+    submarket = (subj["submarket"] or "").strip().lower()
+
+    # Aggregate every AptIQ property in the same submarket.
+    def _agg(rows, key):
+        vals = [v for v in (_num(r, key) for r in rows) if v is not None]
+        return (round(sum(vals) / len(vals), 1) if vals else None, len(vals))
+
+    peers = []
+    if submarket:
+        for _rid, row in _csv.get_all_rows().items():
+            sm = (_air._resolve_col(row, "submarket_name") or "").strip().lower()
+            if sm == submarket:
+                peers.append(row)
+
+    occ_avg, occ_n = _agg(peers, "occupancy_pct")
+    exp_avg, _     = _agg(peers, "exposure_90d_pct")
+    rent_avg, _    = _agg(peers, "avg_rent")
 
     payload = {
-        "available": bool(ctx.get("property") or ctx.get("market_narrative")),
-        "market_name": props.get("aptiq_market_name", ""),
-        "property": ctx.get("property"),
-        "market_narrative": ctx.get("market_narrative"),
+        "available": True,
+        "market_name": subj["market"],
+        "submarket_name": subj["submarket"],
+        "subject": subj,
+        "submarket": {
+            "count": len(peers),
+            "avg_occupancy": occ_avg,
+            "avg_exposure": exp_avg,
+            "avg_rent": rent_avg,
+        },
     }
-    if payload["available"]:
-        _APTIQ_MARKET_CACHE[company_id] = (_t.time(), payload)
+    _APTIQ_MARKET_CACHE[company_id] = (_t.time(), payload)
     return jsonify(payload)
 
 
