@@ -368,12 +368,15 @@ def _compute_leasing_score(props):
             if o >= 60: return 60
             if o >= 45: return 45
             return 30
-        else:
-            if o >= target_occ:      return 100
-            if o >= target_occ - 2:  return 85
-            if o >= target_occ - 5:  return 70
-            if o >= target_occ - 8:  return 55
-            return 35
+        # Stabilized: smooth linear curve (no band cliffs). At/above target = 100;
+        # ~5 pts per 1% below target in the top zone, gentler further down.
+        # (Re-curved 2026-07 — old bands scored a healthy 92.7%/9.3% property a 62.)
+        if o >= target_occ:
+            return 100
+        gap = target_occ - o
+        if gap <= 5:
+            return round(100 - gap * 5)      # 94->95, 93->90, 90->75
+        return max(30, round(75 - (gap - 5) * 3.5))
 
     def _atr_score(a):
         if a is None:
@@ -384,21 +387,19 @@ def _compute_leasing_score(props):
             if a <= 35: return 55
             if a <= 50: return 35
             return 20
-        else:
-            if a <= 4:  return 100
-            if a <= 6:  return 80
-            if a <= 9:  return 60
-            if a <= 13: return 40
-            return 20
+        # Stabilized: 100 at <=5% availability, -5 pts per 1% above.
+        if a <= 5:
+            return 100
+        return max(20, round(100 - (a - 5) * 5))   # 6->95, 9->80, 13->60
 
     def _exposure_score(t, u):
         if t is None or u == 0:
             return 75
         pct = (t / u) * 100
-        if pct <= 8:  return 100
-        if pct <= 15: return 75
-        if pct <= 22: return 50
-        return 25
+        # 100 at <=8% exposure, gentle -3.5 pts per 1% above.
+        if pct <= 8:
+            return 100
+        return max(25, round(100 - (pct - 8) * 3.5))   # 10->93, 15->76, 22->51
 
     o_score = _occ_score(occ)
     a_score = _atr_score(atr)

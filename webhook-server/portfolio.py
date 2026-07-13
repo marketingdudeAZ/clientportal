@@ -468,12 +468,13 @@ def _compute_leasing_score(props):
             if o >= 60: return 60
             if o >= 45: return 45
             return 30
-        else:
-            if o >= target_occ:      return 100
-            if o >= target_occ - 2:  return 85
-            if o >= target_occ - 5:  return 70
-            if o >= target_occ - 8:  return 55
-            return 35
+        # Stabilized: smooth linear curve (re-curved 2026-07 — see server.py).
+        if o >= target_occ:
+            return 100
+        gap = target_occ - o
+        if gap <= 5:
+            return round(100 - gap * 5)
+        return max(30, round(75 - (gap - 5) * 3.5))
 
     def _atr_score(a):
         if a is None: return 75
@@ -483,20 +484,16 @@ def _compute_leasing_score(props):
             if a <= 35: return 55
             if a <= 50: return 35
             return 20
-        else:
-            if a <= 4:  return 100
-            if a <= 6:  return 80
-            if a <= 9:  return 60
-            if a <= 13: return 40
-            return 20
+        if a <= 5:
+            return 100
+        return max(20, round(100 - (a - 5) * 5))
 
     def _exposure_score(t, u):
         if t is None or u == 0: return 75
         pct = (t / u) * 100
-        if pct <= 8:  return 100
-        if pct <= 15: return 75
-        if pct <= 22: return 50
-        return 25
+        if pct <= 8:
+            return 100
+        return max(25, round(100 - (pct - 8) * 3.5))
 
     o_score = _occ_score(occ)
     a_score = _atr_score(atr)
