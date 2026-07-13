@@ -6061,6 +6061,27 @@ def get_funnel_forecast():
     return jsonify(result)
 
 
+# ─── AI SWOT (Performance page) ─────────────────────────────────────────────
+
+
+@app.route("/api/performance/swot", methods=["GET", "OPTIONS"])
+def get_performance_swot():
+    """Channel-aware AI SWOT for one property's digital marketing (cached 24h)."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = request.args.get("company_id", "").strip()
+    uuid = request.args.get("uuid", "").strip()
+    if not company_id and uuid:
+        company_id = _resolve_company_id_by_uuid(uuid)
+    if not company_id:
+        return jsonify({"error": "company_id or uuid required"}), 400
+    import swot as _swot
+    return jsonify(_swot.generate_swot(company_id, force=(request.args.get("force") == "1")))
+
+
 # ─── Health check (public) ──────────────────────────────────────────────────
 
 

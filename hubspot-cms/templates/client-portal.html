@@ -1504,8 +1504,14 @@ body{line-height:1.55}
     </div>
   </div>
 
-  <!-- NinjaCat + SEO Deliverables cards hidden until real integrations land.
-       Previous static cards linked to href="#" with hardcoded "March 2026" report names. -->
+  <!-- AI SWOT — channel-aware, generated from NinjaCat + HubSpot spend + AptIQ -->
+  <div style="margin-top:20px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd)">AI SWOT · digital marketing</div>
+      <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--cug);color:var(--cu)">✦ AI</span>
+    </div>
+    <div id="swot-root"><div style="padding:20px;color:var(--tm);font-size:13px">Loading SWOT…</div></div>
+  </div>
 </section>
 
 <!-- ── SEO & AI INSIGHTS ── -->
@@ -3453,7 +3459,7 @@ function nav(id, el) {
   if (id === 'services')         { if (typeof loadSelfCheckoutCards==='function') loadSelfCheckoutCards(); }
   if (id === 'video')            { loadVideoCreative(); }
   // Forecast page retired 2026-07 — funnel forecast now lives on Plan & Spend
-  if (id === 'performance')      { loadPerformance(); }
+  if (id === 'performance')      { loadPerformance(); loadSwot(); }
   if (id === 'activity')         { loadActivity(); }
   if (id === 'recommendations')  { loadCallPrep(); }
   if (id === 'seo')              { if (typeof loadSeoInsights === 'function') loadSeoInsights(); }
@@ -5714,6 +5720,46 @@ function loadPortfolio() {
 
 // ── Performance gauges ──────────────────────────────────────────────────────
 var _perfLoaded = false;
+
+// ══ AI SWOT (Performance page) ═══════════════════════════════════════════════
+var _swotLoaded = false;
+function loadSwot(){
+  var root=document.getElementById('swot-root'); if(!root) return;
+  var API=window.__PORTAL_API_BASE||'https://rpm-portal-server.onrender.com';
+  var email=window.__PORTAL_EMAIL__||'portal@rpmliving.com';
+  var cid=window.__PORTAL_COMPANY_ID__||'';
+  if(!cid){ root.innerHTML='<div style="padding:20px;color:var(--tm);font-size:13px">No property selected.</div>'; return; }
+  if(_swotLoaded) return; _swotLoaded=true;
+  fetch(API+'/api/performance/swot?company_id='+encodeURIComponent(cid),{headers:{'X-Portal-Email':email}})
+    .then(function(r){return r.json();})
+    .then(function(d){ renderSwot(d); })
+    .catch(function(e){ _swotLoaded=false; root.innerHTML='<div style="padding:20px;color:var(--red);font-size:13px">Could not load SWOT: '+e+'</div>'; });
+}
+function renderSwot(d){
+  var root=document.getElementById('swot-root'); if(!root) return;
+  if(!d||d.available===false){ root.innerHTML='<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:22px;color:var(--ts);font-size:13px">'+((d&&d.message)||'SWOT not available yet.')+'</div>'; return; }
+  var s=d.swot||{};
+  var quads=[
+    {k:'strengths',label:'Strengths',color:'var(--sage)',bg:'rgba(143,166,142,.08)'},
+    {k:'weaknesses',label:'Weaknesses',color:'var(--red)',bg:'rgba(201,68,68,.06)'},
+    {k:'opportunities',label:'Opportunities',color:'var(--cu)',bg:'var(--cug)'},
+    {k:'threats',label:'Threats',color:'var(--amb)',bg:'rgba(212,145,10,.07)'}
+  ];
+  var h=['<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">'];
+  quads.forEach(function(q){
+    var items=s[q.k]||[];
+    h.push('<div style="background:'+q.bg+';border:1px solid var(--bd);border-left:3px solid '+q.color+';border-radius:12px;padding:16px 18px">');
+    h.push('<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:'+q.color+';margin-bottom:10px">'+q.label+'</div>');
+    if(!items.length) h.push('<div style="font-size:12px;color:var(--tm)">—</div>');
+    items.forEach(function(it){
+      h.push('<div style="margin-bottom:10px"><div style="font-size:13px;font-weight:700;color:var(--tp);margin-bottom:2px">'+(it.title||'')+'</div><div style="font-size:12px;color:var(--ts);line-height:1.45">'+(it.detail||'')+'</div></div>');
+    });
+    h.push('</div>');
+  });
+  h.push('</div>');
+  if(d.month) h.push('<div style="font-size:10px;color:var(--tm);margin-top:8px;font-style:italic">Generated from '+d.month+' channel data · AI analysis, review before sharing.</div>');
+  root.innerHTML=h.join('');
+}
 
 function loadPerformance() {
   if (_perfLoaded) return;
