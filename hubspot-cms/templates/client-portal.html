@@ -1358,7 +1358,7 @@ body{line-height:1.55}
     </div>
   </div><!-- /leasing-row -->
 
-  <div class="three-col">
+  <div class="three-col" style="display:none">
     <div class="card card-p digest-card">
       <span class="digest-label" id="digest-label">✦ AI-curated</span>
       <div class="digest-text" id="digest-text" style="color:var(--tm);font-style:italic">Loading your property summary…</div>
@@ -6314,10 +6314,8 @@ function loadFunnelForecast(){
   var cid = window.__PORTAL_COMPANY_ID__ || '';
   if (!cid){ root.innerHTML = '<div style="padding:24px;color:var(--tm);font-size:13px">Select a property to see its funnel forecast.</div>'; return; }
   var goalEl = document.getElementById('ff-goal-input');
-  var ctxEl  = document.getElementById('ff-context');
   var qs = '?company_id=' + encodeURIComponent(cid);
   if (goalEl && goalEl.value) qs += '&goal_leases=' + encodeURIComponent(goalEl.value);
-  if (ctxEl && ctxEl.value)   qs += '&context=' + encodeURIComponent(ctxEl.value);
   if (!goalEl){ root.innerHTML = '<div style="padding:24px;color:var(--tm);font-size:13px">Loading funnel forecast…</div>'; }
   fetch(API_BASE + '/api/forecast/funnel' + qs, { headers:{'X-Portal-Email':email} })
     .then(function(r){ return r.json(); })
@@ -6346,13 +6344,10 @@ function renderFunnelForecast(d){
   h.push('<div><div style="font-size:16px;font-weight:800;color:var(--tp)">'+(prop.name||'Property')+'</div>');
   h.push('<div style="font-size:11px;color:var(--tm);margin-top:2px">'+_ffNum(prop.units)+' units · '+String(d.context||'').replace('_',' ')+' · data '+(d.month||'')+'</div></div>');
   h.push('<div style="display:flex;gap:10px;align-items:flex-end">');
-  h.push('<div><label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--jd);margin-bottom:4px">Leasing goal (units)</label>');
-  h.push('<input id="ff-goal-input" type="number" min="1" step="1" value="'+(d.goal_leases||'')+'" onchange="loadFunnelForecast()" style="width:82px;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:14px;font-weight:700;color:var(--tp)"></div>');
-  var ctxOpts=[['stabilized','Stabilized'],['lease_up','Lease-up'],['new_supply','New supply'],['btr','Build-to-rent']];
-  h.push('<div><label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--jd);margin-bottom:4px">Property type</label>');
-  h.push('<select id="ff-context" onchange="loadFunnelForecast()" style="padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13px;color:var(--tp)">');
-  ctxOpts.forEach(function(o){ h.push('<option value="'+o[0]+'"'+(d.context===o[0]?' selected':'')+'>'+o[1]+'</option>'); });
-  h.push('</select></div></div></div>');
+  h.push('<div style="text-align:right"><label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--jd);margin-bottom:4px">Leasing goal (units)</label>');
+  h.push('<input id="ff-goal-input" type="number" min="1" step="1" value="'+(d.goal_leases||'')+'" onchange="loadFunnelForecast()" style="width:82px;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:14px;font-weight:700;color:var(--tp);text-align:center">');
+  h.push('<div style="font-size:10px;color:var(--tm);margin-top:4px">from '+(d.goal_basis||'AptIQ')+'</div>');
+  h.push('</div></div></div>');
   var vColor=onTrack?'var(--sage)':'var(--red)', vBg=onTrack?'var(--ml)':'rgba(201,68,68,.08)';
   var vText=onTrack?('On track — the funnel supports ~'+leasesA+' leases.'):('Funnel runs dry at '+(bn||'')+' — you can support ~'+leasesA+' leases vs a goal of '+leasesR+'.');
   h.push('<div style="background:'+vBg+';border-left:3px solid '+vColor+';border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:13px;font-weight:600;color:var(--tp)">'+vText+'</div>');

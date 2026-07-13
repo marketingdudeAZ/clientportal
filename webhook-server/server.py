@@ -5897,7 +5897,7 @@ def get_funnel_forecast():
     import bigquery_client as _bq
 
     # 1. Property context from HubSpot
-    props = "name,ninjacat_system_id,totalunits,occupancy_status,developtype,proptype,target_occupancy"
+    props = "name,ninjacat_system_id,totalunits,occupancy_status,developtype,proptype,target_occupancy,aptiq_property_id"
     try:
         r = _req.get(
             f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props}",
@@ -5915,13 +5915,49 @@ def get_funnel_forecast():
 
     units = float(p.get("totalunits") or 0)
 
-    # 2. Derive goal + context (both overridable via query params)
+    # AptIQ occupancy/exposure — the real leasing need (units to lease)
+    apt_occ = apt_exp = None
+    apt_pid = (p.get("aptiq_property_id") or "").strip()
+    if apt_pid:
+        try:
+            from services.fluency_ingestion import apt_iq_csv_client as _csv
+            _ar = _csv.get_property_row(apt_pid)
+
+            def _apt_num(col):
+                if not _ar:
+                    return None
+                s = str(_ar.get(col, "")).replace("%", "").replace(",", "").strip()
+                try:
+                    return float(s)
+                except ValueError:
+                    return None
+            apt_occ = _apt_num("Advertised Occupancy %")
+            apt_exp = _apt_num("Exposure %")
+        except Exception as e:
+            logger.warning("funnel-forecast AptIQ lookup failed for %s: %s", apt_pid, e)
+
+    # 2. Derive goal + context (goal overridable via query param)
     try:
         goal_leases = float(request.args.get("goal_leases") or 0)
     except ValueError:
         goal_leases = 0
+    goal_basis = "your override"
     if goal_leases <= 0:
-        goal_leases = max(1.0, round(units * 0.03)) if units else 5.0  # ~3%/mo turnover
+        # Real leasing need from AptIQ: exposure = units available / coming
+        # available to rent = the true media-plan goal. Fall back to vacancy
+        # from occupancy, then to a turnover estimate only if AptIQ is absent.
+        if apt_exp is not None and units:
+            goal_leases = max(1.0, round(units * apt_exp / 100.0))
+            goal_basis = f"{apt_exp:.1f}% exposure (AptIQ)"
+        elif apt_occ is not None and units:
+            goal_leases = max(1.0, round(units * (100.0 - apt_occ) / 100.0))
+            goal_basis = f"{apt_occ:.1f}% occupancy (AptIQ)"
+        elif units:
+            goal_leases = max(1.0, round(units * 0.03))
+            goal_basis = "3%/mo turnover estimate (no AptIQ data)"
+        else:
+            goal_leases = 5.0
+            goal_basis = "default"
 
     try:
         leads_per_lease = float(request.args.get("leads_per_lease") or 0) or _ff.DEFAULT_LEADS_PER_LEASE
@@ -5981,6 +6017,9 @@ def get_funnel_forecast():
     )
     result["available"] = True
     result["month"] = rows[0].get("report_month") if rows else None
+    result["goal_basis"] = goal_basis
+    result["occupancy"] = apt_occ
+    result["exposure"] = apt_exp
     result["property"] = {"name": p.get("name"), "units": units, "ninjacat_id": ncid}
     return jsonify(result)
 
