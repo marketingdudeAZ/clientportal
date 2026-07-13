@@ -6305,40 +6305,33 @@ function _buildReportHTML(d) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ══ Full-funnel forecast (v1 funnel-sufficiency model) ═══════════════════════
+// ══ Full-funnel forecast + reactive scenario planner (Phase B) ═══════════════
+var _ffData = null;
+var _ffTimer = null;
+var _FF_CH = [['paid_search','Paid Search'],['seo','SEO / Organic'],['paid_social','Paid Social'],['display','Display / CTV'],['retargeting','Retargeting'],['email','Email']];
 function _ffNum(n){ return (Math.round(Number(n)||0)).toLocaleString('en-US'); }
-function _ffBarColor(ratio){
-  if (ratio == null) return 'var(--tm)';
-  if (ratio >= 1)   return 'var(--sage)';
-  if (ratio >= 0.7) return 'var(--amb)';
-  return 'var(--red)';
-}
+function _ffBarColor(r){ if(r==null)return 'var(--tm)'; if(r>=1)return 'var(--sage)'; if(r>=0.7)return 'var(--amb)'; return 'var(--red)'; }
+function _ffBtn(primary){ return 'padding:5px 11px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--bd);'+(primary?'background:var(--cu);color:#fff;border-color:var(--cu)':'background:#fff;color:var(--ts)'); }
+
 function loadFunnelForecast(){
-  var root = document.getElementById('funnel-forecast-root');
-  if (!root) return;
-  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
-  var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
-  var cid = window.__PORTAL_COMPANY_ID__ || '';
-  if (!cid){ root.innerHTML = '<div style="padding:24px;color:var(--tm);font-size:13px">Select a property to see its funnel forecast.</div>'; return; }
-  var goalEl = document.getElementById('ff-goal-input');
-  var qs = '?company_id=' + encodeURIComponent(cid);
-  if (goalEl && goalEl.value) qs += '&goal_leases=' + encodeURIComponent(goalEl.value);
-  if (!goalEl){ root.innerHTML = '<div style="padding:24px;color:var(--tm);font-size:13px">Loading funnel forecast…</div>'; }
-  fetch(API_BASE + '/api/forecast/funnel' + qs, { headers:{'X-Portal-Email':email} })
-    .then(function(r){ return r.json(); })
-    .then(function(d){ renderFunnelForecast(d); })
-    .catch(function(e){ root.innerHTML = '<div style="padding:24px;color:var(--red);font-size:13px">Could not load forecast: '+e+'</div>'; });
+  var root=document.getElementById('funnel-forecast-root'); if(!root) return;
+  var API=window.__PORTAL_API_BASE||'https://rpm-portal-server.onrender.com';
+  var email=window.__PORTAL_EMAIL__||'portal@rpmliving.com';
+  var cid=window.__PORTAL_COMPANY_ID__||'';
+  if(!cid){ root.innerHTML='<div style="padding:24px;color:var(--tm);font-size:13px">Select a property to see its funnel forecast.</div>'; return; }
+  var goalEl=document.getElementById('ff-goal-input');
+  var qs='?company_id='+encodeURIComponent(cid);
+  if(goalEl&&goalEl.value) qs+='&goal_leases='+encodeURIComponent(goalEl.value);
+  if(!goalEl) root.innerHTML='<div style="padding:24px;color:var(--tm);font-size:13px">Loading funnel forecast…</div>';
+  fetch(API+'/api/forecast/funnel'+qs,{headers:{'X-Portal-Email':email}})
+    .then(function(r){return r.json();})
+    .then(function(d){ _ffData=d; renderFunnelForecast(d); })
+    .catch(function(e){ root.innerHTML='<div style="padding:24px;color:var(--red);font-size:13px">Could not load forecast: '+e+'</div>'; });
 }
-function renderFunnelForecast(d){
-  var root = document.getElementById('funnel-forecast-root');
-  if (!root) return;
-  if (!d || d.available === false){
-    var msg = (d && d.message) || 'No NinjaCat performance data is mapped to this property yet.';
-    root.innerHTML = '<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:28px;color:var(--ts);font-size:13px">'+msg+'</div>';
-    return;
-  }
-  var prop=d.property||{}, st=d.stages||{}, rec=d.recommendation||{};
-  var bn=d.bottleneck;
+
+// The parts that change when the scenario budget moves.
+function _ffDynamicHTML(d){
+  var st=d.stages||{}, rec=d.recommendation||{}, bn=d.bottleneck;
   var leasesA=d.achievable_leases||0, leasesR=d.goal_leases||0;
   var stages=[
     {key:'impressions',label:'Impressions',sub:'reach · awareness',a:st.impressions.actual,r:st.impressions.required,ratio:st.impressions.ratio},
@@ -6347,17 +6340,10 @@ function renderFunnelForecast(d){
     {key:'leases',label:'Leases',sub:'the goal',a:leasesA,r:leasesR,ratio:(leasesR?leasesA/leasesR:null)}
   ];
   var onTrack=!bn, h=[];
-  h.push('<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px">');
-  h.push('<div><div style="font-size:16px;font-weight:800;color:var(--tp)">'+(prop.name||'Property')+'</div>');
-  h.push('<div style="font-size:11px;color:var(--tm);margin-top:2px">'+_ffNum(prop.units)+' units · '+String(d.context||'').replace('_',' ')+' · data '+(d.month||'')+'</div></div>');
-  h.push('<div style="display:flex;gap:10px;align-items:flex-end">');
-  h.push('<div style="text-align:right"><label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--jd);margin-bottom:4px">Leasing goal (units)</label>');
-  h.push('<input id="ff-goal-input" type="number" min="1" step="1" value="'+(d.goal_leases||'')+'" onchange="loadFunnelForecast()" style="width:82px;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:14px;font-weight:700;color:var(--tp);text-align:center">');
-  h.push('<div style="font-size:10px;color:var(--tm);margin-top:4px">from '+(d.goal_basis||'AptIQ')+'</div>');
-  h.push('</div></div></div>');
   var vColor=onTrack?'var(--sage)':'var(--red)', vBg=onTrack?'var(--ml)':'rgba(201,68,68,.08)';
-  var vText=onTrack?('On track — the funnel supports ~'+leasesA+' leases.'):('Funnel runs dry at '+(bn||'')+' — you can support ~'+leasesA+' leases vs a goal of '+leasesR+'.');
-  h.push('<div style="background:'+vBg+';border-left:3px solid '+vColor+';border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:13px;font-weight:600;color:var(--tp)">'+vText+'</div>');
+  var scen=d.scenario?'Scenario: ':'';
+  var vText=onTrack?(scen+'On track — supports ~'+leasesA+' leases.'):(scen+'Funnel runs dry at '+(bn||'')+' — ~'+leasesA+' leases vs a goal of '+leasesR+'.');
+  h.push('<div style="background:'+vBg+';border-left:3px solid '+vColor+';border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;font-weight:600;color:var(--tp)">'+vText+'</div>');
   h.push('<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:18px;margin-bottom:16px">');
   h.push('<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd);margin-bottom:14px">The funnel · actual vs. what the goal needs</div>');
   stages.forEach(function(s){
@@ -6366,31 +6352,108 @@ function renderFunnelForecast(d){
     h.push('<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">');
     h.push('<span style="font-weight:700;color:var(--tp)">'+s.label+' <span style="font-weight:400;color:var(--tm)">'+s.sub+'</span>'+(isBn?' <span style="color:var(--red);font-weight:700">← starved</span>':'')+'</span>');
     h.push('<span style="color:var(--ts)"><b style="color:var(--tp)">'+_ffNum(s.a)+'</b> / '+_ffNum(s.r)+(ratio!=null?'  ('+(ratio>=1?'✓':(Math.round(ratio*100)+'%'))+')':'')+'</span></div>');
-    h.push('<div style="height:10px;background:var(--bg);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+fill+'%;background:'+col+';border-radius:6px"></div></div>');
+    h.push('<div style="height:10px;background:var(--bg);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+fill+'%;background:'+col+';border-radius:6px;transition:width .3s ease"></div></div>');
     h.push('</div>');
   });
   h.push('</div>');
-  if (d.diagnosis && d.diagnosis.length){
+  if(d.diagnosis&&d.diagnosis.length){
     h.push('<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:16px 18px;margin-bottom:16px">');
     h.push('<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd);margin-bottom:8px">What this means</div>');
     d.diagnosis.forEach(function(x){ h.push('<div style="font-size:13px;color:var(--ts);line-height:1.5;margin-bottom:6px">• '+x+'</div>'); });
     h.push('</div>');
   }
-  var modeLabel={on_track:'Hold &amp; optimize',reallocate:'Rebalance the mix',spend_more:'Fund the full funnel',fix_conversion:'Fix conversion first'}[rec.mode]||'Recommendation';
+  var modeLabel={on_track:'Hold &amp; optimize',reallocate:'Rebalance the mix',spend_more:'Fund the full funnel',fix_conversion:'Traffic is fed — optimize conversion'}[rec.mode]||'Recommendation';
   var recColor={on_track:'var(--sage)',reallocate:'var(--cu)',spend_more:'var(--cu)',fix_conversion:'var(--amb)'}[rec.mode]||'var(--jd)';
-  h.push('<div style="background:'+recColor+';color:#fff;border-radius:12px;padding:16px 18px;margin-bottom:16px">');
+  h.push('<div style="background:'+recColor+';color:#fff;border-radius:12px;padding:16px 18px">');
   h.push('<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;opacity:.92">'+modeLabel+'</div>');
   h.push('<div style="font-size:13.5px;line-height:1.5">'+(rec.note||'')+'</div></div>');
-  var cap=(rec.capture_share!=null?Math.round(rec.capture_share*100):null);
-  if (cap!=null){
-    h.push('<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:16px 18px">');
-    h.push('<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd);margin-bottom:10px">Current mix · $'+_ffNum(rec.current_spend)+'/mo</div>');
-    h.push('<div style="height:14px;border-radius:7px;overflow:hidden;display:flex;margin-bottom:6px">');
-    h.push('<div style="width:'+cap+'%;background:var(--jd)"></div><div style="width:'+(100-cap)+'%;background:var(--sage)"></div></div>');
-    h.push('<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ts)"><span><b>'+cap+'%</b> demand capture (search)</span><span><b>'+(100-cap)+'%</b> demand creation</span></div>');
-    h.push('</div>');
+  return h.join('');
+}
+
+function renderFunnelForecast(d){
+  var root=document.getElementById('funnel-forecast-root'); if(!root) return;
+  if(!d||d.available===false){
+    root.innerHTML='<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:28px;color:var(--ts);font-size:13px">'+((d&&d.message)||'No NinjaCat performance data is mapped to this property yet.')+'</div>';
+    return;
   }
-  root.innerHTML = h.join('');
+  var prop=d.property||{}, h=[];
+  h.push('<div style="display:grid;grid-template-columns:1fr;gap:16px">');
+  // header
+  h.push('<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">');
+  h.push('<div><div style="font-size:16px;font-weight:800;color:var(--tp)">'+(prop.name||'Property')+'</div>');
+  h.push('<div style="font-size:11px;color:var(--tm);margin-top:2px">'+_ffNum(prop.units)+' units · '+String(d.context||'').replace('_',' ')+' · data '+(d.month||'')+'</div></div>');
+  h.push('<div style="text-align:right"><label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--jd);margin-bottom:4px">Leasing goal (units)</label>');
+  h.push('<input id="ff-goal-input" type="number" min="1" step="1" value="'+(d.goal_leases||'')+'" onchange="loadFunnelForecast()" style="width:82px;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:14px;font-weight:700;color:var(--tp);text-align:center">');
+  h.push('<div style="font-size:10px;color:var(--tm);margin-top:4px">from '+(d.goal_basis||'AptIQ')+'</div></div></div>');
+  // two-column: funnel (dynamic) + scenario controls
+  h.push('<div style="display:grid;grid-template-columns:1fr;gap:16px">');
+  h.push('<div id="ff-funnel-dynamic">'+_ffDynamicHTML(d)+'</div>');
+  h.push(_ffScenarioControls(d));
+  h.push('</div>');
+  h.push('</div>');
+  root.innerHTML=h.join('');
+}
+
+function _ffScenarioControls(d){
+  var cur=d.current_budget_channels||{}, p=[];
+  p.push('<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:18px">');
+  p.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd)">Model a budget</div><div style="display:flex;gap:6px">'+
+    '<button onclick="_ffPreset(\'current\')" style="'+_ffBtn()+'">Current</button>'+
+    '<button onclick="_ffPreset(\'reallocate\')" style="'+_ffBtn()+'">Reallocate</button>'+
+    '<button onclick="_ffPreset(\'fund\')" style="'+_ffBtn(true)+'">Fund the goal</button></div></div>');
+  p.push('<div id="ff-scenario-total" style="font-size:12px;color:var(--ts);margin-bottom:14px">Total: <b style="color:var(--tp)">$'+_ffNum(d.current_budget_total)+'</b>/mo</div>');
+  _FF_CH.forEach(function(c){
+    var v=Math.round(cur[c[0]]||0), max=Math.max(5000, v*3);
+    p.push('<div style="margin-bottom:11px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:var(--tp);font-weight:600">'+c[1]+'</span><span id="ffval-'+c[0]+'" style="color:var(--ts);font-weight:700">$'+_ffNum(v)+'</span></div>'+
+      '<input type="range" id="ffsl-'+c[0]+'" min="0" max="'+max+'" step="100" value="'+v+'" oninput="_ffOnSlider()" style="width:100%;accent-color:var(--cu)"></div>');
+  });
+  p.push('<div style="font-size:10px;color:var(--tm);margin-top:10px;font-style:italic">Directional planning model — not a lease guarantee. Spend from HubSpot; funnel from NinjaCat; conversions anchored on GA4.</div>');
+  p.push('</div>');
+  return p.join('');
+}
+
+function _ffReadSliders(){ var b={}; _FF_CH.forEach(function(c){ var el=document.getElementById('ffsl-'+c[0]); if(el) b[c[0]]=Number(el.value)||0; }); return b; }
+
+function _ffOnSlider(){
+  var b=_ffReadSliders(), tot=0;
+  _FF_CH.forEach(function(c){ var el=document.getElementById('ffval-'+c[0]); if(el) el.textContent='$'+_ffNum(b[c[0]]); tot+=b[c[0]]; });
+  var totEl=document.getElementById('ff-scenario-total');
+  if(totEl) totEl.innerHTML='Scenario: <b style="color:var(--tp)">$'+_ffNum(tot)+'</b>/mo <span style="color:var(--tm)">(current $'+_ffNum((_ffData&&_ffData.current_budget_total)||0)+')</span>';
+  if(_ffTimer) clearTimeout(_ffTimer);
+  _ffTimer=setTimeout(function(){ _ffFetchScenario(b); }, 350);
+}
+
+function _ffFetchScenario(b){
+  if(!_ffData) return;
+  var API=window.__PORTAL_API_BASE||'https://rpm-portal-server.onrender.com';
+  var email=window.__PORTAL_EMAIL__||'portal@rpmliving.com';
+  var cid=window.__PORTAL_COMPANY_ID__||'';
+  var goalEl=document.getElementById('ff-goal-input');
+  var qs='?company_id='+encodeURIComponent(cid);
+  if(goalEl&&goalEl.value) qs+='&goal_leases='+encodeURIComponent(goalEl.value);
+  Object.keys(b).forEach(function(k){ qs+='&sc_'+k+'='+encodeURIComponent(b[k]); });
+  fetch(API+'/api/forecast/funnel'+qs,{headers:{'X-Portal-Email':email}})
+    .then(function(r){return r.json();})
+    .then(function(d){ var dyn=document.getElementById('ff-funnel-dynamic'); if(dyn&&d&&d.available!==false) dyn.innerHTML=_ffDynamicHTML(d); })
+    .catch(function(){});
+}
+
+function _ffPreset(name){
+  if(!_ffData) return;
+  var cur=_ffData.current_budget_channels||{}, b={}, total=0;
+  _FF_CH.forEach(function(c){ b[c[0]]=Math.round(cur[c[0]]||0); total+=b[c[0]]; });
+  if(name==='reallocate'){
+    var freed=(b.paid_search||0)*0.3; b.paid_search=Math.round((b.paid_search||0)*0.7);
+    b.seo=Math.round((b.seo||0)+freed*0.5); b.paid_social=Math.round((b.paid_social||0)+freed*0.5);
+  } else if(name==='fund'){
+    var ach=(_ffData.achievable_leases||1), goal=(_ffData.goal_leases||1);
+    var mult=Math.min(3,Math.max(1.2, goal/Math.max(ach,0.5))), extra=Math.max(0,total)*(mult-1);
+    if(total<=0) extra=goal*600;
+    b.seo=Math.round((b.seo||0)+extra*0.40); b.paid_social=Math.round((b.paid_social||0)+extra*0.35);
+    b.display=Math.round((b.display||0)+extra*0.15); b.paid_search=Math.round((b.paid_search||0)+extra*0.10);
+  }
+  _FF_CH.forEach(function(c){ var el=document.getElementById('ffsl-'+c[0]); if(el){ if(b[c[0]]>Number(el.max)) el.max=b[c[0]]; el.value=b[c[0]]; } });
+  _ffOnSlider();
 }
 
 function loadForecast() {

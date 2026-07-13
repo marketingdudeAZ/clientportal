@@ -6010,16 +6010,53 @@ def get_funnel_forecast():
         "spend": float(r.get("spend") or 0),
     } for r in rows]
 
-    # 4. Run the engine
-    result = _ff.run_funnel_forecast(
-        goal_leases=goal_leases, channel_rows=channel_rows,
-        leads_per_lease=leads_per_lease, context=context,
-    )
+    # 4. Current budget from HubSpot SKUs (authoritative media spend)
+    sku_budget = {}
+    try:
+        from spend_sheet import get_spend_sheet_data
+        _srows = get_spend_sheet_data(force=False)
+        _srow = next((r for r in _srows if str(r.get("company_id")) == str(company_id)), None)
+        if _srow:
+            sku_budget = {sku: float(_srow.get(sku) or 0) for sku in _ff.SKU_COLS}
+    except Exception as e:
+        logger.warning("funnel-forecast spend-sheet lookup failed: %s", e)
+    current_channels = _ff.skus_to_channels(sku_budget)
+    observed = _ff.compute_actual_funnel(channel_rows)
+
+    # 5. Scenario budget (sc_<channel> query params) -> project; else actual funnel
+    scenario_ch = {}
+    for ch in _ff.CHANNEL_STAGE_MULT:
+        v = request.args.get("sc_" + ch)
+        if v is not None:
+            try:
+                scenario_ch[ch] = float(v)
+            except ValueError:
+                pass
+    if scenario_ch:
+        merged = dict(current_channels)
+        merged.update(scenario_ch)
+        result = _ff.project_funnel_from_budget(
+            goal_leases=goal_leases, budget_by_channel=merged,
+            observed=observed, leads_per_lease=leads_per_lease, context=context,
+            current_budget_by_channel=current_channels,
+        )
+        result["scenario"] = True
+    else:
+        result = _ff.run_funnel_forecast(
+            goal_leases=goal_leases, channel_rows=channel_rows,
+            leads_per_lease=leads_per_lease, context=context,
+            spend_by_channel=(current_channels or None),
+        )
+        result["scenario"] = False
+
     result["available"] = True
     result["month"] = rows[0].get("report_month") if rows else None
     result["goal_basis"] = goal_basis
     result["occupancy"] = apt_occ
     result["exposure"] = apt_exp
+    result["current_budget"] = sku_budget
+    result["current_budget_channels"] = {k: round(v, 2) for k, v in current_channels.items()}
+    result["current_budget_total"] = round(sum(sku_budget.values()), 2)
     result["property"] = {"name": p.get("name"), "units": units, "ninjacat_id": ncid}
     return jsonify(result)
 
