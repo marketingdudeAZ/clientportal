@@ -1402,7 +1402,7 @@ body{line-height:1.55}
 <!-- ── PERFORMANCE ── -->
 <section id="section-performance" class="section">
   <div class="sec-topbar">
-    <div><div class="sec-title">Performance</div><div class="sec-sub">Health scores · reporting · deliverables</div></div>
+    <div><div class="sec-title">Performance</div><div class="sec-sub">AI SWOT · channel analysis</div></div>
     <div class="sec-actions">
       <button class="btn btn-secondary btn-sm" id="btn-download-report" onclick="downloadReport()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -1411,7 +1411,8 @@ body{line-height:1.55}
     </div>
   </div>
 
-  <div class="card card-p" style="margin-bottom:20px">
+  <!-- Health-score card hidden 2026-07 (scoring under review; Performance is SWOT-focused). Restore by removing display:none. -->
+  <div class="card card-p" style="margin-bottom:20px;display:none">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
       <div style="font-size:16px;font-weight:700;color:var(--jd)">Property Health Score</div>
       <div style="display:flex;align-items:center;gap:8px">
@@ -1798,7 +1799,15 @@ body{line-height:1.55}
 <!-- ── SERVICES ── -->
 <section id="section-services" class="section">
   <div class="sec-topbar">
-    <div><div class="sec-title">Services</div><div class="sec-sub">Enrolled programs · self-checkout configurator</div></div>
+    <div><div class="sec-title">Plan &amp; Spend</div><div class="sec-sub">Full-funnel forecast · enrolled programs · budget planner</div></div>
+  </div>
+
+  <!-- Full-Funnel Forecast — the "why this budget" hero above the budget tools -->
+  <div style="margin-bottom:22px">
+    <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd);margin-bottom:12px">Full-Funnel Forecast · why this budget</div>
+    <div id="funnel-forecast-root">
+      <div style="padding:24px;color:var(--tm);font-size:13px">Loading funnel forecast…</div>
+    </div>
   </div>
 
   <div class="rec-preload-banner" id="rec-preload-banner">
@@ -2928,15 +2937,6 @@ body{line-height:1.55}
     </div>
   </div>
 
-  <!-- Full-Funnel Forecast (moved from the retired Forecast page) — the "why"
-       above the budget tools: see the funnel gap, then plan the spend to fix it. -->
-  <div style="margin-bottom:22px">
-    <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd);margin-bottom:12px">Full-Funnel Forecast · why this budget</div>
-    <div id="funnel-forecast-root">
-      <div style="padding:24px;color:var(--tm);font-size:13px">Loading funnel forecast…</div>
-    </div>
-  </div>
-
   <!-- Latest deal header — hidden until loadBudget() populates it -->
   <div class="budget-deal-header" id="budget-deal-card" style="display:none">
     <div class="budget-deal-badge">Latest Deal · Closed Won</div>
@@ -3455,7 +3455,7 @@ function nav(id, el) {
   if (id === 'overview')         { loadOverview(); }
   if (id === 'tickets')          { loadTickets(); }
   if (id === 'brief')            { loadClientBrief(); }
-  if (id === 'budget')           { loadBudget(); loadSelfCheckoutCards(); loadFunnelForecast(); }
+  if (id === 'budget')           { loadBudget(); loadSelfCheckoutCards(); }
   if (id === 'services')         { if (typeof loadSelfCheckoutCards==='function') loadSelfCheckoutCards(); }
   if (id === 'video')            { loadVideoCreative(); }
   // Forecast page retired 2026-07 — funnel forecast now lives on Plan & Spend
@@ -3465,7 +3465,7 @@ function nav(id, el) {
   if (id === 'seo')              { if (typeof loadSeoInsights === 'function') loadSeoInsights(); }
   if (id === 'content')          { if (typeof loadContentPlanner === 'function') loadContentPlanner(); }
   if (id === 'research')         { if (typeof loadKeywordResearch === 'function') loadKeywordResearch(); }
-  if (id === 'services')         { loadServices(); }
+  if (id === 'services')         { loadServices(); loadFunnelForecast(); }
   if (id === 'assets')           { assetInitDropzone(); loadAssets(); }
   if (id === 'paid')             { loadPaidMedia(); }
   if (id === 'onboarding')       { if (typeof loadOnboarding === 'function') loadOnboarding(); }
@@ -5723,6 +5723,7 @@ var _perfLoaded = false;
 
 // ══ AI SWOT (Performance page) ═══════════════════════════════════════════════
 var _swotLoaded = false;
+var _swotPolls = 0;
 function loadSwot(){
   var root=document.getElementById('swot-root'); if(!root) return;
   var API=window.__PORTAL_API_BASE||'https://rpm-portal-server.onrender.com';
@@ -5737,6 +5738,11 @@ function loadSwot(){
 }
 function renderSwot(d){
   var root=document.getElementById('swot-root'); if(!root) return;
+  if(d && d.generating){
+    root.innerHTML='<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:22px;color:var(--ts);font-size:13px">✦ Generating your channel SWOT… <span style="color:var(--tm)">(~20s, first time only)</span></div>';
+    if(_swotPolls<15){ _swotPolls++; setTimeout(function(){ _swotLoaded=false; loadSwot(); }, 5000); }
+    return;
+  }
   if(!d||d.available===false){ root.innerHTML='<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:22px;color:var(--ts);font-size:13px">'+((d&&d.message)||'SWOT not available yet.')+'</div>'; return; }
   var s=d.swot||{};
   var quads=[

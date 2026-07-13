@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 
 import requests
@@ -25,6 +26,7 @@ HS_BASE = "https://api.hubapi.com"
 HS_HEADERS = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
 SWOT_CACHE_HOURS = 24
 SWOT_CACHE_PROP = "portal_swot_cache"
+_INFLIGHT = set()   # company_ids currently generating (avoid duplicate threads)
 
 SYSTEM_PROMPT = (
     "You are a senior multifamily digital-marketing strategist reviewing one "
@@ -160,14 +162,14 @@ def _get_cache(company_id):
     try:
         c = json.loads(raw)
         if (time.time() - c.get("cached_at", 0)) / 3600 < SWOT_CACHE_HOURS:
-            return c.get("swot")
+            return c   # {"swot":..., "month":..., "cached_at":...}
     except (json.JSONDecodeError, KeyError):
         pass
     return None
 
 
-def _store_cache(company_id, swot):
-    payload = json.dumps({"swot": swot, "cached_at": time.time()})
+def _store_cache(company_id, swot, month):
+    payload = json.dumps({"swot": swot, "month": month, "cached_at": time.time()})
     try:
         requests.patch(f"{HS_BASE}/crm/v3/objects/companies/{company_id}",
                        headers=HS_HEADERS, json={"properties": {SWOT_CACHE_PROP: payload}}, timeout=12)
@@ -175,21 +177,33 @@ def _store_cache(company_id, swot):
         logger.warning("swot cache store failed: %s", e)
 
 
+def _bg_generate(company_id):
+    """Assemble data + call Claude + cache. Runs in a daemon thread so the HTTP
+    request returns immediately (data loads + Claude take ~30s)."""
+    try:
+        ctx = _assemble_context(company_id)
+        if ctx.get("channels"):
+            swot = _call_claude(ctx)
+            _store_cache(company_id, swot, ctx.get("month"))
+        else:
+            logger.info("swot: no channel data for %s", company_id)
+    except Exception as e:
+        logger.error("swot bg-generate failed for %s: %s", company_id, e, exc_info=True)
+    finally:
+        _INFLIGHT.discard(company_id)
+
+
 def generate_swot(company_id, force=False):
-    """Return {available, swot, month, generated_at} or {available: False}."""
+    """Cached-first and non-blocking. Returns the SWOT if cached; otherwise kicks
+    off background generation and returns {generating: True} so the client polls."""
     if not ANTHROPIC_API_KEY:
         return {"available": False, "message": "AI not configured."}
     if not force:
         cached = _get_cache(company_id)
         if cached:
-            return {"available": True, "swot": cached, "cached": True}
-    try:
-        ctx = _assemble_context(company_id)
-        if not ctx.get("channels"):
-            return {"available": False, "message": "No channel performance data yet for this property."}
-        swot = _call_claude(ctx)
-        _store_cache(company_id, swot)
-        return {"available": True, "swot": swot, "month": ctx.get("month"), "cached": False}
-    except Exception as e:
-        logger.error("generate_swot failed for %s: %s", company_id, e, exc_info=True)
-        return {"available": False, "message": "Could not generate SWOT right now."}
+            return {"available": True, "swot": cached.get("swot"),
+                    "month": cached.get("month"), "cached": True}
+    if company_id not in _INFLIGHT:
+        _INFLIGHT.add(company_id)
+        threading.Thread(target=_bg_generate, args=(company_id,), daemon=True).start()
+    return {"available": False, "generating": True, "message": "Generating SWOT…"}
