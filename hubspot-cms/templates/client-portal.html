@@ -1159,7 +1159,8 @@ body{line-height:1.55}
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
       Property profile
       </div>
-      <div class="nav-item" id="nav-forecast" onclick="nav('forecast',this)" title="Performance forecast simulator">
+      <!-- Forecast nav retired 2026-07 — merged into Plan & Spend -->
+      <div class="nav-item" id="nav-forecast" onclick="nav('forecast',this)" title="Performance forecast simulator" style="display:none">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
       Forecast
       </div>
@@ -2392,10 +2393,7 @@ body{line-height:1.55}
     </div>
   </div>
 
-  <!-- NEW: funnel-sufficiency forecast (rendered by loadFunnelForecast) -->
-  <div id="funnel-forecast-root">
-    <div style="padding:24px;color:var(--tm);font-size:13px">Loading funnel forecast…</div>
-  </div>
+  <!-- Funnel forecast moved to Plan & Spend (section-budget) 2026-07 -->
 
   <!-- Health score callout (shown if score is red) -->
   <div class="health-callout" id="forecast-health-callout" style="display:none">
@@ -2924,6 +2922,15 @@ body{line-height:1.55}
     </div>
   </div>
 
+  <!-- Full-Funnel Forecast (moved from the retired Forecast page) — the "why"
+       above the budget tools: see the funnel gap, then plan the spend to fix it. -->
+  <div style="margin-bottom:22px">
+    <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd);margin-bottom:12px">Full-Funnel Forecast · why this budget</div>
+    <div id="funnel-forecast-root">
+      <div style="padding:24px;color:var(--tm);font-size:13px">Loading funnel forecast…</div>
+    </div>
+  </div>
+
   <!-- Latest deal header — hidden until loadBudget() populates it -->
   <div class="budget-deal-header" id="budget-deal-card" style="display:none">
     <div class="budget-deal-badge">Latest Deal · Closed Won</div>
@@ -3442,10 +3449,10 @@ function nav(id, el) {
   if (id === 'overview')         { loadOverview(); }
   if (id === 'tickets')          { loadTickets(); }
   if (id === 'brief')            { loadClientBrief(); }
-  if (id === 'budget')           { loadBudget(); loadSelfCheckoutCards(); }
+  if (id === 'budget')           { loadBudget(); loadSelfCheckoutCards(); loadFunnelForecast(); }
   if (id === 'services')         { if (typeof loadSelfCheckoutCards==='function') loadSelfCheckoutCards(); }
   if (id === 'video')            { loadVideoCreative(); }
-  if (id === 'forecast')         { loadFunnelForecast(); }
+  // Forecast page retired 2026-07 — funnel forecast now lives on Plan & Spend
   if (id === 'performance')      { loadPerformance(); }
   if (id === 'activity')         { loadActivity(); }
   if (id === 'recommendations')  { loadCallPrep(); }
