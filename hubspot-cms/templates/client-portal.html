@@ -5095,12 +5095,8 @@ function renderExecDashboard(d){
 
   var gauges='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px">'+g.join('')+'</div>';
 
-  // Volume & funnel strip — honest gated state
-  var funnelStrip = (perf&&perf.leads!=null)
-    ? ''  // (real funnel render would go here once data lands)
-    : '<div style="display:flex;align-items:center;gap:12px;background:var(--bg);border:1px dashed var(--bd);border-radius:12px;padding:14px 18px;margin-bottom:18px">'+
-        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--tm)" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>'+
-        '<div style="font-size:12.5px;color:var(--ts)"><b>Leads &amp; leasing funnel</b> — Lead→Prospect→Tour conversion, volume and cost-per-lease unlock automatically when the NinjaCat sync connects. Everything above is live.</div></div>';
+  // Volume & funnel strip removed 2026-07 (NinjaCat sync is live; banner was stale)
+  var funnelStrip = '';
 
   // Conversation starter — derived from real sub-scores, no invented funnel claims
   var subs=[{k:'Market',v:health.market},{k:'Marketing',v:health.marketing},{k:'Funnel',v:health.funnel},{k:'Experience',v:health.experience}]
