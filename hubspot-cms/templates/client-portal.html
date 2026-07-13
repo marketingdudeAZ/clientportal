@@ -2387,17 +2387,22 @@ body{line-height:1.55}
 <section id="section-forecast" class="section">
   <div class="sec-topbar">
     <div>
-      <div class="sec-title">Performance Forecast</div>
-      <div class="sec-sub">Budget simulator · benchmark-driven projections · occupancy impact</div>
+      <div class="sec-title">Media Mix &amp; Full-Funnel Forecast</div>
+      <div class="sec-sub">Work backwards from your leasing goal · see where the funnel runs dry</div>
     </div>
   </div>
 
+  <!-- NEW: funnel-sufficiency forecast (rendered by loadFunnelForecast) -->
+  <div id="funnel-forecast-root">
+    <div style="padding:24px;color:var(--tm);font-size:13px">Loading funnel forecast…</div>
+  </div>
+
   <!-- Health score callout (shown if score is red) -->
-  <div class="health-callout" id="forecast-health-callout">
+  <div class="health-callout" id="forecast-health-callout" style="display:none">
     <strong>Health Score Alert:</strong> Your property's health score suggests operational improvements may be needed alongside marketing investment to fully capture lead volume. Talk to your account manager about the Red Light Report findings.
   </div>
 
-  <div class="forecast-layout">
+  <div class="forecast-layout" style="display:none">
 
     <!-- LEFT COLUMN: Current State + Simulator Controls -->
     <div>
@@ -3440,7 +3445,7 @@ function nav(id, el) {
   if (id === 'budget')           { loadBudget(); loadSelfCheckoutCards(); }
   if (id === 'services')         { if (typeof loadSelfCheckoutCards==='function') loadSelfCheckoutCards(); }
   if (id === 'video')            { loadVideoCreative(); }
-  if (id === 'forecast')         { loadForecast(); }
+  if (id === 'forecast')         { loadFunnelForecast(); }
   if (id === 'performance')      { loadPerformance(); }
   if (id === 'activity')         { loadActivity(); }
   if (id === 'recommendations')  { loadCallPrep(); }
@@ -6292,6 +6297,99 @@ function _buildReportHTML(d) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ══ Full-funnel forecast (v1 funnel-sufficiency model) ═══════════════════════
+function _ffNum(n){ return (Math.round(Number(n)||0)).toLocaleString('en-US'); }
+function _ffBarColor(ratio){
+  if (ratio == null) return 'var(--tm)';
+  if (ratio >= 1)   return 'var(--sage)';
+  if (ratio >= 0.7) return 'var(--amb)';
+  return 'var(--red)';
+}
+function loadFunnelForecast(){
+  var root = document.getElementById('funnel-forecast-root');
+  if (!root) return;
+  var API_BASE = window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com';
+  var email = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  var cid = window.__PORTAL_COMPANY_ID__ || '';
+  if (!cid){ root.innerHTML = '<div style="padding:24px;color:var(--tm);font-size:13px">Select a property to see its funnel forecast.</div>'; return; }
+  var goalEl = document.getElementById('ff-goal-input');
+  var ctxEl  = document.getElementById('ff-context');
+  var qs = '?company_id=' + encodeURIComponent(cid);
+  if (goalEl && goalEl.value) qs += '&goal_leases=' + encodeURIComponent(goalEl.value);
+  if (ctxEl && ctxEl.value)   qs += '&context=' + encodeURIComponent(ctxEl.value);
+  if (!goalEl){ root.innerHTML = '<div style="padding:24px;color:var(--tm);font-size:13px">Loading funnel forecast…</div>'; }
+  fetch(API_BASE + '/api/forecast/funnel' + qs, { headers:{'X-Portal-Email':email} })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ renderFunnelForecast(d); })
+    .catch(function(e){ root.innerHTML = '<div style="padding:24px;color:var(--red);font-size:13px">Could not load forecast: '+e+'</div>'; });
+}
+function renderFunnelForecast(d){
+  var root = document.getElementById('funnel-forecast-root');
+  if (!root) return;
+  if (!d || d.available === false){
+    var msg = (d && d.message) || 'No NinjaCat performance data is mapped to this property yet.';
+    root.innerHTML = '<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:28px;color:var(--ts);font-size:13px">'+msg+'</div>';
+    return;
+  }
+  var prop=d.property||{}, st=d.stages||{}, rec=d.recommendation||{};
+  var bn=d.bottleneck;
+  var leasesA=d.achievable_leases||0, leasesR=d.goal_leases||0;
+  var stages=[
+    {key:'impressions',label:'Impressions',sub:'reach · awareness',a:st.impressions.actual,r:st.impressions.required,ratio:st.impressions.ratio},
+    {key:'sessions',label:'Website Sessions',sub:'traffic',a:st.sessions.actual,r:st.sessions.required,ratio:st.sessions.ratio},
+    {key:'conversions',label:'Conversions',sub:'GA4 leads',a:st.conversions.actual,r:st.conversions.required,ratio:st.conversions.ratio},
+    {key:'leases',label:'Leases',sub:'the goal',a:leasesA,r:leasesR,ratio:(leasesR?leasesA/leasesR:null)}
+  ];
+  var onTrack=!bn, h=[];
+  h.push('<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px">');
+  h.push('<div><div style="font-size:16px;font-weight:800;color:var(--tp)">'+(prop.name||'Property')+'</div>');
+  h.push('<div style="font-size:11px;color:var(--tm);margin-top:2px">'+_ffNum(prop.units)+' units · '+String(d.context||'').replace('_',' ')+' · data '+(d.month||'')+'</div></div>');
+  h.push('<div style="display:flex;gap:10px;align-items:flex-end">');
+  h.push('<div><label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--jd);margin-bottom:4px">Leasing goal (units)</label>');
+  h.push('<input id="ff-goal-input" type="number" min="1" step="1" value="'+(d.goal_leases||'')+'" onchange="loadFunnelForecast()" style="width:82px;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:14px;font-weight:700;color:var(--tp)"></div>');
+  var ctxOpts=[['stabilized','Stabilized'],['lease_up','Lease-up'],['new_supply','New supply'],['btr','Build-to-rent']];
+  h.push('<div><label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--jd);margin-bottom:4px">Property type</label>');
+  h.push('<select id="ff-context" onchange="loadFunnelForecast()" style="padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13px;color:var(--tp)">');
+  ctxOpts.forEach(function(o){ h.push('<option value="'+o[0]+'"'+(d.context===o[0]?' selected':'')+'>'+o[1]+'</option>'); });
+  h.push('</select></div></div></div>');
+  var vColor=onTrack?'var(--sage)':'var(--red)', vBg=onTrack?'var(--ml)':'rgba(201,68,68,.08)';
+  var vText=onTrack?('On track — the funnel supports ~'+leasesA+' leases.'):('Funnel runs dry at '+(bn||'')+' — you can support ~'+leasesA+' leases vs a goal of '+leasesR+'.');
+  h.push('<div style="background:'+vBg+';border-left:3px solid '+vColor+';border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:13px;font-weight:600;color:var(--tp)">'+vText+'</div>');
+  h.push('<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:18px;margin-bottom:16px">');
+  h.push('<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd);margin-bottom:14px">The funnel · actual vs. what the goal needs</div>');
+  stages.forEach(function(s){
+    var ratio=s.ratio, fill=ratio==null?0:Math.max(2,Math.min(100,ratio*100)), col=_ffBarColor(ratio), isBn=(s.key===bn);
+    h.push('<div style="margin-bottom:14px">');
+    h.push('<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">');
+    h.push('<span style="font-weight:700;color:var(--tp)">'+s.label+' <span style="font-weight:400;color:var(--tm)">'+s.sub+'</span>'+(isBn?' <span style="color:var(--red);font-weight:700">← starved</span>':'')+'</span>');
+    h.push('<span style="color:var(--ts)"><b style="color:var(--tp)">'+_ffNum(s.a)+'</b> / '+_ffNum(s.r)+(ratio!=null?'  ('+(ratio>=1?'✓':(Math.round(ratio*100)+'%'))+')':'')+'</span></div>');
+    h.push('<div style="height:10px;background:var(--bg);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+fill+'%;background:'+col+';border-radius:6px"></div></div>');
+    h.push('</div>');
+  });
+  h.push('</div>');
+  if (d.diagnosis && d.diagnosis.length){
+    h.push('<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:16px 18px;margin-bottom:16px">');
+    h.push('<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd);margin-bottom:8px">What this means</div>');
+    d.diagnosis.forEach(function(x){ h.push('<div style="font-size:13px;color:var(--ts);line-height:1.5;margin-bottom:6px">• '+x+'</div>'); });
+    h.push('</div>');
+  }
+  var modeLabel={on_track:'Hold &amp; optimize',reallocate:'Rebalance the mix',spend_more:'Fund the full funnel',fix_conversion:'Fix conversion first'}[rec.mode]||'Recommendation';
+  var recColor={on_track:'var(--sage)',reallocate:'var(--cu)',spend_more:'var(--cu)',fix_conversion:'var(--amb)'}[rec.mode]||'var(--jd)';
+  h.push('<div style="background:'+recColor+';color:#fff;border-radius:12px;padding:16px 18px;margin-bottom:16px">');
+  h.push('<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;opacity:.92">'+modeLabel+'</div>');
+  h.push('<div style="font-size:13.5px;line-height:1.5">'+(rec.note||'')+'</div></div>');
+  var cap=(rec.capture_share!=null?Math.round(rec.capture_share*100):null);
+  if (cap!=null){
+    h.push('<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:16px 18px">');
+    h.push('<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd);margin-bottom:10px">Current mix · $'+_ffNum(rec.current_spend)+'/mo</div>');
+    h.push('<div style="height:14px;border-radius:7px;overflow:hidden;display:flex;margin-bottom:6px">');
+    h.push('<div style="width:'+cap+'%;background:var(--jd)"></div><div style="width:'+(100-cap)+'%;background:var(--sage)"></div></div>');
+    h.push('<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ts)"><span><b>'+cap+'%</b> demand capture (search)</span><span><b>'+(100-cap)+'%</b> demand creation</span></div>');
+    h.push('</div>');
+  }
+  root.innerHTML = h.join('');
+}
 
 function loadForecast() {
   if (_benchmarks) { _renderForecast(); _loadForecastContext(); return; }

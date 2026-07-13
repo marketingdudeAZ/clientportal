@@ -5858,6 +5858,133 @@ def video_generate():
 # Routes covered: /api/seo/*, /api/content/*, /api/keywords/*, /api/trends/*.
 
 
+# ─── Full-funnel forecast (v1 funnel-sufficiency model) ─────────────────────
+
+
+@app.route("/api/forecast/funnel", methods=["GET", "OPTIONS"])
+def get_funnel_forecast():
+    """Goal-based full-funnel media-mix forecast for one property.
+
+    Works backwards from a leasing goal to the impressions/sessions/conversions
+    the funnel needs, overlays actual NinjaCat performance, and reports where the
+    funnel is starved. Spend from HubSpot, funnel volumes from NinjaCat (BQ),
+    context from the property record.
+
+    Query params:
+      company_id     (required unless uuid given)
+      uuid           (resolved to company_id)
+      goal_leases    (optional; defaults to ~3%/mo of units)
+      leads_per_lease(optional; default 32)
+      context        (optional; lease_up|new_supply|btr|stabilized — else derived)
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    company_id = request.args.get("company_id", "").strip()
+    uuid = request.args.get("uuid", "").strip()
+    if not company_id and uuid:
+        company_id = _resolve_company_id_by_uuid(uuid)
+    if not company_id:
+        return jsonify({"error": "company_id or uuid required"}), 400
+
+    import requests as _req
+    from config import HUBSPOT_API_KEY as _HK
+    import funnel_forecast as _ff
+    import bigquery_client as _bq
+
+    # 1. Property context from HubSpot
+    props = "name,ninjacat_system_id,totalunits,occupancy_status,developtype,proptype,target_occupancy"
+    try:
+        r = _req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props}",
+            headers={"Authorization": f"Bearer {_HK}"}, timeout=12,
+        )
+        p = r.json().get("properties", {}) if r.ok else {}
+    except Exception as e:
+        logger.error("funnel-forecast HubSpot fetch failed: %s", e)
+        return jsonify({"error": "property lookup failed"}), 502
+
+    ncid = (p.get("ninjacat_system_id") or "").strip()
+    if not ncid:
+        return jsonify({"error": "no_ninjacat_id", "available": False,
+                        "message": "This property has no NinjaCat account mapped."}), 200
+
+    units = float(p.get("totalunits") or 0)
+
+    # 2. Derive goal + context (both overridable via query params)
+    try:
+        goal_leases = float(request.args.get("goal_leases") or 0)
+    except ValueError:
+        goal_leases = 0
+    if goal_leases <= 0:
+        goal_leases = max(1.0, round(units * 0.03)) if units else 5.0  # ~3%/mo turnover
+
+    try:
+        leads_per_lease = float(request.args.get("leads_per_lease") or 0) or _ff.DEFAULT_LEADS_PER_LEASE
+    except ValueError:
+        leads_per_lease = _ff.DEFAULT_LEADS_PER_LEASE
+
+    context = (request.args.get("context") or "").strip().lower()
+    if context not in _ff.CONTEXT_TOPFUNNEL_MULTIPLIER:
+        status = (p.get("occupancy_status") or "").lower()
+        proptype = (p.get("proptype") or "").lower()
+        if "lease" in status and "up" in status:
+            context = "lease_up"
+        elif "build" in proptype and "rent" in proptype:
+            context = "btr"
+        else:
+            context = "stabilized"
+
+    # 3. Funnel actuals from NinjaCat (latest complete month) via BigQuery
+    if not _bq.is_bigquery_configured():
+        return jsonify({"error": "bq_unconfigured", "available": False}), 200
+    from google.cloud import bigquery as _gbq
+    dataset = _bq._dataset()
+    proj = _bq.BIGQUERY_PROJECT_ID
+    sql = f"""
+      WITH latest AS (
+        SELECT MAX(REPORT_MONTH) AS m
+        FROM `{proj}.{dataset}.ninjacat_metrics`
+        WHERE CAST(NINJACAT_ACCOUNT_ID AS STRING) = @ncid
+      )
+      SELECT CHANNEL_BUCKET AS channel_bucket, MAX(REPORT_MONTH) AS report_month,
+             SUM(IMPRESSIONS) AS impressions, SUM(CLICKS) AS clicks,
+             SUM(SESSIONS) AS sessions, SUM(LEADS) AS leads, SUM(SPEND) AS spend
+      FROM `{proj}.{dataset}.ninjacat_metrics`, latest
+      WHERE CAST(NINJACAT_ACCOUNT_ID AS STRING) = @ncid
+        AND REPORT_MONTH = latest.m
+      GROUP BY channel_bucket
+    """
+    try:
+        rows = _bq.query(sql, [_gbq.ScalarQueryParameter("ncid", "STRING", ncid)])
+    except Exception as e:
+        logger.error("funnel-forecast BQ query failed for %s: %s", ncid, e)
+        return jsonify({"error": "bq_query_failed", "available": False}), 200
+    if not rows:
+        return jsonify({"available": False, "message": "No NinjaCat performance data yet."}), 200
+
+    channel_rows = [{
+        "channel_bucket": r.get("channel_bucket"),
+        "impressions": r.get("impressions") or 0, "clicks": r.get("clicks") or 0,
+        "sessions": r.get("sessions") or 0, "leads": r.get("leads") or 0,
+        "spend": float(r.get("spend") or 0),
+    } for r in rows]
+
+    # 4. Run the engine
+    result = _ff.run_funnel_forecast(
+        goal_leases=goal_leases, channel_rows=channel_rows,
+        leads_per_lease=leads_per_lease, context=context,
+    )
+    result["available"] = True
+    result["month"] = rows[0].get("report_month") if rows else None
+    result["property"] = {"name": p.get("name"), "units": units, "ninjacat_id": ncid}
+    return jsonify(result)
+
+
 # ─── Health check (public) ──────────────────────────────────────────────────
 
 
