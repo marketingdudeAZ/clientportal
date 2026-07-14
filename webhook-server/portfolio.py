@@ -93,7 +93,13 @@ def _build_filter_groups(email=None, role=None):
                     "propertyName": "plestatus",
                     "operator": "IN",
                     "values": ["RPM Managed", "Onboarding"],
-                }
+                },
+                # A property MUST have a uuid to be addressable. Excludes duplicate /
+                # un-enrolled company records so we never link to a uuid=null page.
+                {
+                    "propertyName": "uuid",
+                    "operator": "HAS_PROPERTY",
+                },
             ]
         }
     ]
@@ -169,6 +175,10 @@ def fetch_portfolio(email, role):
             # Disposition guard: drop properties whose management has ended,
             # even if plestatus is a stale "RPM Managed" from the warehouse lag.
             if _management_ended(_cp.get("managementend")):
+                continue
+            # A property MUST have a uuid to be addressable. Drops duplicate /
+            # un-enrolled company records so we never list or link a uuid=null page.
+            if not str(_cp.get("uuid") or "").strip():
                 continue
             if cid not in seen_ids:
                 seen_ids.add(cid)
