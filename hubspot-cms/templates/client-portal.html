@@ -1811,11 +1811,11 @@ body{line-height:1.55}
     <div><div class="sec-title">Plan &amp; Spend</div><div class="sec-sub">Full-funnel forecast · enrolled programs · budget planner</div></div>
   </div>
 
-  <!-- Full-Funnel Forecast — the "why this budget" hero above the budget tools -->
+  <!-- Marketing by stage — "are you represented?" reframe above the budget tools -->
   <div style="margin-bottom:22px">
-    <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd);margin-bottom:12px">Full-Funnel Forecast · why this budget</div>
+    <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--jd);margin-bottom:12px">Your marketing by stage · are you represented?</div>
     <div id="funnel-forecast-root">
-      <div style="padding:24px;color:var(--tm);font-size:13px">Loading funnel forecast…</div>
+      <div style="padding:24px;color:var(--tm);font-size:13px">Loading your plan…</div>
     </div>
   </div>
 
@@ -3483,7 +3483,7 @@ function nav(id, el) {
   if (id === 'seo')              { if (typeof loadSeoInsights === 'function') loadSeoInsights(); }
   if (id === 'content')          { if (typeof loadContentPlanner === 'function') loadContentPlanner(); }
   if (id === 'research')         { if (typeof loadKeywordResearch === 'function') loadKeywordResearch(); }
-  if (id === 'services')         { loadServices(); loadFunnelForecast(); }
+  if (id === 'services')         { loadServices(); loadPlanStages(); }
   if (id === 'assets')           { assetInitDropzone(); loadAssets(); }
   if (id === 'paid')             { loadPaidMedia(); }
   if (id === 'onboarding')       { if (typeof loadOnboarding === 'function') loadOnboarding(); }
@@ -6402,6 +6402,131 @@ var _FF_CH = [['paid_search','Paid Search'],['pmax','Performance Max'],['seo','S
 function _ffNum(n){ return (Math.round(Number(n)||0)).toLocaleString('en-US'); }
 function _ffBarColor(r){ if(r==null)return 'var(--tm)'; if(r>=1)return 'var(--sage)'; if(r>=0.7)return 'var(--amb)'; return 'var(--red)'; }
 function _ffBtn(primary){ return 'padding:5px 11px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--bd);'+(primary?'background:var(--cu);color:#fff;border-color:var(--cu)':'background:#fff;color:var(--ts)'); }
+
+// ══ Plan by stage — need-aware, budget-bounded (Emily/Kyle reframe) ══════════
+var _psData=null, _psPlan=null, _psOpen={}, _psBase=0;
+function _psM(n){ return '$'+Math.round(n).toLocaleString(); }
+function _psCost(k){
+  var s=_psData.services[k], i=_psPlan[k]; if(i==null) return 0;
+  return s.type==='fixed' ? s.tiers[i][1] : s.opts[i][1];
+}
+function loadPlanStages(){
+  var root=document.getElementById('funnel-forecast-root'); if(!root) return;
+  var API=window.__PORTAL_API_BASE||'https://rpm-portal-server.onrender.com';
+  var email=window.__PORTAL_EMAIL__||'portal@rpmliving.com';
+  var cid=window.__PORTAL_COMPANY_ID__||'';
+  if(!cid){ root.innerHTML='<div style="padding:24px;color:var(--tm);font-size:13px">Select a property to see its plan.</div>'; return; }
+  root.innerHTML='<div style="padding:24px;color:var(--tm);font-size:13px">Loading your plan…</div>';
+  fetch(API+'/api/plan/stages?company_id='+encodeURIComponent(cid),{headers:{'X-Portal-Email':email}})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      _psData=d; _psOpen={}; _psPlan={};
+      if(d&&d.services){ Object.keys(d.services).forEach(function(k){ var s=d.services[k]; if(s.active&&s.selected!=null) _psPlan[k]=s.selected; }); }
+      _psBase=(d&&d.envelope&&d.envelope.current)||0;
+      renderPlanStages(d);
+    })
+    .catch(function(e){ root.innerHTML='<div style="padding:24px;color:var(--red);font-size:13px">Could not load plan: '+e+'</div>'; });
+}
+function _psRepState(pct){
+  if(pct>=75) return {label:'Well represented',color:'#3f5a45',bar:'var(--sage)'};
+  if(pct>=40) return {label:'Partly covered',color:'#92600A',bar:'var(--amb)'};
+  if(pct>0)   return {label:'Leaking',color:'#92600A',bar:'var(--amb)'};
+  return {label:'Not represented',color:'var(--red)',bar:'var(--red)'};
+}
+function _psChip(k,on){
+  var nm=_psData.services[k].name;
+  return '<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:100px;border:1px solid '+(on?'rgba(143,166,142,.4)':'var(--bd)')+';'+(on?'background:rgba(143,166,142,.14);color:#3f5a45':'background:#F6F7F8;color:var(--tm);border-style:dashed')+'">'+(on?'<span style="width:8px;height:8px;border-radius:50%;background:var(--sage);display:inline-block"></span>':'<span style="font-weight:800">+</span>')+nm+'</span>';
+}
+function _psTierRow(k){
+  var s=_psData.services[k], sel=_psPlan[k], isFixed=s.type==='fixed', arr=isFixed?s.tiers:s.opts;
+  var cells=arr.map(function(tt,ti){
+    var isRec=(ti===s.rec), desc=isFixed?'':('<div style="font-size:9px;color:var(--tm)">'+tt[2]+'</div>');
+    var selCss=(ti===sel)?'border-color:var(--cu);background:var(--cug);box-shadow:0 0 0 2px rgba(200,150,78,.15)':'border-color:var(--bd)';
+    return '<div class="ps-tier" data-k="'+k+'" data-i="'+ti+'" style="border:1.5px solid;'+selCss+';border-radius:10px;padding:10px 8px;text-align:center;cursor:pointer;position:relative">'+
+      (isRec?'<span style="font-size:7.5px;font-weight:800;color:#fff;background:var(--sage);border-radius:100px;padding:1px 6px;position:absolute;top:-7px;left:50%;transform:translateX(-50%);white-space:nowrap">RECOMMENDED</span>':'')+
+      '<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:'+(ti===sel?'var(--cu)':'var(--tm)')+'">'+tt[0]+'</div>'+
+      '<div style="font-size:15px;font-weight:800;color:var(--tp);margin:3px 0 1px">$'+tt[1].toLocaleString()+'</div>'+desc+'</div>';
+  }).join('');
+  return '<div style="display:grid;grid-template-columns:repeat('+arr.length+',1fr);gap:7px;margin-top:11px">'+cells+'</div>';
+}
+function _psSvcCard(k){
+  var s=_psData.services[k], on=(k in _psPlan);
+  var meta=s.type==='media'?(s.current>0?'variable media · flexes around current':('variable media · min $'+(s.min||0)+'/mo')):'fixed service';
+  var note=s.note?'<div style="font-size:10px;color:var(--amb);font-weight:700;margin-top:6px">⚠ '+s.note+'</div>':'';
+  var tog='<div class="ps-tog" data-k="'+k+'" style="width:38px;height:22px;border-radius:100px;background:'+(on?'var(--sage)':'var(--bd)')+';position:relative;cursor:pointer;flex-shrink:0"><i style="position:absolute;top:2px;left:'+(on?'18px':'2px')+';width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:.15s"></i></div>';
+  return '<div style="border:1px solid var(--bd);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:#fff;'+(on?'':'opacity:.6')+'">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px"><div><div style="font-size:13px;font-weight:800;color:var(--tp)">'+s.name+'</div><div style="font-size:10px;color:var(--tm);font-weight:600;margin-top:1px">'+meta+'</div></div>'+tog+'</div>'+
+    (on?_psTierRow(k)+note:'')+'</div>';
+}
+function renderPlanStages(d){
+  var root=document.getElementById('funnel-forecast-root'); if(!root) return;
+  if(!d||d.available===false){ root.innerHTML='<div class="card" style="padding:20px;color:var(--tm);font-size:13px">'+((d&&d.message)||'The stage plan isn’t available for this property yet.')+'</div>'; return; }
+  var env=d.envelope||{}, mode=d.mode||{};
+  var h=[];
+  // context + envelope
+  h.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">');
+  h.push('<div class="card" style="padding:15px 18px"><div style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);margin-bottom:6px">This property’s situation</div>'+
+    '<div style="font-size:14px;font-weight:800;color:var(--jd);display:inline-flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:50%;background:var(--sage)"></span>'+(mode.label||'—')+'</div>'+
+    '<div style="font-size:11.5px;color:var(--ts);margin-top:6px">'+(mode.reason||'')+'</div></div>');
+  var ceilTxt=env.ceiling?('ceiling <b style="color:#92600A">~'+_psM(env.ceiling)+'</b>'):'';
+  h.push('<div class="card" style="padding:15px 18px"><div style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);margin-bottom:6px">Budget envelope</div>'+
+    '<div style="font-size:18px;font-weight:800;color:var(--tp)">'+_psM(env.current||0)+'<small style="font-size:12px;font-weight:600;color:var(--tm)"> /mo current</small>'+(ceilTxt?' &nbsp;→&nbsp; '+ceilTxt:'')+'</div>'+
+    (env.ceiling?'<div style="font-size:11.5px;color:var(--ts);margin-top:5px">Leasing-season flex capped at <b>+'+(env.flex_pct||35)+'% of current</b> (estimated — confirm annual budget for an exact ceiling).</div>':'')+'</div>');
+  h.push('</div>');
+  // diagnosis
+  if(d.diagnosis) h.push('<div style="display:flex;gap:12px;align-items:flex-start;background:rgba(201,68,68,.06);border:1px solid rgba(201,68,68,.2);border-left:3px solid var(--red);border-radius:12px;padding:13px 16px;margin-bottom:16px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C94444" stroke-width="2" style="flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div style="font-size:12.5px;color:var(--tp)">'+d.diagnosis+'</div></div>');
+  // stages
+  (d.stages||[]).forEach(function(st,si){
+    var rs=_psRepState(st.pct);
+    var chips=st.active.map(function(k){return _psChip(k,true);}).join('')+st.gap.map(function(k){return _psChip(k,false);}).join('');
+    var healthy=st.gap.length===0;
+    var btn=healthy?'<button style="font-size:12px;font-weight:800;border-radius:10px;padding:9px 14px;background:rgba(143,166,142,.12);color:#3f5a45;border:1px solid rgba(143,166,142,.4)">Fully covered ✓</button>':
+      '<button class="ps-exp" data-i="'+si+'" style="font-size:12px;font-weight:800;border-radius:10px;padding:9px 14px;background:var(--jd);color:#fff;border:1px solid var(--jd);cursor:pointer">Strengthen this stage →</button>';
+    var cards=st.channels.map(_psSvcCard).join('');
+    var opened=_psOpen[si];
+    h.push('<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">'+
+      '<div style="display:grid;grid-template-columns:158px 1fr 190px;gap:18px;align-items:center;padding:17px 20px">'+
+        '<div><div style="font-size:10px;font-weight:800;color:var(--tm);letter-spacing:.08em">STAGE 0'+(si+1)+'</div><h3 style="font-size:16px;font-weight:800;color:var(--jd);margin-top:2px">'+st.name+'</h3>'+
+          '<div style="font-size:11.5px;font-weight:800;margin-top:7px;color:'+rs.color+'">● '+rs.label+' · '+st.active.length+'/'+st.channels.length+'</div>'+
+          '<div style="height:5px;border-radius:100px;background:var(--bdl);overflow:hidden;margin-top:7px;width:130px"><i style="display:block;height:100%;border-radius:100px;width:'+Math.max(st.pct,4)+'%;background:'+rs.bar+'"></i></div></div>'+
+        '<div><div style="font-size:12.5px;color:var(--ts)">'+st.story+'</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">'+chips+'</div></div>'+
+        '<div style="text-align:right">'+btn+'</div>'+
+      '</div>'+
+      '<div class="ps-panel" id="ps-panel-'+si+'" style="border-top:1px solid var(--bdl);background:#FCFCFB;overflow:hidden;'+(opened?'padding:16px 20px 20px':'max-height:0;padding:0 20px')+'">'+
+        '<div style="font-size:11.5px;color:var(--ts);margin-bottom:12px"><b>Strengthen '+st.name+'.</b> Options are sized to this property in <b>'+(mode.label||'').toLowerCase()+'</b> — fixed services show package prices; new media enters at its real monthly minimum.</div>'+
+        cards+'</div>'+
+    '</div>');
+  });
+  // plan bar
+  var total=0; Object.keys(_psPlan).forEach(function(k){total+=_psCost(k);});
+  var over=(env.ceiling&&total>env.ceiling);
+  var d0=total-_psBase;
+  var pctc=env.ceiling?Math.round(total/env.ceiling*100):0;
+  var fillCol=over?'var(--red)':pctc>=90?'var(--amb)':'var(--sage)';
+  var deltaTxt=d0>0?('+ '+_psM(d0)+'/mo'):(d0<0?('− '+_psM(-d0)+'/mo'):'');
+  var ceilBlock='';
+  if(env.ceiling){
+    var msg=over
+      ? (_psM(total)+' — '+_psM(total-env.ceiling)+' over the ~'+_psM(env.ceiling)+' flex ceiling. Needs AM approval + annual budget confirmation.')
+      : (_psM(total)+' of ~'+_psM(env.ceiling)+' leasing-season ceiling · '+_psM(env.ceiling-total)+' of headroom');
+    ceilBlock='<div style="height:7px;border-radius:100px;background:rgba(255,255,255,.15);overflow:hidden;margin-top:12px"><i style="display:block;height:100%;border-radius:100px;width:'+Math.min(pctc,100)+'%;background:'+fillCol+'"></i></div>'+
+      '<div style="font-size:11px;margin-top:8px;color:'+(over?'#FFB4B4':'#C9D2D8')+';'+(over?'font-weight:700':'')+'">'+msg+'</div>';
+  }
+  h.push('<div style="background:var(--j2);color:#fff;border-radius:14px;padding:14px 20px;margin-top:4px">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between"><div><span style="font-size:12px;color:#C9D2D8">Plan total</span> &nbsp; <span style="font-size:22px;font-weight:800">'+_psM(total)+'</span><span style="font-size:11.5px;font-weight:700;margin-left:8px;color:'+(over?'#FFB4B4':'var(--sage)')+'">'+deltaTxt+'</span></div>'+
+      '<button style="font-size:12.5px;font-weight:800;background:var(--cu);color:#fff;border:none;border-radius:10px;padding:10px 16px;cursor:pointer">Review &amp; send to AM →</button></div>'+
+    ceilBlock+
+    '</div>');
+  // CYA
+  h.push('<div style="font-size:11px;color:#7A5A1A;background:rgba(212,145,10,.08);border:1px solid rgba(212,145,10,.3);border-radius:8px;padding:9px 12px;margin-top:14px;line-height:1.5"><b>Heads up:</b> this shows where your marketing is represented and sizes changes to your budget — it is <b>not</b> a guarantee of leads or leases. Anything above the flex ceiling, or breaking a minimum term (e.g. SEO’s 6 months), goes through your account manager. Nothing goes live until the RM signs.</div>');
+  root.innerHTML=h.join('');
+  _psWire();
+}
+function _psWire(){
+  document.querySelectorAll('.ps-exp').forEach(function(b){ b.onclick=function(){ var i=b.dataset.i; _psOpen[i]=!_psOpen[i]; var p=document.getElementById('ps-panel-'+i); if(_psOpen[i]){ p.style.maxHeight=''; p.style.padding='16px 20px 20px'; } else { p.style.maxHeight='0'; p.style.padding='0 20px'; } }; });
+  document.querySelectorAll('.ps-tog').forEach(function(t){ t.onclick=function(){ var k=t.dataset.k; if(k in _psPlan){ delete _psPlan[k]; } else { _psPlan[k]=_psData.services[k].rec; } renderPlanStages(_psData); }; });
+  document.querySelectorAll('.ps-tier').forEach(function(t){ t.onclick=function(){ _psPlan[t.dataset.k]=+t.dataset.i; renderPlanStages(_psData); }; });
+}
 
 function loadFunnelForecast(){
   var root=document.getElementById('funnel-forecast-root'); if(!root) return;

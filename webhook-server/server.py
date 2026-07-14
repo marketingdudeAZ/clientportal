@@ -6091,6 +6091,67 @@ def get_funnel_forecast():
     return jsonify(result)
 
 
+@app.route("/api/plan/stages", methods=["GET", "OPTIONS"])
+def get_plan_stages():
+    """Need-aware, budget-bounded stage plan for the Plan & Spend page.
+
+    Reframes the funnel as stage COVERAGE (are you represented?) and sizes
+    Good/Better/Best to the property's mode inside a budget envelope. Current
+    spend = the property's deal line items (same as Enrolled Services).
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = request.args.get("company_id", "").strip()
+    uuid = request.args.get("uuid", "").strip()
+    if not company_id and uuid:
+        company_id = _resolve_company_id_by_uuid(uuid)
+    if not company_id:
+        return jsonify({"error": "company_id or uuid required"}), 400
+
+    import requests as _req
+    from config import HUBSPOT_API_KEY as _HK
+    import plan_stages as _ps
+
+    props = "name,totalunits,occupancy_status,occupancy__,target_occupancy,aptiq_property_id"
+    try:
+        r = _req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props}",
+            headers={"Authorization": f"Bearer {_HK}"}, timeout=12,
+        )
+        p = r.json().get("properties", {}) if r.ok else {}
+    except Exception as e:
+        logger.error("plan-stages HubSpot fetch failed: %s", e)
+        return jsonify({"error": "property lookup failed"}), 502
+
+    # AptIQ occupancy/exposure (preferred over the HubSpot occupancy field)
+    apt_occ = apt_exp = None
+    apt_pid = (p.get("aptiq_property_id") or "").strip()
+    if apt_pid:
+        try:
+            from services.fluency_ingestion import apt_iq_csv_client as _csv
+            _ar = _csv.get_property_row(apt_pid)
+
+            def _apt_num(col):
+                if not _ar:
+                    return None
+                s = str(_ar.get(col, "")).replace("%", "").replace(",", "").strip()
+                try:
+                    return float(s)
+                except ValueError:
+                    return None
+            apt_occ = _apt_num("Advertised Occupancy %")
+            apt_exp = _apt_num("Exposure %")
+        except Exception as e:
+            logger.warning("plan-stages AptIQ lookup failed for %s: %s", apt_pid, e)
+
+    current_channels = _ps.get_current_channel_spend(company_id)
+    plan = _ps.build_plan(company_id, p, current_channels, occ=apt_occ, exposure=apt_exp)
+    return jsonify(plan)
+
+
 # ─── AI SWOT (Performance page) ─────────────────────────────────────────────
 
 
