@@ -249,6 +249,35 @@ def _spend_by_company():
         return {}
 
 
+def _digital_spend_by_company():
+    """{company_id: monthly digital $} — excludes mgmt_fee + website_hosting.
+
+    'Enrolled in digital' must mean actual paid media / SEO / reputation, NOT a
+    management-only deal. Emily's #1 ask: the Properties list mixes RPM's whole
+    book of business with digital clients, so a management-fee-only property must
+    read as 'Not enrolled'. spend_sheet is cached, so this second pass is cheap.
+    """
+    try:
+        from spend_sheet import get_spend_sheet_data, _SPEND_COLUMN_KEYS
+        skip = {"mgmt_fee", "website_hosting"}
+        keys = [k for k in _SPEND_COLUMN_KEYS if k not in skip]
+        out = {}
+        for row in get_spend_sheet_data():
+            total = 0.0
+            for k in keys:
+                v = row.get(k)
+                if v:
+                    try:
+                        total += float(v)
+                    except (TypeError, ValueError):
+                        pass
+            out[str(row.get("company_id"))] = total
+        return out
+    except Exception as e:
+        logger.warning("portfolio: digital-spend join unavailable (%s) — enrolled flag falls back", e)
+        return {}
+
+
 def _compute_monthly_spend(props):
     """Compute total monthly marketing spend for a property."""
     total = 0.0
@@ -550,6 +579,7 @@ def format_portfolio_response(companies):
     # Format individual properties for the table
     properties = []
     _smap = _spend_by_company()
+    _dmap = _digital_spend_by_company()  # digital-only (excl mgmt fee/hosting)
     benchmarks = compute_benchmarks(companies, _smap)
     for props in companies:
         _cid = str(props.get("hubspot_company_id") or "")
@@ -592,11 +622,11 @@ def format_portfolio_response(companies):
             "monthly_spend": round(monthly, 2),
             "flags": _safe_int(props.get("redlight_flag_count")),
             "status": props.get("plestatus", ""),
-            # Enrolled in digital = has a deal in the line-item engine, or any
-            # active monthly spend. Lets the Properties list flag the 500+ book-
-            # of-business records that are NOT digital clients (Emily's #1 ask:
-            # kills ticket confusion on non-enrolled properties).
-            "enrolled_in_digital": bool(_cid in _smap) or (monthly is not None and monthly > 0),
+            # Enrolled in digital = has >$0 of DIGITAL spend (paid media / SEO /
+            # reputation) — a management-fee-only deal reads as NOT enrolled.
+            # Lets the Properties list separate digital clients from RPM's whole
+            # book of business (Emily's #1 ask: kills ticket confusion).
+            "enrolled_in_digital": _dmap.get(_cid, 0.0) > 0,
             # Lease-Up vs Stabilized — the HubSpot occupancy_status field is the
             # source of truth; fall back to the derived leasing state.
             "occupancy_status": (props.get("occupancy_status") or "").strip(),
