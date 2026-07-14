@@ -7400,8 +7400,8 @@ function _renderVideoCreative(d) {
   var heroCta = document.getElementById('video-hero-cta');
   if (heroCta) {
     if (!d.enrolled) {
-      heroCta.textContent = 'Enroll this property';
-      heroCta.onclick = function () { var em = document.getElementById('enroll-modal'); if (em) em.classList.add('open'); };
+      heroCta.textContent = 'Generate videos';
+      heroCta.onclick = function () { startVideoGeneration(); };
     } else if (pending > 0) {
       heroCta.textContent = 'Review ' + pending + ' variant' + (pending === 1 ? '' : 's');
     } else {
@@ -7431,7 +7431,7 @@ function _renderCycleView(d) {
   var status = d.cycle_status || '';
 
   if (!d.enrolled) {
-    _renderEnrollmentLanding(el);
+    _renderVideoGenerateLanding(el);   // ungated — manual generate (Kyle)
     return;
   }
   if (!status || status === 'No Cycle') {
@@ -7694,6 +7694,64 @@ function selectEnrollTier(tier, el) {
   el.classList.add('selected');
   el.querySelector('input[type=radio]').checked = true;
 }
+// Ungated Video Creative (Kyle): every property sees the full experience; a
+// video render only fires from this explicit button (no auto-generation).
+// Runs on HeyGen, pulling the script from the Property Profile and the visuals
+// from the property's Files. Approved variants save back to Files.
+function _renderVideoGenerateLanding(el) {
+  if (!el) return;
+  el.innerHTML =
+    '<div style="text-align:center;padding:44px 24px;max-width:540px;margin:0 auto">' +
+      '<div style="font-size:20px;font-weight:800;color:var(--jd);margin-bottom:8px">See your property as a video</div>' +
+      '<div style="font-size:13px;color:var(--ts);line-height:1.6;margin-bottom:22px">We’ll write a script from your <b>Property Profile</b> and build short ad videos from the photos in your <b>Files</b> — powered by HeyGen. Review them, approve the ones you like, and they save straight to your Files library.</div>' +
+      '<button id="video-generate-btn" class="btn btn-primary" onclick="startVideoGeneration()" style="font-size:14px;padding:12px 26px">Generate my videos</button>' +
+      '<div style="font-size:11px;color:var(--tm);margin-top:12px">Pulls from your profile + photos · takes a few minutes · nothing goes live until you approve.</div>' +
+    '</div>';
+}
+
+function startVideoGeneration() {
+  var API_BASE = window.__PORTAL_API_BASE || window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var email    = window.__PORTAL_EMAIL__ || 'portal@rpmliving.com';
+  var cid      = (typeof COMPANY_ID_VIDEO !== 'undefined' && COMPANY_ID_VIDEO) || window.__PORTAL_COMPANY_ID__ || '';
+  var uuid     = window.__PORTAL_UUID__ || '';
+  var propName = window.__PORTAL_PROP_NAME || '';
+  var el = document.getElementById('video-cycle-content');
+  if (!cid) { if (el) el.innerHTML = '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:24px;text-align:center;font-size:13px;color:#991b1b">Property ID not available — open this from the Properties list.</div>'; return; }
+  var btn = document.getElementById('video-generate-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating — writing your script…'; }
+  fetch(API_BASE + '/api/client-brief?company_id=' + encodeURIComponent(cid), { headers: { 'X-Portal-Email': email } })
+    .then(function(r){ return r.json(); })
+    .then(function(briefData){
+      if (briefData.error) { briefData = {}; }
+      var brief = {
+        voice_tone:       briefData.voice_and_tone || '',
+        tone_freetext:    '',
+        taglines:         briefData.taglines || '',
+        target_audience:  (briefData.units_offered || '').split(',').map(function(s){return s.trim();}).filter(Boolean),
+        unit_mix:         (briefData.units_offered || '').split(',').map(function(s){return s.trim();}).filter(Boolean),
+        marketing_goals:  (briefData.goals || '').split('.').map(function(s){return s.trim();}).filter(Boolean),
+        differentiators:  (briefData.unique_solutions || '') + (briefData.additional_selling_points ? ' ' + briefData.additional_selling_points : ''),
+        competitor_focus: briefData.competitors || '',
+        current_specials: '',
+      };
+      return fetch(API_BASE + '/api/video-enroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Portal-Email': email },
+        body: JSON.stringify({ company_id: cid, property_uuid: uuid, property_name: propName, contact_email: email, tier: 'Starter', provider: 'heygen', brief: brief })
+      });
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.error) { if (btn) { btn.disabled = false; btn.textContent = 'Generate my videos'; } if (el) el.innerHTML = '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:24px;text-align:center;font-size:13px;color:#991b1b">Could not start: ' + _escHtml(String(d.error)) + '</div>'; return; }
+      _videoData = null;
+      if (el) el.innerHTML = '<div style="text-align:center;padding:52px 0;color:var(--tm);font-size:13px">' +
+        '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display:block;margin:0 auto 12px;opacity:.4"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+        'Generating your videos from your Property Profile and photos — this takes a few minutes. This view refreshes automatically.</div>';
+      setTimeout(function(){ _videoData = null; loadVideoCreative(); }, 30000);
+    })
+    .catch(function(err){ if (btn) { btn.disabled = false; btn.textContent = 'Generate my videos'; } if (el) el.innerHTML = '<div style="font-size:13px;color:var(--red);text-align:center;padding:24px">Could not start generation: ' + _escHtml(err.message) + '</div>'; });
+}
+
 function submitEnrollment() {
   var tier = document.querySelector('input[name=enroll-tier]:checked');
   if (!tier) { alert('Please select a tier.'); return; }
