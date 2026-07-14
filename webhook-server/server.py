@@ -6011,17 +6011,46 @@ def get_funnel_forecast():
         "spend": float(r.get("spend") or 0),
     } for r in rows]
 
-    # 4. Current budget from HubSpot SKUs (authoritative media spend)
-    sku_budget = {}
+    # 4. Current budget from the property's HubSpot DEAL line items — the same
+    #    source the Enrolled Services table reads, so "Current" always matches it.
+    #    (The old spend sheet is portfolio-scoped and misses un-synced properties.)
+    current_channels = {}
     try:
-        from spend_sheet import get_spend_sheet_data
-        _srows = get_spend_sheet_data(force=False)
-        _srow = next((r for r in _srows if str(r.get("company_id")) == str(company_id)), None)
-        if _srow:
-            sku_budget = {sku: float(_srow.get(sku) or 0) for sku in _ff.SKU_COLS}
+        import requests as _r2
+        from config import HUBSPOT_API_KEY as _HK2
+        _hh = {"Authorization": f"Bearer {_HK2}", "Content-Type": "application/json"}
+        _hb = "https://api.hubapi.com"
+        _da = _r2.get(f"{_hb}/crm/v3/objects/companies/{company_id}/associations/deals", headers=_hh, timeout=10)
+        _dids = [a["id"] for a in _da.json().get("results", [])] if _da.ok else []
+        if _dids:
+            _db = _r2.post(f"{_hb}/crm/v3/objects/deals/batch/read", headers=_hh,
+                           json={"inputs": [{"id": d} for d in _dids[:100]],
+                                 "properties": ["dealstage", "closedate"]}, timeout=10)
+            _deals = _db.json().get("results", []) if _db.ok else []
+            _deals.sort(key=lambda d: (1 if "won" in (d.get("properties", {}).get("dealstage") or "").lower() else 0,
+                                       d.get("properties", {}).get("closedate") or ""), reverse=True)
+            if _deals:
+                _did = _deals[0]["id"]
+                _li = _r2.get(f"{_hb}/crm/v3/objects/deals/{_did}/associations/line_items", headers=_hh, timeout=10)
+                _lids = [a["id"] for a in _li.json().get("results", [])] if _li.ok else []
+                if _lids:
+                    _lb = _r2.post(f"{_hb}/crm/v3/objects/line_items/batch/read", headers=_hh,
+                                   json={"inputs": [{"id": x} for x in _lids],
+                                         "properties": ["hs_sku", "name", "amount", "price"]}, timeout=10)
+                    for _l in (_lb.json().get("results", []) if _lb.ok else []):
+                        _lp = _l.get("properties", {})
+                        _ch = _ff.lineitem_to_channel(_lp.get("hs_sku") or "", _lp.get("name") or "")
+                        if not _ch:
+                            continue
+                        try:
+                            _amt = float(str(_lp.get("amount") or _lp.get("price") or 0).replace(",", ""))
+                        except (ValueError, TypeError):
+                            _amt = 0.0
+                        if _amt > 0:
+                            current_channels[_ch] = current_channels.get(_ch, 0) + _amt
     except Exception as e:
-        logger.warning("funnel-forecast spend-sheet lookup failed: %s", e)
-    current_channels = _ff.skus_to_channels(sku_budget)
+        logger.warning("funnel-forecast deal-budget lookup failed: %s", e)
+    sku_budget = dict(current_channels)  # response compatibility
     observed = _ff.compute_actual_funnel(channel_rows)
 
     # 5. Scenario budget (sc_<channel> query params) -> project; else actual funnel

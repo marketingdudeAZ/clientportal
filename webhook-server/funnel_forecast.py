@@ -44,17 +44,20 @@ CONTEXT_TOPFUNNEL_MULTIPLIER = {
 CHANNEL_STAGE_MULT = {
     # channel:        (impr_mult, sess_mult, conv_mult)
     "paid_search":    (0.30, 0.55, 1.00),
-    "retargeting":    (0.80, 0.45, 0.85),
+    "pmax":           (0.55, 0.50, 0.85),   # PMax spans search+display+YouTube; strong convert
     "seo":            (0.55, 1.00, 0.60),
-    "email":          (0.40, 0.60, 0.50),
-    "paid_social":    (1.00, 0.55, 0.38),
+    "meta":           (1.00, 0.55, 0.38),
+    "tiktok":         (1.10, 0.45, 0.30),
     "display":        (1.20, 0.18, 0.22),
+    "ctv":            (1.25, 0.10, 0.15),
+    "retargeting":    (0.80, 0.45, 0.85),
+    "social_content": (0.60, 0.40, 0.25),
 }
 # Headroom before diminishing returns, as a multiple of CURRENT channel spend.
-# Search is near its ceiling (1.2x); awareness has lots of room (4-5x).
+# Search/PMax are near their ceiling (1.2-1.6x); awareness has lots of room (4-5x).
 CHANNEL_SAT_MULT = {
-    "paid_search": 1.2, "retargeting": 1.8, "seo": 3.0,
-    "email": 2.0, "paid_social": 4.0, "display": 5.0,
+    "paid_search": 1.2, "pmax": 1.6, "seo": 3.0, "meta": 4.0, "tiktok": 4.5,
+    "display": 5.0, "ctv": 5.0, "retargeting": 1.8, "social_content": 3.0,
 }
 OVER_CAP_EFFICIENCY = 0.12   # dollars past the cap only count this much
 NEW_CHANNEL_FLOOR = 1500.0   # a not-currently-run channel gets this much headroom
@@ -63,14 +66,34 @@ NEW_CHANNEL_FLOOR = 1500.0   # a not-currently-run channel gets this much headro
 SKU_COLS = ["search", "pmax", "paid_social", "geofence", "display", "retargeting",
             "ctv", "seo", "social_posting", "eblast", "email_drip"]
 SKU_TO_CHANNEL = {
-    "search": "paid_search", "pmax": "paid_search",
-    "paid_social": "paid_social",
-    "display": "display", "geofence": "display", "ctv": "display",
+    "search": "paid_search", "pmax": "pmax",
+    "paid_social": "meta",
+    "display": "display", "geofence": "display", "ctv": "ctv",
     "retargeting": "retargeting",
-    "seo": "seo", "social_posting": "seo",
-    "eblast": "email", "email_drip": "email",
+    "seo": "seo", "social_posting": "social_content",
 }
-DEMAND_CAPTURE_CHANNELS = {"paid_search", "retargeting"}
+DEMAND_CAPTURE_CHANNELS = {"paid_search", "pmax", "retargeting"}
+
+
+def lineitem_to_channel(sku, name=""):
+    """Map a HubSpot deal line-item (sku + name) to a funnel channel, or None for
+    management/package fees that aren't a media channel. This is the same source
+    the Enrolled Services table reads, so the funnel's Current view matches it.
+
+    Note: Performance Max already spans Display + retargeting-style inventory, so
+    display/retargeting stay their own channels only for STANDALONE line items.
+    """
+    s = f"{sku} {name}".lower()
+    if "performance max" in s or "pmax" in s or "p-max" in s: return "pmax"
+    if "search" in s:                                          return "paid_search"
+    if "tiktok" in s:                                          return "tiktok"
+    if "meta" in s or "facebook" in s or "instagram" in s or ("paid" in s and "social" in s): return "meta"
+    if "retarget" in s:                                        return "retargeting"
+    if "ctv" in s or "ott" in s or "youtube" in s:             return "ctv"
+    if "display" in s or "geofence" in s or "programmatic" in s or "demand gen" in s or "demand_gen" in s: return "display"
+    if "seo" in s:                                             return "seo"
+    if "social posting" in s or "social_posting" in s or "social content" in s: return "social_content"
+    return None  # management fee, reputation, hosting, etc. — not a media channel
 
 
 def _safe_div(n, d):
@@ -209,7 +232,7 @@ def run_funnel_forecast(*, goal_leases, channel_rows, leads_per_lease=DEFAULT_LE
         # fall back to NinjaCat spend if HubSpot budget wasn't supplied
         spend_by_channel = {}
         for b, c in actual["per_channel"].items():
-            ch = "paid_search" if b == "Paid Search" else ("paid_social" if b == "Paid Social" else b)
+            ch = "paid_search" if b == "Paid Search" else ("meta" if b == "Paid Social" else b)
             if c["spend"]:
                 spend_by_channel[ch] = spend_by_channel.get(ch, 0) + c["spend"]
     return _assemble(
