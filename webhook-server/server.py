@@ -1147,6 +1147,17 @@ def submit_call_notes():
     if not answered:
         return jsonify({"error": "No answered questions — nothing to save"}), 400
 
+    # Fair Housing gate — block non-compliant answers before they reach HubSpot
+    # (these feed the property profile and, downstream, ads).
+    try:
+        from fair_housing_gate import check_fair_housing as _fh_check
+        _fh = _fh_check([{"field": (p.get("question") or "Answer"), "text": p.get("answer", "")} for p in answered])
+        if not _fh["compliant"]:
+            return jsonify({"error": "fair_housing", "violations": _fh["violations"],
+                            "message": "These answers can't be saved — they contain Fair Housing issues. Please revise the highlighted text."}), 422
+    except Exception as _fhe:
+        logger.warning("call-notes fair-housing check errored (allowing save): %s", _fhe)
+
     try:
         from call_notes import save_call_notes
         result = save_call_notes(
@@ -3412,6 +3423,19 @@ def update_client_brief():
 
     if not hs_props:
         return jsonify({"error": "No valid fields to update"}), 400
+
+    # Fair Housing gate — screen the free-text values before they hit HubSpot
+    # (Property Profile copy feeds Fluency ads).
+    try:
+        from fair_housing_gate import check_fair_housing as _fh_check
+        _fh_items = [{"field": k.replace("_", " ").title(), "text": str(v)}
+                     for k, v in fields.items() if isinstance(v, str) and v.strip()]
+        _fh = _fh_check(_fh_items)
+        if not _fh["compliant"]:
+            return jsonify({"error": "fair_housing", "violations": _fh["violations"],
+                            "message": "This can't be saved — it contains Fair Housing issues. Please revise the highlighted text."}), 422
+    except Exception as _fhe:
+        logger.warning("client-brief fair-housing check errored (allowing save): %s", _fhe)
 
     try:
         # 1. PATCH the company record

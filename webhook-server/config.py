@@ -160,7 +160,8 @@ HEYGEN_BASE_URL = os.getenv("HEYGEN_BASE_URL", "https://api.heygen.com")
 HEYGEN_WEBHOOK_SECRET = os.getenv("HEYGEN_WEBHOOK_SECRET", "")
 
 # Which provider to use when the enrollment request omits `provider`.
-VIDEO_PROVIDER_DEFAULT = os.getenv("VIDEO_PROVIDER_DEFAULT", "creatify")
+# HeyGen = avatar-free scene output; the video pipeline runs on it now.
+VIDEO_PROVIDER_DEFAULT = os.getenv("VIDEO_PROVIDER_DEFAULT", "heygen")
 
 # --- NinjaCat ---
 NINJACAT_EXPORT_BUCKET = os.getenv("NINJACAT_EXPORT_BUCKET")
