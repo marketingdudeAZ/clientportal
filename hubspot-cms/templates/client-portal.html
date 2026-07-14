@@ -938,6 +938,8 @@ body{padding-top:36px}
 .pnb-icon-btn{position:relative;background:transparent;border:none;width:30px;height:30px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:rgba(255,255,255,.75);cursor:pointer;transition:background .15s,color .15s}
 .pnb-icon-btn:hover{background:rgba(255,255,255,.08);color:#fff}
 .pnb-icon-badge{position:absolute;top:2px;right:2px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--cu);color:#fff;font-size:9px;font-weight:800;line-height:16px;text-align:center}
+/* SEO removed from nav (Kyle) — hard-hide regardless of any JS reveal */
+#nav-seo{display:none!important}
 .pnb-tier-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 9px;border-radius:999px;background:var(--cug);color:var(--cul);border:1px solid rgba(200,150,78,.32)}
 .pnb-tier-badge.tier-local{background:rgba(156,163,175,.16);color:#C5CBD2;border-color:rgba(156,163,175,.3)}
 .pnb-tier-badge.tier-lite{background:rgba(143,166,142,.16);color:#B5CCB4;border-color:rgba(143,166,142,.3)}
@@ -10223,26 +10225,21 @@ setTimeout(loadPropertySwitcher, 1500);
 
   // ── Tier badge in header ─────────────────────────────────────────
   var TIER_LABELS = { local: 'Local', lite: 'Lite', basic: 'Basic', standard: 'Standard', premium: 'Premium' };
+  // Top-bar badge now shows OCCUPANCY STATUS (Lease-Up / Stabilized), not the
+  // SEO tier — SEO is removed from the portal nav (Kyle). Lease-Up = copper,
+  // Stabilized = sage, anything else = gray. Hidden when the field is empty.
   function loadTierBadge() {
-    var cid = window.__PORTAL_COMPANY_ID__ || '';
-    if (!cid) return;
-    fetch(API_BASE + '/api/seo/entitlement?company_id=' + encodeURIComponent(cid),
-      { headers: { 'X-Portal-Email': EMAIL } })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (data) {
-        if (!data) return;
-        var tier = (data.tier || data.seo_tier || '').toLowerCase();
-        if (!tier || !TIER_LABELS[tier]) return;
-        var badge = document.getElementById('pnb-tier-badge');
-        if (!badge) return;
-        badge.textContent = TIER_LABELS[tier];
-        badge.className = 'pnb-tier-badge tier-' + tier;
-        badge.style.display = '';
-        var feats = (data.features || {});
-        var count = Object.keys(feats).filter(function (k) { return feats[k]; }).length;
-        if (count) badge.title = 'Tier: ' + TIER_LABELS[tier] + ' · ' + count + ' features enabled';
-      })
-      .catch(function () {});
+    var badge = document.getElementById('pnb-tier-badge');
+    if (!badge) return;
+    var occ = (window.__PORTAL_OCC_STATUS || '').trim();
+    if (!occ) { badge.style.display = 'none'; return; }
+    var lo = occ.toLowerCase();
+    var cls = lo.indexOf('lease') !== -1 ? 'tier-standard'
+            : lo.indexOf('stab')  !== -1 ? 'tier-basic' : 'tier-local';
+    badge.textContent = occ;
+    badge.className = 'pnb-tier-badge ' + cls;
+    badge.title = 'Occupancy status: ' + occ;
+    badge.style.display = '';
   }
 
   // ── Recently-viewed strip in property switcher dropdown ──────────
