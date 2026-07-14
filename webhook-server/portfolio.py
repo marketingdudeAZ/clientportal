@@ -592,6 +592,15 @@ def format_portfolio_response(companies):
             "monthly_spend": round(monthly, 2),
             "flags": _safe_int(props.get("redlight_flag_count")),
             "status": props.get("plestatus", ""),
+            # Enrolled in digital = has a deal in the line-item engine, or any
+            # active monthly spend. Lets the Properties list flag the 500+ book-
+            # of-business records that are NOT digital clients (Emily's #1 ask:
+            # kills ticket confusion on non-enrolled properties).
+            "enrolled_in_digital": bool(_cid in _smap) or (monthly is not None and monthly > 0),
+            # Lease-Up vs Stabilized — the HubSpot occupancy_status field is the
+            # source of truth; fall back to the derived leasing state.
+            "occupancy_status": (props.get("occupancy_status") or "").strip(),
+            "is_lease_up": bool(ls.get("is_lease_up")) if ls else False,
             # Leasing health
             "occupancy": _safe_float(occ_raw) if occ_raw else None,
             "atr": _safe_float(atr_raw) if atr_raw else None,

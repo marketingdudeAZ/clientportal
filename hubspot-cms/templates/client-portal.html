@@ -736,9 +736,15 @@ select.brief-input{height:34px;cursor:pointer}
 .prop-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.04em}
 .prop-badge.asset{background:rgba(200,150,78,0.12);color:#92600A;border:1px solid rgba(200,150,78,0.3)}
 .prop-badge.type{background:rgba(63,90,117,0.1);color:#374151;border:1px solid rgba(63,90,117,0.2)}
-.prop-badge.occ-leaseup{background:rgba(239,68,68,0.1);color:#991b1b;border:1px solid rgba(239,68,68,0.25)}
+/* Lease-Up is amber (ramping / low occ is expected), NOT red — a lease-up
+   property still filling should not read as an alarm (Emily feedback). */
+.prop-badge.occ-leaseup{background:rgba(212,145,10,0.12);color:#92600A;border:1px solid rgba(212,145,10,0.3)}
 .prop-badge.occ-stabilized{background:rgba(16,185,129,0.1);color:#065f46;border:1px solid rgba(16,185,129,0.25)}
 .prop-badge.occ-other{background:rgba(107,114,128,0.1);color:#4b5563;border:1px solid rgba(107,114,128,0.2)}
+/* "Enrolled in Digital" pill for the Properties list (Emily #1) */
+.digi-badge{font-size:10px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.digi-badge.yes{background:rgba(16,185,129,0.12);color:#065f46;border:1px solid rgba(16,185,129,0.28)}
+.digi-badge.no{background:rgba(107,114,128,0.1);color:#6b7280;border:1px solid rgba(107,114,128,0.22)}
 .fomo-panel{background:#fff;border:1px solid var(--bd);border-radius:12px;overflow:hidden;margin-top:14px}
 .fomo-panel-hdr{padding:12px 16px;border-bottom:1px solid var(--bd);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tm);background:var(--bg)}
 .fomo-list{padding:0 16px}
@@ -1287,9 +1293,12 @@ body{line-height:1.55}
   <!-- 30-second summary card (consolidates Health, Leads, CPL + active issues) -->
   <div class="summary-card status-inactive" id="summary-card" style="display:none">
     <div class="summary-card-header">
-      <div class="summary-status-pill" id="summary-status-pill">
-        <span class="summary-status-dot"></span>
-        <span id="summary-status-text">Loading…</span>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div class="summary-status-pill" id="summary-status-pill">
+          <span class="summary-status-dot"></span>
+          <span id="summary-status-text">Loading…</span>
+        </div>
+        <span class="prop-badge occ-other" id="summary-occ-tag" style="display:none"></span>
       </div>
       <div class="summary-card-meta" id="summary-card-meta"></div>
     </div>
@@ -2232,6 +2241,15 @@ body{line-height:1.55}
 <section id="section-assets" class="section">
   <div class="sec-topbar">
     <div><div class="sec-title">Asset Library</div><div class="sec-sub">Photography · video · brand · collateral</div></div>
+  </div>
+
+  <!-- Photo-in-ads CYA (Emily feedback) — the library IS the ad source of truth -->
+  <div style="display:flex;gap:12px;align-items:flex-start;background:rgba(212,145,10,0.08);border:1px solid rgba(212,145,10,0.3);border-left:3px solid var(--cu);border-radius:10px;padding:14px 16px;margin-bottom:18px">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92600A" stroke-width="2" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <div style="font-size:12.5px;color:#5A4A2A;line-height:1.5">
+      <b style="color:#7A5A1A">The photos in this library are the photos running in your ads.</b>
+      When you add a new set, <b>remove the ones you no longer want live</b> — anything left here can appear in Google, PMax, display, and social creative.
+    </div>
   </div>
 
   <!-- Drag & drop zone -->
@@ -5390,6 +5408,24 @@ function _renderSummaryCard(propData, ticketsData, budgetData) {
   else                            statusText = 'Awaiting score';
   setText('summary-status-text', statusText);
 
+  // ── Lease-Up / Stabilized tag ─────────────────────────
+  // First thing a manager wants on a low-occ property: is this a lease-up
+  // we're still filling, or a chronic problem? (Emily feedback #2)
+  var occStatus = (propData.occupancy_status || window.__PORTAL_OCC_STATUS || '').trim();
+  var occTag = document.getElementById('summary-occ-tag');
+  if (occTag) {
+    if (occStatus) {
+      var lo = occStatus.toLowerCase();
+      var occCls = lo.indexOf('lease') !== -1 ? 'occ-leaseup'
+                 : lo.indexOf('stab')  !== -1 ? 'occ-stabilized' : 'occ-other';
+      occTag.className = 'prop-badge ' + occCls;
+      occTag.textContent = occStatus;
+      occTag.style.display = '';
+    } else {
+      occTag.style.display = 'none';
+    }
+  }
+
   // ── Meta line ─────────────────────────────────────────
   var meta = '';
   if (perf && perf.month) {
@@ -5745,17 +5781,23 @@ function renderSwot(d){
   }
   if(!d||d.available===false){ root.innerHTML='<div style="background:var(--white);border:1px solid var(--bd);border-radius:12px;padding:22px;color:var(--ts);font-size:13px">'+((d&&d.message)||'SWOT not available yet.')+'</div>'; return; }
   var s=d.swot||{};
+  // Opportunities are BLUE (external), distinct from amber Threats — they read
+  // as two different things now (Emily feedback). S/W internal, O/T external.
   var quads=[
-    {k:'strengths',label:'Strengths',color:'var(--sage)',bg:'rgba(143,166,142,.08)'},
-    {k:'weaknesses',label:'Weaknesses',color:'var(--red)',bg:'rgba(201,68,68,.06)'},
-    {k:'opportunities',label:'Opportunities',color:'var(--cu)',bg:'var(--cug)'},
-    {k:'threats',label:'Threats',color:'var(--amb)',bg:'rgba(212,145,10,.07)'}
+    {k:'strengths',label:'Strengths',scope:'Internal',color:'var(--sage)',bg:'rgba(143,166,142,.08)'},
+    {k:'weaknesses',label:'Weaknesses',scope:'Internal',color:'var(--red)',bg:'rgba(201,68,68,.06)'},
+    {k:'opportunities',label:'Opportunities',scope:'External',color:'#2F6FB0',bg:'rgba(47,111,176,.07)'},
+    {k:'threats',label:'Threats',scope:'External',color:'var(--amb)',bg:'rgba(212,145,10,.07)'}
   ];
-  var h=['<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">'];
+  var h=['<div style="font-size:11.5px;color:var(--tm);margin:0 0 12px;line-height:1.5"><b style="color:var(--ts)">Strengths &amp; Weaknesses</b> are internal — your campaigns, what you control. <b style="color:var(--ts)">Opportunities &amp; Threats</b> are external — the market and competitors.</div>',
+    '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">'];
   quads.forEach(function(q){
     var items=s[q.k]||[];
     h.push('<div style="background:'+q.bg+';border:1px solid var(--bd);border-left:3px solid '+q.color+';border-radius:12px;padding:16px 18px">');
-    h.push('<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:'+q.color+';margin-bottom:10px">'+q.label+'</div>');
+    h.push('<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">'
+      +'<span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:'+q.color+'">'+q.label+'</span>'
+      +'<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--tm);background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:2px 7px">'+q.scope+'</span>'
+      +'</div>');
     if(!items.length) h.push('<div style="font-size:12px;color:var(--tm)">—</div>');
     items.forEach(function(it){
       h.push('<div style="margin-bottom:10px"><div style="font-size:13px;font-weight:700;color:var(--tp);margin-bottom:2px">'+(it.title||'')+'</div><div style="font-size:12px;color:var(--ts);line-height:1.45">'+(it.detail||'')+'</div></div>');
@@ -6356,7 +6398,7 @@ function _buildReportHTML(d) {
 // ══ Full-funnel forecast + reactive scenario planner (Phase B) ═══════════════
 var _ffData = null;
 var _ffTimer = null;
-var _FF_CH = [['paid_search','Paid Search'],['pmax','Performance Max'],['seo','SEO / Organic'],['meta','Meta'],['tiktok','TikTok'],['display','Display'],['ctv','CTV'],['retargeting','Retargeting']];
+var _FF_CH = [['paid_search','Paid Search'],['pmax','Performance Max'],['seo','SEO'],['meta','Meta'],['tiktok','TikTok'],['display','Display'],['ctv','CTV'],['retargeting','Retargeting']];
 function _ffNum(n){ return (Math.round(Number(n)||0)).toLocaleString('en-US'); }
 function _ffBarColor(r){ if(r==null)return 'var(--tm)'; if(r>=1)return 'var(--sage)'; if(r>=0.7)return 'var(--amb)'; return 'var(--red)'; }
 function _ffBtn(primary){ return 'padding:5px 11px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--bd);'+(primary?'background:var(--cu);color:#fff;border-color:var(--cu)':'background:#fff;color:var(--ts)'); }
@@ -6818,7 +6860,7 @@ function _buildSliders() {
   var cats = [
     {key:'paid_search', label:'Paid Search (Google Ads)', channels:['google_ads']},
     {key:'paid_social', label:'Paid Social (Meta Ads)', channels:['meta']},
-    {key:'seo',         label:'Organic / SEO', channels:['seo_organic']},
+    {key:'seo',         label:'SEO', channels:['seo_organic']},
     {key:'video',       label:'Video Creative <span class="beta-badge">Beta</span>', channels:['video_creative']},
   ];
   cats.forEach(function(cat) {
@@ -10643,6 +10685,11 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
       <option value="watch">Watch (50–74)</option>
       <option value="needs-attention">Needs Attention (&lt;50)</option>
     </select>
+    <select id="pl-digital" class="form-input" style="width:180px" onchange="filterPropList()" title="Filter to just properties enrolled in digital services">
+      <option value="">All Properties</option>
+      <option value="enrolled">Enrolled in Digital</option>
+      <option value="not-enrolled">Not Enrolled</option>
+    </select>
     <button class="btn btn-secondary btn-sm" onclick="saveCurrentView()" title="Save this market + health filter as a named view">&#9733; Save view</button>
   </div>
   <!-- Saved views (Lauren pilot feedback #2) — per-user, localStorage keyed on login -->
@@ -10657,11 +10704,12 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
           <th>Property</th>
           <th>Market</th>
           <th>Health</th>
+          <th>Digital</th>
           <th>Status</th>
         </tr>
       </thead>
       <tbody id="pl-tbody">
-        <tr><td colspan="4" style="padding:40px;text-align:center;color:var(--tm);font-style:italic">Loading properties…</td></tr>
+        <tr><td colspan="5" style="padding:40px;text-align:center;color:var(--tm);font-style:italic">Loading properties…</td></tr>
       </tbody>
     </table>
   </div>
@@ -10856,7 +10904,7 @@ function loadPropList() {
     .catch(function(err) {
       console.warn('loadPropList failed:', err);
       var el = document.getElementById('pl-tbody');
-      if (el) el.innerHTML = '<tr><td colspan="4" style="padding:32px;text-align:center;color:var(--tm)">Could not load properties. Please try refreshing.</td></tr>';
+      if (el) el.innerHTML = '<tr><td colspan="5" style="padding:32px;text-align:center;color:var(--tm)">Could not load properties. Please try refreshing.</td></tr>';
     });
 }
 
@@ -10969,10 +11017,13 @@ function filterPropList() {
   var market = document.getElementById('pl-market')  ? document.getElementById('pl-market').value  : '';
   var city   = document.getElementById('pl-city')    ? document.getElementById('pl-city').value    : '';
   var health = document.getElementById('pl-health')  ? document.getElementById('pl-health').value  : '';
+  var digital = document.getElementById('pl-digital') ? document.getElementById('pl-digital').value : '';
   var filtered = _propListData.filter(function(p) {
     if (q && !(p.name||'').toLowerCase().includes(q) && !(p.market||'').toLowerCase().includes(q)) return false;
     if (market && (p.market||'') !== market) return false;
     if (city && _cityKey(p) !== city) return false;
+    if (digital === 'enrolled'     && !p.enrolled_in_digital) return false;
+    if (digital === 'not-enrolled' &&  p.enrolled_in_digital) return false;
     if (health) {
       var sc = p.health_score != null ? Math.round(p.health_score) : null;
       if (health === 'on-track'    && (sc == null || sc < 75))  return false;
@@ -10989,7 +11040,7 @@ function renderPropList(props) {
   var tbody = document.getElementById('pl-tbody');
   if (!tbody) return;
   if (!props.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--tm)">No properties match your filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--tm)">No properties match your filters.</td></tr>';
     return;
   }
   tbody.innerHTML = props.map(function(p) {
@@ -11009,6 +11060,9 @@ function renderPropList(props) {
       '</div></td>' +
       '<td>' + (p.market||'—') + '</td>' +
       '<td><span class="h-badge ' + badgeClass + '">' + badgeLabel + '</span></td>' +
+      '<td>' + (p.enrolled_in_digital
+        ? '<span class="digi-badge yes">Enrolled</span>'
+        : '<span class="digi-badge no">Not enrolled</span>') + '</td>' +
       '<td><span class="ple-pill' + (isActive?' active':'') + '">' + ple + '</span></td>' +
       '</tr>';
   }).join('');
