@@ -64,12 +64,16 @@ def match_company_for_ticket(task):
             hit = _one_with_uuid(_search("website", dom, operator="CONTAINS_TOKEN"))
             if hit:
                 return hit, "url:website"
-    # 2. property_code (Yardi/ERD) — secondary confirm (may be stale, so not primary).
+    # 2. Yardi property code — secondary confirm only. It can change (new bank
+    #    account / new Yardi code), so never primary. The ticket's "Property Code"
+    #    is the Yardi code; on HubSpot it may live as property_code or yardi_id.
     code = cf(task, "Property Code")
     if code:
-        hit = _one_with_uuid(_search("property_code", str(code).strip()))
-        if hit:
-            return hit, "property_code"
+        code = str(code).strip()
+        for prop in ("property_code", "yardi_id"):
+            hit = _one_with_uuid(_search(prop, code))
+            if hit:
+                return hit, f"yardi:{prop}"
     # 3. name — last resort, single uuid match only.
     name = (task.get("name") or "").strip()
     if name:
