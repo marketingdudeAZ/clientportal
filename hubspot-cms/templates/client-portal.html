@@ -10884,6 +10884,11 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
     </button>
   </div>
 
+  <div style="margin:0 0 16px">
+    <select id="needs-market" class="form-input" style="width:220px" onchange="renderNeedsYou(this.value)">
+      <option value="">All Markets</option>
+    </select>
+  </div>
   <div id="needs-you-root">
     <div class="skeleton skeleton-block"></div>
     <div class="skeleton skeleton-block" style="margin-top:8px"></div>
@@ -11520,6 +11525,7 @@ function renderSpendSheet(rows) {
 // Triage list — primary landing view
 // "What needs you" = an action inbox: Onboarding + Dispositions + Attention
 // (open tickets). Health-score rows dropped — Properties/Portfolio show those.
+var _needsData = null;
 function loadTriage() {
   var root  = document.getElementById('needs-you-root');
   var subEl = document.getElementById('triage-subtitle');
@@ -11529,18 +11535,32 @@ function loadTriage() {
     .then(function(r){ return r.json(); })
     .then(function(d){
       _triageLoaded = true;
-      var onb = d.onboarding || [], dispo = d.dispositions || [], attn = d.attention || [];
-      if (subEl) subEl.textContent = onb.length + ' onboarding · ' + dispo.length + ' dispositioning · '
-        + attn.length + ' open ticket' + (attn.length === 1 ? '' : 's');
-      root.innerHTML =
-        _needsSection('Onboarding', 'Coming online — what still needs to be completed', _onbHtml(onb)) +
-        _needsSection('Dispositions', 'Retain to keep the campaign live, or let it turn off at the management end date', _dispoHtml(dispo)) +
-        _needsSection('Attention', 'Open tickets aging in the queue', attn.length ? attn.map(triageRowHtml).join('') : _needsEmpty('No open tickets need attention.'));
+      _needsData = { onboarding: d.onboarding || [], dispositions: d.dispositions || [], attention: d.attention || [] };
+      var sel = document.getElementById('needs-market');
+      if (sel) {
+        var cur = sel.value, mkts = {};
+        ['onboarding','dispositions','attention'].forEach(function(s){ _needsData[s].forEach(function(r){ if (r.market) mkts[r.market] = 1; }); });
+        sel.innerHTML = '<option value="">All Markets</option>' + Object.keys(mkts).sort().map(function(m){
+          return '<option value="' + escapeHtml(m) + '"' + (m === cur ? ' selected' : '') + '>' + escapeHtml(m) + '</option>'; }).join('');
+        renderNeedsYou(sel.value);
+      } else { renderNeedsYou(''); }
     })
     .catch(function(){
       if (subEl) subEl.textContent = 'Could not load.';
       root.innerHTML = '<div class="empty-state"><div class="empty-state-title">Unavailable</div><div class="empty-state-sub">Try refreshing in a moment.</div></div>';
     });
+}
+function renderNeedsYou(market) {
+  var root = document.getElementById('needs-you-root'), subEl = document.getElementById('triage-subtitle');
+  if (!root || !_needsData) return;
+  function f(rows){ return market ? rows.filter(function(r){ return (r.market || '') === market; }) : rows; }
+  var onb = f(_needsData.onboarding), dispo = f(_needsData.dispositions), attn = f(_needsData.attention);
+  if (subEl) subEl.textContent = onb.length + ' onboarding · ' + dispo.length + ' dispositioning · '
+    + attn.length + ' open ticket' + (attn.length === 1 ? '' : 's') + (market ? ' · ' + market : '');
+  root.innerHTML =
+    _needsSection('Onboarding', 'Coming online — what still needs to be completed', _onbHtml(onb)) +
+    _needsSection('Dispositions', 'Retain to keep the campaign live, or let it turn off at the management end date', _dispoHtml(dispo)) +
+    _needsSection('Attention', 'Open tickets aging in the queue', attn.length ? attn.map(triageRowHtml).join('') : _needsEmpty('No open tickets need attention.'));
 }
 function _needsSection(title, sub, bodyHtml) {
   return '<div style="margin-bottom:26px">' +
