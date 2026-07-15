@@ -42,6 +42,7 @@ COMPANY_PROPS = [
     "brf___renewal_leases_120_trend",     # Renewal lease 120-day trend
     "occupancy_status",                   # Lease-Up / Stabilized / In-Transition / Renovation
     "managementend",                      # disposition guard (past date = property gone)
+    "disposition_retained",               # true = keep active despite disposition (retain toggle)
     # Lease-up ramp inputs (time-aware occupancy target)
     "lease_up_start_date",                # ramp start (delivery/reposition); preferred
     "managementstart",                    # fallback ramp start (new construction ≈ delivery)
@@ -170,12 +171,17 @@ def fetch_portfolio(email, role):
         for company in results:
             cid = company["id"]
             _cp = company.get("properties", {})
-            if (_cp.get("plestatus") or "").strip() not in allowed:
-                continue
-            # Disposition guard: drop properties whose management has ended,
-            # even if plestatus is a stale "RPM Managed" from the warehouse lag.
-            if _management_ended(_cp.get("managementend")):
-                continue
+            # Disposition RETAINED (retain toggle): keep the property active —
+            # keeps its uuid + campaign, no Fluency re-setup — despite a
+            # Dispositioning status or a past management end date.
+            retained = str(_cp.get("disposition_retained") or "").strip().lower() in ("true", "yes", "1")
+            if not retained:
+                if (_cp.get("plestatus") or "").strip() not in allowed:
+                    continue
+                # Disposition guard: drop properties whose management has ended,
+                # even if plestatus is a stale "RPM Managed" from warehouse lag.
+                if _management_ended(_cp.get("managementend")):
+                    continue
             # A property MUST have a uuid to be addressable. Drops duplicate /
             # un-enrolled company records so we never list or link a uuid=null page.
             if not str(_cp.get("uuid") or "").strip():

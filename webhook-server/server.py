@@ -6225,6 +6225,35 @@ def clickup_ticket_complete():
     return jsonify({"status": "accepted", "task_id": task_id}), 202
 
 
+@app.route("/api/disposition/list", methods=["GET", "OPTIONS"])
+def disposition_list():
+    """Properties that are dispositioning or retained — the AM/PM review report."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
+    import disposition
+    return jsonify({"properties": disposition.list_dispositioning()})
+
+
+@app.route("/api/disposition/retain", methods=["POST", "OPTIONS"])
+def disposition_retain():
+    """Set the disposition_retained flag on a company (retain vs let it turn off)."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
+    body = request.get_json(force=True) or {}
+    cid = str(body.get("company_id", "")).strip()
+    retained = bool(body.get("retained"))
+    if not cid:
+        return jsonify({"error": "company_id required"}), 400
+    import disposition
+    ok = disposition.set_retained(cid, retained)
+    return jsonify({"status": "ok" if ok else "error", "company_id": cid,
+                    "retained": retained}), (200 if ok else 502)
+
+
 # ─── AI SWOT (Performance page) ─────────────────────────────────────────────
 
 
