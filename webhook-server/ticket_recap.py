@@ -95,6 +95,9 @@ _REDACT = [re.compile(p, re.I) for p in [
     r"\bwasn'?t configured\b", r"\bset ?up (?:wrong|incorrectly)\b",
     r"\bClickUp\b", r"\bNinjaCat\b", r"\bHubSpot\b", r"\bFluency\b",
     r"\bticket\b", r"\binternal\b",
+    # targeting / location claims we can't stand behind (Kyle) — flag for review
+    r"\btargeting\b", r"\bpositioning\b", r"\bdistrict\b", r"\bneighborhood\b",
+    r"\brenters in\b", r"\baudience\b",
 ]]
 
 
@@ -192,10 +195,14 @@ def generate_recap(task: dict, comments: list, ticket_type: str = "general") -> 
                      else "new account build") + ": DO state the specific per-channel "
                      "budget figures shown in the ticket data above (e.g. 'increased Paid "
                      "Search to $4,000 and Performance Max to $1,500'). Use ONLY figures "
-                     "that appear in the data — never invent or estimate any.")
+                     "that appear in the data — never invent or estimate any. "
+                     "Keep it high level: budgets and channels turned on, what is running, "
+                     "tracking set up, and deliverables. Do NOT mention any location, "
+                     "neighborhood, district, market, audience, or positioning, and do NOT "
+                     "describe who or where the campaigns target.")
         user = f"Ticket type framing hint: {hint}\n\n{narrative}{extra}"
         msg = client.messages.create(
-            model=CLAUDE_DIGEST_MODEL, max_tokens=500, temperature=0.3,
+            model=CLAUDE_DIGEST_MODEL, max_tokens=500, temperature=0,
             system=SYSTEM_PROMPT, messages=[{"role": "user", "content": user}],
         )
         raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text").strip()
