@@ -46,7 +46,11 @@ SYSTEM_PROMPT = (
     "NOT invent client blame. Use neutral, proactive language ('we identified and "
     "corrected …') — never falsely blame the client.\n"
     "- End forward-looking when it reads naturally.\n"
-    "- Use plain punctuation (commas, periods). Do NOT use em-dashes.\n\n"
+    "- Use plain punctuation (commas, periods). Do NOT use em-dashes.\n"
+    "- NUMBERS: never state a specific dollar amount, budget, percentage, ranking, "
+    "or metric unless it appears verbatim in the ticket data provided below. If a "
+    "figure is not given, describe the change qualitatively (e.g. 'increased your "
+    "paid search budget') — never invent, estimate, or round to a plausible number.\n\n"
     "PRODUCT ACCURACY — do not fabricate benefits:\n"
     "- Describe what was done factually. NEVER invent an outcome or benefit claim "
     "for a service, and never attach lead-generation / 'maximize lead capture' "
@@ -107,6 +111,12 @@ def infer_ticket_type(task: dict) -> str:
     return "general"
 
 
+# ClickUp field names that are noise/internal — never feed them to the recap.
+_FIELD_SKIP = {"qa status", "task progress", "comment count", "priority", "market",
+               "account manager", "submitter email", "property url", "property domain",
+               "website", "property code"}
+
+
 def _internal_narrative(task: dict, comments: list) -> str:
     parts = []
     if task.get("name"):
@@ -114,6 +124,26 @@ def _internal_narrative(task: dict, comments: list) -> str:
     desc = (task.get("text_content") or task.get("description") or "").strip()
     if desc:
         parts.append("Description:\n" + desc)
+    # Structured ticket fields (real budgets/scope) so the model uses ACTUAL
+    # values instead of inventing numbers. Matching/internal fields are skipped.
+    try:
+        from clickup_client import _resolve_field_value
+        detail = []
+        for f in (task.get("custom_fields") or []):
+            nm = (f.get("name") or "").strip()
+            if not nm or nm.lower() in _FIELD_SKIP:
+                continue
+            val = _resolve_field_value(f)
+            if val in (None, "", []):
+                continue
+            if isinstance(val, list):
+                val = ", ".join(str(x) for x in val)
+            detail.append(f"- {nm}: {val}")
+        if detail:
+            parts.append("Ticket details (use these exact values; do not invent others):\n"
+                         + "\n".join(detail))
+    except Exception:
+        pass
     if comments:
         parts.append("Work thread (chronological):")
         for c in comments:
