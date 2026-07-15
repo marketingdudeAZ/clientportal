@@ -53,6 +53,38 @@ def get_task(task_id: str) -> dict[str, Any] | None:
     return r.json()
 
 
+def get_comments(task_id: str) -> list[dict[str, Any]]:
+    """Fetch a task's comment thread (the work log the recap summarizes).
+
+    Returns a list of {author, text, date} oldest-first. Empty on any failure —
+    a recap can still be built from the task description alone.
+    """
+    if not CLICKUP_API_KEY or not task_id:
+        return []
+    try:
+        r = requests.get(
+            f"{CU_BASE}/task/{task_id}/comment",
+            headers=_headers(),
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp get_comments network error for %s: %s", task_id, e)
+        return []
+    if not _ok(r):
+        logger.warning("ClickUp get_comments %s -> %s %s", task_id, r.status_code, r.text[:200])
+        return []
+    out = []
+    for c in (r.json().get("comments") or []):
+        out.append({
+            "author": ((c.get("user") or {}).get("username")
+                       or (c.get("user") or {}).get("email") or "team member"),
+            "text": c.get("comment_text") or "",
+            "date": c.get("date"),
+        })
+    out.reverse()  # ClickUp returns newest-first; recap reads chronologically
+    return out
+
+
 def custom_field_value(task: dict, name: str) -> Any:
     """Return the value of a ClickUp custom field by case-insensitive name.
 
