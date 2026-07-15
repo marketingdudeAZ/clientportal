@@ -6176,6 +6176,55 @@ def get_plan_stages():
     return jsonify(plan)
 
 
+@app.route("/api/webhooks/clickup/ticket-complete", methods=["POST", "OPTIONS"])
+def clickup_ticket_complete():
+    """ClickUp ticket Done → client-facing recap note on the matched HubSpot company.
+
+    Auth: ClickUp native webhook X-Signature (HMAC-SHA256 of the raw body with
+    CLICKUP_WEBHOOK_SECRET) OR a ?token= matching that secret (for a ClickUp
+    Automation 'call webhook' action). ?dry_run=1 returns the draft WITHOUT
+    posting — use it to validate on a real completed ticket first.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    import hmac as _hmac, hashlib as _hashlib, threading as _threading
+    from config import CLICKUP_WEBHOOK_SECRET
+
+    raw = request.get_data() or b""
+    secret = CLICKUP_WEBHOOK_SECRET or ""
+    sig = request.headers.get("X-Signature", "")
+    token = request.args.get("token", "")
+    authed = False
+    if secret:
+        if sig:
+            expected = _hmac.new(secret.encode(), raw, _hashlib.sha256).hexdigest()
+            authed = _hmac.compare_digest(expected, sig)
+        elif token:
+            authed = _hmac.compare_digest(token, secret)
+    if not authed:
+        return jsonify({"error": "unauthorized"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    task_id = (payload.get("task_id") or payload.get("id")
+               or (payload.get("task") or {}).get("id")
+               or (payload.get("payload") or {}).get("id") or "")
+    task_id = str(task_id).strip()
+    if not task_id:
+        return jsonify({"error": "no task_id in payload"}), 400
+
+    import clickup_recap
+    if request.args.get("dry_run") in ("1", "true", "yes"):
+        return jsonify(clickup_recap.process_completed_task(task_id, dry_run=True))
+
+    def _bg(tid):
+        try:
+            clickup_recap.process_completed_task(tid)
+        except Exception as exc:
+            logger.exception("clickup_recap bg error for %s: %s", tid, exc)
+    _threading.Thread(target=_bg, args=(task_id,), daemon=True).start()
+    return jsonify({"status": "accepted", "task_id": task_id}), 202
+
+
 # ─── AI SWOT (Performance page) ─────────────────────────────────────────────
 
 

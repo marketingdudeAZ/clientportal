@@ -247,6 +247,25 @@ def create_task(
     return r.json()
 
 
+def add_tag(task_id: str, tag: str) -> bool:
+    """Add a tag to a task (used as a 'recap-posted' dedupe marker). Best-effort."""
+    if not CLICKUP_API_KEY or not task_id or not tag:
+        return False
+    try:
+        r = requests.post(
+            f"{CU_BASE}/task/{task_id}/tag/{tag}",
+            headers=_headers(),
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp add_tag network error for %s: %s", task_id, e)
+        return False
+    if not _ok(r):
+        logger.warning("ClickUp add_tag %s -> %s %s", task_id, r.status_code, r.text[:200])
+        return False
+    return True
+
+
 def tag_user_in_comment(task_id: str, user_id: str | int, text: str) -> bool:
     """Post a comment that @-mentions a ClickUp user.
 
