@@ -136,6 +136,11 @@ def _internal_narrative(task: dict, comments: list) -> str:
             val = _resolve_field_value(f)
             if val in (None, "", []):
                 continue
+            if f.get("type") == "currency":
+                try:
+                    val = "$" + format(int(round(float(val))), ",")
+                except (TypeError, ValueError):
+                    pass
             if isinstance(val, list):
                 val = ", ".join(str(x) for x in val)
             detail.append(f"- {nm}: {val}")
@@ -173,7 +178,14 @@ def generate_recap(task: dict, comments: list, ticket_type: str = "general") -> 
             return result
         import anthropic
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        user = f"Ticket type framing hint: {hint}\n\n{narrative}"
+        extra = ""
+        if ticket_type in ("budget_update", "new_account_build"):
+            extra = ("\n\nThis is a " + ("budget update" if ticket_type == "budget_update"
+                     else "new account build") + ": DO state the specific per-channel "
+                     "budget figures shown in the ticket data above (e.g. 'increased Paid "
+                     "Search to $4,000 and Performance Max to $1,500'). Use ONLY figures "
+                     "that appear in the data — never invent or estimate any.")
+        user = f"Ticket type framing hint: {hint}\n\n{narrative}{extra}"
         msg = client.messages.create(
             model=CLAUDE_DIGEST_MODEL, max_tokens=500, temperature=0.3,
             system=SYSTEM_PROMPT, messages=[{"role": "user", "content": user}],
