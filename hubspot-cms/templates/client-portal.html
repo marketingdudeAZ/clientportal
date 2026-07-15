@@ -10848,7 +10848,6 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
     <button class="ptab"        id="ptab-list"      onclick="topView('list',this)">Properties</button>
     <button class="ptab"        id="ptab-portfolio" onclick="topView('portfolio',this)">Portfolio Dashboard</button>
     <button class="ptab"        id="ptab-spend"     onclick="topView('spend',this)">Spend Sheet</button>
-    <button class="ptab"        id="ptab-disposition" onclick="topView('disposition',this)">Disposition</button>
   </nav>
   <div class="ptop-user" id="ptop-user-label">
     <span id="ptop-email" style="display:none"></span>
@@ -10876,15 +10875,7 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
     </button>
   </div>
 
-  <div class="triage-summary-bar" id="triage-summary-bar" style="display:none">
-    <div class="triage-summary-stat"><span class="v" id="triage-total">0</span><span class="l">Properties</span></div>
-    <div class="triage-summary-stat crit"><span class="v" id="triage-critical">0</span><span class="l">Critical</span></div>
-    <div class="triage-summary-stat warn"><span class="v" id="triage-warning">0</span><span class="l">Warning</span></div>
-    <div class="triage-summary-stat"><span class="v" id="triage-watch">0</span><span class="l">Watch</span></div>
-    <div class="triage-summary-stat ok"><span class="v" id="triage-ontrack">0</span><span class="l">On track</span></div>
-  </div>
-
-  <div class="triage-list" id="triage-list">
+  <div id="needs-you-root">
     <div class="skeleton skeleton-block"></div>
     <div class="skeleton skeleton-block" style="margin-top:8px"></div>
     <div class="skeleton skeleton-block" style="margin-top:8px"></div>
@@ -11069,24 +11060,6 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
   </div>
 </div>
 
-<!-- ════════════ DISPOSITION REVIEW ════════════ -->
-<div id="ptab-panel-disposition" class="ptab-panel" style="display:none">
-  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;gap:16px">
-    <div>
-      <div style="font-size:22px;font-weight:800;color:var(--tp)">Disposition Review</div>
-      <div style="font-size:12px;color:var(--tm);margin-top:3px;max-width:640px">Properties dispositioning (recent + upcoming) and any already retained. <b>Retain</b> keeps the campaign live and the property active — same uuid, no Fluency re-setup. <b>Turn off</b> lets it end at the management end date.</div>
-    </div>
-    <button class="btn btn-secondary btn-sm" style="flex-shrink:0" onclick="loadDisposition(true)">Refresh</button>
-  </div>
-  <div id="dispo-summary" style="font-size:12px;color:var(--tm);margin:6px 0 16px"></div>
-  <div class="prop-list-table-card">
-    <table class="pl-table">
-      <thead><tr><th>Property</th><th>Market</th><th>Mgmt End</th><th>Type</th><th style="text-align:right">Decision</th></tr></thead>
-      <tbody id="dispo-tbody"><tr><td colspan="5" style="padding:40px;text-align:center;color:var(--tm);font-style:italic">Loading dispositioning properties…</td></tr></tbody>
-    </table>
-  </div>
-</div>
-
 <script>
 // ── Globals ────────────────────────────────────────────────────────────────────
 window.__PORTAL_EMAIL__   = '{{ request.contact.email | escape_html }}';
@@ -11101,7 +11074,7 @@ var _portfolioLoaded = false;
 var _spendLoaded     = false;
 
 function topView(tab, btn) {
-  ['triage','list','portfolio','spend','disposition'].forEach(function(t) {
+  ['triage','list','portfolio','spend'].forEach(function(t) {
     var p = document.getElementById('ptab-panel-' + t);
     if (p) p.style.display = (t === tab) ? 'block' : 'none';
     var b = document.getElementById('ptab-' + t);
@@ -11111,58 +11084,9 @@ function topView(tab, btn) {
   if (tab === 'list'        && !_propListLoaded)  loadPropList();
   if (tab === 'portfolio'   && !_portfolioLoaded) loadPortfolio();
   if (tab === 'spend'       && !_spendLoaded)     loadSpendSheet();
-  if (tab === 'disposition' && !_dispoLoaded)     loadDisposition();
 }
 var _triageLoaded = false;
 
-// ── Disposition Review ─────────────────────────────────────────────────────────
-var _dispoLoaded = false;
-function loadDisposition(force) {
-  if (_dispoLoaded && !force) return;
-  var tb = document.getElementById('dispo-tbody');
-  if (tb) tb.innerHTML = '<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--tm)">Loading dispositioning properties…</td></tr>';
-  fetch(_apiBase + '/api/disposition/list', { headers: { 'X-Portal-Email': _email } })
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      _dispoLoaded = true;
-      var rows = d.properties || [];
-      renderDisposition(rows);
-      var s = document.getElementById('dispo-summary');
-      if (s) { var ret = rows.filter(function(x){ return x.retained; }).length;
-        s.textContent = rows.length + ' propert' + (rows.length===1?'y':'ies') + ' in review · ' + ret + ' retained'; }
-    })
-    .catch(function(){ if (tb) tb.innerHTML = '<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--red)">Could not load disposition data.</td></tr>'; });
-}
-function renderDisposition(rows) {
-  var tb = document.getElementById('dispo-tbody'); if (!tb) return;
-  if (!rows.length) { tb.innerHTML = '<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--tm)">No dispositioning properties in the review window.</td></tr>'; return; }
-  tb.innerHTML = rows.map(function(r){
-    var end = (r.managementend||'').slice(0,10) || '—';
-    var url = 'https://digital.rpmliving.com/client-portal?uuid=' + encodeURIComponent(r.uuid);
-    var retSel = r.retained;
-    var retBtn = '<button onclick="dispoSetRetain(\''+r.company_id+'\',true,this)" class="btn btn-sm" style="background:'+(retSel?'var(--sage)':'#fff')+';color:'+(retSel?'#fff':'var(--ts)')+';border:1px solid '+(retSel?'var(--sage)':'var(--bd)')+'">Retain</button>';
-    var offBtn = '<button onclick="dispoSetRetain(\''+r.company_id+'\',false,this)" class="btn btn-sm" style="background:'+(!retSel?'var(--jd)':'#fff')+';color:'+(!retSel?'#fff':'var(--ts)')+';border:1px solid '+(!retSel?'var(--jd)':'var(--bd)')+';margin-left:6px">Turn off</button>';
-    return '<tr data-cid="'+r.company_id+'">'+
-      '<td><a href="'+url+'" style="font-weight:700;color:var(--jd);text-decoration:none">'+_escHtml(r.name||'')+'</a>'+
-        (r.retained?' <span style="font-size:9px;font-weight:800;color:#065f46;background:rgba(16,185,129,.12);border-radius:100px;padding:2px 7px;text-transform:uppercase;letter-spacing:.04em">Retained</span>':'')+'</td>'+
-      '<td>'+_escHtml(r.market||'—')+'</td>'+
-      '<td style="white-space:nowrap">'+end+'</td>'+
-      '<td>'+_escHtml(r.dispo_type||r.plestatus||'—')+'</td>'+
-      '<td style="text-align:right;white-space:nowrap">'+retBtn+offBtn+'</td>'+
-    '</tr>';
-  }).join('');
-}
-function dispoSetRetain(cid, retained, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = '…'; }
-  fetch(_apiBase + '/api/disposition/retain', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal-Email': _email },
-    body: JSON.stringify({ company_id: cid, retained: retained })
-  })
-    .then(function(r){ return r.json(); })
-    .then(function(d){ if (d.status === 'ok') { _dispoLoaded = false; loadDisposition(true); }
-      else { if (btn) btn.disabled = false; alert('Could not update — please try again.'); } })
-    .catch(function(){ if (btn) btn.disabled = false; alert('Could not update — please try again.'); });
-}
 
 // ── Properties List ───────────────────────────────────────────────────────────
 var _propListData = [];
@@ -11585,56 +11509,80 @@ function renderSpendSheet(rows) {
 
 // ── Init: load Properties list on page load ───────────────────────────────────
 // Triage list — primary landing view
+// "What needs you" = an action inbox: Onboarding + Dispositions + Attention
+// (open tickets). Health-score rows dropped — Properties/Portfolio show those.
 function loadTriage() {
-  var listEl = document.getElementById('triage-list');
-  var subEl  = document.getElementById('triage-subtitle');
-  if (!listEl) return;
-  if (subEl) subEl.textContent = 'Loading triage…';
-  fetch(_apiBase + '/api/portfolio/triage', { headers: { 'X-Portal-Email': _email } })
+  var root  = document.getElementById('needs-you-root');
+  var subEl = document.getElementById('triage-subtitle');
+  if (!root) return;
+  if (subEl) subEl.textContent = 'Loading…';
+  fetch(_apiBase + '/api/needs-you', { headers: { 'X-Portal-Email': _email } })
     .then(function(r){ return r.json(); })
     .then(function(d){
       _triageLoaded = true;
-      var rows = (d && d.rows) || [];
-      var sum  = (d && d.summary) || {};
-      var bar  = document.getElementById('triage-summary-bar');
-      if (bar) bar.style.display = '';
-      setTri('triage-total', sum.total || 0);
-      setTri('triage-critical', sum.critical || 0);
-      setTri('triage-warning', sum.warning || 0);
-      setTri('triage-watch', sum.watch || 0);
-      setTri('triage-ontrack', sum.on_track || 0);
-      var attention = (sum.critical || 0) + (sum.warning || 0);
-      if (subEl) {
-        subEl.textContent = attention === 0
-          ? 'All clear across ' + (sum.total || 0) + ' properties.'
-          : attention + ' propert' + (attention === 1 ? 'y needs' : 'ies need') + ' attention out of ' + (sum.total || 0);
-      }
-      if (!rows.length) {
-        listEl.innerHTML =
-          '<div class="empty-state">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="20 6 9 17 4 12"/></svg>' +
-          '<div class="empty-state-title">All clear</div>' +
-          '<div class="empty-state-sub">Nothing needs your attention right now.</div>' +
-          '</div>';
-        return;
-      }
-      // Show a "rest are on track" collapsible if there are many on-track rows
-      var critWarn = rows.filter(function(r){ return r.severity === 'critical' || r.severity === 'warning'; });
-      var others   = rows.filter(function(r){ return r.severity !== 'critical' && r.severity !== 'warning'; });
-      var visible  = critWarn.length ? critWarn.concat(others.slice(0, Math.max(0, 12 - critWarn.length))) : rows.slice(0, 24);
-      var html = visible.map(triageRowHtml).join('');
-      var hidden = rows.length - visible.length;
-      if (hidden > 0) {
-        html += '<div style="margin-top:6px;font-size:12px;color:var(--tm);text-align:center">' +
-          hidden + ' more on track or watch — switch to Properties tab for the full list' +
-          '</div>';
-      }
-      listEl.innerHTML = html;
+      var onb = d.onboarding || [], dispo = d.dispositions || [], attn = d.attention || [];
+      if (subEl) subEl.textContent = onb.length + ' onboarding · ' + dispo.length + ' dispositioning · '
+        + attn.length + ' open ticket' + (attn.length === 1 ? '' : 's');
+      root.innerHTML =
+        _needsSection('Onboarding', 'Coming online — what still needs to be completed', _onbHtml(onb)) +
+        _needsSection('Dispositions', 'Retain to keep the campaign live, or let it turn off at the management end date', _dispoHtml(dispo)) +
+        _needsSection('Attention', 'Open tickets aging in the queue', attn.length ? attn.map(triageRowHtml).join('') : _needsEmpty('No open tickets need attention.'));
     })
     .catch(function(){
-      if (subEl) subEl.textContent = 'Could not load triage.';
-      listEl.innerHTML = '<div class="empty-state"><div class="empty-state-title">Triage unavailable</div><div class="empty-state-sub">Try refreshing in a moment.</div></div>';
+      if (subEl) subEl.textContent = 'Could not load.';
+      root.innerHTML = '<div class="empty-state"><div class="empty-state-title">Unavailable</div><div class="empty-state-sub">Try refreshing in a moment.</div></div>';
     });
+}
+function _needsSection(title, sub, bodyHtml) {
+  return '<div style="margin-bottom:26px">' +
+    '<div style="font-size:14px;font-weight:800;color:var(--jd);text-transform:uppercase;letter-spacing:.05em">' + title + '</div>' +
+    '<div style="font-size:12px;color:var(--tm);margin:2px 0 12px">' + sub + '</div>' + bodyHtml + '</div>';
+}
+function _needsEmpty(msg) {
+  return '<div style="padding:20px;text-align:center;color:var(--tm);font-size:13px;background:#fff;border:1px solid var(--bd);border-radius:10px">' + msg + '</div>';
+}
+function _onbHtml(rows) {
+  if (!rows.length) return _needsEmpty('No properties currently onboarding.');
+  var items = ['brief','budget','creative','gbp'], labels = {brief:'Brief',budget:'Budget',creative:'Creative',gbp:'GBP'};
+  return rows.map(function(r){
+    var url = 'https://digital.rpmliving.com/client-portal?uuid=' + encodeURIComponent(r.uuid);
+    var chips = items.map(function(k){ var ok = r.checklist[k];
+      return '<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:100px;' +
+        (ok ? 'background:rgba(16,185,129,.12);color:#065f46;border:1px solid rgba(16,185,129,.3)' : 'background:#F6F7F8;color:#8a949c;border:1px dashed var(--bd)') +
+        '">' + (ok ? '✓ ' : '○ ') + labels[k] + '</span>';
+    }).join(' ');
+    var col = r.done === 4 ? 'var(--sage)' : r.done >= 2 ? 'var(--amb)' : 'var(--red)';
+    return '<a href="' + url + '" style="display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:13px 18px;background:#fff;border:1px solid var(--bd);border-left:4px solid ' + col + ';border-radius:10px;margin-bottom:8px;text-decoration:none;color:inherit">' +
+      '<div><div style="font-weight:700;color:var(--jd)">' + escapeHtml(r.name) + '</div>' +
+        '<div style="font-size:11px;color:var(--tm);margin-bottom:7px">' + escapeHtml(r.market || '') + '</div>' + chips + '</div>' +
+      '<div style="font-size:13px;font-weight:800;color:' + col + ';white-space:nowrap">' + r.done + '/4</div></a>';
+  }).join('');
+}
+function _dispoHtml(rows) {
+  if (!rows.length) return _needsEmpty('No dispositioning properties in the review window.');
+  return rows.map(function(r){
+    var end = (r.managementend || '').slice(0,10) || '—';
+    var url = 'https://digital.rpmliving.com/client-portal?uuid=' + encodeURIComponent(r.uuid);
+    var rs = r.retained;
+    var retBtn = '<button onclick="dispoSetRetain(\'' + r.company_id + '\',true,this)" class="btn btn-sm" style="background:' + (rs?'var(--sage)':'#fff') + ';color:' + (rs?'#fff':'var(--ts)') + ';border:1px solid ' + (rs?'var(--sage)':'var(--bd)') + '">Retain</button>';
+    var offBtn = '<button onclick="dispoSetRetain(\'' + r.company_id + '\',false,this)" class="btn btn-sm" style="background:' + (!rs?'var(--jd)':'#fff') + ';color:' + (!rs?'#fff':'var(--ts)') + ';border:1px solid ' + (!rs?'var(--jd)':'var(--bd)') + ';margin-left:6px">Turn off</button>';
+    return '<div style="display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:13px 18px;background:#fff;border:1px solid var(--bd);border-radius:10px;margin-bottom:8px">' +
+      '<div><a href="' + url + '" style="font-weight:700;color:var(--jd);text-decoration:none">' + escapeHtml(r.name) + '</a>' +
+        (r.retained ? ' <span style="font-size:9px;font-weight:800;color:#065f46;background:rgba(16,185,129,.12);border-radius:100px;padding:2px 7px;text-transform:uppercase">Retained</span>' : '') +
+        '<div style="font-size:11px;color:var(--tm)">' + escapeHtml(r.market || '') + ' · ends ' + end + '</div></div>' +
+      '<div style="white-space:nowrap">' + retBtn + offBtn + '</div></div>';
+  }).join('');
+}
+function dispoSetRetain(cid, retained, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  fetch(_apiBase + '/api/disposition/retain', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal-Email': _email },
+    body: JSON.stringify({ company_id: cid, retained: retained })
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (d.status === 'ok') { _triageLoaded = false; loadTriage(); }
+      else { if (btn) btn.disabled = false; alert('Could not update — please try again.'); } })
+    .catch(function(){ if (btn) btn.disabled = false; alert('Could not update — please try again.'); });
 }
 function reloadTriage() {
   // ?force=true requires INTERNAL_API_KEY auth, so the portal can't bust

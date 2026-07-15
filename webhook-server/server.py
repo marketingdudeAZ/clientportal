@@ -6254,6 +6254,39 @@ def disposition_retain():
                     "retained": retained}), (200 if ok else 502)
 
 
+@app.route("/api/needs-you", methods=["GET", "OPTIONS"])
+def needs_you():
+    """The 'What needs you' action inbox: onboarding + dispositions + open tickets.
+
+    Onboarding = properties coming online + completeness flags. Dispositions =
+    retain/turn-off review. Attention = aging/open tickets (the non-health
+    triage signals). Health-score rows are intentionally dropped — Properties
+    and Portfolio Dashboard already show those.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
+    onb = dispo = attn = []
+    try:
+        import onboarding
+        onb = onboarding.list_onboarding()
+    except Exception as e:
+        logger.warning("needs-you onboarding failed: %s", e)
+    try:
+        import disposition
+        dispo = disposition.list_dispositioning()
+    except Exception as e:
+        logger.warning("needs-you dispositions failed: %s", e)
+    try:
+        import triage as _tri
+        rows = (_tri.get_portfolio_triage() or {}).get("rows", [])
+        attn = [r for r in rows if r.get("reason_kind") in ("ticket_aging", "ticket_open")]
+    except Exception as e:
+        logger.warning("needs-you attention failed: %s", e)
+    return jsonify({"onboarding": onb, "dispositions": dispo, "attention": attn})
+
+
 # ─── AI SWOT (Performance page) ─────────────────────────────────────────────
 
 
