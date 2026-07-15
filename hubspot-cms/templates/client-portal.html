@@ -3374,6 +3374,15 @@ function _bootstrapResolveThenLoad() {
 document.addEventListener('DOMContentLoaded', function() {
   _bootstrapResolveThenLoad();  // resolve uuid→company_id, then load
 
+  // Deep-link (onboarding wizard): ?tab=brief|services|assets opens that section.
+  var _deepTab = new URLSearchParams(location.search).get('tab');
+  if (_deepTab) {
+    setTimeout(function(){
+      var el = document.querySelector('.nav-item[onclick*="nav(\'' + _deepTab + '\'"]');
+      try { nav(_deepTab, el); } catch(e){}
+    }, 400);
+  }
+
   // Stamp the "You viewed the client portal" activity row with real time (not hardcoded 2:34 PM)
   var tlTime = document.getElementById('tl-session-time');
   if (tlTime) {
@@ -11541,37 +11550,77 @@ function _needsSection(title, sub, bodyHtml) {
 function _needsEmpty(msg) {
   return '<div style="padding:20px;text-align:center;color:var(--tm);font-size:13px;background:#fff;border:1px solid var(--bd);border-radius:10px">' + msg + '</div>';
 }
+// Onboarding wizard: each item + which property-portal tab completes it.
+// GBP has no portal surface (connected externally) so it links to the property.
+var _ONB_ITEMS = [
+  { k:'brief',    label:'Property brief',          tab:'brief',    cta:'Complete the brief' },
+  { k:'budget',   label:'Budget',                  tab:'services', cta:'Set the budget' },
+  { k:'creative', label:'Creative / photos',       tab:'assets',   cta:'Upload creative' },
+  { k:'gbp',      label:'Google Business Profile',  tab:'',         cta:'Connect GBP' }
+];
 function _onbHtml(rows) {
   if (!rows.length) return _needsEmpty('No properties currently onboarding.');
-  var items = ['brief','budget','creative','gbp'], labels = {brief:'Brief',budget:'Budget',creative:'Creative',gbp:'GBP'};
-  return rows.map(function(r){
+  return rows.map(function(r, i){
     var url = 'https://digital.rpmliving.com/client-portal?uuid=' + encodeURIComponent(r.uuid);
-    var chips = items.map(function(k){ var ok = r.checklist[k];
+    var col = r.done === 4 ? 'var(--sage)' : r.done >= 2 ? 'var(--amb)' : 'var(--red)';
+    var chips = _ONB_ITEMS.map(function(it){ var ok = r.checklist[it.k];
       return '<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:100px;' +
         (ok ? 'background:rgba(16,185,129,.12);color:#065f46;border:1px solid rgba(16,185,129,.3)' : 'background:#F6F7F8;color:#8a949c;border:1px dashed var(--bd)') +
-        '">' + (ok ? '✓ ' : '○ ') + labels[k] + '</span>';
+        '">' + (ok ? '✓ ' : '○ ') + it.label.split(' ')[0] + '</span>';
     }).join(' ');
-    var col = r.done === 4 ? 'var(--sage)' : r.done >= 2 ? 'var(--amb)' : 'var(--red)';
-    return '<a href="' + url + '" style="display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:13px 18px;background:#fff;border:1px solid var(--bd);border-left:4px solid ' + col + ';border-radius:10px;margin-bottom:8px;text-decoration:none;color:inherit">' +
-      '<div><div style="font-weight:700;color:var(--jd)">' + escapeHtml(r.name) + '</div>' +
-        '<div style="font-size:11px;color:var(--tm);margin-bottom:7px">' + escapeHtml(r.market || '') + '</div>' + chips + '</div>' +
-      '<div style="font-size:13px;font-weight:800;color:' + col + ';white-space:nowrap">' + r.done + '/4</div></a>';
+    var detail = _ONB_ITEMS.map(function(it){
+      var ok = r.checklist[it.k];
+      var right = ok
+        ? '<span style="color:#065f46;font-weight:700;font-size:12px">✓ Done</span>'
+        : (it.tab
+            ? '<a href="' + url + '&tab=' + it.tab + '" class="btn btn-sm" style="background:var(--jd);color:#fff;border:none">' + it.cta + ' →</a>'
+            : '<a href="' + url + '" class="btn btn-sm" style="background:#fff;color:var(--ts);border:1px solid var(--bd)">' + it.cta + ' →</a>');
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--bdl)">' +
+        '<span style="font-size:13px;color:var(--tp);font-weight:600">' + it.label + '</span>' + right + '</div>';
+    }).join('');
+    return '<div style="background:#fff;border:1px solid var(--bd);border-left:4px solid ' + col + ';border-radius:10px;margin-bottom:8px;overflow:hidden">' +
+      '<div onclick="_onbToggle(' + i + ')" style="display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:13px 18px;cursor:pointer">' +
+        '<div><div style="font-weight:700;color:var(--jd)">' + escapeHtml(r.name) + '</div>' +
+          '<div style="font-size:11px;color:var(--tm);margin:3px 0 7px">' + escapeHtml(r.market || '') + '</div>' + chips + '</div>' +
+        '<div style="font-size:13px;font-weight:800;color:' + col + ';white-space:nowrap">' + r.done + '/4</div>' +
+        '<svg id="onb-chev-' + i + '" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--tm)" stroke-width="2" style="transition:transform .15s"><polyline points="6 9 12 15 18 9"/></svg>' +
+      '</div>' +
+      '<div id="onb-detail-' + i + '" style="display:none;padding:2px 18px 12px">' + detail + '</div>' +
+    '</div>';
   }).join('');
+}
+function _onbToggle(i){
+  var d = document.getElementById('onb-detail-' + i), c = document.getElementById('onb-chev-' + i);
+  if (!d) return;
+  var open = d.style.display !== 'none';
+  d.style.display = open ? 'none' : 'block';
+  if (c) c.style.transform = open ? '' : 'rotate(180deg)';
 }
 function _dispoHtml(rows) {
   if (!rows.length) return _needsEmpty('No dispositioning properties in the review window.');
-  return rows.map(function(r){
-    var end = (r.managementend || '').slice(0,10) || '—';
+  var today = new Date(); today.setHours(0,0,0,0);
+  var body = rows.map(function(r){
+    var endRaw = (r.managementend || '').slice(0,10);
+    var end = endRaw || '—';
+    var pastDue = false, daysOver = 0;
+    if (endRaw) { var ed = new Date(endRaw + 'T00:00:00'); if (!isNaN(ed.getTime()) && ed < today) { pastDue = true; daysOver = Math.round((today - ed) / 86400000); } }
     var url = 'https://digital.rpmliving.com/client-portal?uuid=' + encodeURIComponent(r.uuid);
     var rs = r.retained;
     var retBtn = '<button onclick="dispoSetRetain(\'' + r.company_id + '\',true,this)" class="btn btn-sm" style="background:' + (rs?'var(--sage)':'#fff') + ';color:' + (rs?'#fff':'var(--ts)') + ';border:1px solid ' + (rs?'var(--sage)':'var(--bd)') + '">Retain</button>';
     var offBtn = '<button onclick="dispoSetRetain(\'' + r.company_id + '\',false,this)" class="btn btn-sm" style="background:' + (!rs?'var(--jd)':'#fff') + ';color:' + (!rs?'#fff':'var(--ts)') + ';border:1px solid ' + (!rs?'var(--jd)':'var(--bd)') + ';margin-left:6px">Turn off</button>';
-    return '<div style="display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:13px 18px;background:#fff;border:1px solid var(--bd);border-radius:10px;margin-bottom:8px">' +
-      '<div><a href="' + url + '" style="font-weight:700;color:var(--jd);text-decoration:none">' + escapeHtml(r.name) + '</a>' +
-        (r.retained ? ' <span style="font-size:9px;font-weight:800;color:#065f46;background:rgba(16,185,129,.12);border-radius:100px;padding:2px 7px;text-transform:uppercase">Retained</span>' : '') +
-        '<div style="font-size:11px;color:var(--tm)">' + escapeHtml(r.market || '') + ' · ends ' + end + '</div></div>' +
-      '<div style="white-space:nowrap">' + retBtn + offBtn + '</div></div>';
+    var dateCell = '<span style="font-weight:' + (pastDue?'800':'600') + ';color:' + (pastDue?'var(--red)':'var(--tp)') + '">' + end + '</span>' +
+      (pastDue ? ' <span style="font-size:9px;font-weight:800;color:#fff;background:var(--red);border-radius:100px;padding:2px 7px;text-transform:uppercase;letter-spacing:.03em">Past due ' + daysOver + 'd</span>' : '');
+    return '<tr>' +
+      '<td><a href="' + url + '" style="font-weight:700;color:var(--jd);text-decoration:none">' + escapeHtml(r.name) + '</a>' +
+        (r.retained ? ' <span style="font-size:9px;font-weight:800;color:#065f46;background:rgba(16,185,129,.12);border-radius:100px;padding:2px 7px;text-transform:uppercase">Retained</span>' : '') + '</td>' +
+      '<td>' + escapeHtml(r.market || '—') + '</td>' +
+      '<td style="white-space:nowrap">' + dateCell + '</td>' +
+      '<td style="text-align:right;white-space:nowrap">' + retBtn + offBtn + '</td>' +
+    '</tr>';
   }).join('');
+  return '<div class="prop-list-table-card"><table class="pl-table">' +
+    '<thead><tr><th>Property</th><th>Market</th><th>Management End Date</th><th style="text-align:right">Decision</th></tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div>';
 }
 function dispoSetRetain(cid, retained, btn) {
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
