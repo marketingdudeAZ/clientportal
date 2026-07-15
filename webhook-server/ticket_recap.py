@@ -74,7 +74,12 @@ SYSTEM_PROMPT = (
     "guarantee a profile will not be suspended or unverified — say only that it "
     "reduces the likelihood.\n"
     "- If you are unsure what a named service does, describe it plainly by name "
-    "without inventing its benefit, or omit it — do not guess.\n\n"
+    "without inventing its benefit, or omit it — do not guess.\n"
+    "- TARGETING & LOCATION: do NOT claim specific audience targeting, neighborhood "
+    "or area names, or phrasing like 'targeting [X] renters in [Y] area' — we may "
+    "not have configured that exact targeting. Keep it high level: the budgets and "
+    "channels that are turned on, what is running, that tracking is set up, and any "
+    "deliverables. Do not describe WHO or WHERE the campaigns target.\n\n"
     "Return ONLY JSON: {\"note\":\"…\", \"surfaced_problem\":true|false, "
     "\"attribution\":\"none|property_marketing|external|internal\", "
     "\"needs_review\":true|false, \"review_reason\":\"…\"}. Set needs_review=true if "
@@ -114,7 +119,10 @@ def infer_ticket_type(task: dict) -> str:
 # ClickUp field names that are noise/internal — never feed them to the recap.
 _FIELD_SKIP = {"qa status", "task progress", "comment count", "priority", "market",
                "account manager", "submitter email", "property url", "property domain",
-               "website", "property code"}
+               "website", "property code",
+               # positioning/aspirational input — NOT a confirmed action; feeding it
+               # makes the recap claim targeting/locations we may not have configured.
+               "key messages", "key message", "target audience", "positioning"}
 
 
 def _internal_narrative(task: dict, comments: list) -> str:
