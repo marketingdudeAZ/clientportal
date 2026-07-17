@@ -120,9 +120,19 @@ def process_completed_task(task_id, dry_run=False):
                 "company": name, "note": recap["note"], "needs_review": recap.get("needs_review"),
                 "attribution": recap.get("attribution"), "flags": recap.get("flags")}
 
+    # Detailed recap PDF (ticket link + who/what/when) — attached to the note.
+    ticket_url = "https://app.clickup.com/t/" + str(task_id)
+    pdf_bytes = None
+    try:
+        import ticket_recap_pdf
+        pdf_bytes = ticket_recap_pdf.build_recap_pdf(task, comments, recap["note"], ticket_url)
+    except Exception as e:
+        logger.warning("clickup_recap: PDF build failed for %s: %s", task_id, e)
+
     res = ticket_recap_writer.post_recap_to_company(
         company_id, recap["note"], name, ttype,
         needs_review=recap.get("needs_review"), review_reason=recap.get("review_reason"),
+        pdf_bytes=pdf_bytes,
     )
     clickup_client.add_tag(task_id, PROCESSED_TAG)
     logger.info("clickup_recap: posted recap for task %s → company %s (%s)", task_id, company_id, method)

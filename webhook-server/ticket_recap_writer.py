@@ -26,6 +26,31 @@ def _headers():
     return {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
 
 
+def _upload_pdf(pdf_bytes: bytes, filename: str):
+    """Upload a PDF to HubSpot Files — a permanent, non-expiring public URL.
+    Returns (file_id, url) or (None, None). file_id is used to attach it to the note.
+    """
+    if not (HUBSPOT_API_KEY and pdf_bytes):
+        return None, None
+    import io
+    try:
+        r = requests.post(
+            f"{HS}/files/v3/files",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"},  # multipart; no JSON content-type
+            files={"file": (filename, io.BytesIO(pdf_bytes), "application/pdf")},
+            data={"folderPath": "/ticket-recaps",
+                  "options": '{"access":"PUBLIC_NOT_INDEXABLE","overwrite":false}'},
+            timeout=25,
+        )
+        if r.ok:
+            j = r.json()
+            return j.get("id"), j.get("url")
+        logger.warning("recap-writer: PDF upload failed (%s): %s", r.status_code, r.text[:200])
+    except requests.RequestException as e:
+        logger.warning("recap-writer: PDF upload error: %s", e)
+    return None, None
+
+
 def _company_owner_id(company_id: str) -> str | None:
     try:
         r = requests.get(
@@ -41,14 +66,24 @@ def _company_owner_id(company_id: str) -> str | None:
 
 def post_recap_to_company(company_id: str, note_text: str, property_name: str,
                           ticket_type: str = "general", needs_review: bool = False,
-                          review_reason: str = "") -> dict:
-    """Create the recap note (owner-authored) + an AM close-out task. Returns ids."""
-    out = {"note_id": None, "task_id": None, "owner_id": None}
+                          review_reason: str = "", pdf_bytes: bytes = None) -> dict:
+    """Create the recap note (owner-authored) + an AM close-out task. Returns ids.
+
+    If pdf_bytes is given, upload it to HubSpot Files (permanent URL) and attach
+    it to the note (the detailed internal recap).
+    """
+    out = {"note_id": None, "task_id": None, "owner_id": None, "pdf_url": None}
     if not (HUBSPOT_API_KEY and company_id and (note_text or "").strip()):
         return out
     owner_id = _company_owner_id(company_id)
     out["owner_id"] = owner_id
     ts = int(time.time() * 1000)
+
+    # 0. Detailed recap PDF → HubSpot Files (permanent), attached to the note.
+    file_id = None
+    if pdf_bytes:
+        safe = "".join(c for c in (property_name or "recap") if c.isalnum() or c in " -_").strip()[:60] or "recap"
+        file_id, out["pdf_url"] = _upload_pdf(pdf_bytes, f"Ticket Recap - {safe}.pdf")
 
     # 1. Note — attributed to the company owner (hubspot_owner_id).
     label = ticket_type.replace("_", " ").title()
@@ -56,6 +91,8 @@ def post_recap_to_company(company_id: str, note_text: str, property_name: str,
     note_props = {"hs_note_body": body, "hs_timestamp": ts}
     if owner_id:
         note_props["hubspot_owner_id"] = owner_id
+    if file_id:
+        note_props["hs_attachment_ids"] = str(file_id)  # attaches the PDF to the note
     try:
         nr = requests.post(f"{HS}/crm/v3/objects/notes", headers=_headers(),
                            json={"properties": note_props}, timeout=12)
