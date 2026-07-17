@@ -53,11 +53,52 @@ def get_task(task_id: str) -> dict[str, Any] | None:
     return r.json()
 
 
-def get_comments(task_id: str) -> list[dict[str, Any]]:
-    """Fetch a task's comment thread (the work log the recap summarizes).
+def _shape_comment(c: dict) -> dict[str, Any]:
+    """Normalize one ClickUp comment into the recap's shape."""
+    user = c.get("user") or {}
+    assignee = c.get("assignee") or {}
+    return {
+        "id": c.get("id"),
+        "user": user,
+        "author": user.get("username") or user.get("email") or "team member",
+        "text": c.get("comment_text") or "",
+        "date": c.get("date"),
+        "resolved": bool(c.get("resolved")),
+        "assignee": (assignee.get("username") or assignee.get("email")) if assignee else None,
+        "reactions": len(c.get("reactions") or []),
+        "reply_count": c.get("reply_count") or 0,
+        "replies": [],
+    }
 
-    Returns a list of {author, text, date} oldest-first. Empty on any failure —
-    a recap can still be built from the task description alone.
+
+def get_comment_replies(comment_id: str) -> list[dict[str, Any]]:
+    """Fetch threaded replies under one comment, oldest-first. Best-effort."""
+    if not CLICKUP_API_KEY or not comment_id:
+        return []
+    try:
+        r = requests.get(
+            f"{CU_BASE}/comment/{comment_id}/reply",
+            headers=_headers(),
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp get_comment_replies network error for %s: %s", comment_id, e)
+        return []
+    if not _ok(r):
+        logger.warning("ClickUp get_comment_replies %s -> %s %s", comment_id, r.status_code, r.text[:200])
+        return []
+    out = [_shape_comment(c) for c in (r.json().get("comments") or [])]
+    out.reverse()  # ClickUp returns newest-first
+    return out
+
+
+def get_comments(task_id: str, with_replies: bool = True, max_reply_fetches: int = 40) -> list[dict[str, Any]]:
+    """Fetch a task's full comment thread — the work log the recap summarizes.
+
+    Returns a list of shaped comments oldest-first, each carrying the author,
+    text, timestamp, resolved/assignee state, reaction count, and (when
+    with_replies) its threaded replies. Empty on any failure — a recap can
+    still be built from the task description alone.
     """
     if not CLICKUP_API_KEY or not task_id:
         return []
@@ -73,16 +114,55 @@ def get_comments(task_id: str) -> list[dict[str, Any]]:
     if not _ok(r):
         logger.warning("ClickUp get_comments %s -> %s %s", task_id, r.status_code, r.text[:200])
         return []
-    out = []
-    for c in (r.json().get("comments") or []):
-        out.append({
-            "author": ((c.get("user") or {}).get("username")
-                       or (c.get("user") or {}).get("email") or "team member"),
-            "text": c.get("comment_text") or "",
-            "date": c.get("date"),
-        })
+    out = [_shape_comment(c) for c in (r.json().get("comments") or [])]
     out.reverse()  # ClickUp returns newest-first; recap reads chronologically
+    if with_replies:
+        fetched = 0
+        for c in out:
+            if c["reply_count"] and fetched < max_reply_fetches:
+                c["replies"] = get_comment_replies(c["id"])
+                fetched += 1
     return out
+
+
+def people_involved(task: dict, comments: list[dict]) -> list[dict[str, Any]]:
+    """Roll up everyone who touched the ticket, with the role(s) they played.
+
+    Sources: task creator (Requested), assignees (Assigned), watchers
+    (Watching), and everyone who left a comment or reply (Commented). Deduped
+    by user id, ordered by role priority so the recap reads top-down.
+    """
+    order = ["Requested", "Assigned", "Watching", "Commented"]
+    people: dict[Any, dict] = {}
+
+    def add(user: dict | None, role: str):
+        if not user:
+            return
+        name = user.get("username") or user.get("email")
+        if not name:
+            return
+        key = user.get("id") or name
+        p = people.setdefault(key, {"name": name, "email": user.get("email"), "roles": []})
+        if role not in p["roles"]:
+            p["roles"].append(role)
+
+    add(task.get("creator"), "Requested")
+    for a in (task.get("assignees") or []):
+        add(a, "Assigned")
+    for w in (task.get("watchers") or []):
+        add(w, "Watching")
+    for c in comments:
+        add(c.get("user"), "Commented")
+        for rep in (c.get("replies") or []):
+            add(rep.get("user"), "Commented")
+
+    def sort_key(p):
+        first = min((order.index(r) for r in p["roles"] if r in order), default=99)
+        return (first, p["name"].lower())
+
+    for p in people.values():
+        p["roles"].sort(key=lambda r: order.index(r) if r in order else 99)
+    return sorted(people.values(), key=sort_key)
 
 
 def custom_field_value(task: dict, name: str) -> Any:
