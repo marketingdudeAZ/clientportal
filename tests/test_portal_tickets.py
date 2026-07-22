@@ -106,6 +106,10 @@ class CoerceAndCreate(unittest.TestCase):
                     "status": {"status": "to do"}, "date_created": "1720000000000"}
 
         self.patchers = [
+            # Patch the module attribute directly so the test doesn't depend on
+            # whether some earlier-imported test set CLICKUP_API_KEY before
+            # config froze it (the full-suite import-order gotcha).
+            mock.patch.object(clickup_client, "CLICKUP_API_KEY", "test-key"),
             mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()),
             mock.patch.object(clickup_client, "create_task", side_effect=_fake_create_task),
             mock.patch("hubspot_client.get_company",
