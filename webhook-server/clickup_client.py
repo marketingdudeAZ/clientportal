@@ -53,6 +53,103 @@ def get_task(task_id: str) -> dict[str, Any] | None:
     return r.json()
 
 
+def get_list_fields(list_id: str) -> list[dict[str, Any]]:
+    """Return a list's custom-field definitions (`GET /list/{id}/field`).
+
+    Each field carries `id`, `name`, `type`, `required`, and (for
+    drop_down/labels) a `type_config.options` list. The portal renders its
+    per-type ticket form directly from this, so a field your team adds in
+    ClickUp shows up in the portal with no redeploy. Empty on any failure —
+    the caller degrades to a plain description-only form.
+    """
+    if not CLICKUP_API_KEY or not list_id:
+        return []
+    try:
+        r = requests.get(
+            f"{CU_BASE}/list/{list_id}/field",
+            headers=_headers(),
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp get_list_fields network error for %s: %s", list_id, e)
+        return []
+    if not _ok(r):
+        logger.warning("ClickUp get_list_fields %s -> %s %s", list_id, r.status_code, r.text[:200])
+        return []
+    return r.json().get("fields") or []
+
+
+def get_list(list_id: str) -> dict[str, Any] | None:
+    """Fetch a list's metadata (name, status set). Used to map ClickUp statuses."""
+    if not CLICKUP_API_KEY or not list_id:
+        return None
+    try:
+        r = requests.get(f"{CU_BASE}/list/{list_id}", headers=_headers(), timeout=_TIMEOUT)
+    except requests.RequestException as e:
+        logger.warning("ClickUp get_list network error for %s: %s", list_id, e)
+        return None
+    if not _ok(r):
+        logger.warning("ClickUp get_list %s -> %s %s", list_id, r.status_code, r.text[:200])
+        return None
+    return r.json()
+
+
+def get_tasks(list_id: str, *, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Fetch tasks in a list (single page). Best-effort — empty on failure."""
+    if not CLICKUP_API_KEY or not list_id:
+        return []
+    try:
+        r = requests.get(
+            f"{CU_BASE}/list/{list_id}/task",
+            headers=_headers(),
+            params=params or {},
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp get_tasks network error for %s: %s", list_id, e)
+        return []
+    if not _ok(r):
+        logger.warning("ClickUp get_tasks %s -> %s %s", list_id, r.status_code, r.text[:200])
+        return []
+    return r.json().get("tasks") or []
+
+
+def discover_workspace_lists(workspace_id: str) -> list[dict[str, Any]]:
+    """Walk a workspace → spaces → (folders) → lists and return every list.
+
+    Returns `[{id, name, space, folder}]`. This is the one-shot helper for
+    pulling the 7 ticket-list IDs the portal needs without hand-copying them
+    out of ClickUp URLs (which carry *view* IDs, not list IDs). Best-effort:
+    partial results are returned if any single call fails.
+    """
+    if not CLICKUP_API_KEY or not workspace_id:
+        return []
+
+    def _get(path: str, key: str) -> list[dict]:
+        try:
+            r = requests.get(f"{CU_BASE}/{path}", headers=_headers(), timeout=_TIMEOUT)
+        except requests.RequestException as e:
+            logger.warning("ClickUp discover %s network error: %s", path, e)
+            return []
+        if not _ok(r):
+            logger.warning("ClickUp discover %s -> %s %s", path, r.status_code, r.text[:200])
+            return []
+        return r.json().get(key) or []
+
+    out: list[dict[str, Any]] = []
+    for space in _get(f"team/{workspace_id}/space", "spaces"):
+        sid, sname = space.get("id"), space.get("name")
+        if not sid:
+            continue
+        for lst in _get(f"space/{sid}/list", "lists"):
+            out.append({"id": lst.get("id"), "name": lst.get("name"), "space": sname, "folder": None})
+        for folder in _get(f"space/{sid}/folder", "folders"):
+            fname = folder.get("name")
+            for lst in (folder.get("lists") or []):
+                out.append({"id": lst.get("id"), "name": lst.get("name"), "space": sname, "folder": fname})
+    return out
+
+
 def _shape_comment(c: dict) -> dict[str, Any]:
     """Normalize one ClickUp comment into the recap's shape."""
     user = c.get("user") or {}
@@ -296,8 +393,14 @@ def create_task(
     status: str | None = None,
     priority: int | None = None,
     assignees: list[int] | None = None,
+    custom_fields: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
-    """Create a task in a ClickUp list. Returns the new task dict on success."""
+    """Create a task in a ClickUp list. Returns the new task dict on success.
+
+    `custom_fields` is ClickUp's `[{"id": field_id, "value": ...}]` shape —
+    the portal builds it from the list's field definitions so per-type form
+    inputs land on the right ClickUp fields.
+    """
     if not CLICKUP_API_KEY or not list_id or not name:
         return None
     payload: dict[str, Any] = {"name": name}
@@ -311,6 +414,8 @@ def create_task(
         payload["priority"] = priority
     if assignees:
         payload["assignees"] = assignees
+    if custom_fields:
+        payload["custom_fields"] = custom_fields
     try:
         r = requests.post(
             f"{CU_BASE}/list/{list_id}/task",

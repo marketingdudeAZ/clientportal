@@ -3076,12 +3076,15 @@ body{line-height:1.55}
 
   <div class="create-ticket-form" id="create-ticket-form">
     <div style="font-size:14px;font-weight:700;color:var(--jd);margin-bottom:16px">New Work Request</div>
-    <div class="form-row"><label class="form-label">Title</label><input class="form-input" placeholder="What do you need?"/></div>
-    <div class="form-row"><label class="form-label">Description</label><textarea class="form-textarea" placeholder="Details, context, any relevant links…"></textarea></div>
-    <div class="form-row-2">
-      <div class="form-row" style="margin-bottom:0"><label class="form-label">Priority</label><select class="form-select"><option>High</option><option selected>Medium</option><option>Low</option></select></div>
-      <div class="form-row" style="margin-bottom:0"><label class="form-label">Category</label><select class="form-select"><option>SEO</option><option>Paid Search</option><option>Paid Social</option><option>Reputation</option><option>Creative</option><option>Geofence</option><option>Performance Max</option><option>Other</option></select></div>
+    <div class="form-row"><label class="form-label">Request type</label>
+      <select class="form-select" id="ct-type" onchange="renderTicketFields(this.value)">
+        <option value="">Loading request types…</option>
+      </select>
     </div>
+    <div class="form-row"><label class="form-label">Subject</label><input class="form-input" id="ct-subject" placeholder="Briefly, what do you need?"/></div>
+    <!-- Fields for the selected type render here, read live from ClickUp. Property
+         fields we already know (Property URL, Market, code, AM) are pre-filled server-side. -->
+    <div id="ct-fields"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary btn-sm" onclick="submitTicket()">Next</button>
       <button class="btn btn-ghost btn-sm" onclick="toggleCreateTicket()">Cancel</button>
@@ -3686,42 +3689,102 @@ function toggleTicket(id) {
 }
 
 function toggleCreateTicket() {
-  document.getElementById('create-ticket-form').classList.toggle('show');
+  var form = document.getElementById('create-ticket-form');
+  form.classList.toggle('show');
+  if (form.classList.contains('show')) _loadTicketTypes();
+}
+
+// Ticket types are ClickUp lists; their forms are read LIVE from ClickUp so a
+// field your team adds there appears here with no redeploy. Loaded once.
+var __TICKET_TYPES__ = null;
+function _loadTicketTypes(force) {
+  var sel = document.getElementById('ct-type');
+  if (!sel) return;
+  if (__TICKET_TYPES__ && !force) return;
+  var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  fetch(API_BASE + '/api/portal-tickets/types', {
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    __TICKET_TYPES__ = {};
+    var types = (data && data.types) || [];
+    if (!types.length) { sel.innerHTML = '<option value="">No request types available</option>'; return; }
+    sel.innerHTML = '<option value="">Select a request type…</option>' +
+      types.map(function(t){
+        __TICKET_TYPES__[t.key] = t;
+        return '<option value="' + _escAttr(t.key) + '">' + _escHtml(t.label) + '</option>';
+      }).join('');
+  })
+  .catch(function(){ sel.innerHTML = '<option value="">Could not load request types</option>'; });
+}
+
+// Render the selected type's fields into the form.
+function renderTicketFields(typeKey) {
+  var box = document.getElementById('ct-fields');
+  if (!box) return;
+  box.innerHTML = '';
+  var t = __TICKET_TYPES__ && __TICKET_TYPES__[typeKey];
+  if (!t || !t.fields) return;
+  box.innerHTML = t.fields.map(function(f){
+    var req  = f.required ? ' <span style="color:#c0392b">*</span>' : '';
+    var attr = 'data-fid="' + _escAttr(f.id) + '" data-req="' + (f.required ? '1' : '') + '"';
+    var opts = (f.options || []).map(function(o){
+      return '<option value="' + _escAttr(o.label) + '">' + _escHtml(o.label) + '</option>';
+    }).join('');
+    var ctl;
+    switch (f.input) {
+      case 'textarea':    ctl = '<textarea class="form-textarea ct-f" ' + attr + '></textarea>'; break;
+      case 'select':      ctl = '<select class="form-select ct-f" ' + attr + '><option value="">Select…</option>' + opts + '</select>'; break;
+      case 'multiselect': ctl = '<select class="form-select ct-f" multiple ' + attr + '>' + opts + '</select>'; break;
+      case 'checkbox':    ctl = '<input type="checkbox" class="ct-f" ' + attr + '/>'; break;
+      case 'number':
+      case 'currency':    ctl = '<input type="number" step="any" class="form-input ct-f" ' + attr + '/>'; break;
+      case 'date':        ctl = '<input type="date" class="form-input ct-f" ' + attr + '/>'; break;
+      case 'email':       ctl = '<input type="email" class="form-input ct-f" ' + attr + '/>'; break;
+      case 'url':         ctl = '<input type="url" class="form-input ct-f" ' + attr + '/>'; break;
+      default:            ctl = '<input type="text" class="form-input ct-f" ' + attr + '/>';
+    }
+    return '<div class="form-row"><label class="form-label">' + _escHtml(f.name || '') + req + '</label>' + ctl + '</div>';
+  }).join('');
 }
 
 function submitTicket() {
-  var form     = document.getElementById('create-ticket-form');
-  var title    = form.querySelector('.form-input').value.trim();
-  var desc     = form.querySelector('.form-textarea').value.trim();
-  var selects  = form.querySelectorAll('.form-select');
-  var priority = selects[0] ? selects[0].value : 'Medium';
-  var category = selects[1] ? selects[1].value : 'Other';
+  var form    = document.getElementById('create-ticket-form');
+  var typeKey = (document.getElementById('ct-type') || {}).value || '';
+  var subject = ((document.getElementById('ct-subject') || {}).value || '').trim();
 
-  if (!title) { alert('Please enter a title for your request.'); return; }
+  if (!typeKey) { alert('Please choose a request type.'); return; }
+  if (!subject) { alert('Please enter a subject for your request.'); return; }
 
-  // Remove any existing KB deflection panel before searching
+  // Required-field check on the dynamic fields.
+  var missing = [];
+  form.querySelectorAll('#ct-fields .ct-f').forEach(function(el){
+    if (el.getAttribute('data-req') !== '1') return;
+    var v = (el.type === 'checkbox') ? el.checked : (el.value || '').trim();
+    if (!v) {
+      var lbl = el.closest('.form-row').querySelector('.form-label');
+      missing.push(lbl ? lbl.textContent.replace(' *', '').trim() : 'a required field');
+    }
+  });
+  if (missing.length) { alert('Please fill in: ' + missing.join(', ')); return; }
+
   var existingPanel = form.querySelector('.kb-deflect-panel');
   if (existingPanel) existingPanel.remove();
 
   var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
-  // Step 1 — search KB first
-  fetch(API_BASE + '/api/kb-search?q=' + encodeURIComponent(title), {
+  // Deflect against the knowledge base first, using the subject as the query.
+  fetch(API_BASE + '/api/kb-search?q=' + encodeURIComponent(subject), {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
   .then(function(r){ return r.json(); })
   .then(function(kb) {
     var articles = (kb.articles || []).filter(function(a){ return a.title && a.url; });
-    if (articles.length) {
-      _showKBDeflect(form, articles, function(){ _doSubmitTicket(form, title, desc, priority, category); });
-    } else {
-      _doSubmitTicket(form, title, desc, priority, category);
-    }
+    if (articles.length) _showKBDeflect(form, articles, function(){ _doSubmitTicket(form, typeKey, subject); });
+    else _doSubmitTicket(form, typeKey, subject);
   })
-  .catch(function() {
-    // KB unavailable — just submit the ticket
-    _doSubmitTicket(form, title, desc, priority, category);
-  });
+  .catch(function(){ _doSubmitTicket(form, typeKey, subject); });
 }
 
 function _showKBDeflect(form, articles, onProceed) {
@@ -3749,55 +3812,61 @@ function _showKBDeflect(form, articles, onProceed) {
   };
 }
 
-function _doSubmitTicket(form, title, desc, priority, category) {
+// Collect the dynamic field values keyed by ClickUp field id.
+function _collectTicketFields(form) {
+  var out = {};
+  form.querySelectorAll('#ct-fields .ct-f').forEach(function(el){
+    var fid = el.getAttribute('data-fid');
+    if (!fid) return;
+    var val;
+    if (el.type === 'checkbox') val = el.checked;
+    else if (el.multiple) val = Array.prototype.slice.call(el.selectedOptions).map(function(o){ return o.value; });
+    else val = (el.value || '').trim();
+    if (val === '' || (Array.isArray(val) && !val.length)) return;
+    out[fid] = val;
+  });
+  return out;
+}
+
+function _doSubmitTicket(form, typeKey, subject) {
   var submitBtn = form.querySelector('.btn-primary');
   submitBtn.textContent = 'Submitting…';
   submitBtn.disabled = true;
 
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '';
+  var UUID       = window.__PORTAL_UUID__ || '';
   var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  var fields     = _collectTicketFields(form);
 
-  fetch(API_BASE + '/api/ticket', {
+  fetch(API_BASE + '/api/portal-tickets/create', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com',
     },
-    body: JSON.stringify({ company_id: COMPANY_ID, subject: title, description: desc, priority: priority, category: category })
+    body: JSON.stringify({ company_id: COMPANY_ID, uuid: UUID, ticket_type: typeKey, subject: subject, fields: fields })
   })
-  .then(function(r){ return r.json(); })
-  .then(function(data) {
-    if (data.status === 'ok') {
+  .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+  .then(function(res) {
+    if (res.ok && res.data && res.data.ok) {
+      var ph = document.getElementById('submitted-ticket-placeholder');
       var list = document.getElementById('tickets-list');
-      list.insertAdjacentHTML('afterbegin', _renderTicketCard({
-        id: data.ticket_id, subject: title, description: desc,
-        stage_label: 'New', priority: priority.toUpperCase(),
-        owner_name: 'Your AM', created_at: new Date().toISOString(), channel: category,
-      }));
-      form.querySelector('.form-input').value = '';
-      form.querySelector('.form-textarea').value = '';
+      var cardHtml = _renderClickupTicketCard(res.data.ticket);
+      if (ph) ph.insertAdjacentHTML('beforebegin', cardHtml);
+      else if (list) list.insertAdjacentHTML('afterbegin', cardHtml);
+      var subj = document.getElementById('ct-subject'); if (subj) subj.value = '';
+      var fbox = document.getElementById('ct-fields'); if (fbox) fbox.innerHTML = '';
+      var tsel = document.getElementById('ct-type');   if (tsel) tsel.value = '';
       form.classList.remove('show');
       var badge = document.getElementById('tickets-badge');
       if (badge) badge.textContent = parseInt(badge.textContent || '0') + 1;
-      document.getElementById('tl-ticket-text').textContent = 'Work request submitted to Service Hub: "' + title + '"';
-      showActivityItem('tl-ticket-submitted');
+      var tt = document.getElementById('tl-ticket-text');
+      if (tt) { tt.textContent = 'Work request submitted: "' + subject + '"'; showActivityItem('tl-ticket-submitted'); }
     } else {
-      alert('Could not submit ticket: ' + (data.error || 'unknown error'));
+      alert('Could not submit request: ' + ((res.data && res.data.error) || 'please try again'));
     }
   })
-  .catch(function(err) {
-    var list = document.getElementById('tickets-list');
-    list.insertAdjacentHTML('afterbegin', _renderTicketCard({
-      id: 'local-' + Date.now(), subject: title, description: desc,
-      stage_label: 'New', priority: priority.toUpperCase(),
-      owner_name: 'Your AM', created_at: new Date().toISOString(),
-    }));
-    form.querySelector('.form-input').value = '';
-    form.querySelector('.form-textarea').value = '';
-    form.classList.remove('show');
-    document.getElementById('tl-ticket-text').textContent = 'Work request submitted: "' + title + '"';
-    showActivityItem('tl-ticket-submitted');
-  })
+  .catch(function(){ alert('Could not submit request — please try again.'); })
   .finally(function() {
     submitBtn.textContent = 'Next';
     submitBtn.disabled = false;
@@ -3806,23 +3875,24 @@ function _doSubmitTicket(form, title, desc, priority, category) {
 
 function loadTickets() {
   var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '';
+  var UUID       = window.__PORTAL_UUID__ || '';
   var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
 
-  fetch(API_BASE + '/api/tickets?company_id=' + COMPANY_ID, {
+  fetch(API_BASE + '/api/portal-tickets?company_id=' + encodeURIComponent(COMPANY_ID) + '&uuid=' + encodeURIComponent(UUID), {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     var list = document.getElementById('tickets-list');
     if (!list) return;
-    if (!data.tickets || !data.tickets.length) {
+    var tickets = (data && data.tickets) || [];
+    if (!tickets.length) {
       list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tm);font-size:13px">No open requests</div><div id="submitted-ticket-placeholder"></div>';
       return;
     }
-    list.innerHTML = data.tickets.map(_renderTicketCard).join('') +
+    list.innerHTML = tickets.map(_renderClickupTicketCard).join('') +
       '<div id="submitted-ticket-placeholder"></div>';
-    // Update sidebar badge
-    var open = data.tickets.filter(function(t){ return t.stage_label !== 'Closed'; }).length;
+    var open = tickets.filter(function(t){ return t.status !== 'Done'; }).length;
     var badge = document.getElementById('tickets-badge');
     if (badge) badge.textContent = open;
   })
@@ -3833,6 +3903,32 @@ function loadTickets() {
       list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tm);font-size:13px">Could not load requests \u2014 refresh to retry.</div><div id="submitted-ticket-placeholder"></div>';
     }
   });
+}
+
+// A ClickUp-backed ticket card: subject, type, client-safe status, age, and a
+// deep-link. No inline thread \u2014 the client-facing record is the on-Done recap.
+function _renderClickupTicketCard(t) {
+  var statusClass = (t.status === 'In progress' || t.status === 'Done') ? 'in-progress' : 'open';
+  var dateStr = '';
+  if (t.created_ts) { try { dateStr = new Date(t.created_ts).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}); } catch(e){} }
+  var age = (typeof t.age_days === 'number') ? (t.age_days === 0 ? 'today' : t.age_days + 'd ago') : '';
+  var id = 'ticket-cu-' + (t.id || Date.now());
+  var link = t.url ? '<a href="' + _escAttr(t.url) + '" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Open in ClickUp</a>' : '';
+  return '<div class="ticket-card" id="' + id + '">' +
+    '<div class="ticket-head" onclick="toggleTicket(\'' + id + '\')">' +
+      '<div class="ticket-priority med"></div>' +
+      '<div class="ticket-title">' + _escHtml(t.subject || '') + '</div>' +
+      '<div class="ticket-owner">' + _escHtml(t.type_label || '') + '</div>' +
+      '<span class="ticket-status ' + statusClass + '">' + _escHtml(t.status || 'Open') + '</span>' +
+      '<svg class="ticket-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>' +
+    '</div>' +
+    '<div class="ticket-body">' +
+      '<div class="ticket-foot">' +
+        '<div class="ticket-date">Opened ' + dateStr + (age ? ' \u00b7 ' + age : '') + '</div>' +
+        '<div style="display:flex;gap:8px;">' + link + '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
 }
 
 function _renderTicketCard(t) {
