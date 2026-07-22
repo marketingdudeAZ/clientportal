@@ -143,6 +143,71 @@ PROPERTY_BRIEF_REFIRE_FIELD = os.getenv("PROPERTY_BRIEF_REFIRE_FIELD", "rpm_brie
 CLICKUP_BRIEF_ATTEST_FIELD = os.getenv(
     "CLICKUP_BRIEF_ATTEST_FIELD", "Community Brief is up to date & accurate")
 
+# --- Portal Ticket Page (per-type forms → ClickUp) ---
+# See docs/ticket-page-scope.md. The portal renders one form per ticket type,
+# reads each list's field definitions LIVE from ClickUp (so team edits show up
+# with no redeploy), and creates the task in that type's list. List IDs come
+# from env — the ClickUp URLs carry *view* IDs, not list IDs, so pull the real
+# ones with the internal GET /api/portal-tickets/admin/discover endpoint.
+CLICKUP_WORKSPACE_ID = os.getenv("CLICKUP_WORKSPACE_ID", "9011805260")
+
+# Ordered ticket-type registry. `key` is the stable portal id; `label` is what
+# the client sees; `list_env` names the env var holding that type's ClickUp
+# list id; `audience` gates the picker ("client" = anyone in the portal,
+# "internal" = hidden from clients). A type whose list id is unset is simply
+# omitted from the picker rather than erroring — so this lights up type-by-type
+# as IDs are filled in.
+# `label` mirrors the real ClickUp form/list name so discovery can match by
+# name; `aliases` catches naming drift between the form title and the list
+# title. `form_slug` is the id segment from the public ClickUp form URL, kept
+# for reference/debugging only (it is NOT the numeric list id the API needs).
+PORTAL_TICKET_TYPES = [
+    {"key": "new_account_build", "label": "New Account Onboarding",             "list_env": "CLICKUP_LIST_NEW_ACCOUNT_BUILD", "audience": "client",   "form_slug": "8cjaf2c-19771", "aliases": ["New Account Build", "New Account", "Onboarding"]},
+    {"key": "budget_update",     "label": "Budget Changes",                     "list_env": "CLICKUP_LIST_BUDGET_UPDATE",      "audience": "client",   "form_slug": "8cjaf2c-20971", "aliases": ["Budget Update", "Budget"]},
+    {"key": "general",           "label": "General Ticket",                     "list_env": "CLICKUP_LIST_GENERAL",            "audience": "client",   "form_slug": "8cjaf2c-24611", "aliases": ["General"]},
+    {"key": "creative_ad_copy",  "label": "Ad Updates: Photos & New Specials",  "list_env": "CLICKUP_LIST_CREATIVE_AD_COPY",   "audience": "client",   "form_slug": "8cjaf2c-2751",  "aliases": ["Ad Updates", "Creative & Ad Copy Updates", "Creative", "Photos & New Specials Review"]},
+    {"key": "campaign_review",   "label": "Digital Marketing Review",           "list_env": "CLICKUP_LIST_CAMPAIGN_REVIEW",    "audience": "client",   "form_slug": "8cjaf2c-2771",  "aliases": ["Campaign Performance Review", "Marketing Review", "Performance Review"]},
+    {"key": "rebrand",           "label": "Rebrands",                           "list_env": "CLICKUP_LIST_REBRAND",            "audience": "client",   "form_slug": "8cjaf2c-2811",  "aliases": ["Rebrand"]},
+    # Dispos/Cancellations defaults to internal-only — flip via CLICKUP_DISPO_AUDIENCE
+    # if property marketing should open one directly (scope doc §Decisions #3).
+    {"key": "dispo_cancel",      "label": "Dispos / Cancellations",             "list_env": "CLICKUP_LIST_DISPO_CANCEL",       "audience": os.getenv("CLICKUP_DISPO_AUDIENCE", "internal"), "form_slug": "8cjaf2c-22451", "aliases": ["Dispo / Cancel", "Dispo", "Cancellation", "Cancel"]},
+    # "New Business" is a sales/lead intake form — internal by default; not part
+    # of the property client's ticket picker unless CLICKUP_NEW_BUSINESS_AUDIENCE flips it.
+    {"key": "new_business",      "label": "New Business",                       "list_env": "CLICKUP_LIST_NEW_BUSINESS",       "audience": os.getenv("CLICKUP_NEW_BUSINESS_AUDIENCE", "internal"), "form_slug": "8cjaf2c-2791", "aliases": ["new business"]},
+]
+
+# ClickUp custom-field names the portal auto-fills from the property record so
+# the requester never re-types what we already know. Filtered OUT of the
+# client-facing form. Matched case-insensitively against the ClickUp field name.
+PORTAL_TICKET_PREFILL_FIELDS = [
+    s.strip() for s in os.getenv(
+        "CLICKUP_TICKET_PREFILL_FIELDS",
+        "Property URL,Market,Property Code,Account Manager,uuid,UUID",
+    ).split(",") if s.strip()
+]
+
+# Where each prefilled ClickUp field is sourced on the HubSpot company record.
+# {ClickUp field name: HubSpot company property}. Best-effort — a missing
+# HubSpot prop just leaves that field blank for the requester to fill in.
+PORTAL_TICKET_PREFILL_SOURCES = {
+    "Property URL":    os.getenv("CLICKUP_PREFILL_PROP_URL_FIELD",  "website"),
+    "Property Code":   os.getenv("CLICKUP_PREFILL_PROP_CODE_FIELD", "property_code"),
+    "Market":          os.getenv("CLICKUP_PREFILL_MARKET_FIELD",    "market"),
+    "Account Manager": os.getenv("CLICKUP_PREFILL_AM_FIELD",        "account_manager"),
+    "uuid": "uuid",
+    "UUID": "uuid",
+}
+
+# ClickUp task statuses → client-safe portal labels (scope doc §4). Matched
+# case-insensitively; anything unmapped falls through to a title-cased version
+# of the raw ClickUp status rather than leaking an internal slug verbatim.
+PORTAL_TICKET_STATUS_MAP = {
+    "to do": "Open", "open": "Open", "new": "Open", "backlog": "Open",
+    "in progress": "In progress", "pending pm approval": "In progress",
+    "in review": "In progress", "review": "In progress", "awaiting review": "In progress",
+    "complete": "Done", "completed": "Done", "closed": "Done", "done": "Done",
+}
+
 # --- Creatify Video Pipeline ---
 CREATIFY_API_ID  = os.getenv("CREATIFY_API_ID", "")
 CREATIFY_API_KEY = os.getenv("CREATIFY_API_KEY", "")

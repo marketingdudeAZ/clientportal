@@ -8,6 +8,7 @@ from .loop import loop_bp
 from .onboarding import onboarding_bp
 from .paid import paid_bp
 from .portal import portal_bp
+from .portal_tickets import portal_tickets_bp
 from .portal_ui import portal_ui_bp
 from .property_brief import property_brief_bp
 from .redlight import redlight_lite_bp
@@ -20,6 +21,7 @@ def register_all(app):
     """Register every blueprint in this package on the given Flask app."""
     app.register_blueprint(paid_bp)
     app.register_blueprint(portal_bp)
+    app.register_blueprint(portal_tickets_bp)
     app.register_blueprint(portal_ui_bp)
     app.register_blueprint(redlight_lite_bp)
     app.register_blueprint(seo_bp)
