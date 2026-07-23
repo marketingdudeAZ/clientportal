@@ -3726,27 +3726,72 @@ function renderTicketFields(typeKey) {
   box.innerHTML = '';
   var t = __TICKET_TYPES__ && __TICKET_TYPES__[typeKey];
   if (!t || !t.fields) return;
-  box.innerHTML = t.fields.map(function(f){
-    var req  = f.required ? ' <span style="color:#c0392b">*</span>' : '';
-    var attr = 'data-fid="' + _escAttr(f.id) + '" data-req="' + (f.required ? '1' : '') + '"';
-    var opts = (f.options || []).map(function(o){
-      return '<option value="' + _escAttr(o.label) + '">' + _escHtml(o.label) + '</option>';
-    }).join('');
-    var ctl;
-    switch (f.input) {
-      case 'textarea':    ctl = '<textarea class="form-textarea ct-f" ' + attr + '></textarea>'; break;
-      case 'select':      ctl = '<select class="form-select ct-f" ' + attr + '><option value="">Select…</option>' + opts + '</select>'; break;
-      case 'multiselect': ctl = '<select class="form-select ct-f" multiple ' + attr + '>' + opts + '</select>'; break;
-      case 'checkbox':    ctl = '<input type="checkbox" class="ct-f" ' + attr + '/>'; break;
-      case 'number':
-      case 'currency':    ctl = '<input type="number" step="any" class="form-input ct-f" ' + attr + '/>'; break;
-      case 'date':        ctl = '<input type="date" class="form-input ct-f" ' + attr + '/>'; break;
-      case 'email':       ctl = '<input type="email" class="form-input ct-f" ' + attr + '/>'; break;
-      case 'url':         ctl = '<input type="url" class="form-input ct-f" ' + attr + '/>'; break;
-      default:            ctl = '<input type="text" class="form-input ct-f" ' + attr + '/>';
+
+  var SEC = 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--tm,#6b7280);margin:18px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--bd,#e5e7eb)';
+  var html = '';
+  if (t.updates_profile) {
+    html += '<div style="background:#fff8e6;border:1px solid #f0d98a;color:#6b5300;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:14px">'
+          + '✎ Anything you enter here updates your <b>property profile</b>.</div>';
+  }
+  var curSection = null;
+  t.fields.forEach(function(f){
+    var sec = f.section || '';
+    if (sec !== curSection) {
+      curSection = sec;
+      if (sec) html += '<div style="' + SEC + '">' + _escHtml(sec) + '</div>';
     }
-    return '<div class="form-row"><label class="form-label">' + _escHtml(f.name || '') + req + '</label>' + ctl + '</div>';
+    html += _renderTicketField(f);
+  });
+  box.innerHTML = html;
+
+  // Wire conditional visibility: re-evaluate whenever a controller changes.
+  box.querySelectorAll('.ct-f').forEach(function(el){
+    el.addEventListener('change', function(){ _applyConditionals(box); });
+    el.addEventListener('input',  function(){ _applyConditionals(box); });
+  });
+  _applyConditionals(box);
+}
+
+function _renderTicketField(f) {
+  var req  = f.required ? ' <span style="color:#c0392b">*</span>' : '';
+  var opts = (f.options || []).map(function(o){
+    return '<option value="' + _escAttr(o.label) + '">' + _escHtml(o.label) + '</option>';
   }).join('');
+  var attr = 'data-fid="' + _escAttr(f.key) + '" data-key="' + _escAttr(f.key) + '" data-req="' + (f.required ? '1' : '') + '"';
+  var ctl;
+  switch (f.input) {
+    case 'textarea':    ctl = '<textarea class="form-textarea ct-f" ' + attr + '></textarea>'; break;
+    case 'select':      ctl = '<select class="form-select ct-f" ' + attr + '><option value="">Select…</option>' + opts + '</select>'; break;
+    case 'multiselect': ctl = '<select class="form-select ct-f" multiple ' + attr + '>' + opts + '</select>'; break;
+    case 'checkbox':    ctl = '<input type="checkbox" class="ct-f" ' + attr + '/>'; break;
+    case 'number':
+    case 'currency':    ctl = '<input type="number" step="any" class="form-input ct-f" ' + attr + '/>'; break;
+    case 'date':        ctl = '<input type="date" class="form-input ct-f" ' + attr + '/>'; break;
+    case 'email':       ctl = '<input type="email" class="form-input ct-f" ' + attr + '/>'; break;
+    case 'url':         ctl = '<input type="url" class="form-input ct-f" ' + attr + '/>'; break;
+    default:            ctl = '<input type="text" class="form-input ct-f" ' + attr + '/>';
+  }
+  var helper = f.helper ? '<div style="font-size:11px;color:var(--tm,#6b7280);margin-top:4px">' + _escHtml(f.helper) + '</div>' : '';
+  var showAttr = '';
+  if (f.show_if) {
+    showAttr = ' data-showif-field="' + _escAttr(f.show_if.field) + '" data-showif-vals="' + _escAttr(JSON.stringify(f.show_if.values || [])) + '"';
+  }
+  return '<div class="form-row ct-field-row"' + showAttr + '><label class="form-label">' + _escHtml(f.label || '') + req + '</label>' + ctl + helper + '</div>';
+}
+
+// Show/hide conditional rows based on their controlling field's current value.
+// A hidden field's input is disabled so it's excluded from validation + collect.
+function _applyConditionals(box) {
+  box.querySelectorAll('.ct-field-row[data-showif-field]').forEach(function(row){
+    var ctrlKey = row.getAttribute('data-showif-field') || '';
+    var vals; try { vals = JSON.parse(row.getAttribute('data-showif-vals') || '[]'); } catch(e){ vals = []; }
+    var ctrl = box.querySelector('.ct-f[data-key="' + (window.CSS && CSS.escape ? CSS.escape(ctrlKey) : ctrlKey) + '"]');
+    var cur = ctrl ? (ctrl.value || '') : '';
+    var show = vals.indexOf(cur) !== -1;
+    row.style.display = show ? '' : 'none';
+    var input = row.querySelector('.ct-f');
+    if (input) input.disabled = !show;
+  });
 }
 
 function submitTicket() {
@@ -3760,6 +3805,7 @@ function submitTicket() {
   // Required-field check on the dynamic fields.
   var missing = [];
   form.querySelectorAll('#ct-fields .ct-f').forEach(function(el){
+    if (el.disabled) return;                       // hidden conditional field
     if (el.getAttribute('data-req') !== '1') return;
     var v = (el.type === 'checkbox') ? el.checked : (el.value || '').trim();
     if (!v) {
@@ -3816,6 +3862,7 @@ function _showKBDeflect(form, articles, onProceed) {
 function _collectTicketFields(form) {
   var out = {};
   form.querySelectorAll('#ct-fields .ct-f').forEach(function(el){
+    if (el.disabled) return;                       // hidden conditional field
     var fid = el.getAttribute('data-fid');
     if (!fid) return;
     var val;
@@ -3849,19 +3896,26 @@ function _doSubmitTicket(form, typeKey, subject) {
   .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
   .then(function(res) {
     if (res.ok && res.data && res.data.ok) {
+      // The ticket exists now regardless of the profile step — show it.
       var ph = document.getElementById('submitted-ticket-placeholder');
       var list = document.getElementById('tickets-list');
       var cardHtml = _renderClickupTicketCard(res.data.ticket);
       if (ph) ph.insertAdjacentHTML('beforebegin', cardHtml);
       else if (list) list.insertAdjacentHTML('afterbegin', cardHtml);
-      var subj = document.getElementById('ct-subject'); if (subj) subj.value = '';
-      var fbox = document.getElementById('ct-fields'); if (fbox) fbox.innerHTML = '';
-      var tsel = document.getElementById('ct-type');   if (tsel) tsel.value = '';
-      form.classList.remove('show');
       var badge = document.getElementById('tickets-badge');
       if (badge) badge.textContent = parseInt(badge.textContent || '0') + 1;
       var tt = document.getElementById('tl-ticket-text');
       if (tt) { tt.textContent = 'Work request submitted: "' + subject + '"'; showActivityItem('tl-ticket-submitted'); }
+
+      var prof = res.data.profile || { conflicts: [], applied: [] };
+      if (prof.conflicts && prof.conflicts.length) {
+        _renderProfileConflicts(form, COMPANY_ID, prof.conflicts);   // keep form open to resolve
+      } else {
+        _finalizeSubmit();
+        if (prof.applied && prof.applied.length && typeof showToast === 'function') {
+          showToast('Property profile updated — ' + prof.applied.length + ' field' + (prof.applied.length > 1 ? 's' : ''));
+        }
+      }
     } else {
       alert('Could not submit request: ' + ((res.data && res.data.error) || 'please try again'));
     }
@@ -3871,6 +3925,66 @@ function _doSubmitTicket(form, typeKey, subject) {
     submitBtn.textContent = 'Next';
     submitBtn.disabled = false;
   });
+}
+
+// Clear + close the create form after a submit (and any profile resolution).
+function _finalizeSubmit() {
+  var subj = document.getElementById('ct-subject');
+  if (subj) { subj.value = ''; if (subj.closest('.form-row')) subj.closest('.form-row').style.display = ''; }
+  var tsel = document.getElementById('ct-type');
+  if (tsel) { tsel.value = ''; if (tsel.closest('.form-row')) tsel.closest('.form-row').style.display = ''; }
+  var fbox = document.getElementById('ct-fields'); if (fbox) fbox.innerHTML = '';
+  var form = document.getElementById('create-ticket-form'); if (form) form.classList.remove('show');
+}
+
+// The closed-loop conflict step: the ticket is already filed; some entries
+// differ from the current property profile, so ask which value should win.
+function _renderProfileConflicts(form, companyId, conflicts) {
+  var subj = document.getElementById('ct-subject'); if (subj && subj.closest('.form-row')) subj.closest('.form-row').style.display = 'none';
+  var tsel = document.getElementById('ct-type');    if (tsel && tsel.closest('.form-row')) tsel.closest('.form-row').style.display = 'none';
+  var box = document.getElementById('ct-fields');
+  if (!box) { _finalizeSubmit(); return; }
+
+  var SEC = 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--tm,#6b7280);margin:4px 0 8px';
+  var html = '<div style="' + SEC + '">Confirm profile updates</div>'
+    + '<div style="font-size:12px;color:var(--tm,#6b7280);margin-bottom:12px">Your request was submitted. A few entries differ from the current property profile — choose which to keep.</div>';
+  conflicts.forEach(function(c) {
+    html += '<div class="ct-conflict" data-key="' + _escAttr(c.key) + '" style="border:1px solid var(--bd,#e5e7eb);border-radius:8px;padding:12px;margin-bottom:10px">'
+      + '<div style="font-weight:600;font-size:13px;margin-bottom:6px">' + _escHtml(c.label) + '</div>'
+      + '<label style="display:block;font-size:12px;margin:4px 0;cursor:pointer"><input type="radio" name="cf-' + _escAttr(c.key) + '" value="keep" checked/> Keep current: <b>' + _escHtml(c.current_value) + '</b></label>'
+      + '<label style="display:block;font-size:12px;margin:4px 0;cursor:pointer"><input type="radio" name="cf-' + _escAttr(c.key) + '" value="update"/> Update to: <b>' + _escHtml(c.ticket_value) + '</b></label>'
+      + '<input type="hidden" class="cf-ticketval" value="' + _escAttr(c.ticket_value) + '"/></div>';
+  });
+  html += '<div style="display:flex;gap:8px;margin-top:8px">'
+    + '<button class="btn btn-primary btn-sm" id="cf-apply">Save profile</button>'
+    + '<button class="btn btn-ghost btn-sm" id="cf-skip">Keep all current</button></div>';
+  box.innerHTML = html;
+
+  var apply = function(resolutions) {
+    var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+    var done = function(applied) {
+      _finalizeSubmit();
+      if (applied && typeof showToast === 'function') showToast('Property profile updated');
+    };
+    if (!resolutions.length) { done(false); return; }
+    fetch(API_BASE + '/api/portal-tickets/resolve-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' },
+      body: JSON.stringify({ company_id: companyId, resolutions: resolutions })
+    }).then(function(){ done(true); }).catch(function(){ done(false); });
+  };
+
+  document.getElementById('cf-apply').onclick = function() {
+    var resolutions = [];
+    box.querySelectorAll('.ct-conflict').forEach(function(row) {
+      var choice = row.querySelector('input[type=radio]:checked');
+      if (choice && choice.value === 'update') {
+        resolutions.push({ key: row.getAttribute('data-key'), value: row.querySelector('.cf-ticketval').value });
+      }
+    });
+    apply(resolutions);
+  };
+  document.getElementById('cf-skip').onclick = function() { _finalizeSubmit(); };
 }
 
 function loadTickets() {
