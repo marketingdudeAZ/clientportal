@@ -68,6 +68,15 @@ PLE_STATUSES = ["RPM Managed", "Dispositioning", "Onboarding"]
 # Tiers eligible for --commit (fuzzy is always review-only).
 _AUTO_TIERS = {"exact_name", "address"}
 
+# Actions that still need a human. `--needs-only` filters the report to these:
+# everything except the rows that are auto-committable or already done.
+NEEDS_MATCHING_ACTIONS = {
+    "review",                          # fuzzy / ambiguous name
+    "match_but_no_uuid",               # good match but company has no uuid yet
+    "already_mapped_DIFFERENT_review",  # mapped to a different CoStar id — verify
+    "no_match",                        # no HubSpot company found
+}
+
 CSV_COLUMNS = [
     "match_type", "score",
     "costar_property_id", "costar_listing_id", "listing_name",
@@ -337,6 +346,9 @@ def main() -> int:
     ap.add_argument("--commit", action="store_true",
                     help="write ids for exact_name + address tiers (default: dry-run)")
     ap.add_argument("--report", help="write the review CSV to this path (default: stdout)")
+    ap.add_argument("--needs-only", action="store_true",
+                    help="report only rows that still need a human (review / no uuid / "
+                         "no match / mapped-to-different) — excludes auto-committable + done")
     ap.add_argument("--fuzzy-floor", type=float, default=DEFAULT_FUZZY_FLOOR,
                     help=f"token-set similarity floor for fuzzy tier (default {DEFAULT_FUZZY_FLOOR})")
     ap.add_argument("--lookback", type=int, default=10,
@@ -351,8 +363,14 @@ def main() -> int:
     rows = suggest(roster, companies, args.fuzzy_floor)
 
     summarize(rows)
+
+    report_rows = rows
+    if args.needs_only:
+        report_rows = [r for r in rows if r["action"] in NEEDS_MATCHING_ACTIONS]
+        logger.info("--needs-only: %d of %d listings need a human", len(report_rows), len(rows))
+
     if not args.commit:
-        write_report(rows, args.report)
+        write_report(report_rows, args.report)
         logger.info("Dry-run only. Review the CSV, then re-run with --commit.")
         return 0
     return commit(rows)
