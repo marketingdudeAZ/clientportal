@@ -71,7 +71,12 @@ Two HubSpot company custom properties hold the CoStar ids:
 (created by `scripts/create_apartmentscom_property.py`). **Code never writes
 `uuid`** — it only reads uuid off the company and pairs it with these ids in
 the map table. Populating the CoStar ids onto companies is a human-in-the-loop
-pass, aided by the `PropertyName`/`Address` fields the API itself returns.
+pass, aided by `scripts/suggest_apartmentscom_mapping.py`: it fuzzy-matches the
+API's authorized-listing roster (`PropertyName`/`Address`/`City`/`State`) to
+HubSpot companies — reusing the AptIQ backfill's name/address normalization —
+and emits a review CSV (dry-run default). `--commit` writes
+`apartmentscom_property_id` only for the high-confidence exact-name/address
+tiers after a typed confirmation; fuzzy matches are always review-only.
 
 ### Cadence
 
