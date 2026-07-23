@@ -29,8 +29,15 @@ Modes:
 Usage (from repo root; needs Costar_Rental_Manager_API_Key + HUBSPOT_API_KEY):
   python3 scripts/suggest_apartmentscom_mapping.py
   python3 scripts/suggest_apartmentscom_mapping.py --report /tmp/ils_map.csv
+  python3 scripts/suggest_apartmentscom_mapping.py --needs-only
   python3 scripts/suggest_apartmentscom_mapping.py --fuzzy-floor 0.85
   python3 scripts/suggest_apartmentscom_mapping.py --commit
+
+As a Render one-off job (ephemeral disk → use --gcs-bucket for durable output;
+see docs/runbooks/apartmentscom-mapping-report.md):
+  python3 scripts/suggest_apartmentscom_mapping.py --needs-only \
+      --gcs-bucket "$APARTMENTSCOM_REPORT_BUCKET" \
+      --gcs-object apartmentscom/ils_needs_matching.csv
 """
 
 from __future__ import annotations
@@ -282,19 +289,41 @@ def suggest(listings: list[dict], companies: list[dict],
 
 # ── Report + commit ──────────────────────────────────────────────────────────
 
-def write_report(rows: list[dict], path: str | None) -> None:
+def render_csv(rows: list[dict]) -> str:
     buf = io.StringIO()
     w = csv.DictWriter(buf, fieldnames=CSV_COLUMNS)
     w.writeheader()
     for r in rows:
         w.writerow(r)
-    text = buf.getvalue()
+    return buf.getvalue()
+
+
+def write_report(rows: list[dict], path: str | None) -> str:
+    """Render rows to CSV; write to `path` or stdout. Returns the CSV text."""
+    text = render_csv(rows)
     if path:
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(text)
         logger.info("Wrote report → %s", path)
     else:
         sys.stdout.write(text)
+    return text
+
+
+def upload_to_gcs(text: str, bucket: str, obj: str) -> str:
+    """Upload the CSV to gs://bucket/obj using the shared BQ service account
+    (reuses customer_match_export.write_csv_to_gcs). Returns the gs:// URI or
+    '' on failure. This is the durable sink for an ephemeral Render one-off
+    job — the container's local disk is wiped on exit, GCS is not."""
+    try:
+        import customer_match_export as cme
+    except ImportError as exc:
+        logger.warning("GCS upload unavailable (%s)", exc)
+        return ""
+    uri = cme.write_csv_to_gcs(text.encode("utf-8"), bucket, obj)
+    if uri:
+        logger.info("Report uploaded → %s", uri)
+    return uri
 
 
 def summarize(rows: list[dict]) -> None:
@@ -353,6 +382,11 @@ def main() -> int:
                     help=f"token-set similarity floor for fuzzy tier (default {DEFAULT_FUZZY_FLOOR})")
     ap.add_argument("--lookback", type=int, default=10,
                     help="days to walk back looking for a non-empty roster day")
+    ap.add_argument("--gcs-bucket", default=os.environ.get("APARTMENTSCOM_REPORT_BUCKET", ""),
+                    help="upload the CSV here for durable retrieval (default: "
+                         "$APARTMENTSCOM_REPORT_BUCKET). Recommended for Render one-off jobs.")
+    ap.add_argument("--gcs-object", default="apartmentscom/ils_needs_matching.csv",
+                    help="object path within the bucket")
     args = ap.parse_args()
 
     roster = fetch_roster(args.lookback)
@@ -370,7 +404,9 @@ def main() -> int:
         logger.info("--needs-only: %d of %d listings need a human", len(report_rows), len(rows))
 
     if not args.commit:
-        write_report(report_rows, args.report)
+        text = write_report(report_rows, args.report)
+        if args.gcs_bucket:
+            upload_to_gcs(text, args.gcs_bucket, args.gcs_object)
         logger.info("Dry-run only. Review the CSV, then re-run with --commit.")
         return 0
     return commit(rows)
