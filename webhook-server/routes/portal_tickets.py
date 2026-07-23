@@ -95,6 +95,41 @@ def ticket_create():
     return jsonify(body_out), status
 
 
+# ── POST /api/portal-tickets/resolve-profile ─────────────────────────────────
+
+@portal_tickets_bp.route("/api/portal-tickets/resolve-profile", methods=["POST", "OPTIONS"])
+def ticket_resolve_profile():
+    """Apply a requester's conflict decisions to the property profile.
+
+    Body: {company_id, resolutions: [{key, value}]}. Only the fields the user
+    chose to overwrite are sent; "keep current" needs no write."""
+    if request.method == "OPTIONS":
+        return preflight_response()
+    if not _is_authorized(request):
+        return jsonify({"error": "auth required"}), 401
+    body = request.get_json(silent=True) or {}
+    company_id = (body.get("company_id") or "").strip()
+    resolutions = body.get("resolutions") or []
+    edited_by = request.headers.get("X-Portal-Email", "").strip()
+    if not company_id or not isinstance(resolutions, list):
+        return jsonify({"ok": False, "error": "company_id and resolutions required"}), 400
+
+    import portal_ticket_profile
+    applied, failed = [], []
+    for r in resolutions:
+        key = (r or {}).get("key")
+        value = (r or {}).get("value")
+        if not key or value in (None, ""):
+            continue
+        try:
+            ok, msg = portal_ticket_profile.resolve_conflict(company_id, key, value, edited_by=edited_by)
+        except Exception as e:  # noqa: BLE001
+            ok, msg = False, str(e)
+        (applied if ok else failed).append({"key": key, "message": msg if not ok else "ok"})
+    return jsonify({"ok": True, "applied": applied, "failed": failed})
+
+
+
 # ── GET /api/portal-tickets ──────────────────────────────────────────────────
 
 @portal_tickets_bp.route("/api/portal-tickets", methods=["GET", "OPTIONS"])
