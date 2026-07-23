@@ -41,6 +41,7 @@ from datetime import date
 from flask import Blueprint, jsonify, request
 
 import deal_creator
+import fulfillment_task
 import google_ads_islost
 import hubspot_client
 import launch_policy
@@ -166,6 +167,16 @@ def process_self_checkout(payload: dict, actor: str, today: date | None = None) 
     loop_terminal_events.record_deal_created(
         property_uuid, company_id, deal_id=deal_id, channel=channel,
         amount=float(recommended_budget),
+    )
+
+    # Bridge 1: hand the booked deal to fulfillment in ClickUp. Fire-and-forget
+    # so a ClickUp hiccup never fails a checkout that already created the deal +
+    # quote; no-ops when CLICKUP_LIST_FULFILLMENT is unset.
+    fulfillment_task.handle_async(
+        deal_id, company_id,
+        channel=channel, amount=float(recommended_budget),
+        property_name=property_name, property_uuid=property_uuid or "",
+        launch_date=launch_dt.isoformat(),
     )
 
     return {
