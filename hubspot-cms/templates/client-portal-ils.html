@@ -1,0 +1,160 @@
+<!--
+  RPM Living Client Portal — ILS Performance page (ADR 0021)
+
+  A standalone, non-destructive portal page (same pattern as the Loop
+  subpage, client-portal-loop.html) that surfaces apartments.com listing
+  performance + lead data for one property.
+
+  Sections:
+    - Attract  → impressions + media/video/tour/map views
+    - Engage   → leads by source (phone / email / website / tour / apply)
+    - Trend    → daily impressions + leads over the selected window
+
+  Routes:
+    ?uuid={id}                Single-property ILS view
+    ?uuid={id}&days={30|90}   Window (default 30)
+
+  Auth: HubSpot Memberships (same as the main portal).
+  Backend: /api/ils/* (Flask blueprint, routes/ils.py). Data originates
+  from the apartments.com Performance Summary API, landed daily in BigQuery.
+
+  Host as a separate HubSpot page (e.g. /client-portal-ils) linked from the
+  portal nav.
+-->
+{% set uuid_param = request.query_dict.uuid %}
+{% set days_param = request.query_dict.days or '30' %}
+
+{% if uuid_param %}
+  {% set companies = crm_objects("company",
+    "uuid=" ~ uuid_param,
+    "id,name,rpmmarket,totalunits,uuid,apartmentscom_property_id") %}
+  {% if companies.results|length > 0 %}
+    {% set property = companies.results[0] %}
+  {% endif %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ property.name|default("Property") }} — ILS Performance</title>
+<style>
+  :root{
+    --bg:#fafaf9;--card:#fff;--bd:#e7e5e4;--ts:#1c1917;--tm:#57534e;
+    --tl:#a8a29e;--j:#2563eb;--g:#16a34a;--y:#ca8a04;--r:#dc2626;
+    --amber:#f59e0b;--shadow:0 1px 3px rgba(0,0,0,0.04),0 1px 2px rgba(0,0,0,0.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+       background:var(--bg);color:var(--ts);font-size:14px;line-height:1.5}
+  .wrap{max-width:1240px;margin:0 auto;padding:24px}
+
+  .hdr{display:flex;align-items:baseline;justify-content:space-between;
+       padding-bottom:20px;border-bottom:1px solid var(--bd);margin-bottom:24px;flex-wrap:wrap;gap:12px}
+  .hdr h1{margin:0;font-size:24px;font-weight:700}
+  .hdr .meta{color:var(--tm);font-size:13px}
+  .hdr .meta strong{color:var(--ts)}
+  .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;
+        font-weight:600;background:#fef3c7;color:#92400e;margin-left:8px;
+        text-transform:uppercase;letter-spacing:.5px}
+  .pkg{display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;
+       font-weight:700;background:#ecfeff;color:#155e75}
+
+  /* Range switch */
+  .range{display:flex;gap:4px}
+  .range button{padding:6px 14px;border:1px solid var(--bd);background:#fff;cursor:pointer;
+                font-family:inherit;font-size:13px;font-weight:600;color:var(--tm);border-radius:6px}
+  .range button.active{background:var(--j);color:#fff;border-color:var(--j)}
+
+  .section-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+                 color:var(--tm);margin:28px 0 12px;display:flex;align-items:center;gap:8px}
+  .section-label .dot{width:8px;height:8px;border-radius:50%}
+  .dot.attract{background:var(--amber)}
+  .dot.engage{background:var(--j)}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .kpi{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:18px;
+       box-shadow:var(--shadow)}
+  .kpi .label{font-size:12px;color:var(--tm);font-weight:600}
+  .kpi .num{font-size:28px;font-weight:700;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+  .kpi .delta{font-size:12px;font-weight:600}
+  .kpi .delta.up{color:var(--g)}
+  .kpi .delta.down{color:var(--r)}
+  .kpi .delta.flat{color:var(--tl)}
+
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:20px;
+        box-shadow:var(--shadow);margin-top:16px}
+  .card h2{margin:0 0 4px;font-size:16px;font-weight:700}
+  .card .sub{color:var(--tm);font-size:12px;margin:0 0 16px}
+  .chart{width:100%;height:220px}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--tm);margin-top:8px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:12px;height:3px;border-radius:2px;display:inline-block}
+
+  .empty{padding:48px 20px;text-align:center;color:var(--tm)}
+  .loading{padding:20px;text-align:center;color:var(--tm);font-size:13px}
+
+  @media(max-width:900px){ .kpis{grid-template-columns:repeat(2,1fr)} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <div>
+      <h1>{{ property.name|default("Property") }}
+          <span class="pill">ILS Performance</span></h1>
+      <div class="meta">
+        {{ property.rpmmarket|default("") }}
+        {% if property.totalunits %} · {{ property.totalunits|int }} units{% endif %}
+        · <span id="ils-package" class="pkg">—</span>
+        · <span id="ils-lastdate" class="meta"></span>
+      </div>
+    </div>
+    <div class="range" id="ils-range">
+      <button data-days="30">30 days</button>
+      <button data-days="90">90 days</button>
+    </div>
+  </div>
+
+  <div id="ils-body">
+    <div class="loading">Loading ILS performance…</div>
+  </div>
+
+  <!-- Attract -->
+  <div class="section-label"><span class="dot attract"></span> Attract — Visibility</div>
+  <div class="kpis" id="ils-attract"></div>
+
+  <!-- Engage -->
+  <div class="section-label"><span class="dot engage"></span> Engage — Leads</div>
+  <div class="kpis" id="ils-engage"></div>
+
+  <!-- Trend -->
+  <div class="card">
+    <h2>Daily trend</h2>
+    <p class="sub">Impressions and leads per day over the selected window.</p>
+    <svg class="chart" id="ils-chart" preserveAspectRatio="none"></svg>
+    <div class="legend">
+      <span><i style="background:#f59e0b"></i> Total impressions</span>
+      <span><i style="background:#2563eb"></i> Total leads</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+window.RPM_ILS_CONFIG = {
+  uuid: "{{ property.uuid|default(uuid_param) }}",
+  days: parseInt("{{ days_param }}", 10) || 30,
+  apiBase: "https://rpm-portal-server.onrender.com",
+  portalEmail: "{{ contact.email|default('') }}"
+};
+</script>
+<script src="{{ get_asset_url('/portal/js/ils.js') }}"></script>
+
+</body>
+</html>
+
+{% else %}
+  <script>window.location.replace('/client-portal')</script>
+{% endif %}
