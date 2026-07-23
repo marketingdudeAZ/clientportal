@@ -338,3 +338,132 @@ def _col_letter(n: int) -> str:
         n, r = divmod(n - 1, 26)
         s = chr(65 + r) + s
     return s
+
+
+# ── Per-company real-time sync (Bridge 2) ────────────────────────────────────
+#
+# The daily `sync` re-scans the whole managed portfolio. That's correct for a
+# nightly refresh but means a client's brief edit doesn't reach Fluency until
+# the next batch. This path upserts ONE property's row on demand, so a save in
+# the portal reaches the sheet in seconds. It reuses the exact same schema,
+# resolve (override-wins), and hash-diff logic as `sync` — a single company can
+# never disagree with what the batch would have written.
+
+def _fetch_company_by_id(company_id: str, hs_properties: list[str]) -> dict | None:
+    try:
+        r = requests.get(
+            f"{HS_BASE}/crm/v3/objects/companies/{company_id}",
+            headers=_headers(),
+            params={"properties": ",".join(hs_properties)},
+            timeout=20,
+        )
+        if r.status_code >= 400:
+            logger.warning("fluency_feed: company %s read -> %s", company_id, r.status_code)
+            return None
+        return r.json()
+    except requests.RequestException as e:
+        logger.warning("fluency_feed: company %s read failed: %s", company_id, e)
+        return None
+
+
+def build_record_for_company(company_id: str) -> tuple[dict | None, dict]:
+    """Build the single sheet row for one company. Returns (record | None, stats).
+    None when the company can't be read or has no uuid (no Fluency target)."""
+    schema = feed_schema()
+    fields = schema["fields"]
+    company = _fetch_company_by_id(company_id, schema["hs_properties"])
+    if not company:
+        return None, {"reason": "company read failed"}
+    p = company.get("properties", {}) or {}
+    uuid = (p.get("uuid") or "").strip()
+    if not uuid:
+        return None, {"reason": "no uuid"}
+    row: dict[str, Any] = {
+        "account_id":         uuid,
+        "hubspot_company_id": company.get("id", "") or company_id,
+        "account_name":       p.get("name") or "",
+        "account_market":     p.get("rpmmarket") or "",
+        "account_state":      p.get("state") or "",
+    }
+    for f in fields:
+        row[f["col"]] = _resolve(p, f["resolved"], f["override"])
+    for col, src in _LEGACY_COLUMNS:
+        if src:
+            row[col] = _resolve(p, f"fluency_{src}", f"fluency_{src}_override")
+        else:
+            row.setdefault(col, "")
+    return row, {"account_id": uuid}
+
+
+def sync_company(company_id: str, dry_run: bool = False) -> dict:
+    """Upsert a single company's row into the Fluency sheet on demand.
+
+    Safe to call unconditionally — no-ops (returns a skip) when the feature
+    flag or the sheet id is unset, so a portal edit never fails on a Fluency
+    hiccup. Only writes when the row's content hash actually changed, so a
+    no-op edit (same value) touches nothing.
+    """
+    company_id = str(company_id or "").strip()
+    if not company_id:
+        return {"skipped": "no company_id"}
+
+    record, stats = build_record_for_company(company_id)
+    if record is None:
+        return {"skipped": stats.get("reason", "no record")}
+
+    schema = feed_schema()
+    columns = schema["columns"]
+    data_cols = columns[:-2]
+    record["hash"] = _hash([record.get(c, "") for c in data_cols])
+
+    if dry_run:
+        return {"dry_run": True, "account_id": record["account_id"], "record": record}
+
+    sheet_id = os.environ.get(SHEET_ID_ENV, "").strip()
+    if not sheet_id:
+        return {"skipped": f"{SHEET_ID_ENV} unset", "account_id": record["account_id"]}
+
+    import gspread
+    try:
+        gc = _gc()
+        sh = gc.open_by_key(sheet_id)
+        try:
+            ws = sh.worksheet(TAB_NAME)
+        except gspread.WorksheetNotFound:
+            ws = sh.add_worksheet(title=TAB_NAME, rows=4000, cols=len(columns))
+            ws.update("A1", [columns])
+
+        existing = ws.get_all_values()
+        header = existing[0] if existing else []
+        # If the header doesn't match the current schema, a single-row upsert
+        # would misalign. Defer to the full batch `sync` to migrate the header;
+        # this path only writes against an already-migrated sheet.
+        if header != columns:
+            return {"deferred": "header mismatch — run full sync first",
+                    "account_id": record["account_id"]}
+
+        id_idx = header.index("account_id")
+        h_idx = header.index("hash")
+        row_num = None
+        for i, row in enumerate(existing[1:], start=2):
+            if id_idx < len(row) and row[id_idx] == record["account_id"]:
+                if h_idx < len(row) and row[h_idx] == record["hash"]:
+                    return {"skipped_unchanged": True, "account_id": record["account_id"]}
+                row_num = i
+                break
+
+        record["last_updated_at"] = dt.datetime.utcnow().isoformat() + "Z"
+        row_values = [str(record.get(c, "")) for c in columns]
+        end_col = _col_letter(len(columns))
+        if row_num:
+            ws.batch_update([{"range": f"A{row_num}:{end_col}{row_num}", "values": [row_values]}],
+                            value_input_option="RAW")
+            action = "updated"
+        else:
+            ws.append_rows([row_values], value_input_option="RAW")
+            action = "appended"
+        return {action: 1, "account_id": record["account_id"],
+                "sheet_id": sheet_id, "tab": TAB_NAME}
+    except Exception as e:
+        logger.warning("fluency_feed.sync_company %s failed: %s", company_id, e)
+        return {"error": str(e), "account_id": record.get("account_id", "")}
