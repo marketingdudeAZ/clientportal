@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 with mock.patch.dict(os.environ, {"HUBSPOT_API_KEY": "test-key"}):
     import deal_creator  # noqa: E402
     import product_catalog  # noqa: E402
+    import quote_generator  # noqa: E402
 
 
 def _resp(body, status_code=200):
@@ -417,7 +418,27 @@ class TestPropertyBriefTestMode(unittest.TestCase):
         })
         self.assertEqual(props["pipeline"], "898123078")
         self.assertEqual(props["dealstage"], "1356833043")
-        self.assertIn("[TEST]", props["dealname"])
+        # Test mode is routing-only: the deal name must stay clean because
+        # it flows onto the client-facing quote title.
+        self.assertNotIn("[TEST]", props["dealname"])
+
+    def test_quote_title_strips_legacy_test_prefix(self):
+        """Deals created before the prefix removal still carry "[TEST] " in
+        their name — the quote title derived from them must come out clean."""
+        cases = {
+            "[TEST] Alaire at Morningside - New Account Build - 07/20/2026":
+                "Alaire at Morningside - New Account Build - 07/20/2026",
+            "[Test] Alaire at Morningside - New Account Build - 07/20/2026":
+                "Alaire at Morningside - New Account Build - 07/20/2026",
+            "[TEST] [TEST] Doubled - New Account Build - 07/20/2026":
+                "Doubled - New Account Build - 07/20/2026",
+            "Clean Name - New Account Build - 07/20/2026":
+                "Clean Name - New Account Build - 07/20/2026",
+        }
+        for raw, expected in cases.items():
+            self.assertEqual(quote_generator._strip_test_prefix(raw), expected)
+        # Degenerate name that is ONLY the marker: don't blank the title.
+        self.assertEqual(quote_generator._strip_test_prefix("[TEST]"), "[TEST]")
 
     def test_test_mode_falls_back_to_default_when_pipeline_id_missing(self):
         props = self._run_with_env({

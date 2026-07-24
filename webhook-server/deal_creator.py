@@ -133,7 +133,11 @@ def create_deal_with_line_items(
         deal_properties["hubspot_owner_id"] = owner_id
 
     # Test-mode override — keeps prod revenue reporting clean while we
-    # validate the flow end-to-end.
+    # validate the flow end-to-end. Routing only: the deal NAME stays
+    # clean (no "[TEST]" prefix) because the name flows onto the quote
+    # title and out to signers/vendors, who read it as a real IO
+    # (2026-07-24: Upwork confusion over "[TEST]"-titled IOs). The
+    # test pipeline placement alone is what keeps reporting clean.
     if os.getenv("PROPERTY_BRIEF_TEST_MODE", "").strip().lower() == "true":
         test_pipeline = os.getenv("HUBSPOT_TEST_PIPELINE_ID", "").strip()
         if test_pipeline:
@@ -141,7 +145,6 @@ def create_deal_with_line_items(
             deal_properties["dealstage"] = os.getenv(
                 "HUBSPOT_TEST_PIPELINE_FIRST_STAGE_ID", "1356833043"
             ).strip()
-            deal_properties["dealname"]  = f"[TEST] {deal_properties['dealname']}"
 
     # Step 1: create the deal
     deal_resp = requests.post(

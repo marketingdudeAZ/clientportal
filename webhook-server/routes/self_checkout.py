@@ -12,8 +12,8 @@ flag is flipped AND register_all() adds it):
         ▼
     deal_creator.create_deal_with_line_items(...)   ← TEST pipeline only
         │  (PROPERTY_BRIEF_TEST_MODE=true + HUBSPOT_TEST_PIPELINE_ID routes the
-        │   deal into "Property Brief Testing" at stage 1356833043 / [TEST] name;
-        │   NEVER the live Sales Pipeline)
+        │   deal into "Property Brief Testing" at stage 1356833043; deal name
+        │   stays clean — no [TEST] prefix; NEVER the live Sales Pipeline)
         ▼
     patch launch_date__c  (launch_policy: ASAP/scheduled + 5-biz-day new-channel buffer)
         │

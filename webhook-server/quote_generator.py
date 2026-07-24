@@ -112,6 +112,10 @@ def generate_and_send_quote(
                        deal_id, e)
 
     deal_name = _fetch_deal_name(deal_id) or "Property Brief Quote"
+    # Deals created before 2026-07-24 in test mode carry a "[TEST] "
+    # name prefix. The quote title is what signers/vendors see, so
+    # never let that prefix through even on retries against old deals.
+    deal_name = _strip_test_prefix(deal_name)
     today = _dt.date.today()
 
     # Step 1: create the quote.
@@ -287,6 +291,15 @@ def generate_and_send_quote(
         logger.debug("Quote %s: forecast attach skipped: %s", quote_id, _exc)
 
     return quote_id
+
+
+def _strip_test_prefix(name: str) -> str:
+    """Drop a leading "[TEST]"/"[Test]" marker (any case, repeated) from a
+    deal name so it never surfaces on client-facing quote titles."""
+    cleaned = name.strip()
+    while cleaned.upper().startswith("[TEST]"):
+        cleaned = cleaned[len("[TEST]"):].lstrip(" -–—")
+    return cleaned or name
 
 
 def _fetch_owner_profile(owner_id: str) -> dict:
