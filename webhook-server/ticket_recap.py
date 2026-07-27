@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 
 logger = logging.getLogger(__name__)
 
-# Ticket-type → a short client framing hint. dispo_cancel is intentionally
-# absent — the caller must NOT generate a client note for off-boarding tickets.
+# Ticket-type → a short client framing hint. Types without an entry (e.g.
+# dispo_cancel, new_business) still get a recap but fall back to generic framing.
 TYPE_FRAMING = {
     "new_account_build": "onboarding complete — campaigns are live",
     "budget_update":     "budget change is live and pacing",
@@ -25,7 +26,13 @@ TYPE_FRAMING = {
     "performance_review": "a performance review and the optimizations we made",
     "rebrand":           "rebrand rollout complete",
 }
-EXCLUDED_TYPES = {"dispo_cancel"}  # never write a client note for these
+# Ticket types the recap pipeline will NOT auto-post for. Empty by default —
+# every type (including dispo_cancel / new_business) gets a recap attempt. Set
+# TICKET_RECAP_EXCLUDED_TYPES to a comma-separated list of keys (e.g.
+# "dispo_cancel,new_business") to restore a guardrail without a code change.
+EXCLUDED_TYPES = {
+    t.strip() for t in os.getenv("TICKET_RECAP_EXCLUDED_TYPES", "").split(",") if t.strip()
+}
 
 SYSTEM_PROMPT = (
     "You write SHORT, client-facing activity notes for a multifamily digital-"
