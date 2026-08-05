@@ -24,11 +24,14 @@ at IO — it's a starting number, not a final spend.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Callable
 
 import loop_terminal_events
 import rec_id
+
+_log = logging.getLogger(__name__)
 
 # Marketing statuses that justify a recommendation. GREEN / missing → no card.
 _TRIGGER_STATUSES = frozenset({"RED", "YELLOW"})
@@ -125,6 +128,113 @@ def recommend_for_channel(
     )
 
 
+# ── Voice layer ─────────────────────────────────────────────────────────────
+# The decision core above stays pure and I/O-free. Voicing is a separate,
+# opt-in pass applied by recommend_for_property, which already does I/O.
+
+_RATIONALE_TASK_RULES = (
+    "You are writing the one-paragraph rationale on a budget recommendation "
+    "card shown to a property manager in their client portal.\n\n"
+    "- 2 to 3 sentences. This is PROSPECTIVE: explain why we recommend the "
+    "change and what it is expected to address. Do not describe it as work "
+    "already completed.\n"
+    "- Use ONLY the figures supplied below. They are real; state them exactly "
+    "as given.\n"
+    "- Do not promise a specific result. Say what the change addresses, not "
+    "what it will deliver.\n"
+    "- No greeting, no sign-off, no bullet points. Prose only."
+)
+
+_RATIONALE_SCHEMA = 'Return ONLY JSON: {"rationale":"…"}.'
+
+
+def _voiced_rationale(rec: "Recommendation", profile) -> str | None:
+    """Rewrite a rationale in the property's voice. None on any failure.
+
+    Lazy imports keep the pure core free of HubSpot/Anthropic dependencies.
+    """
+    try:
+        import json
+        import re
+
+        import rec_voice
+        from config import ANTHROPIC_API_KEY, CLAUDE_DIGEST_MODEL
+        if not ANTHROPIC_API_KEY:
+            return None
+        import anthropic
+
+        facts = (
+            f"Channel: {rec.channel}\n"
+            f"Current monthly budget: ${round(rec.current_budget):,}\n"
+            f"Recommended monthly budget: ${round(rec.recommended_budget):,}\n"
+            f"Deterministic summary of the situation: {rec.rationale}"
+        )
+        system = rec_voice.build_system_prompt(
+            task_rules=_RATIONALE_TASK_RULES,
+            profile=profile,
+            output_schema=_RATIONALE_SCHEMA,
+        )
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        msg = client.messages.create(
+            model=CLAUDE_DIGEST_MODEL, max_tokens=400, temperature=0,
+            system=system,
+            messages=[{"role": "user", "content": facts}],
+        )
+        raw = "".join(b.text for b in msg.content
+                      if getattr(b, "type", "") == "text").strip()
+        m = re.search(r"\{.*\}", raw, re.S)
+        if not m:
+            return None
+        text = (json.loads(m.group(0)).get("rationale") or "").strip()
+        return text or None
+    except Exception as e:  # noqa: BLE001 - voicing is never load-bearing
+        _log.warning("voiced rationale unavailable for %s: %s",
+                     rec.recommendation_id, e)
+        return None
+
+
+def apply_voice(rec: "Recommendation", profile) -> "Recommendation | None":
+    """Return `rec` with a voiced, compliance-gated rationale.
+
+    Order matters:
+      1. Try the voiced rationale. Gate it. If it passes, use it.
+      2. If voicing fails OR the gate blocks it, fall back to the
+         deterministic rationale — the recommendation is still worth showing,
+         and the template rationale is assembled from figures rather than
+         generated, so it carries no fabrication risk.
+      3. Gate the deterministic rationale too. Only if THAT is blocked is the
+         card suppressed (returns None).
+
+    Never raises. A gate outage degrades to hard-patterns-only rather than
+    blocking generation.
+    """
+    import dataclasses
+
+    import rec_voice
+
+    voiced = _voiced_rationale(rec, profile) if profile is not None else None
+    if voiced:
+        verdict = rec_voice.gate_client_copy(
+            [{"field": "rationale", "text": voiced}], profile=profile)
+        if verdict.allowed:
+            if verdict.forbidden_hits:
+                _log.info("rec %s voiced copy used off-brand phrase(s) %s",
+                          rec.recommendation_id, verdict.forbidden_hits)
+            return dataclasses.replace(rec, rationale=voiced)
+        _log.warning("rec %s voiced rationale blocked by gate (%s) — falling "
+                     "back to the deterministic rationale",
+                     rec.recommendation_id,
+                     [v.get("protected_class") for v in verdict.violations])
+
+    base = rec_voice.gate_client_copy(
+        [{"field": "rationale", "text": rec.rationale}], profile=profile)
+    if not base.allowed:
+        _log.error("rec %s suppressed — deterministic rationale failed the "
+                   "compliance gate: %s", rec.recommendation_id, base.violations)
+        return None
+    return rec
+
+
 def recommend_for_property(
     property_uuid: str | None,
     company_id: str | None,
@@ -134,6 +244,7 @@ def recommend_for_property(
     *,
     open_deal_channels: Callable[[], set[str]] | None = None,
     emit: bool = True,
+    voice_profile=None,
 ) -> list[Recommendation]:
     """Generate cards for a property, suppressing any channel with an open deal.
 
@@ -141,6 +252,12 @@ def recommend_for_property(
     have an open (in-flight) deal — the duplicate-budget *display* guard. The
     authoritative guard runs again at checkout (TOCTOU); this only hides cards.
     When `emit`, each surfaced card emits a `recommendation_proposed` loop event.
+
+    `voice_profile` (a rec_voice.VoiceProfile) opts the card into the shared
+    voice layer: the rationale is rewritten in the property's register and
+    passed through the compliance gate before it can be shown. Omit it and the
+    deterministic rationale is used unchanged — but it is still gated, so no
+    path renders ungated client-facing copy.
     """
     recs: list[Recommendation] = []
     suppressed = open_deal_channels() if open_deal_channels else set()
@@ -150,6 +267,9 @@ def recommend_for_property(
         rec = recommend_for_channel(property_uuid, company_id, sig, period, guardrails)
         if rec is None:
             continue
+        rec = apply_voice(rec, voice_profile)
+        if rec is None:
+            continue  # suppressed by the compliance gate
         if emit:
             loop_terminal_events.record_recommendation_proposed(
                 property_uuid, company_id,

@@ -423,3 +423,76 @@ def test_new_callers_get_the_shared_rules_the_recap_used_to_hoard():
                        "Say what we did and the outcome",
                        "End forward-looking"):
         assert recap_only not in out, f"recap-specific clause leaked: {recap_only}"
+
+
+# ── the Loop rec voice layer (commit 7) ─────────────────────────────────────
+
+def _rec():
+    import recommendation_gen as rg
+    return rg.Recommendation(
+        property_uuid="u-1", company_id="123", channel="paid_search",
+        current_budget=1500.0, recommended_budget=2000.0, delta=500.0,
+        rationale="paid_search is losing ~28% of available impressions to budget.",
+        recommendation_id="rec1:loop1:u-1:paid_search:2026-q3",
+    )
+
+
+def test_voiced_rationale_is_used_when_it_passes_the_gate(monkeypatch):
+    import recommendation_gen as rg
+    _no_llm(monkeypatch)
+    monkeypatch.setattr(rg, "_voiced_rationale",
+                        lambda rec, profile: "A refined, considered increase.")
+    out = rg.apply_voice(_rec(), _profile(tiers=("luxury",)))
+    assert out.rationale == "A refined, considered increase."
+
+
+def test_blocked_voiced_rationale_falls_back_to_the_deterministic_one(monkeypatch):
+    """A gate block must not cost the client the recommendation itself."""
+    import recommendation_gen as rg
+    _no_llm(monkeypatch)
+    monkeypatch.setattr(rg, "_voiced_rationale",
+                        lambda rec, profile: "An exclusive community for young professionals.")
+    base = _rec()
+    out = rg.apply_voice(base, _profile())
+    assert out is not None
+    assert out.rationale == base.rationale
+
+
+def test_card_is_suppressed_only_if_the_deterministic_rationale_is_blocked(monkeypatch):
+    import recommendation_gen as rg
+    import dataclasses
+    _no_llm(monkeypatch)
+    monkeypatch.setattr(rg, "_voiced_rationale", lambda rec, profile: None)
+    bad = dataclasses.replace(_rec(), rationale="No children allowed.")
+    assert rg.apply_voice(bad, _profile()) is None
+
+
+def test_no_profile_still_gates_the_deterministic_rationale(monkeypatch):
+    """No path may render ungated client-facing copy."""
+    import recommendation_gen as rg
+    _no_llm(monkeypatch)
+    calls = []
+    real = rv.gate_client_copy
+    monkeypatch.setattr(rv, "gate_client_copy",
+                        lambda items, **kw: calls.append(items) or real(items, **kw))
+    out = rg.apply_voice(_rec(), None)
+    assert out is not None
+    assert calls, "the deterministic rationale was never gated"
+
+
+def test_voicing_failure_is_never_load_bearing(monkeypatch):
+    import recommendation_gen as rg
+    _no_llm(monkeypatch)
+
+    def _boom(rec, profile):
+        raise RuntimeError("anthropic down")
+
+    monkeypatch.setattr(rg, "_voiced_rationale", _boom)
+    base = _rec()
+    with pytest.raises(RuntimeError):
+        rg._voiced_rationale(base, _profile())
+    # ...but the real _voiced_rationale swallows, so apply_voice survives.
+    monkeypatch.undo()
+    _no_llm(monkeypatch)
+    out = rg.apply_voice(base, _profile())
+    assert out is not None and out.rationale == base.rationale
