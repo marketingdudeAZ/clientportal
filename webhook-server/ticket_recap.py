@@ -13,6 +13,8 @@ import json
 import logging
 import re
 
+import rec_voice
+
 logger = logging.getLogger(__name__)
 
 # Ticket-type → a short client framing hint. dispo_cancel is intentionally
@@ -27,6 +29,20 @@ TYPE_FRAMING = {
 }
 EXCLUDED_TYPES = {"dispo_cancel"}  # never write a client note for these
 
+# The house rules live in rec_voice.CLIENT_VOICE_RULES and are shared with every
+# other client-facing generator. They are pulled in here as NAMED FRAGMENTS
+# rather than as the assembled block because the recap's bullet list interleaves
+# shared rules with recap-specific ones, and the original order is preserved
+# byte-for-byte (tests/test_ticket_recap_prompt.py pins it). Editing a shared
+# rule in rec_voice.py moves the recap and the Loop recs together.
+#
+# Recap-specific and deliberately NOT shared:
+#   - the ticket-shaped preamble and the 2-4 sentence contract
+#   - "Say what we did and the outcome" (the recap is retrospective; a Loop rec
+#     is prospective, and this clause would actively mislead it)
+#   - the surface-problems / client-input framing rules
+#   - the forward-looking close
+#   - the JSON output schema
 SYSTEM_PROMPT = (
     "You write SHORT, client-facing activity notes for a multifamily digital-"
     "marketing agency (RPM). The input is an INTERNAL support ticket — a "
@@ -34,52 +50,18 @@ SYSTEM_PROMPT = (
     "that a client (property owner / property-marketing team) can read on their "
     "account record.\n\n"
     "RULES:\n"
-    "- Voice: 'we', proactive, professional, confident. Say what we did and the outcome.\n"
-    "- STRIP everything internal: manager↔specialist coaching, teammate names, role "
-    "names, internal tool names (ClickUp, Fluency, NinjaCat, HubSpot, etc.), and raw "
-    "config / process chatter.\n"
+    f"{rec_voice.RULE_VOICE_WE} Say what we did and the outcome.\n"
+    f"{rec_voice.RULE_STRIP_INTERNAL}\n"
     "- Do NOT hide problems — surface them, but reframe how we speak about them.\n"
     "- When something was missing or wrong because of a client / property-marketing "
     "input (e.g. not provided at onboarding), frame it as that input being needed, "
     "not as an RPM error.\n"
-    "- CRITICAL INTEGRITY RULE: if the problem was genuinely an internal RPM slip, do "
-    "NOT invent client blame. Use neutral, proactive language ('we identified and "
-    "corrected …') — never falsely blame the client.\n"
+    f"{rec_voice.RULE_INTEGRITY}\n"
     "- End forward-looking when it reads naturally.\n"
-    "- Use plain punctuation (commas, periods). Do NOT use em-dashes.\n"
-    "- NUMBERS: never state a specific dollar amount, budget, percentage, ranking, "
-    "or metric unless it appears verbatim in the ticket data provided below. If a "
-    "figure is not given, describe the change qualitatively (e.g. 'increased your "
-    "paid search budget') — never invent, estimate, or round to a plausible number.\n\n"
-    "PRODUCT ACCURACY — do not fabricate benefits:\n"
-    "- Describe what was done factually. NEVER invent an outcome or benefit claim "
-    "for a service, and never attach lead-generation / 'maximize lead capture' "
-    "language to a service that is not a lead-gen service.\n"
-    "- Boost AI (Google Business Profile syndication) is about GOOGLE BUSINESS "
-    "PROFILE VISIBILITY — impressions, views, and local-listing optimization. It "
-    "is NOT lead capture. Speak to it only as improving Google Business Profile "
-    "visibility.\n"
-    "- SEO (2026 packages): SEO is ORGANIC VISIBILITY, search rankings, and local "
-    "search presence — never promise leads or leases from SEO. Google Business "
-    "Profile work (daily GBP posts, floorplan/concession sync, GBP verification, "
-    "local keyword ingestion, brand-voice posts) improves GOOGLE BUSINESS PROFILE "
-    "visibility and local presence. 'Initial Site Optimization' is a foundational "
-    "technical and on-page audit (title tags, meta descriptions, headings) "
-    "targeting priority keywords; ongoing optimizations and content / new pages "
-    "improve organic visibility. Keyword tracking, competitor-gap, heatmap, and "
-    "site-health items are MEASUREMENT — describe them as tracking / monitoring, "
-    "not as outcomes.\n"
-    "- GBP Photo Audit: reviewing Google Business Profile photos to remove "
-    "renderings and non-photographic images that risk Google penalties. NEVER "
-    "guarantee a profile will not be suspended or unverified — say only that it "
-    "reduces the likelihood.\n"
-    "- If you are unsure what a named service does, describe it plainly by name "
-    "without inventing its benefit, or omit it — do not guess.\n"
-    "- TARGETING & LOCATION: do NOT claim specific audience targeting, neighborhood "
-    "or area names, or phrasing like 'targeting [X] renters in [Y] area' — we may "
-    "not have configured that exact targeting. Keep it high level: the budgets and "
-    "channels that are turned on, what is running, that tracking is set up, and any "
-    "deliverables. Do not describe WHO or WHERE the campaigns target.\n\n"
+    f"{rec_voice.RULE_PLAIN_PUNCTUATION}\n"
+    f"{rec_voice.numbers_rule('the ticket data provided below')}\n\n"
+    f"{rec_voice.BLOCK_PRODUCT_ACCURACY}\n"
+    f"{rec_voice.RULE_TARGETING_LOCATION}\n\n"
     "Return ONLY JSON: {\"note\":\"…\", \"surfaced_problem\":true|false, "
     "\"attribution\":\"none|property_marketing|external|internal\", "
     "\"needs_review\":true|false, \"review_reason\":\"…\"}. Set needs_review=true if "
@@ -89,16 +71,18 @@ SYSTEM_PROMPT = (
 
 # Deterministic backstop: if any of these survive into the note, force review —
 # even if the model thought the note was clean.
-_REDACT = [re.compile(p, re.I) for p in [
+#
+# The coaching / self-blame patterns are recap-specific: those terms arrive from
+# manager↔specialist work threads, an input only the recap has. The internal-tool
+# and targeting patterns back shared rules, so they come from rec_voice.
+_RECAP_REDACT_TERMS = (
     r"\bspecialist\b", r"\bmanager\b", r"\bcoach(?:ed|ing)?\b",
     r"\bmisconfigured\b", r"\bwe messed up\b", r"\bour (?:mistake|error|fault)\b",
     r"\bwasn'?t configured\b", r"\bset ?up (?:wrong|incorrectly)\b",
-    r"\bClickUp\b", r"\bNinjaCat\b", r"\bHubSpot\b", r"\bFluency\b",
-    r"\bticket\b", r"\binternal\b",
-    # targeting / location claims we can't stand behind (Kyle) — flag for review
-    r"\btargeting\b", r"\bpositioning\b", r"\bdistrict\b", r"\bneighborhood\b",
-    r"\brenters in\b", r"\baudience\b",
-]]
+)
+_REDACT = [re.compile(p, re.I) for p in (
+    _RECAP_REDACT_TERMS + rec_voice.INTERNAL_TERMS + rec_voice.TARGETING_TERMS
+)]
 
 
 def infer_ticket_type(task: dict) -> str:

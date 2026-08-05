@@ -26,10 +26,117 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 # ── The shared house rules ──────────────────────────────────────────────────
-# Populated in the CLIENT_VOICE_RULES extraction commit. Kept as an explicit
-# empty string (not None) so build_system_prompt composes identically before
-# and after the extraction.
-CLIENT_VOICE_RULES = ""
+# These came out of ticket_recap.SYSTEM_PROMPT, where they were the only copy
+# in the codebase. They are exposed BOTH as named fragments and as one
+# assembled block:
+#
+#   - Named fragments, because in the recap prompt the shared and
+#     recap-specific rules are interleaved inside a single bullet list. The
+#     recap reassembles them in their original order, which is what lets T1
+#     assert byte-identical output. Reordering them to group the shared ones
+#     would change the prompt.
+#   - CLIENT_VOICE_RULES, the assembled block, for every NEW caller. New
+#     callers have no legacy ordering to preserve and should take the whole
+#     thing.
+#
+# Edit a rule in ONE place here and both the recap and the Loop recs move
+# together. That is the entire point of the extraction.
+
+RULE_VOICE_WE = "- Voice: 'we', proactive, professional, confident."
+
+RULE_STRIP_INTERNAL = (
+    "- STRIP everything internal: manager↔specialist coaching, teammate names, role "
+    "names, internal tool names (ClickUp, Fluency, NinjaCat, HubSpot, etc.), and raw "
+    "config / process chatter."
+)
+
+RULE_INTEGRITY = (
+    "- CRITICAL INTEGRITY RULE: if the problem was genuinely an internal RPM slip, do "
+    "NOT invent client blame. Use neutral, proactive language ('we identified and "
+    "corrected …') — never falsely blame the client."
+)
+
+RULE_PLAIN_PUNCTUATION = (
+    "- Use plain punctuation (commas, periods). Do NOT use em-dashes."
+)
+
+
+def numbers_rule(source_phrase: str = "the data provided below") -> str:
+    """The no-invented-numbers rule, worded for the caller's data source.
+
+    The highest-value rule in the original recap prompt and the one the other
+    generators most needed: Loop rec rationales quote budgets, reputation recs
+    quote star deltas. Only the name of the data source varies.
+    """
+    return (
+        "- NUMBERS: never state a specific dollar amount, budget, percentage, ranking, "
+        f"or metric unless it appears verbatim in {source_phrase}. If a "
+        "figure is not given, describe the change qualitatively (e.g. 'increased your "
+        "paid search budget') — never invent, estimate, or round to a plausible number."
+    )
+
+
+RULE_NUMBERS = numbers_rule()
+
+BLOCK_PRODUCT_ACCURACY = (
+    "PRODUCT ACCURACY — do not fabricate benefits:\n"
+    "- Describe what was done factually. NEVER invent an outcome or benefit claim "
+    "for a service, and never attach lead-generation / 'maximize lead capture' "
+    "language to a service that is not a lead-gen service.\n"
+    "- Boost AI (Google Business Profile syndication) is about GOOGLE BUSINESS "
+    "PROFILE VISIBILITY — impressions, views, and local-listing optimization. It "
+    "is NOT lead capture. Speak to it only as improving Google Business Profile "
+    "visibility.\n"
+    "- SEO (2026 packages): SEO is ORGANIC VISIBILITY, search rankings, and local "
+    "search presence — never promise leads or leases from SEO. Google Business "
+    "Profile work (daily GBP posts, floorplan/concession sync, GBP verification, "
+    "local keyword ingestion, brand-voice posts) improves GOOGLE BUSINESS PROFILE "
+    "visibility and local presence. 'Initial Site Optimization' is a foundational "
+    "technical and on-page audit (title tags, meta descriptions, headings) "
+    "targeting priority keywords; ongoing optimizations and content / new pages "
+    "improve organic visibility. Keyword tracking, competitor-gap, heatmap, and "
+    "site-health items are MEASUREMENT — describe them as tracking / monitoring, "
+    "not as outcomes.\n"
+    "- GBP Photo Audit: reviewing Google Business Profile photos to remove "
+    "renderings and non-photographic images that risk Google penalties. NEVER "
+    "guarantee a profile will not be suspended or unverified — say only that it "
+    "reduces the likelihood.\n"
+    "- If you are unsure what a named service does, describe it plainly by name "
+    "without inventing its benefit, or omit it — do not guess."
+)
+
+RULE_TARGETING_LOCATION = (
+    "- TARGETING & LOCATION: do NOT claim specific audience targeting, neighborhood "
+    "or area names, or phrasing like 'targeting [X] renters in [Y] area' — we may "
+    "not have configured that exact targeting. Keep it high level: the budgets and "
+    "channels that are turned on, what is running, that tracking is set up, and any "
+    "deliverables. Do not describe WHO or WHERE the campaigns target."
+)
+
+# The assembled block for new callers.
+CLIENT_VOICE_RULES = (
+    "You are writing CLIENT-FACING copy for RPM Living, a multifamily digital-"
+    "marketing agency. These rules always apply.\n\n"
+    "RULES:\n"
+    f"{RULE_VOICE_WE}\n"
+    f"{RULE_STRIP_INTERNAL}\n"
+    f"{RULE_INTEGRITY}\n"
+    f"{RULE_PLAIN_PUNCTUATION}\n"
+    f"{RULE_NUMBERS}\n\n"
+    f"{BLOCK_PRODUCT_ACCURACY}\n"
+    f"{RULE_TARGETING_LOCATION}"
+)
+
+# Deterministic backstops for the rules above. ticket_recap has always scanned
+# its own output for these; any generator that shows copy to a client should.
+INTERNAL_TERMS = (
+    r"\bClickUp\b", r"\bNinjaCat\b", r"\bHubSpot\b", r"\bFluency\b",
+    r"\bticket\b", r"\binternal\b",
+)
+TARGETING_TERMS = (
+    r"\btargeting\b", r"\bpositioning\b", r"\bdistrict\b", r"\bneighborhood\b",
+    r"\brenters in\b", r"\baudience\b",
+)
 
 
 # ── Per-tier voice guidance ─────────────────────────────────────────────────
