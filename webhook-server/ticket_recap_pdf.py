@@ -50,6 +50,45 @@ def _user_name(u):
     return (u or {}).get("username") or (u or {}).get("email") or ""
 
 
+# Embedding caps: keep the PDF a sane size for HubSpot Files even on a
+# screenshot-heavy ticket. Beyond the cap, images degrade to links.
+MAX_EMBEDDED_IMAGES = 12
+_MAX_PX_WIDE = 1400
+
+
+def _image_flowable(raw: bytes, max_w: float, max_h: float):
+    """bytes → a sized reportlab Image, or None if the bytes aren't an image.
+
+    Normalizes via Pillow (flattens transparency to white, downscales large
+    screenshots, re-encodes as JPEG) so one odd file can't break the build
+    and a 4K screenshot doesn't bloat the PDF.
+    """
+    try:
+        from PIL import Image as PILImage
+        from reportlab.platypus import Image as RLImage
+        src = PILImage.open(io.BytesIO(raw))
+        src.load()
+        if src.mode in ("RGBA", "LA", "P"):
+            src = src.convert("RGBA")
+            flat = PILImage.new("RGB", src.size, (255, 255, 255))
+            flat.paste(src, mask=src.split()[-1])
+            src = flat
+        elif src.mode != "RGB":
+            src = src.convert("RGB")
+        if src.width > _MAX_PX_WIDE:
+            ratio = _MAX_PX_WIDE / src.width
+            src = src.resize((_MAX_PX_WIDE, max(1, int(src.height * ratio))))
+        out = io.BytesIO()
+        src.save(out, format="JPEG", quality=80)
+        out.seek(0)
+        w, h = src.size
+        scale = min(max_w / w, max_h / h, 1.0)
+        return RLImage(out, width=w * scale, height=h * scale)
+    except Exception as e:
+        logger.warning("ticket_recap_pdf: image embed skipped (%s)", e)
+        return None
+
+
 def build_recap_pdf(task: dict, comments: list, summary_text: str, ticket_url: str) -> bytes | None:
     """Render the recap PDF. Returns bytes, or None if reportlab is unavailable."""
     try:
@@ -176,6 +215,32 @@ def build_recap_pdf(task: dict, comments: list, summary_text: str, ticket_url: s
     except Exception as e:
         logger.warning("ticket_recap_pdf: custom-field render skipped (%s)", e)
 
+    # image embedding shared by the work log + attachments sections
+    import clickup_client as _cu
+    img_state = {"embedded": 0, "urls": set()}
+    img_max_w, img_max_h = 6.4 * inch, 4.2 * inch
+
+    def _emit_image(att, style_indent=0.0):
+        """Embed one image attachment (or fall back to a link)."""
+        url, title = att.get("url") or "", escape(att.get("title") or "screenshot")
+        if not url or url in img_state["urls"]:
+            return
+        img_state["urls"].add(url)
+        flowable = None
+        if img_state["embedded"] < MAX_EMBEDDED_IMAGES:
+            raw = _cu.download_attachment(url)
+            if raw:
+                flowable = _image_flowable(raw, img_max_w - style_indent, img_max_h)
+        if flowable:
+            img_state["embedded"] += 1
+            flowable.hAlign = "LEFT"
+            story.append(flowable)
+            story.append(Paragraph(f'<font color="{GRAY}">{title}</font>', small))
+        else:
+            story.append(Paragraph(
+                f'<a href="{escape(url)}"><u>Attachment: {title}</u></a>', linkst))
+        story.append(Spacer(1, 6))
+
     # work log — the full conversation: original request + every comment + replies
     desc = (task.get("text_content") or task.get("description") or "").strip()
     reply_style = ParagraphStyle("reply", parent=body, leftIndent=18)
@@ -204,14 +269,40 @@ def build_recap_pdf(task: dict, comments: list, summary_text: str, ticket_url: s
             story.append(Paragraph(f'<b>{who}</b> · <font color="{GRAY}">{when}</font>{tail}', meta_style))
             if t:
                 story.append(Paragraph(escape(t), style))
+            for att in (c.get("images") or []):
+                _emit_image(att, style_indent=getattr(style, "leftIndent", 0) or 0)
             story.append(Spacer(1, 6))
 
         for c in (comments or []):
-            if not ((c.get("text") or "").strip() or c.get("replies")):
+            if not ((c.get("text") or "").strip() or c.get("replies") or c.get("images")):
                 continue
             _emit(c, body, small)
             for rep in (c.get("replies") or []):
                 _emit(rep, reply_style, reply_meta)
+
+    # attachments on the task itself (screenshots in the description, uploads).
+    # ClickUp mirrors comment attachments here too — the url dedupe set means
+    # anything already shown in the work log isn't repeated.
+    task_atts = task.get("attachments") or []
+    if task_atts:
+        try:
+            from clickup_client import IMAGE_EXTENSIONS, _attachment_ext
+            imgs = [a for a in task_atts
+                    if a.get("url") and _attachment_ext(a) in IMAGE_EXTENSIONS
+                    and a.get("url") not in img_state["urls"]]
+            files = [a for a in task_atts
+                     if a.get("url") and _attachment_ext(a) not in IMAGE_EXTENSIONS]
+            if imgs or files:
+                story.append(Paragraph("Attachments", h2))
+            for att in imgs:
+                _emit_image(att)
+            for att in files:
+                title = escape(att.get("title") or att.get("name") or "file")
+                story.append(Paragraph(
+                    f'<a href="{escape(att["url"])}"><u>{title}</u></a>', linkst))
+                story.append(Spacer(1, 4))
+        except Exception as e:
+            logger.warning("ticket_recap_pdf: task attachments skipped (%s)", e)
 
     story.append(Spacer(1, 12))
     story.append(Paragraph("Generated automatically by the RPM Digital portal. Internal record.", small))

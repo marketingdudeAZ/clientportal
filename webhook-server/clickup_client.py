@@ -150,6 +150,41 @@ def discover_workspace_lists(workspace_id: str) -> list[dict[str, Any]]:
     return out
 
 
+# Attachment extensions rendered as pictures in the recap PDF. Everything
+# else (pdf, csv, …) is listed by name/link instead of embedded.
+IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
+
+
+def _attachment_ext(att: dict) -> str:
+    ext = (att.get("extension") or "").strip().lower().lstrip(".")
+    if not ext:
+        url = att.get("url") or ""
+        ext = url.rsplit("?", 1)[0].rsplit(".", 1)[-1].lower() if "." in url else ""
+    return ext
+
+
+def _comment_images(c: dict) -> list[dict[str, Any]]:
+    """Pull image attachments out of a raw comment's block array.
+
+    Screenshots pasted into a ClickUp comment arrive as blocks of type
+    'attachment' in the `comment` array — `comment_text` carries no trace of
+    them. Shapes vary across API versions, so probe both block['attachment']
+    and block['attributes']['attachment'] defensively.
+    """
+    out = []
+    for block in (c.get("comment") or []):
+        if not isinstance(block, dict):
+            continue
+        att = block.get("attachment") or (block.get("attributes") or {}).get("attachment")
+        if not (isinstance(att, dict) and att.get("url")):
+            continue
+        if _attachment_ext(att) in IMAGE_EXTENSIONS:
+            out.append({"url": att.get("url"),
+                        "title": att.get("title") or att.get("name") or "screenshot",
+                        "extension": _attachment_ext(att)})
+    return out
+
+
 def _shape_comment(c: dict) -> dict[str, Any]:
     """Normalize one ClickUp comment into the recap's shape."""
     user = c.get("user") or {}
@@ -165,6 +200,7 @@ def _shape_comment(c: dict) -> dict[str, Any]:
         "reactions": len(c.get("reactions") or []),
         "reply_count": c.get("reply_count") or 0,
         "replies": [],
+        "images": _comment_images(c),
     }
 
 
@@ -336,6 +372,39 @@ def _resolve_field_value(field: dict) -> Any:
     if ftype == "checkbox":
         return bool(raw)
     return raw
+
+
+def download_attachment(url: str, max_bytes: int = 8_000_000) -> bytes | None:
+    """Fetch an attachment's bytes for embedding in the recap PDF.
+
+    The API token is sent ONLY to clickup.com hosts — attachment URLs are
+    signed CDN links that normally need no auth, and the token must never
+    leak to an arbitrary host. Oversized or failed downloads return None;
+    the caller degrades to a link.
+    """
+    if not url:
+        return None
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    headers = {}
+    if host == "clickup.com" or host.endswith(".clickup.com"):
+        headers["Authorization"] = CLICKUP_API_KEY or ""
+    try:
+        r = requests.get(url, headers=headers, timeout=20, stream=True)
+        if not _ok(r):
+            logger.warning("ClickUp download_attachment %s -> %s", url[:120], r.status_code)
+            return None
+        buf = b""
+        for chunk in r.iter_content(chunk_size=65536):
+            buf += chunk
+            if len(buf) > max_bytes:
+                logger.warning("ClickUp download_attachment %s exceeds %s bytes — skipped",
+                               url[:120], max_bytes)
+                return None
+        return buf or None
+    except requests.RequestException as e:
+        logger.warning("ClickUp download_attachment network error for %s: %s", url[:120], e)
+        return None
 
 
 # ── Writes ─────────────────────────────────────────────────────────────────
