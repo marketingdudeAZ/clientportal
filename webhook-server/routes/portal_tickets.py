@@ -75,6 +75,12 @@ def ticket_create():
     subject = (body.get("subject") or "").strip()
     fields = body.get("fields") or {}
     property_uuid = (body.get("uuid") or "").strip()
+    # Optional property-profile gap answers. A malformed value is ignored
+    # rather than rejected — these are never required, so they must never be
+    # able to fail a ticket.
+    brief_answers = body.get("brief_answers")
+    if not isinstance(brief_answers, dict):
+        brief_answers = None
     submitted_by = request.headers.get("X-Portal-Email", "").strip()
 
     if not company_id:
@@ -91,6 +97,7 @@ def ticket_create():
         fields=fields,
         submitted_by=submitted_by,
         property_uuid=property_uuid,
+        brief_answers=brief_answers,
     )
     return jsonify(body_out), status
 
