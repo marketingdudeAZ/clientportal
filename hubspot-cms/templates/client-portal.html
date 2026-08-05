@@ -426,6 +426,28 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 .kb-article-snippet{font-size:11px;color:var(--tm);margin-top:2px;line-height:1.5}
 .kb-deflect-actions{display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--bd)}
 
+/* ── Ticket brief gaps (docs/ticket-brief-gaps-scope.md) ── */
+.ct-profile{background:#FAFAF9;border:1px solid var(--bd);border-radius:10px;padding:16px 18px;margin:4px 0 14px}
+.ct-profile[hidden]{display:none}
+.ct-profile-title{font-size:12px;font-weight:700;color:var(--jd);margin-bottom:4px}
+.ct-profile-sub{font-size:11px;color:var(--tm);line-height:1.6;margin-bottom:14px}
+.ct-profile .form-row{margin-bottom:12px}
+.ct-profile .form-label{text-transform:none;letter-spacing:0;font-size:12px;color:var(--tp)}
+.ct-bf-hint{font-size:11px;color:var(--tm);line-height:1.5;margin:-2px 0 6px}
+.ct-known{margin-top:4px;border-top:1px solid var(--bdl);padding-top:10px}
+.ct-known[hidden]{display:none}
+.ct-known summary{font-size:11px;font-weight:700;color:var(--ts);cursor:pointer;list-style:none}
+.ct-known summary::-webkit-details-marker{display:none}
+.ct-known summary:before{content:"▸ ";color:var(--tm)}
+.ct-known[open] summary:before{content:"▾ "}
+.ct-known-row{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--bdl);font-size:11px;line-height:1.5}
+.ct-known-row:last-child{border-bottom:none}
+.ct-known-label{font-weight:700;color:var(--ts);flex-shrink:0;min-width:132px}
+.ct-known-val{color:var(--tm);flex:1;word-break:break-word}
+.ct-known-edit{color:var(--cu);text-decoration:none;flex-shrink:0;font-weight:700}
+.ct-profile-foot{font-size:11px;color:var(--tm);margin-top:12px;padding-top:10px;border-top:1px solid var(--bdl);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ct-profile-foot a{color:var(--cu);text-decoration:none;font-weight:700}
+
 /* ── Ticket Thread (chat-bubble UX rework) ── */
 .ticket-thread{background:#FAFAF9;border:1px solid var(--bd);border-radius:12px;padding:16px;margin:10px 0;display:flex;flex-direction:column;gap:12px}
 .thread-msg{display:flex;flex-direction:column;max-width:100%}
@@ -3085,6 +3107,25 @@ body{line-height:1.55}
     <!-- Fields for the selected type render here, read live from ClickUp. Property
          fields we already know (Property URL, Market, code, AM) are pre-filled server-side. -->
     <div id="ct-fields"></div>
+    <!-- Property-profile gaps for this request type: up to 5 optional questions
+         for fields we don't have yet, plus what we already know (shown back, so
+         nobody is asked twice). Answers PATCH the community-brief overrides on
+         submit. Never required — this can never block a ticket. -->
+    <div id="ct-profile-block" class="ct-profile" hidden>
+      <div class="ct-profile-head">
+        <div class="ct-profile-title">Help us skip the back-and-forth</div>
+        <div class="ct-profile-sub" id="ct-profile-sub"></div>
+      </div>
+      <div id="ct-profile-ask"></div>
+      <details id="ct-profile-known" class="ct-known" hidden>
+        <summary id="ct-profile-known-summary">Already on your property profile</summary>
+        <div id="ct-profile-known-list"></div>
+      </details>
+      <div class="ct-profile-foot">
+        <span id="ct-profile-note">Optional — you can submit without these.</span>
+        <a href="#" onclick="nav('brief'); return false;">See your full property profile →</a>
+      </div>
+    </div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary btn-sm" onclick="submitTicket()">Next</button>
       <button class="btn btn-ghost btn-sm" onclick="toggleCreateTicket()">Cancel</button>
@@ -3747,6 +3788,126 @@ function renderTicketFields(typeKey) {
     }
     return '<div class="form-row"><label class="form-label">' + _escHtml(f.name || '') + req + '</label>' + ctl + '</div>';
   }).join('');
+  _loadBriefGaps(typeKey);
+}
+
+// ── Property-profile gaps ──
+// The ticket form is the highest-intent moment we get, so spend it on what the
+// profile is MISSING for this request type — never on what we already have.
+// Every question is optional; any failure here just leaves the block hidden.
+var __BRIEF_GAPS__ = {};
+
+function _resetBriefBlock() {
+  var block = document.getElementById('ct-profile-block');
+  if (!block) return;
+  block.hidden = true;
+  var ask = document.getElementById('ct-profile-ask');
+  var known = document.getElementById('ct-profile-known');
+  var knownList = document.getElementById('ct-profile-known-list');
+  if (ask) ask.innerHTML = '';
+  if (knownList) knownList.innerHTML = '';
+  if (known) { known.hidden = true; known.open = false; }
+}
+
+function _loadBriefGaps(typeKey) {
+  _resetBriefBlock();
+  if (!typeKey) return;
+  if (__BRIEF_GAPS__[typeKey]) { _renderBriefGaps(__BRIEF_GAPS__[typeKey]); return; }
+
+  var COMPANY_ID = window.__PORTAL_COMPANY_ID__ || '';
+  var UUID       = window.__PORTAL_UUID__ || '';
+  var API_BASE   = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
+  if (!COMPANY_ID) return;
+
+  fetch(API_BASE + '/api/portal-tickets/brief-gaps?company_id=' + encodeURIComponent(COMPANY_ID) +
+        '&ticket_type=' + encodeURIComponent(typeKey) + '&uuid=' + encodeURIComponent(UUID), {
+    headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
+  })
+  .then(function(r){ return r.ok ? r.json() : null; })
+  .then(function(data) {
+    if (!data || !data.ok) return;
+    __BRIEF_GAPS__[typeKey] = data;
+    // Only render if the user is still on this type.
+    var sel = document.getElementById('ct-type');
+    if (sel && sel.value === typeKey) _renderBriefGaps(data);
+  })
+  .catch(function(e){ console.warn('brief gaps unavailable:', e); });
+}
+
+function _renderBriefGaps(data) {
+  var block = document.getElementById('ct-profile-block');
+  if (!block) return;
+  var asks  = (data && data.ask) || [];
+  var known = (data && data.known) || [];
+  if (!asks.length && !known.length) { _resetBriefBlock(); return; }
+
+  // Sub-line: lead with what we already have when there is anything to show.
+  var name = (data.property_name || 'your property');
+  var sub = known.length
+    ? 'We already have ' + known.length + ' detail' + (known.length === 1 ? '' : 's') +
+      ' on file for ' + _escHtml(name) + '.' +
+      (asks.length ? ' Answer up to ' + asks.length + ' more and your team can start without emailing you first — ' +
+                     'we\'ll save them to your property profile, so you\'re only ever asked once.' : '')
+    : 'Answering these saves your team a round of emails. They go straight onto your property profile, ' +
+      'so you\'ll only ever be asked once.';
+  document.getElementById('ct-profile-sub').innerHTML = sub;
+
+  // Ask rows — .ct-bf/data-bkey deliberately differ from the ClickUp fields'
+  // .ct-f/data-fid so a brief answer can never be posted as a custom field.
+  document.getElementById('ct-profile-ask').innerHTML = asks.map(function(f) {
+    var ph = f.placeholder ? ' placeholder="' + _escAttr(f.placeholder) + '"' : '';
+    var opts = (f.options || []).map(function(o) {
+      return '<option value="' + _escAttr(o) + '">' + _escHtml(o) + '</option>';
+    }).join('');
+    var ctl;
+    switch (f.input) {
+      case 'textarea':    ctl = '<textarea class="form-textarea ct-bf" data-bkey="' + _escAttr(f.key) + '"' + ph + '></textarea>'; break;
+      case 'select':      ctl = '<select class="form-select ct-bf" data-bkey="' + _escAttr(f.key) + '"><option value="">Select…</option>' + opts + '</select>'; break;
+      case 'multiselect': ctl = '<select class="form-select ct-bf" multiple data-bkey="' + _escAttr(f.key) + '">' + opts + '</select>'; break;
+      default:            ctl = '<input type="text" class="form-input ct-bf" data-bkey="' + _escAttr(f.key) + '"' + ph + '/>';
+    }
+    return '<div class="form-row"><label class="form-label">' + _escHtml(f.label || '') + '</label>' +
+           (f.hint ? '<div class="ct-bf-hint">' + _escHtml(f.hint) + '</div>' : '') + ctl + '</div>';
+  }).join('');
+
+  // Known — collapsed by default; this is reassurance, not reading material.
+  var knownBox = document.getElementById('ct-profile-known');
+  if (known.length) {
+    document.getElementById('ct-profile-known-summary').textContent =
+      'Already on your property profile (' + known.length + ')';
+    document.getElementById('ct-profile-known-list').innerHTML = known.map(function(k) {
+      return '<div class="ct-known-row">' +
+        '<span class="ct-known-label">' + _escHtml(k.label || '') + '</span>' +
+        '<span class="ct-known-val">' + _escHtml(k.preview || '') + '</span>' +
+        '<a class="ct-known-edit" href="#" onclick="nav(\'brief\'); return false;">Edit →</a>' +
+      '</div>';
+    }).join('');
+    knownBox.hidden = false;
+  }
+
+  var note = document.getElementById('ct-profile-note');
+  if (note) {
+    var deferred = ((data && data.deferred) || []).length;
+    note.textContent = 'Optional — you can submit without these.' +
+      (deferred ? ' ' + deferred + ' more detail' + (deferred === 1 ? '' : 's') + ' live on your property profile.' : '');
+  }
+  block.hidden = false;
+}
+
+// Brief answers, keyed by brief field key. Multi-selects join with ';' — the
+// format community_brief.write_field expects for multi-enumeration.
+function _collectBriefAnswers(form) {
+  var out = {};
+  form.querySelectorAll('#ct-profile-ask .ct-bf').forEach(function(el) {
+    var key = el.getAttribute('data-bkey');
+    if (!key) return;
+    var val = el.multiple
+      ? Array.prototype.slice.call(el.selectedOptions).map(function(o){ return o.value; }).join(';')
+      : (el.value || '').trim();
+    if (!val) return;
+    out[key] = val;
+  });
+  return out;
 }
 
 function submitTicket() {
@@ -3844,7 +4005,8 @@ function _doSubmitTicket(form, typeKey, subject) {
       'Content-Type': 'application/json',
       'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com',
     },
-    body: JSON.stringify({ company_id: COMPANY_ID, uuid: UUID, ticket_type: typeKey, subject: subject, fields: fields })
+    body: JSON.stringify({ company_id: COMPANY_ID, uuid: UUID, ticket_type: typeKey, subject: subject,
+                           fields: fields, brief_answers: _collectBriefAnswers(form) })
   })
   .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
   .then(function(res) {
@@ -3857,6 +4019,11 @@ function _doSubmitTicket(form, typeKey, subject) {
       var subj = document.getElementById('ct-subject'); if (subj) subj.value = '';
       var fbox = document.getElementById('ct-fields'); if (fbox) fbox.innerHTML = '';
       var tsel = document.getElementById('ct-type');   if (tsel) tsel.value = '';
+      // Answers just landed on the profile — drop the cache so the next
+      // request for this type asks for what's still missing, not what we
+      // already saved.
+      __BRIEF_GAPS__ = {};
+      _resetBriefBlock();
       form.classList.remove('show');
       var badge = document.getElementById('tickets-badge');
       if (badge) badge.textContent = parseInt(badge.textContent || '0') + 1;
