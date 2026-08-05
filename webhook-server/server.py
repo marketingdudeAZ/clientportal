@@ -902,6 +902,13 @@ def approve_recommendation():
             rec_body=rec_body,
             am_owner_id=am_owner_id,
         )
+        try:
+            import loop_terminal_events
+            loop_terminal_events.record_recommendation_approved(
+                property_uuid, company_id, recommendation_id=rec_id,
+                rec_type=rec_type, actor=email)
+        except Exception as exc:
+            logger.warning("loop event emit failed for rec %s (approved): %s", rec_id, exc)
         return jsonify(result)
     except Exception as e:
         logger.error("Approval routing failed: %s", e, exc_info=True)
@@ -936,6 +943,12 @@ def dismiss_recommendation():
     try:
         _update_rec_status(rec_id, "dismissed")
         _log_hubspot_activity(company_id, f"Portal: Client dismissed recommendation (rec_id={rec_id})")
+        try:
+            import loop_terminal_events
+            loop_terminal_events.record_recommendation_rejected(
+                property_uuid, company_id, recommendation_id=rec_id, actor=email)
+        except Exception as exc:
+            logger.warning("loop event emit failed for rec %s (rejected): %s", rec_id, exc)
         return jsonify({"status": "dismissed"})
     except Exception as e:
         logger.error("Dismiss failed: %s", e)
@@ -5332,6 +5345,35 @@ def get_call_prep():
     return jsonify(payload)
 
 
+def _emit_rec_terminal_event(payload: dict, company_id: str, rec_id: str,
+                             outcome: str, email: str) -> None:
+    """Emit recommendation_approved / recommendation_rejected. Never raises.
+
+    source_id is the rec_id, so this joins to the earlier
+    recommendation_proposed event for the same recommendation.
+    """
+    try:
+        import loop_terminal_events
+        rec = None
+        for r in (payload or {}).get("recommendations", []) or []:
+            if isinstance(r, dict) and r.get("rec_id") == rec_id:
+                rec = r
+                break
+        rec_type = (rec or {}).get("rec_type") or (rec or {}).get("type")
+        property_uuid = (payload or {}).get("property_uuid")
+        if outcome == "approved":
+            loop_terminal_events.record_recommendation_approved(
+                property_uuid, company_id, recommendation_id=rec_id,
+                rec_type=rec_type, actor=email)
+        else:
+            loop_terminal_events.record_recommendation_rejected(
+                property_uuid, company_id, recommendation_id=rec_id,
+                rec_type=rec_type, actor=email)
+    except Exception as exc:
+        logger.warning("loop event emit failed for rec %s (%s): %s",
+                       rec_id, outcome, exc)
+
+
 def _callprep_update_rec(company_id: str, rec_id: str, new_status: str, email: str) -> dict | None:
     """Read stored call-prep payload, update one rec's status, write back.
 
@@ -5404,6 +5446,10 @@ def callprep_dismiss():
     result = _callprep_update_rec(company_id, rec_id, "dismissed", email)
     if not result:
         return jsonify({"error": "Recommendation not found or update failed"}), 404
+
+    # Close the loop funnel. Emitted AFTER the state write and best-effort, so
+    # instrumentation can never fail a client action.
+    _emit_rec_terminal_event(result, company_id, rec_id, "rejected", email)
     return jsonify({"status": "dismissed", "rec_id": rec_id})
 
 
@@ -5426,6 +5472,8 @@ def callprep_approve():
     result = _callprep_update_rec(company_id, rec_id, "approved", email)
     if not result:
         return jsonify({"error": "Recommendation not found or update failed"}), 404
+
+    _emit_rec_terminal_event(result, company_id, rec_id, "approved", email)
 
     # Create an AM task summarizing what was approved
     import requests as req, datetime as _dt

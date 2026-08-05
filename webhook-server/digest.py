@@ -141,19 +141,48 @@ def _store_cached_digest(company_id, text):
         logger.warning("Could not store digest cache for %s: %s", company_id, r.status_code)
 
 
-def get_open_recs_count(property_uuid):
-    """Count pending recommendations in HubDB for this property."""
-    from config import HUBDB_RECOMMENDATIONS_TABLE_ID
-    if not HUBDB_RECOMMENDATIONS_TABLE_ID:
+def get_open_recs_count(company_id):
+    """Count recommendations this client can actually act on right now.
+
+    Sourced from the Call Prep payload (`callprep_data_json`) — the canonical
+    client-facing surface, and the one the portal's Approve / Dismiss buttons
+    write back to.
+
+    It used to count HubDB rpm_recommendations rows, which was wrong twice
+    over. Those rows have no client-facing renderer (the HubDB rec-feed partial
+    was never included by the portal template), so the digest was telling
+    clients they had N open recommendations they could not see anywhere. And
+    because red_light_pipeline minted a fresh row id every monthly run and
+    nothing ever moved a row off `pending`, the number only ever went up.
+
+    Call Prep is regenerated monthly and overwrites the prior cycle, so the
+    count is naturally bounded and reflects the current cycle only.
+
+    Returns 0 on any failure — the digest degrades to no rec mention rather
+    than a wrong one.
+    """
+    if not company_id:
         return 0
-    url = (
-        f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_RECOMMENDATIONS_TABLE_ID}/rows"
-        f"?property_uuid__eq={property_uuid}&status__eq=pending"
+    url = (f"{HS_BASE}/crm/v3/objects/companies/{company_id}"
+           f"?properties=callprep_data_json")
+    try:
+        r = requests.get(url, headers=HS_HEADERS, timeout=10)
+        if r.status_code != 200:
+            logger.warning("open-recs count for %s -> %s", company_id, r.status_code)
+            return 0
+        raw = ((r.json() or {}).get("properties") or {}).get("callprep_data_json") or ""
+        if not raw:
+            return 0
+        payload = json.loads(raw)
+    except (requests.RequestException, ValueError, TypeError) as e:
+        logger.warning("open-recs count failed for %s: %s", company_id, e)
+        return 0
+
+    recs = (payload or {}).get("recommendations") or []
+    return sum(
+        1 for rec in recs
+        if isinstance(rec, dict) and (rec.get("status") or "pending").lower() == "pending"
     )
-    r = requests.get(url, headers=HS_HEADERS)
-    if r.status_code == 200:
-        return r.json().get("total", 0)
-    return 0
 
 
 def generate_digest(property_uuid, company_id, property_name, rpmmarket):
@@ -191,7 +220,8 @@ def generate_digest(property_uuid, company_id, property_name, rpmmarket):
         logger.info("No BigQuery data for %s — returning fallback", property_uuid)
         return DIGEST_FALLBACK
 
-    open_recs = get_open_recs_count(property_uuid)
+    # Keyed by company_id: Call Prep is stored on the HubSpot company record.
+    open_recs = get_open_recs_count(company_id)
 
     try:
         user_msg = _build_user_message(property_name, rpmmarket, scores, insights, open_recs)

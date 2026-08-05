@@ -13,6 +13,11 @@ event vocabulary lives in a single file (not scattered string literals):
 
     recommendation_proposed  (optimize)  card rendered with a $ recommendation
             │
+            ├──▶ recommendation_rejected (optimize)  client dismissed it
+            │
+            ▼
+    recommendation_approved  (optimize)  client approved it in the portal
+            │
             ▼
     self_checkout_submitted  (convert)   PM clicked "Add"
             │
@@ -86,6 +91,61 @@ def record_self_checkout_submitted(
         trigger="client_action",
         magnitude=float(amount),
         payload={"channel": channel, "actor": actor},
+    )
+
+
+def record_recommendation_approved(
+    property_uuid: str | None,
+    company_id: str | None,
+    *,
+    recommendation_id: str,
+    rec_type: str | None = None,
+    actor: str | None = None,
+    magnitude: float | None = None,
+) -> str:
+    """A client approved a recommendation in the portal.
+
+    `source_id=recommendation_id` is what makes the funnel joinable: this and
+    the earlier `recommendation_proposed` share a key, so proposed -> approved
+    conversion is a group-by rather than a heuristic match. That join is
+    exactly what the old random rec ids made impossible.
+    """
+    return loop_writer.record(
+        stage="optimize",
+        event_type="recommendation_approved",
+        property_uuid=property_uuid,
+        company_id=company_id,
+        source=_SOURCE,
+        source_id=recommendation_id,
+        trigger="client_action",
+        magnitude=(float(magnitude) if magnitude is not None else None),
+        payload={"rec_type": rec_type, "actor": actor},
+    )
+
+
+def record_recommendation_rejected(
+    property_uuid: str | None,
+    company_id: str | None,
+    *,
+    recommendation_id: str,
+    rec_type: str | None = None,
+    actor: str | None = None,
+    reason: str | None = None,
+) -> str:
+    """A client dismissed a recommendation in the portal.
+
+    A rejection is a measurement, not a non-event: without it the funnel
+    cannot tell "never looked at" from "looked at and declined".
+    """
+    return loop_writer.record(
+        stage="optimize",
+        event_type="recommendation_rejected",
+        property_uuid=property_uuid,
+        company_id=company_id,
+        source=_SOURCE,
+        source_id=recommendation_id,
+        trigger="client_action",
+        payload={"rec_type": rec_type, "actor": actor, "reason": reason},
     )
 
 
