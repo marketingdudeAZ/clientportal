@@ -34,6 +34,7 @@ os.environ.setdefault("CLICKUP_API_KEY", "test-key")
 os.environ["CLICKUP_LIST_CREATIVE_AD_COPY"] = "901-creative"
 os.environ["CLICKUP_LIST_GENERAL"] = "901-general"
 os.environ["CLICKUP_LIST_CAMPAIGN_REVIEW"] = "901-review"
+os.environ["CLICKUP_LIST_NEW_ACCOUNT_BUILD"] = "901-newacct"
 
 import community_brief as cb  # noqa: E402
 import config  # noqa: E402
@@ -361,6 +362,197 @@ class DegradedPathTests(unittest.TestCase):
             r = self._get()
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.get_json()["degraded"])
+
+
+# ── 7-9. write-back ─────────────────────────────────────────────────────────
+
+import clickup_client  # noqa: E402
+
+
+class WriteBackTests(unittest.TestCase):
+    """Answers land on the property profile — and can never cost us a ticket."""
+
+    def setUp(self):
+        self.created = {}
+
+        def _fake_create_task(list_id, name, **kw):
+            self.created = {"list_id": list_id, "name": name, **kw}
+            return {"id": "task-9", "name": name, "url": "https://app.clickup.com/t/task-9",
+                    "status": {"status": "to do"}, "date_created": "1720000000000"}
+
+        self.writes = []
+
+        def _fake_write_field(company_id, key, value, edited_by=""):
+            self.writes.append({"company_id": company_id, "key": key,
+                                "value": value, "edited_by": edited_by})
+            return True, value
+
+        self.patchers = [
+            mock.patch.object(config, "PORTAL_TICKET_BRIEF_GAPS_ENABLED", True),
+            mock.patch.object(clickup_client, "CLICKUP_API_KEY", "test-key"),
+            mock.patch.object(clickup_client, "get_list_fields", return_value=[
+                {"id": "f_details", "name": "Details", "type": "text", "required": False},
+            ]),
+            mock.patch.object(clickup_client, "create_task", side_effect=_fake_create_task),
+            mock.patch("hubspot_client.get_company", return_value={"name": "Maple", "uuid": "u-1"}),
+            mock.patch.object(portal_tickets, "_record_mapping"),
+            # Empty profile: nothing to clobber, so every answer is writable.
+            mock.patch.object(cb, "load_company_state", return_value={"name": "Maple"}),
+            mock.patch.object(cb, "write_field", side_effect=_fake_write_field),
+        ]
+        for p in self.patchers:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patchers:
+            p.stop()
+
+    def _create(self, brief_answers, type_key="creative_ad_copy"):
+        return portal_tickets.create_ticket(
+            "cid-42", type_key,
+            subject="New photos",
+            fields={"f_details": "Please refresh the gallery"},
+            submitted_by="manager@rpmliving.com",
+            property_uuid="u-1",
+            brief_answers=brief_answers,
+        )
+
+    # ── 7. happy path ────────────────────────────────────────────────────────
+
+    def test_answers_are_written_and_stamped_on_the_task(self):
+        body, status = self._create({
+            "taglines": "Live Well, Live Here\nYour Best Address",
+            "brand_adjectives": "Warm; Modern; Walkable",
+        })
+        self.assertEqual(status, 201)
+        self.assertTrue(body["ok"])
+
+        self.assertEqual([w["key"] for w in self.writes], ["taglines", "brand_adjectives"])
+        self.assertTrue(all(w["edited_by"] == "manager@rpmliving.com" for w in self.writes))
+        self.assertTrue(all(w["company_id"] == "cid-42" for w in self.writes))
+        self.assertEqual(self.writes[0]["value"], "Live Well, Live Here\nYour Best Address")
+
+        desc = self.created["description"]
+        self.assertIn("Property profile updated from this request: Taglines, Brand Adjectives", desc)
+        self.assertNotIn("Could NOT save", desc)
+        # The existing identity stamp is untouched.
+        self.assertIn("Submitted via the RPM client portal.", desc)
+        self.assertIn("uuid=u-1", desc)
+
+    def test_multiselect_list_is_joined_the_way_write_field_expects(self):
+        self._create({"voice_tier": ["luxury", "lifestyle"]}, type_key="new_account_build")
+        self.assertEqual(self.writes[0]["key"], "voice_tier")
+        self.assertEqual(self.writes[0]["value"], "luxury;lifestyle")
+
+    def test_no_answers_leaves_the_description_exactly_as_before(self):
+        self._create(None)
+        self.assertEqual(self.writes, [])
+        self.assertNotIn("Property profile updated", self.created["description"])
+
+    def test_writes_are_skipped_entirely_when_the_flag_is_off(self):
+        with mock.patch.object(config, "PORTAL_TICKET_BRIEF_GAPS_ENABLED", False):
+            body, status = self._create({"taglines": "Live Well"})
+        self.assertEqual(status, 201)
+        self.assertEqual(self.writes, [])
+
+    # ── 8. failure isolation ─────────────────────────────────────────────────
+
+    def test_write_failures_do_not_block_the_ticket(self):
+        def _flaky(company_id, key, value, edited_by=""):
+            if key == "differentiators":
+                raise RuntimeError("hubspot connection reset")
+            if key == "must_include":
+                return False, "HubSpot 500"
+            self.writes.append({"key": key})
+            return True, value
+
+        with mock.patch.object(cb, "write_field", side_effect=_flaky), \
+             mock.patch.object(portal_tickets, "_record_mapping") as rec:
+            body, status = self._create({
+                "taglines": "Live Well",
+                "differentiators": "Rooftop lounge with skyline views",
+                "must_include": "Now offering 6 weeks free",
+            })
+
+        self.assertEqual(status, 201)          # the ticket is the product
+        self.assertTrue(body["ok"])
+        rec.assert_called_once()               # tracking still recorded
+
+        desc = self.created["description"]
+        self.assertIn("Property profile updated from this request: Taglines", desc)
+        self.assertIn("⚠ Could NOT save to the property profile — please update manually: "
+                      "Differentiators, Must Include / Key Messages", desc)
+        # Submitted values echoed so nothing the requester typed is lost.
+        self.assertIn("Rooftop lounge with skyline views", desc)
+        self.assertIn("Now offering 6 weeks free", desc)
+
+    def test_total_hubspot_outage_still_creates_the_ticket(self):
+        with mock.patch.object(cb, "load_company_state", side_effect=RuntimeError("down")), \
+             mock.patch.object(cb, "write_field", side_effect=RuntimeError("down")):
+            body, status = self._create({"taglines": "Live Well", "residents_love": "The courtyard"})
+        self.assertEqual(status, 201)
+        desc = self.created["description"]
+        self.assertIn("Could NOT save", desc)
+        self.assertIn("Taglines", desc)
+        self.assertIn("What Residents Love", desc)
+
+    # ── 9. the write gates ───────────────────────────────────────────────────
+
+    def test_only_keys_mapped_to_this_type_are_writable(self):
+        """Gate 1 + R1: nothing off-mapping reaches write_field, uuid included."""
+        self._create({
+            "taglines": "Live Well",          # mapped -> written
+            "marketing_budget": "$12,000",    # internal, not mapped -> dropped
+            "goals": "Lease up by Q4",        # mapped for OTHER types -> dropped
+            "uuid": "hacked-uuid",            # not a brief field at all -> dropped
+            "name": "Renamed Property",       # readonly identity -> dropped
+        })
+        self.assertEqual([w["key"] for w in self.writes], ["taglines"])
+
+    def test_blank_answers_are_dropped(self):
+        self._create({"taglines": "   ", "brand_adjectives": "", "residents_love": "\n\t"})
+        self.assertEqual(self.writes, [])
+
+    def test_anti_clobber_skips_fields_filled_since_the_form_loaded(self):
+        """A human edit on the brief page outranks a stale ticket form."""
+        with mock.patch.object(cb, "load_company_state",
+                               return_value={"name": "Maple", "fluency_taglines": "Edited on the profile"}):
+            self._create({"taglines": "Stale form value", "brand_adjectives": "Warm"})
+        self.assertEqual([w["key"] for w in self.writes], ["brand_adjectives"])
+        desc = self.created["description"]
+        self.assertIn("Skipped (filled in on the profile while this form was open): Taglines", desc)
+        self.assertNotIn("Stale form value", desc)
+
+    def test_write_back_is_bounded_by_the_cap(self):
+        answers = {k: f"value for {k}" for k in CREATIVE}   # all 8 mapped fields
+        self._create(answers)
+        self.assertEqual(len(self.writes), config.PORTAL_TICKET_BRIEF_MAX_ASK)
+        self.assertEqual([w["key"] for w in self.writes], CREATIVE[:5])  # priority order
+
+    def test_unmapped_ticket_type_writes_nothing(self):
+        self._create({"taglines": "Live Well"}, type_key="general")
+        self.assertEqual(self.writes, [])
+
+    def test_route_ignores_a_malformed_brief_answers_payload(self):
+        c = _client()
+        with mock.patch.object(portal_tickets, "create_ticket",
+                               return_value=({"ok": True, "ticket": {}}, 201)) as ct:
+            r = c.post("/api/portal-tickets/create",
+                       json={"company_id": "cid", "ticket_type": "general",
+                             "subject": "x", "brief_answers": "not-an-object"},
+                       headers=PORTAL_HDR)
+        self.assertEqual(r.status_code, 201)
+        self.assertIsNone(ct.call_args.kwargs["brief_answers"])
+
+    def test_route_passes_brief_answers_through(self):
+        c = _client()
+        with mock.patch.object(portal_tickets, "create_ticket",
+                               return_value=({"ok": True, "ticket": {}}, 201)) as ct:
+            c.post("/api/portal-tickets/create",
+                   json={"company_id": "cid", "ticket_type": "creative_ad_copy",
+                         "subject": "x", "brief_answers": {"taglines": "Live Well"}},
+                   headers=PORTAL_HDR)
+        self.assertEqual(ct.call_args.kwargs["brief_answers"], {"taglines": "Live Well"})
 
 
 if __name__ == "__main__":

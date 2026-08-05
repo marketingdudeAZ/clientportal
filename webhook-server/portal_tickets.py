@@ -422,8 +422,115 @@ def _build_custom_fields(
     return payload, applied
 
 
+# ── brief write-back ─────────────────────────────────────────────────────────
+
+_ECHO_MAX = 500
+
+
+def _apply_brief_answers(company_id: str, type_key: str, answers: dict | None,
+                         submitted_by: str = "") -> dict[str, Any]:
+    """Write gap answers onto the property profile. Bounded, and never raises.
+
+    Returns {"saved": [labels], "skipped": [labels], "failed": [{label, value, error}]}
+    for the provenance stamp on the ClickUp task.
+
+    Four gates on what can be written, so a crafted POST can't reach an
+    arbitrary property:
+      1. the key must be in THIS ticket type's mapping (askable, non-internal);
+      2. community_brief.write_field only ever PATCHes field.hs_override — uuid
+         is not a brief field and has no override, so R1 holds by construction;
+      3. anti-clobber — re-read the profile and skip anything that got filled
+         in while the ticket form sat open (a human edit outranks a stale form);
+      4. blank / whitespace-only answers are dropped before any write.
+
+    Bounded by the same cap as the ask, and every write is individually
+    wrapped: a HubSpot outage produces `failed` entries, never an exception,
+    so it can degrade profile capture but never ticket creation.
+    """
+    result: dict[str, Any] = {"saved": [], "skipped": [], "failed": []}
+    if not company_id or not answers or not isinstance(answers, dict):
+        return result
+    if not _gaps_enabled():
+        return result
+
+    import community_brief as cb
+
+    mapped = _mapped_keys(type_key)
+    if not mapped:
+        return result
+
+    # Gates 1 + 4, in mapping order (so the cap keeps the same priority the
+    # form used) — never trust the order or contents of the posted object.
+    todo = []
+    for key in mapped:
+        if key not in answers:
+            continue
+        field = cb.FIELDS.get(key)
+        if not field or not _is_askable(field):
+            continue
+        raw = answers[key]
+        value = ";".join(str(v) for v in raw if str(v).strip()) if isinstance(raw, list) else str(raw or "")
+        if not value.strip():
+            continue
+        todo.append((key, field, value))
+        if len(todo) >= _cap():
+            break
+    if not todo:
+        return result
+
+    # Gate 3 — one fresh read for the anti-clobber check.
+    try:
+        props = cb.load_company_state(company_id) or {}
+    except Exception as e:  # noqa: BLE001
+        logger.warning("brief write-back: profile re-read failed for %s: %s", company_id, e)
+        props = {}
+
+    for key, field, value in todo:
+        try:
+            if props and cb.resolve_value(props, field.hs_resolved, field.hs_override):
+                result["skipped"].append(field.label)
+                continue
+            ok, detail = cb.write_field(company_id, key, value, edited_by=submitted_by)
+            if ok:
+                result["saved"].append(field.label)
+            else:
+                result["failed"].append({"label": field.label, "value": value, "error": str(detail)})
+        except Exception as e:  # noqa: BLE001 — one bad field can't take the rest down
+            logger.warning("brief write-back failed for %s/%s: %s", company_id, key, e)
+            result["failed"].append({"label": field.label, "value": value, "error": str(e)[:120]})
+
+    if result["failed"]:
+        logger.warning("brief write-back: %s of %s fields failed for %s",
+                       len(result["failed"]), len(todo), company_id)
+    return result
+
+
+def _brief_lines(brief: dict | None) -> list[str]:
+    """The provenance block for the ClickUp description.
+
+    Failures echo the submitted values underneath, so nothing the requester
+    typed is lost even when every HubSpot write failed — the assignee can put
+    them on the profile by hand.
+    """
+    if not brief:
+        return []
+    lines: list[str] = []
+    if brief.get("saved"):
+        lines.append("Property profile updated from this request: " + ", ".join(brief["saved"]))
+    if brief.get("skipped"):
+        lines.append("Skipped (filled in on the profile while this form was open): "
+                     + ", ".join(brief["skipped"]))
+    if brief.get("failed"):
+        lines.append("⚠ Could NOT save to the property profile — please update manually: "
+                     + ", ".join(f["label"] for f in brief["failed"]))
+        for f in brief["failed"]:
+            lines.append(f"   {f['label']}: {_truncate(str(f['value']).replace(chr(10), ' · '), _ECHO_MAX)}")
+    return lines
+
+
 def _description(applied: dict, submitted_by: str, company_id: str,
-                 property_uuid: str, extra: dict | None) -> str:
+                 property_uuid: str, extra: dict | None,
+                 brief: dict | None = None) -> str:
     """A provenance + identity stamp so the recap automation can match the task
     back to the property with confidence."""
     lines = ["Submitted via the RPM client portal."]
@@ -442,6 +549,10 @@ def _description(applied: dict, submitted_by: str, company_id: str,
             continue
         if k not in applied:
             lines.append(f"{k}: {v}")
+    brief_lines = _brief_lines(brief)
+    if brief_lines:
+        lines.append("")
+        lines.extend(brief_lines)
     return "\n".join(lines)
 
 
@@ -455,8 +566,17 @@ def create_ticket(
     fields: dict | None = None,
     submitted_by: str = "",
     property_uuid: str = "",
+    brief_answers: dict | None = None,
 ) -> tuple[dict, int]:
-    """Create a ClickUp task for a portal ticket. Returns (body, http_status)."""
+    """Create a ClickUp task for a portal ticket. Returns (body, http_status).
+
+    `brief_answers` are the optional property-profile gap answers from the
+    ticket form ({brief field key: value}). They are written to HubSpot BEFORE
+    the task is created, because the description — the only place the internal
+    team sees what was captured — has to name what saved and what didn't.
+    That write is bounded and cannot raise, so a HubSpot outage degrades
+    profile capture without ever costing us the ticket.
+    """
     t = _type_by_key(type_key)
     if not t:
         return {"ok": False, "error": "Unknown ticket type."}, 400
@@ -469,7 +589,8 @@ def create_ticket(
     subject = (subject or "").strip() or t["label"]
     prefill = _prefill_values(company_id, property_uuid)
     cf_payload, applied = _build_custom_fields(list_id, fields, prefill)
-    description = _description(applied, submitted_by, company_id, property_uuid, fields)
+    brief = _apply_brief_answers(company_id, type_key, brief_answers, submitted_by)
+    description = _description(applied, submitted_by, company_id, property_uuid, fields, brief)
 
     task = clickup_client.create_task(
         list_id,
