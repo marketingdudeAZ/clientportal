@@ -34,6 +34,82 @@ def _profile(**kw) -> rv.VoiceProfile:
     return rv.VoiceProfile(**base)
 
 
+# ── T2: override-wins resolution ────────────────────────────────────────────
+
+def test_t2_override_beats_resolved():
+    props = {
+        "fluency_voice_tier": "standard",
+        "fluency_voice_tier_override": "luxury",
+        "fluency_unit_noun": "apartment",
+        "fluency_unit_noun_override": "residence;penthouse",
+        "fluency_forbidden_phrases": "cozy",
+        "fluency_forbidden_phrases_override": "luxury living\nresort-style",
+    }
+    p = rv.load_voice_profile("123", props=props)
+    assert p.tiers == ("luxury",)
+    assert p.unit_nouns == ("residence", "penthouse")
+    assert p.forbidden_phrases == ("luxury living", "resort-style")
+    assert p.is_default is False
+
+
+def test_t2_resolved_wins_when_no_override():
+    p = rv.load_voice_profile("123", props={"fluency_voice_tier": "value"})
+    assert p.tiers == ("value",)
+
+
+def test_t2_blank_override_does_not_beat_a_populated_resolved_value():
+    """Whitespace-only is not a human edit — the blank-vs-absent seam where
+    override models usually break. community_brief._nonblank already draws
+    this line; this asserts we inherit it rather than re-deciding."""
+    for blank in ("", "   ", "\n"):
+        p = rv.load_voice_profile("123", props={
+            "fluency_voice_tier": "luxury",
+            "fluency_voice_tier_override": blank,
+        })
+        assert p.tiers == ("luxury",), f"blank override {blank!r} wrongly won"
+
+
+def test_t2_every_voice_field_is_public():
+    """No internal=True field may ever be read into a prompt."""
+    import community_brief as cb
+    for key in list(rv.VOICE_SCALAR_FIELDS) + list(rv.VOICE_LIST_FIELDS):
+        fld = cb.FIELDS.get(key)
+        assert fld is not None, f"{key} missing from community_brief.FIELDS"
+        assert fld.internal is False, f"{key} is internal=True and must not be prompted"
+
+
+def test_t2_off_vocab_tier_is_dropped():
+    p = rv.load_voice_profile("123", props={
+        "fluency_voice_tier_override": "platinum;luxury",
+        "fluency_advertised_name_override": "The Quincy",
+    })
+    assert p.tiers == ("luxury",)
+
+
+def test_t2_empty_record_degrades_to_default():
+    p = rv.load_voice_profile("123", props={})
+    assert p.is_default is True
+    assert p.tiers == ()
+    assert rv.render_property_voice_block(p) == ""
+    # A record with only irrelevant props is still "no voice".
+    assert rv.load_voice_profile("123", props={"name": "x"}).is_default is True
+
+
+def test_t2_never_raises_when_hubspot_is_down(monkeypatch):
+    import community_brief as cb
+    monkeypatch.setattr(cb, "load_company_state",
+                        lambda cid: (_ for _ in ()).throw(RuntimeError("boom")))
+    p = rv.load_voice_profile("123")
+    assert p.is_default is True
+
+
+def test_t2_reads_uuid_but_never_writes_it():
+    """R1: code never writes uuid. Reading it for event correlation is fine."""
+    p = rv.load_voice_profile("123", props={
+        "uuid": "u-9", "fluency_voice_tier": "value"})
+    assert p.property_uuid == "u-9"
+
+
 # ── T3: tier guidance vs the Fair Housing hard patterns ─────────────────────
 
 def test_t3_no_tier_prefers_a_hard_blocked_phrase():

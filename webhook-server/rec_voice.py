@@ -166,6 +166,124 @@ class VoiceProfile:
                     self.must_include, self.forbidden_phrases))
 
 
+# Community-brief field keys this module reads. Every one MUST be
+# internal=False — internal fields (budget, PMS/CMS, resident demographics)
+# must never reach a prompt. _assert_public() enforces it at load time and
+# test_t2_* enforces it in CI, so flipping a field to internal=True in
+# community_brief.py cannot silently leak it into generated copy.
+VOICE_SCALAR_FIELDS: dict[str, str] = {
+    "advertised_name": "advertised_name",
+    "short_name": "short_name",
+}
+VOICE_LIST_FIELDS: dict[str, str] = {
+    "voice_tier": "tiers",
+    "unit_noun": "unit_nouns",
+    "brand_adjectives": "brand_adjectives",
+    "differentiators": "differentiators",
+    "taglines": "taglines",
+    "must_include": "must_include",
+    "forbidden_phrases": "forbidden_phrases",
+}
+
+
+def _split_multi(value: str) -> tuple[str, ...]:
+    """Split a stored multiselect / one-per-line value into parts.
+
+    HubSpot multiselects are ';'-separated; brief textareas are documented as
+    one-per-line. Mirrors community_brief._split_for_pills' precedence so the
+    portal and the prompt see the same list.
+    """
+    if not value:
+        return ()
+    s = str(value)
+    if "\n" in s:
+        parts = s.split("\n")
+    elif "," in s and ";" not in s:
+        parts = s.split(",")
+    else:
+        parts = s.split(";")
+    return tuple(p.strip() for p in parts if p.strip())
+
+
+def _assert_public(cb, key: str) -> bool:
+    """True when a brief field exists and is safe to put in a prompt."""
+    fld = cb.FIELDS.get(key)
+    if fld is None:
+        logger.warning("rec_voice: brief field %r not found; skipping", key)
+        return False
+    if getattr(fld, "internal", False):
+        logger.error(
+            "rec_voice: brief field %r is internal=True and must not reach a "
+            "prompt; skipping", key)
+        return False
+    return True
+
+
+def load_voice_profile(company_id: str, *, props: dict | None = None) -> VoiceProfile:
+    """Build a VoiceProfile from a HubSpot company record.
+
+    Override-wins per CLAUDE.md rule 4, delegated to
+    community_brief.resolve_value — the single precedence rule the portal
+    display and the Fluency feed already share. Routing through it (rather
+    than reading the props directly) is what keeps generated copy from
+    describing a property differently than the brief shows it.
+
+    Pass `props` to skip the fetch when the caller already holds the record.
+
+    Never raises. On fetch failure or an empty record, returns
+    VoiceProfile(is_default=True) with no property specifics, so a generator
+    degrades to generic-but-safe copy rather than failing. Callers that must
+    not ship generic copy check `.is_default`.
+    """
+    try:
+        import community_brief as cb
+    except Exception as e:  # pragma: no cover - import guard
+        logger.warning("rec_voice: community_brief unavailable (%s)", e)
+        return VoiceProfile(company_id=company_id, is_default=True)
+
+    try:
+        if props is None:
+            props = cb.load_company_state(company_id) or {}
+    except Exception as e:
+        logger.warning("rec_voice: load_company_state failed for %s: %s", company_id, e)
+        props = {}
+
+    if not props:
+        return VoiceProfile(company_id=company_id, is_default=True)
+
+    values: dict[str, object] = {}
+    for key, attr in VOICE_SCALAR_FIELDS.items():
+        if not _assert_public(cb, key):
+            continue
+        fld = cb.FIELDS[key]
+        values[attr] = cb.resolve_value(props, fld.hs_resolved, fld.hs_override)
+
+    for key, attr in VOICE_LIST_FIELDS.items():
+        if not _assert_public(cb, key):
+            continue
+        fld = cb.FIELDS[key]
+        values[attr] = _split_multi(cb.resolve_value(props, fld.hs_resolved, fld.hs_override))
+
+    # Tiers are a locked vocabulary; drop anything off-vocab rather than
+    # letting it reach primary_tier and silently degrade to 'standard'.
+    tiers = tuple(t.lower() for t in values.get("tiers", ()) if isinstance(t, str))
+    off_vocab = [t for t in tiers if t not in VOICE_TIER_GUIDANCE]
+    if off_vocab:
+        logger.warning("rec_voice: off-vocab voice tier(s) %s for company %s",
+                       off_vocab, company_id)
+    values["tiers"] = tuple(t for t in tiers if t in VOICE_TIER_GUIDANCE)
+
+    profile = VoiceProfile(
+        property_uuid=(props.get("uuid") or None),  # read-only; R1 forbids writes
+        company_id=company_id,
+        **values,  # type: ignore[arg-type]
+    )
+    if not profile.has_content:
+        return VoiceProfile(property_uuid=profile.property_uuid,
+                            company_id=company_id, is_default=True)
+    return profile
+
+
 def _join(items) -> str:
     return "; ".join(str(i).strip() for i in items if str(i).strip())
 
