@@ -95,6 +95,49 @@ def ticket_create():
     return jsonify(body_out), status
 
 
+# ── GET /api/portal-tickets/brief-gaps ───────────────────────────────────────
+
+@portal_tickets_bp.route("/api/portal-tickets/brief-gaps", methods=["GET", "OPTIONS"])
+def ticket_brief_gaps():
+    """What this ticket type still needs from the property profile.
+
+    Feeds the ticket form's profile block: up to PORTAL_TICKET_BRIEF_MAX_ASK
+    optional questions for fields that are still empty, plus what we already
+    know (shown back, never re-asked). See docs/ticket-brief-gaps-scope.md.
+
+    This endpoint must never break the ticket form, so beyond the argument
+    checks it does not fail: an unreadable profile, a disabled flag, or an
+    unexpected error all return 200 with an empty ask.
+    """
+    if request.method == "OPTIONS":
+        return preflight_response()
+    if not _is_authorized(request):
+        return jsonify({"error": "auth required"}), 401
+
+    company_id = (request.args.get("company_id") or "").strip()
+    type_key = (request.args.get("ticket_type") or "").strip()
+    if not company_id:
+        return jsonify({"ok": False, "error": "company_id required"}), 400
+    if not type_key:
+        return jsonify({"ok": False, "error": "ticket_type required"}), 400
+    if not portal_tickets._type_by_key(type_key):
+        return jsonify({"ok": False, "error": "Unknown ticket type."}), 400
+
+    if not portal_tickets._gaps_enabled():
+        body = portal_tickets._empty_gaps(company_id, type_key)
+        body.update({"ok": True, "enabled": False})
+        return jsonify(body)
+
+    try:
+        body = portal_tickets.brief_gaps(company_id, type_key)
+    except Exception as e:  # noqa: BLE001 — a gap read must never cost a ticket
+        logger.warning("brief gaps failed for %s/%s: %s", company_id, type_key, e)
+        body = portal_tickets._empty_gaps(company_id, type_key)
+        body["degraded"] = True
+    body.update({"ok": True, "enabled": True})
+    return jsonify(body)
+
+
 # ── GET /api/portal-tickets ──────────────────────────────────────────────────
 
 @portal_tickets_bp.route("/api/portal-tickets", methods=["GET", "OPTIONS"])

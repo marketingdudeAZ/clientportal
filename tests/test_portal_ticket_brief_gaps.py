@@ -227,5 +227,141 @@ class GapEngineTests(unittest.TestCase):
         self.assertEqual(known["property_amenities"]["source"], "resolved")
 
 
+# ── 5-6. the endpoint ───────────────────────────────────────────────────────
+
+from flask import Flask  # noqa: E402
+
+import routes.portal_tickets as pt_routes  # noqa: E402
+
+GAPS_URL = "/api/portal-tickets/brief-gaps"
+PORTAL_HDR = {"X-Portal-Email": "manager@rpmliving.com"}
+
+
+def _client():
+    app = Flask(__name__)
+    app.register_blueprint(pt_routes.portal_tickets_bp)
+    return app.test_client()
+
+
+class EndpointContractTests(unittest.TestCase):
+    """The full error table from the scope doc. Nothing here may 500."""
+
+    def setUp(self):
+        self.client = _client()
+        # The flag is off by default; these tests exercise the enabled path.
+        p = mock.patch.object(config, "PORTAL_TICKET_BRIEF_GAPS_ENABLED", True)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _get(self, query, headers=PORTAL_HDR):
+        return self.client.get(GAPS_URL + query, headers=headers)
+
+    def test_200_shape(self):
+        with mock.patch.object(cb, "load_company_state",
+                               return_value={"name": "Sunset Ridge", "fluency_taglines": "Live Well"}):
+            r = self._get("?company_id=123&ticket_type=creative_ad_copy&uuid=abc-123")
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertEqual(set(body), {"ok", "enabled", "ticket_type", "company_id",
+                                     "property_name", "ask", "known", "deferred", "counts"})
+        self.assertTrue(body["ok"])
+        self.assertTrue(body["enabled"])
+        self.assertEqual(body["ticket_type"], "creative_ad_copy")
+        self.assertEqual(body["company_id"], "123")
+        self.assertEqual(len(body["ask"]), 5)
+        self.assertEqual([k["key"] for k in body["known"]], ["taglines"])
+        self.assertEqual(set(body["counts"]), {"mapped", "known", "asked", "deferred"})
+        self.assertEqual(set(body["ask"][0]),
+                         {"key", "label", "input", "hint", "options", "placeholder"})
+
+    def test_401_without_auth(self):
+        r = self._get("?company_id=123&ticket_type=creative_ad_copy", headers={})
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.get_json(), {"error": "auth required"})
+
+    def test_internal_key_also_authorizes(self):
+        with mock.patch.dict(os.environ, {"INTERNAL_API_KEY": "s3cret"}), \
+             mock.patch.object(cb, "load_company_state", return_value={"name": "X"}):
+            r = self._get("?company_id=123&ticket_type=creative_ad_copy",
+                          headers={"X-Internal-Key": "s3cret"})
+        self.assertEqual(r.status_code, 200)
+
+    def test_400_missing_company_id(self):
+        r = self._get("?ticket_type=creative_ad_copy")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json()["error"], "company_id required")
+
+    def test_400_missing_ticket_type(self):
+        r = self._get("?company_id=123")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json()["error"], "ticket_type required")
+
+    def test_400_unknown_ticket_type(self):
+        r = self._get("?company_id=123&ticket_type=not_a_type")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json()["error"], "Unknown ticket type.")
+
+    def test_200_empty_for_unmapped_type(self):
+        with mock.patch.object(cb, "load_company_state", return_value={"name": "X"}):
+            r = self._get("?company_id=123&ticket_type=general")
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertEqual(body["ask"], [])
+        self.assertEqual(body["counts"]["mapped"], 0)
+
+    def test_200_empty_when_flag_off(self):
+        with mock.patch.object(config, "PORTAL_TICKET_BRIEF_GAPS_ENABLED", False), \
+             mock.patch.object(cb, "load_company_state") as load:
+            r = self._get("?company_id=123&ticket_type=creative_ad_copy")
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertFalse(body["enabled"])
+        self.assertEqual(body["ask"], [])
+        self.assertEqual(body["counts"], {"mapped": 0, "known": 0, "asked": 0, "deferred": 0})
+        load.assert_not_called()  # flag off = we don't even read HubSpot
+
+    def test_options_preflight(self):
+        r = self.client.open(GAPS_URL, method="OPTIONS")
+        self.assertIn(r.status_code, (200, 204))
+
+
+class DegradedPathTests(unittest.TestCase):
+    """HubSpot down -> the form still renders. No 500s, ever."""
+
+    def setUp(self):
+        self.client = _client()
+        p = mock.patch.object(config, "PORTAL_TICKET_BRIEF_GAPS_ENABLED", True)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _get(self):
+        return self.client.get(
+            GAPS_URL + "?company_id=123&ticket_type=creative_ad_copy", headers=PORTAL_HDR)
+
+    def test_profile_read_raises(self):
+        with mock.patch.object(cb, "load_company_state", side_effect=RuntimeError("hubspot 500")):
+            r = self._get()
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertTrue(body["degraded"])
+        self.assertEqual(body["ask"], [])
+        self.assertEqual(body["known"], [])
+
+    def test_profile_read_returns_empty(self):
+        with mock.patch.object(cb, "load_company_state", return_value={}):
+            r = self._get()
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertTrue(body["degraded"])
+        self.assertEqual(body["ask"], [])
+        self.assertEqual(body["counts"]["mapped"], 8)  # we know what we'd have asked
+
+    def test_unexpected_engine_error_is_contained(self):
+        with mock.patch.object(portal_tickets, "brief_gaps", side_effect=ValueError("boom")):
+            r = self._get()
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.get_json()["degraded"])
+
+
 if __name__ == "__main__":
     unittest.main()
