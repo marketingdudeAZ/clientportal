@@ -25,7 +25,6 @@ import json
 import logging
 import os
 import sys
-import uuid as uuid_lib
 
 import requests
 
@@ -37,6 +36,7 @@ from config import (
     HUBSPOT_API_KEY,
     HUBDB_RECOMMENDATIONS_TABLE_ID,
 )
+import rec_id
 from bigquery_client import write_red_light_score, write_report_insights
 
 logger = logging.getLogger(__name__)
@@ -87,11 +87,34 @@ def extract_insights(pdf_text):
         return []
 
 
+def _find_existing_rec_row(rec_id_value):
+    """Return the HubDB row for a rec_id, or None. Never raises."""
+    url = (f"{HUBDB_BASE}/{HUBDB_RECOMMENDATIONS_TABLE_ID}/rows"
+           f"?rec_id__eq={rec_id_value}")
+    try:
+        r = requests.get(url, headers=HS_HEADERS, timeout=10)
+        if r.status_code != 200:
+            logger.warning("rec lookup %s -> %s", rec_id_value, r.status_code)
+            return None
+        results = (r.json() or {}).get("results") or []
+        return results[0] if results else None
+    except requests.RequestException as e:
+        logger.warning("rec lookup network error for %s: %s", rec_id_value, e)
+        return None
+
+
 def write_recs_to_hubdb(property_uuid, insights, report_month):
-    """Write high-priority findings to HubDB rpm_recommendations.
+    """Upsert high-priority findings into HubDB rpm_recommendations.
 
     Only writes insights with priority=high and a non-null recommendation.
     Rec type is classified by Claude based on content.
+
+    UPSERT, not insert. rec_id is deterministic (rec_id.build_rec_id), so the
+    same finding in the same period resolves to the same row. This pipeline
+    runs monthly; the previous uuid4() id minted a new row every run, which
+    meant a client's dismissal never stuck and the digest's pending count grew
+    without bound. A row a client has already actioned is left ALONE — status
+    is the client's to set, not this pipeline's.
     """
     if not HUBDB_RECOMMENDATIONS_TABLE_ID:
         logger.warning("HUBDB_RECOMMENDATIONS_TABLE_ID not set — skipping rec ingest")
@@ -103,11 +126,16 @@ def write_recs_to_hubdb(property_uuid, insights, report_month):
     ]
 
     for insight in high_priority:
-        rec_id = str(uuid_lib.uuid4())
+        rec_id_value = rec_id.build_rec_id(
+            source="red_light",
+            property_uuid=property_uuid,
+            dimension=insight["finding"],
+            period=report_month[:7],
+        )
         rec_type = _classify_rec_type(insight)
 
         row = {
-            "rec_id": rec_id,
+            "rec_id": rec_id_value,
             "property_uuid": property_uuid,
             "source": "red_light",
             "rec_type": rec_type,
@@ -122,10 +150,31 @@ def write_recs_to_hubdb(property_uuid, insights, report_month):
             "bq_row_ref": f"{property_uuid}:{report_month}",
         }
 
+        existing = _find_existing_rec_row(rec_id_value)
+        if existing:
+            existing_status = ((existing.get("values") or {}).get("status") or "").lower()
+            if existing_status and existing_status != "pending":
+                # The client approved or dismissed this. Re-proposing it would
+                # undo their decision — the exact bug the stable id fixes.
+                logger.info("rec %s already %s — leaving it alone",
+                            rec_id_value, existing_status)
+                continue
+            # Still pending: refresh the wording in place, never duplicate.
+            patch = {k: v for k, v in row.items() if k != "status"}
+            url = (f"{HUBDB_BASE}/{HUBDB_RECOMMENDATIONS_TABLE_ID}"
+                   f"/rows/{existing.get('id')}/draft")
+            r = requests.patch(url, headers=HS_HEADERS, json=patch)
+            if r.status_code in (200, 201):
+                logger.info("Updated rec card %s for %s", rec_id_value, property_uuid)
+            else:
+                logger.error("Failed to update rec card: %s %s",
+                             r.status_code, r.text[:200])
+            continue
+
         url = f"{HUBDB_BASE}/{HUBDB_RECOMMENDATIONS_TABLE_ID}/rows"
         r = requests.post(url, headers=HS_HEADERS, json=row)
         if r.status_code == 201:
-            logger.info("Created rec card %s for %s", rec_id, property_uuid)
+            logger.info("Created rec card %s for %s", rec_id_value, property_uuid)
         else:
             logger.error("Failed to create rec card: %s %s", r.status_code, r.text[:200])
 

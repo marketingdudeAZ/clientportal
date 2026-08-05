@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 import loop_terminal_events
+import rec_id
 
 # Marketing statuses that justify a recommendation. GREEN / missing → no card.
 _TRIGGER_STATUSES = frozenset({"RED", "YELLOW"})
@@ -118,7 +119,9 @@ def recommend_for_channel(
         recommended_budget=recommended,
         delta=delta,
         rationale=rationale,
-        recommendation_id=f"{property_uuid}:{signal.channel}:{period}",
+        recommendation_id=rec_id.build_rec_id(
+            source="loop1", property_uuid=property_uuid,
+            dimension=signal.channel, period=period),
     )
 
 
