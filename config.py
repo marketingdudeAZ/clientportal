@@ -193,6 +193,95 @@ PORTAL_TICKET_PREFILL_SOURCES = {
     "UUID": "uuid",
 }
 
+# ── Ticket brief gaps (docs/ticket-brief-gaps-scope.md) ──────────────────────
+# Community-brief fields that make each ticket type actionable, in PRIORITY
+# order. The portal asks for the first PORTAL_TICKET_BRIEF_MAX_ASK of these
+# that are still empty on the property record; anything already known is shown
+# back, never re-asked. Position 1 is the field you'd most regret not having.
+#
+# Every key MUST be askable — it exists in community_brief.FIELDS, has an
+# hs_override to write to, isn't a table/readonly type, and (for client-audience
+# ticket types) isn't internal=True. tests/test_portal_ticket_brief_gaps.py
+# enforces all of that, so a bad mapping fails CI rather than the portal.
+PORTAL_TICKET_BRIEF_FIELDS = {
+
+    # Ad Updates: Photos & New Specials — the creative team's actual inputs.
+    "creative_ad_copy": [
+        "taglines",
+        "brand_adjectives",
+        "differentiators",
+        "residents_love",
+        "property_amenities",
+        "unit_features",
+        "must_include",
+        "forbidden_phrases",
+    ],
+
+    # New Account Onboarding — the brief IS the deliverable here. Long list on
+    # purpose: the cap keeps the form short and the next ticket picks up more.
+    # Deliberately does NOT link out to the onboarding intake — the wizard is
+    # the deep path, this is opportunistic gap-closing.
+    "new_account_build": [
+        "voice_tier",
+        "unit_noun",
+        "advertised_name",
+        "differentiators",
+        "property_amenities",
+        "unit_features",
+        "neighborhood",
+        "competitors",
+        "must_include",
+        "forbidden_phrases",
+    ],
+
+    # Rebrands — name equity + the new voice.
+    "rebrand": [
+        "advertised_name",
+        "former_property_name",
+        "short_name",
+        "taglines",
+        "brand_adjectives",
+        "differentiators",
+        "must_include",
+        "forbidden_phrases",
+    ],
+
+    # Digital Marketing Review — exactly what the team chases over email today.
+    "campaign_review": [
+        "goals",
+        "initiatives",
+        "competitors",
+        "neighborhood_highlights",
+        "local_partnerships",
+        "onsite_events",
+    ],
+
+    # Budget Changes — stays light on purpose. marketing_budget is internal=True
+    # and deliberately NOT asked here.
+    "budget_update": [
+        "goals",
+        "initiatives",
+    ],
+
+    # Deliberately empty — a general ticket must stay a one-field escape hatch,
+    # a dispo/cancellation is the wrong moment to ask enrichment questions, and
+    # New Business is sales intake for a property we have no brief for.
+    "general": [],
+    "dispo_cancel": [],
+    "new_business": [],
+}
+
+# Hard cap on how many gap questions the ticket form may show. Five is the
+# ceiling that keeps this a nudge rather than a second onboarding form.
+PORTAL_TICKET_BRIEF_MAX_ASK = int(os.getenv("PORTAL_TICKET_BRIEF_MAX_ASK", "5"))
+
+# Off by default. Off = the endpoint returns an empty ask and create_ticket
+# ignores brief answers, so the ticket page behaves exactly as it does today.
+# Going live is a config flip, not a deploy.
+PORTAL_TICKET_BRIEF_GAPS_ENABLED = (
+    os.getenv("PORTAL_TICKET_BRIEF_GAPS_ENABLED", "false").strip().lower() == "true"
+)
+
 # ClickUp task statuses → client-safe portal labels (scope doc §4). Matched
 # case-insensitively; anything unmapped falls through to a title-cased version
 # of the raw ClickUp status rather than leaking an internal slug verbatim.
