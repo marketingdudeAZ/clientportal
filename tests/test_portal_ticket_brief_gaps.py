@@ -101,9 +101,130 @@ class MappingIntegrityTests(unittest.TestCase):
             self.assertEqual(config.PORTAL_TICKET_BRIEF_FIELDS.get(type_key), [],
                              f"{type_key} must map to no brief fields")
 
+    def test_askable_helper_agrees_with_the_mapping(self):
+        for type_key, keys in config.PORTAL_TICKET_BRIEF_FIELDS.items():
+            for key in keys:
+                self.assertTrue(portal_tickets._is_askable(cb.FIELDS[key]),
+                                f"{type_key}: '{key}' fails _is_askable")
+
     def test_the_cap_is_sane(self):
         self.assertGreaterEqual(config.PORTAL_TICKET_BRIEF_MAX_ASK, 1)
         self.assertLessEqual(config.PORTAL_TICKET_BRIEF_MAX_ASK, 8)
+
+
+# ── 2-4. the gap engine ─────────────────────────────────────────────────────
+
+# creative_ad_copy, in mapping order — the fixture the gap tests lean on.
+CREATIVE = ["taglines", "brand_adjectives", "differentiators", "residents_love",
+            "property_amenities", "unit_features", "must_include", "forbidden_phrases"]
+
+
+def _gaps(props, type_key="creative_ad_copy", company_id="123"):
+    with mock.patch.object(cb, "load_company_state", return_value=props):
+        return portal_tickets.brief_gaps(company_id, type_key)
+
+
+class GapEngineTests(unittest.TestCase):
+
+    def test_mapping_fixture_matches_config(self):
+        """Guard the fixture itself — if the mapping moves, these tests must too."""
+        self.assertEqual(config.PORTAL_TICKET_BRIEF_FIELDS["creative_ad_copy"], CREATIVE)
+
+    # ── 2. known vs ask split ────────────────────────────────────────────────
+
+    def test_known_and_ask_split_by_source(self):
+        out = _gaps({
+            "name": "Sunset Ridge",
+            "fluency_taglines": "Live Well, Live Here",       # human override
+            "fluency_property_amenities": "Pool\nGym",        # pipeline-resolved
+        })
+        known = {k["key"]: k for k in out["known"]}
+        asked = [a["key"] for a in out["ask"]]
+
+        self.assertEqual(set(known), {"taglines", "property_amenities"})
+        self.assertEqual(known["taglines"]["source"], "override")
+        self.assertEqual(known["property_amenities"]["source"], "resolved")
+        self.assertEqual(known["property_amenities"]["preview"], "Pool · Gym")
+        self.assertEqual(out["property_name"], "Sunset Ridge")
+
+        # Neither known field is re-asked; the ask is the next 5 empties in order.
+        self.assertNotIn("taglines", asked)
+        self.assertNotIn("property_amenities", asked)
+        self.assertEqual(asked, ["brand_adjectives", "differentiators", "residents_love",
+                                 "unit_features", "must_include"])
+
+        c = out["counts"]
+        self.assertEqual(c, {"mapped": 8, "known": 2, "asked": 5, "deferred": 1})
+        self.assertEqual(c["known"] + c["asked"] + c["deferred"], c["mapped"])
+
+    def test_ask_rows_carry_what_the_form_needs_to_render(self):
+        out = _gaps({"name": "X"}, type_key="new_account_build")
+        rows = {a["key"]: a for a in out["ask"]}
+        self.assertEqual(rows["voice_tier"]["input"], "multiselect")
+        self.assertEqual(rows["voice_tier"]["options"],
+                         ["value", "standard", "lifestyle", "luxury"])
+        self.assertEqual(rows["advertised_name"]["input"], "text")
+        self.assertEqual(rows["differentiators"]["input"], "textarea")
+        self.assertEqual(rows["differentiators"]["placeholder"], "One per line")
+        for row in out["ask"]:
+            self.assertLessEqual(len(row["hint"]), 121)  # 120 + the ellipsis
+            self.assertTrue(row["label"])
+
+    def test_types_with_no_mapping_produce_no_block(self):
+        for type_key in ("general", "dispo_cancel", "new_business"):
+            out = _gaps({"name": "X", "fluency_taglines": "t"}, type_key=type_key)
+            self.assertEqual(out["ask"], [])
+            self.assertEqual(out["known"], [])
+            self.assertEqual(out["counts"]["mapped"], 0)
+
+    # ── 3. the cap holds ─────────────────────────────────────────────────────
+
+    def test_cap_limits_the_ask_and_defers_the_rest(self):
+        out = _gaps({"name": "Empty Property"})
+        self.assertEqual(len(out["ask"]), 5)
+        self.assertEqual([a["key"] for a in out["ask"]], CREATIVE[:5])
+        self.assertEqual(out["ask"][0]["key"], "taglines")  # priority order preserved
+        self.assertEqual([d["key"] for d in out["deferred"]], CREATIVE[5:])
+        self.assertTrue(all(d["reason"] == "over_cap" for d in out["deferred"]))
+        self.assertEqual(out["counts"], {"mapped": 8, "known": 0, "asked": 5, "deferred": 3})
+
+    def test_cap_is_configurable(self):
+        with mock.patch.object(config, "PORTAL_TICKET_BRIEF_MAX_ASK", 3):
+            out = _gaps({"name": "Empty Property"})
+        self.assertEqual(len(out["ask"]), 3)
+        self.assertEqual(out["counts"]["deferred"], 5)
+
+    def test_unaskable_fields_are_deferred_not_asked(self):
+        with mock.patch.dict(config.PORTAL_TICKET_BRIEF_FIELDS,
+                             {"creative_ad_copy": ["floor_plans", "year_built", "taglines"]},
+                             clear=False):
+            out = _gaps({"name": "X"})
+        self.assertEqual([a["key"] for a in out["ask"]], ["taglines"])
+        self.assertEqual({d["key"]: d["reason"] for d in out["deferred"]},
+                         {"floor_plans": "not_askable", "year_built": "not_askable"})
+
+    # ── 4. whitespace-only override is a gap ─────────────────────────────────
+
+    def test_whitespace_only_override_counts_as_missing(self):
+        """The drift bug, applied here: '   ' is not an answer.
+
+        Portal display, the Fluency feed, and this form all route through
+        resolve_value, so they can never disagree about what's filled in.
+        """
+        out = _gaps({"name": "X", "fluency_taglines": "   ",
+                     "fluency_brand_adjectives": "\n\t "})
+        asked = [a["key"] for a in out["ask"]]
+        self.assertIn("taglines", asked)
+        self.assertIn("brand_adjectives", asked)
+        self.assertEqual(out["known"], [])
+
+    def test_whitespace_override_falls_through_to_a_real_resolved_value(self):
+        out = _gaps({"name": "X",
+                     "fluency_property_amenities_override": "   ",
+                     "fluency_property_amenities": "Pool"})
+        known = {k["key"]: k for k in out["known"]}
+        self.assertIn("property_amenities", known)
+        self.assertEqual(known["property_amenities"]["source"], "resolved")
 
 
 if __name__ == "__main__":

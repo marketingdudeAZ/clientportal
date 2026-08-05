@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import clickup_client
+import config  # attribute access for the brief-gap knobs — see _cap()/_gaps_enabled()
 from config import (
     CLICKUP_WORKSPACE_ID,
     PORTAL_TICKET_PREFILL_FIELDS,
@@ -181,6 +182,166 @@ def _prefill_values(company_id: str, property_uuid: str = "") -> dict[str, str]:
         if val:
             out[cu_name] = str(val)
     return out
+
+
+# ── brief gaps (docs/ticket-brief-gaps-scope.md) ─────────────────────────────
+#
+# The ticket form is the highest-intent moment we get with property marketing.
+# Spend it on the gaps only: read the community brief, show back what we
+# already know, and ask for at most PORTAL_TICKET_BRIEF_MAX_ASK fields that are
+# still empty. Nothing here is ever required, and nothing here can fail a
+# ticket — every path degrades to "no questions".
+
+# community_brief field type → the input kind the portal form renders. Same
+# vocabulary as _INPUT_KIND above so the UI has one renderer to reason about.
+_BRIEF_INPUT = {
+    "text": "text",
+    "textarea": "textarea",
+    "dropdown": "select",
+    "multiselect": "multiselect",
+}
+
+_PREVIEW_MAX = 120
+_HINT_MAX = 120
+
+
+def _cap() -> int:
+    """The live question cap. Read at call time so env/tests can move it."""
+    return max(1, int(getattr(config, "PORTAL_TICKET_BRIEF_MAX_ASK", 5)))
+
+
+def _gaps_enabled() -> bool:
+    """Feature flag, read at call time — going live is a config flip."""
+    return bool(getattr(config, "PORTAL_TICKET_BRIEF_GAPS_ENABLED", False))
+
+
+def _mapped_keys(type_key: str) -> list[str]:
+    return list(getattr(config, "PORTAL_TICKET_BRIEF_FIELDS", {}).get(type_key) or [])
+
+
+def _is_askable(field) -> bool:
+    """Can this brief field be answered in one inline form row?
+
+    Needs somewhere to write (hs_override), and must not be a structured table
+    (floor plans / tracking / documents) or a machine-owned readonly field.
+    Client-safety (internal=True) is enforced by the mapping tests, not here —
+    an internal field must never be in a client-facing mapping in the first place.
+    """
+    import community_brief as cb
+    if not getattr(field, "hs_override", ""):
+        return False
+    if field.type in cb.TABLE_TYPES:
+        return False
+    return field.type in _BRIEF_INPUT
+
+
+def _truncate(text: str, limit: int) -> str:
+    s = " ".join(str(text or "").split())
+    return s if len(s) <= limit else s[:limit].rstrip() + "…"
+
+
+def _preview(value: str) -> str:
+    """One-line, length-capped rendering of a stored brief value."""
+    return _truncate(str(value or "").replace("\n", " · "), _PREVIEW_MAX)
+
+
+def _ask_row(field) -> dict[str, Any]:
+    hint = _truncate(field.hint, _HINT_MAX)
+    placeholder = ""
+    if field.type == "textarea" and "one per line" in (field.hint or "").lower():
+        placeholder = "One per line"
+    return {
+        "key": field.key,
+        "label": field.label,
+        "input": _BRIEF_INPUT.get(field.type, "text"),
+        "hint": hint,
+        "options": list(field.options or []),
+        "placeholder": placeholder,
+    }
+
+
+def _empty_gaps(company_id: str, type_key: str, mapped_count: int = 0) -> dict[str, Any]:
+    return {
+        "ticket_type": type_key,
+        "company_id": company_id,
+        "property_name": "",
+        "ask": [],
+        "known": [],
+        "deferred": [],
+        "counts": {"mapped": mapped_count, "known": 0, "asked": 0, "deferred": 0},
+    }
+
+
+def brief_gaps(company_id: str, type_key: str) -> dict[str, Any]:
+    """What this ticket type needs, split into ask / known / deferred.
+
+    `ask` holds at most _cap() fields that are still empty on the property
+    record, in mapping (priority) order. `known` is what we already have, so
+    the requester is never asked twice. `deferred` is mapped-but-not-asked,
+    tagged over_cap or not_askable.
+
+    Emptiness is decided by community_brief.resolve_value — the same
+    override > resolved > empty rule the portal display and the Fluency feed
+    use, so a whitespace-only override counts as a gap here too.
+
+    Never raises. If the profile can't be read we return NO questions with
+    degraded=True rather than every question: asking for what we already have
+    is a worse failure than asking for nothing.
+    """
+    mapped = _mapped_keys(type_key)
+    if not mapped:
+        return _empty_gaps(company_id, type_key)
+
+    import community_brief as cb
+
+    try:
+        props = cb.load_company_state(company_id) or {}
+    except Exception as e:  # noqa: BLE001 — the ticket form must still render
+        logger.warning("brief gaps: profile read failed for %s: %s", company_id, e)
+        props = {}
+    if not props:
+        out = _empty_gaps(company_id, type_key, mapped_count=len(mapped))
+        out["degraded"] = True
+        return out
+
+    cap = _cap()
+    ask: list[dict] = []
+    known: list[dict] = []
+    deferred: list[dict] = []
+
+    for key in mapped:
+        field = cb.FIELDS.get(key)
+        if not field or not _is_askable(field):
+            label = getattr(field, "label", "") or key
+            deferred.append({"key": key, "label": label, "reason": "not_askable"})
+            continue
+        value = cb.resolve_value(props, field.hs_resolved, field.hs_override)
+        if value:
+            known.append({
+                "key": key,
+                "label": field.label,
+                "preview": _preview(value),
+                "source": "override" if cb._nonblank(props.get(field.hs_override)) else "resolved",
+            })
+        elif len(ask) < cap:
+            ask.append(_ask_row(field))
+        else:
+            deferred.append({"key": key, "label": field.label, "reason": "over_cap"})
+
+    return {
+        "ticket_type": type_key,
+        "company_id": company_id,
+        "property_name": str(props.get("name") or ""),
+        "ask": ask,
+        "known": known,
+        "deferred": deferred,
+        "counts": {
+            "mapped": len(mapped),
+            "known": len(known),
+            "asked": len(ask),
+            "deferred": len(deferred),
+        },
+    }
 
 
 # ── custom-field payload building ────────────────────────────────────────────
