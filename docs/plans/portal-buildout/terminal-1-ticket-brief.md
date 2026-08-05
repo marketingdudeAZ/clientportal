@@ -1,133 +1,310 @@
 # Terminal 1 — Ticket form ↔ Community Brief integration
 
-You are working in `marketingdudeAZ/clientportal`. Create branch
-`feature/ticket-brief-integration` off the latest `origin/main`,
-develop on it, commit in logical chunks, and push with
+## Setup
+
+Repo: `marketingdudeAZ/clientportal`. Branch:
+
+```
+git fetch origin main
+git checkout -B feature/ticket-brief-integration origin/main
+```
+
+Develop on that branch only. Commit in the sequence given at the end,
+`feat(...)`-style messages matching the repo log. Push with
 `git push -u origin feature/ticket-brief-integration`. Do NOT open a
-PR unless asked. Read `CLAUDE.md` and `IMMUTABLE_RULES.md` first.
+PR unless asked. Read `CLAUDE.md` and `IMMUTABLE_RULES.md` before any
+code.
 
 ## Goal
 
-When a client opens the portal ticket form ("Request Work"), the form
-must check that property's **Community Brief** (the property profile):
+When a client opens the portal ticket form ("Request Work"):
 
-1. Information already on the profile is **not asked again** — it's
-   shown read-only as "Already on your property profile."
-2. Profile-relevant information that's **missing** IS asked in the
-   ticket, and the answers are **written back to the profile** so it
-   stays current.
-3. A clear callout tells the client: their answers here update their
-   Property Profile.
+1. The form checks that property's **Community Brief** (property
+   profile). Anything already on the profile is shown read-only —
+   never asked again.
+2. Profile-relevant info that's **missing** is asked as optional
+   fields inside the ticket, and answers are **written back to the
+   profile** (override props, audit-logged).
+3. A visible callout says the answers update their Property Profile.
 
-## Read these before writing code
+## Required reading (exact places)
 
-- `webhook-server/portal_tickets.py` — schema building
-  (`_INPUT_KIND` :39, prefill filtering :95-127, `_prefill_values`
-  :156, `create_ticket` :289, BigQuery mapping :368).
-- `webhook-server/routes/portal_tickets.py` — the blueprint
-  (`/api/portal-tickets/types` :48, `/create` :65, auth :34-43).
-- `webhook-server/community_brief.py` — the profile contract:
-  `SECTIONS`/`FIELDS`, `resolve_value()` :443 (override > resolved >
-  empty; every read MUST go through it), `write_field()` :626 (the
-  ONLY legal write path — validates, PATCHes only the `*_override`
-  prop, audit-logs), `load_company_state()` :407,
-  `build_render_context()` :552, `FAIR_HOUSING_PROTECTED_TOPICS` :371.
-- `webhook-server/server.py:6667-6721` — existing company_id-keyed
-  brief read/write endpoints (`/api/accounts/property/brief`,
-  `/api/accounts/property/field`) — the internal-side precedent.
-- `hubspot-cms/templates/client-portal.html` — form markup
-  :3065-3098, form JS :3686-3932 (`_loadTicketTypes`,
-  `renderTicketFields`, `_collectTicketFields`, `_doSubmitTicket`).
-- `tests/test_portal_tickets.py` — mocking patterns to extend.
-- `config.py` AND `webhook-server/config.py` (they are mirrored —
-  change both): `PORTAL_TICKET_TYPES` :159, prefill config :177-194.
+- `webhook-server/portal_tickets.py` — `_INPUT_KIND` :39-51, schema
+  shaping + prefill filtering :95-127, `_prefill_values` :156-183,
+  `_coerce` :188-226, `_description` :264-284, `create_ticket`
+  :289-324, BigQuery mapping `_record_mapping` :368-384.
+- `webhook-server/routes/portal_tickets.py` — blueprint + auth
+  helper :34-43, `GET /api/portal-tickets/types` :48,
+  `POST /api/portal-tickets/create` :65, `GET /api/portal-tickets`
+  :100.
+- `webhook-server/community_brief.py` — `BriefField` :72-90,
+  `SECTIONS` :97-359, `FIELDS` :362, `FAIR_HOUSING_PROTECTED_TOPICS`
+  :371-376, `_all_property_names` :393, `load_company_state` :407,
+  `resolve_value` :443-456 (override > resolved > empty — EVERY read
+  goes through this), `build_render_context` :552-620, `write_field`
+  :626-723 (the ONLY legal write path — validates key, rejects
+  non-writable, PATCHes only the `*_override` prop, audit-logs),
+  `TABLE_TYPES` :48.
+- `webhook-server/server.py:6667-6721` — `/api/accounts/property/brief`
+  and `/field`: the internal-side precedent for company_id-keyed
+  brief read/write.
+- `hubspot-cms/templates/client-portal.html` — ticket markup
+  :3065-3098, ticket CSS :387-446 and :982-993, ticket JS :3686-3932
+  (`toggleCreateTicket`, `_loadTicketTypes`, `renderTicketFields`,
+  `_collectTicketFields`, `_doSubmitTicket` — submit payload at
+  :3847: `{company_id, uuid, ticket_type, subject, fields}` +
+  `X-Portal-Email` header).
+- `tests/test_portal_tickets.py` — all 12 tests; reuse their
+  monkeypatch style.
+- `config.py` AND `webhook-server/config.py` — MIRRORED; every config
+  change lands in both. Ticket types :159-172, prefill :177-194.
 
-## Build
+## Step 1 — Mapping config
 
-### 1. Mapping config
-`PORTAL_TICKET_BRIEF_FIELDS: dict[str, list[str]]` in both config
-copies — ticket_type → community-brief field keys relevant to that
-type. Propose the mapping yourself from `community_brief.SECTIONS`
-(e.g. `creative_ad_copy` → taglines, brand_adjectives,
-differentiators, property_amenities, unit_features, must_include,
-forbidden_phrases; `rebrand` → advertised_name, short_name,
-former_property_name, taglines, brand_adjectives, romance;
-`new_account_build` → a broad set). Validate at import/test time that
-every key exists in `community_brief.FIELDS`, is NOT `internal=True`,
-and has an `hs_override` (i.e. is writable). Table types
-(`floorplan_table`, `tracking_table`, `documents`) are excluded —
-too complex for a ticket form.
+Add to BOTH config files:
 
-### 2. Gap computation endpoint
-`GET /api/portal-tickets/brief-gaps?company_id=<id>&ticket_type=<t>`
-(same auth as the other portal-ticket routes). Loads brief state once
-(`load_company_state`), and for each mapped key returns:
-`{key, label, section, type, options, hint, status: "on_file"|"missing",
-value}` where `value` uses `resolve_value`. Internal fields must never
-appear. Return `{fields: [...], callout: true}`.
+```python
+# Community-brief fields the ticket form checks per ticket type.
+# Keys must exist in community_brief.FIELDS, be writable
+# (hs_override set), not internal, and not a TABLE_TYPES type.
+# Order = ask priority when fields are missing.
+PORTAL_TICKET_BRIEF_FIELDS = {
+    "creative_ad_copy": [
+        "taglines", "brand_adjectives", "differentiators",
+        "residents_love", "property_amenities", "unit_features",
+        "must_include", "forbidden_phrases",
+    ],
+    "rebrand": [
+        "advertised_name", "short_name", "former_property_name",
+        "taglines", "brand_adjectives", "romance", "differentiators",
+    ],
+    "new_account_build": [
+        "voice_tier", "unit_noun", "advertised_name", "taglines",
+        "brand_adjectives", "differentiators", "neighborhood",
+        "landmarks", "competitors", "property_amenities",
+        "unit_features", "goals", "must_include", "forbidden_phrases",
+    ],
+    "campaign_review": [
+        "goals", "initiatives", "competitors",
+        "neighborhood_highlights", "local_partnerships",
+        "onsite_events",
+    ],
+    "budget_update": ["goals", "initiatives"],
+    "general": [],
+}
 
-### 3. Frontend
-In `client-portal.html`'s ticket form JS: after the type is chosen,
-fetch brief-gaps and render a "Property Profile check" block below the
-ClickUp-driven fields:
-- **On-file values**: collapsed/read-only rows ("Already on your
-  property profile — we won't ask again"). No inputs.
-- **Missing values**: real inputs typed from the field (`text`,
-  `textarea`, `multiselect` with its options), visually grouped under
-  a banner callout: **"Heads up — your answers here also update your
-  Property Profile, so we only have to ask once."** Missing fields are
-  optional (don't block ticket submission), but encouraged.
-- Match the existing form's CSS patterns (see :387-446).
+# Cap on missing-field asks per ticket (avoid form fatigue).
+# On-file display is uncapped; asks take the first N missing in
+# mapping order.
+PORTAL_TICKET_BRIEF_MAX_ASKS = 5
+```
 
-### 4. Write-back on submit
-`POST /api/portal-tickets/create` accepts an optional
-`profile_updates: {key: value}` map. Server-side:
-- Validate keys against the ticket type's mapped, writable set (reject
-  anything else — the client can't write arbitrary profile fields).
-- Write each via
-  `community_brief.write_field(company_id, key, value, edited_by=<X-Portal-Email>)`.
-- Append a "Profile updates captured with this ticket" section to the
-  ClickUp task description (`_description`) listing key → value.
-- Ticket creation must succeed even if a profile write fails; return
-  `profile_results` in the response and note failures in the ClickUp
-  description.
+Sanity-check each key against `community_brief.SECTIONS` while
+implementing (e.g. `residents_love` exists; `residents_dislike`,
+`target_resident`, `challenges`, `priorities` are `internal=True` —
+NEVER map those). Adjust the lists if any key fails the validity
+rules, and enforce those rules in a test (Step 5), not just by eye.
 
-### 5. Tests
-Extend `tests/test_portal_tickets.py`: mapping validity (every
-configured key exists / writable / non-internal), gap split logic
-(override set vs resolved set vs empty), create with profile_updates
-(write_field called with right args; ticket still created when
-write_field returns failure), rejection of unmapped keys.
+## Step 2 — Gap module + endpoint
+
+New module `webhook-server/ticket_brief_gaps.py`:
+
+```python
+def compute_gaps(company_id: str, ticket_type: str) -> dict:
+    """One HubSpot GET via community_brief.load_company_state, then
+    split the mapped keys. Returns the response dict below."""
+```
+
+- For each mapped key: `field = community_brief.FIELDS[key]`;
+  effective value = `resolve_value(props, field.hs_resolved,
+  field.hs_override)`.
+- Skip (defense in depth, even though the config test enforces it):
+  unknown keys, `internal=True`, `type in TABLE_TYPES`, no
+  `hs_override`.
+- Non-blank value → `on_file`; blank → `missing` (first
+  `PORTAL_TICKET_BRIEF_MAX_ASKS` only; count the overflow).
+
+Route in `webhook-server/routes/portal_tickets.py` (same `_authed`
+guard as siblings):
+
+```
+GET /api/portal-tickets/brief-gaps?company_id=<id>&ticket_type=<t>
+```
+
+Response:
+
+```json
+{
+  "ticket_type": "creative_ad_copy",
+  "company_id": "1234",
+  "callout": "Heads up — your answers here also update your Property Profile, so we only have to ask once.",
+  "on_file": [
+    {"key": "taglines", "label": "Taglines", "section": "Brand & Story",
+     "type": "textarea", "value": "Live the lake life"}
+  ],
+  "missing": [
+    {"key": "brand_adjectives", "label": "Brand adjectives",
+     "section": "Brand & Story", "type": "text",
+     "options": [], "hint": "<BriefField.hint verbatim>"}
+  ],
+  "missing_overflow": 0
+}
+```
+
+Errors: 400 missing/unknown params; unknown or unmapped ticket_type →
+200 with empty arrays (the form just shows no profile block); HubSpot
+failure → 503 `{"error": "..."}` matching sibling routes' style.
+
+## Step 3 — Frontend (client-portal.html)
+
+Work ONLY inside the ticket-form region (markup :3065-3098, JS
+:3686-3932) plus the CSS blocks. Another parallel branch owns the
+Call Prep section — don't touch it.
+
+1. Markup: add `<div id="ct-profile-block" style="display:none">`
+   after `#ct-fields` inside the form.
+2. JS: in the type-change path that calls `renderTicketFields`, also
+   fire `_loadBriefGaps(type)` →
+   `GET /api/portal-tickets/brief-gaps?...` with the same
+   `X-Portal-Email` header pattern the other calls use. Render:
+   - **Callout banner** (top of block): amber/info style consistent
+     with existing portal callouts; text = the `callout` string from
+     the API. Add a one-line sub-note: *"Fields marked 'on file'
+     come from your Property Profile."*
+   - **On-file group** — collapsed `<details>` titled
+     `Already on your property profile (N)`; each row:
+     label + value, read-only, no inputs.
+   - **Missing group** — heading *"Help us complete your profile
+     (optional)"*; inputs typed from `type`:
+     `text` → `<input type="text">`, `textarea` → `<textarea>`,
+     `multiselect`/`dropdown` → checkboxes / `<select>` built from
+     `options` (mirror the rendering conventions in
+     `renderTicketFields` :3723-3750). Inputs carry
+     `data-profile-key="<key>"` and show `hint` as placeholder/help
+     text. All optional — never block submit.
+3. `_collectProfileUpdates()`: gather non-empty
+   `[data-profile-key]` values; multiselect values join with `";"`
+   (that is what `write_field` splits on).
+4. In `_doSubmitTicket` (:3847 payload): add
+   `profile_updates: _collectProfileUpdates()` when non-empty.
+5. After successful submit, if the response's `profile_results` has
+   failures, keep the existing success toast but append
+   *"(some profile updates didn't save — your team was notified)"*.
+6. Reset the block on form close/type change.
+
+## Step 4 — Write-back in create_ticket
+
+`POST /api/portal-tickets/create` accepts optional
+`profile_updates: {key: value}`. In
+`portal_tickets.create_ticket` (or a helper it calls):
+
+1. Validate every key ∈ the ticket type's mapped set AND passes the
+   writability rules. Invalid key → include
+   `{"key": k, "ok": false, "error": "not allowed"}` in results; do
+   NOT fail the request.
+2. Valid keys →
+   `community_brief.write_field(company_id, key, value,
+   edited_by=<X-Portal-Email value>)`. Capture `(ok, message)`.
+3. ClickUp description (`_description`): append
+
+   ```
+   --- Profile updates captured with this ticket ---
+   Taglines: Live the lake life
+   Brand adjectives: modern; welcoming   [FAILED TO SAVE: <msg>]
+   ```
+
+   using field labels, flagging failures inline.
+4. Order of operations: create the ClickUp task FIRST (ticket
+   creation must never be blocked by profile writes)… except the
+   description needs the results — so: run the profile writes first
+   but wrap the whole batch so ANY exception degrades to
+   `{"ok": false}` results and ticket creation proceeds. A HubSpot
+   outage must still yield a created ticket.
+5. Response gains `"profile_results": [{"key","ok","error"}...]`
+   (empty list when no updates sent).
+
+## Step 5 — Tests (tests/test_portal_tickets.py, new class or file)
+
+1. `test_brief_mapping_keys_valid` — every configured key exists in
+   `FIELDS`, non-internal, has `hs_override`, type not in
+   `TABLE_TYPES`. This is the config police; it must import the real
+   mapping, not a copy.
+2. `test_gaps_split_override_wins` — prop has override → on_file even
+   if resolved empty; resolved only → on_file; both blank/whitespace
+   → missing (whitespace-only counts as missing — `_nonblank`
+   semantics).
+3. `test_gaps_max_asks_cap` — >5 missing → 5 returned,
+   `missing_overflow` correct, order = mapping order.
+4. `test_gaps_unmapped_type_empty` — `general` and unknown types →
+   empty arrays, 200.
+5. `test_gaps_never_leaks_internal` — poison the mapping via
+   monkeypatch with an internal key → it is skipped.
+6. `test_create_with_profile_updates` — `write_field` called once per
+   key with `edited_by` = portal email; description contains the
+   capture section; response `profile_results` all ok.
+7. `test_create_profile_write_failure_still_creates_ticket` —
+   `write_field` raises/returns failure → ClickUp task still created,
+   result marked not-ok, description flags it.
+8. `test_create_rejects_unmapped_profile_key` — sneaky key →
+   not-ok result, `write_field` NOT called for it.
+9. Existing 12 tests still pass unmodified.
+
+Run before pushing:
+`pytest tests/test_portal_tickets.py tests/test_brief_resolver.py tests/test_property_brief.py`
 
 ## Guardrails (non-negotiable)
 
 - **R1:** never write the `uuid` HubSpot property. You never PATCH
-  HubSpot directly in this work — all profile writes go through
-  `community_brief.write_field`. If you find yourself writing a raw
-  company PATCH, stop.
-- Never expose `internal=True` brief fields to the client-facing form.
-- Don't ask for or store fair-housing-protected info
-  (`FAIR_HOUSING_PROTECTED_TOPICS`).
-- Keep the ClickUp schema-driven fields working exactly as they do
-  today — the profile block is additive.
+  HubSpot directly here — everything goes through
+  `community_brief.write_field`. A raw company PATCH anywhere in this
+  branch is a defect.
+- Never expose `internal=True` fields client-side.
+- Nothing in the mapping may touch fair-housing-protected topics
+  (`FAIR_HOUSING_PROTECTED_TOPICS`) — no demographics, ever.
+- The ClickUp schema-driven fields keep working exactly as today; the
+  profile block is purely additive.
+- Don't touch `client-portal.html` outside the ticket region + its
+  CSS; another branch is editing the Call Prep section in parallel.
 
-## In-lane cleanups (do these if cheap, skip if they balloon)
+## In-lane cleanups (separate commits; skip any that balloon)
 
-- `brief_ai_drafter.CB_DRAFTABLE` has 3 keys missing from
-  `community_brief.FIELDS` (`marketed_amenity_names`,
-  `amenities_descriptions`, `selling_points`) — extractions are
-  silently dropped. Add the missing `BriefField`s (the HubSpot props
-  already exist) or remove the keys.
-- The dashboard's legacy ticket status filter is a no-op
-  (`client-portal.html:5636-5640` filters `t.status`, but
-  `ticket_manager.list_tickets` returns `stage_label`).
-- Dead code: `_renderTicketCard` (:3934) has no call site;
-  `escalateTicket` (:3966) makes no network call.
+- `brief_ai_drafter.CB_DRAFTABLE` (:525-581) has 3 keys missing from
+  `community_brief.FIELDS` — `marketed_amenity_names`,
+  `amenities_descriptions`, `selling_points` — so those LLM
+  extractions are silently dropped (`write_field` returns unknown-
+  field). The HubSpot props exist (see migrations + `server.py:6565,
+  6594`). Fix: add the three `BriefField`s to the right sections
+  (override-only, non-internal for amenities ones — use judgment),
+  and add them to `fluency_feed`'s exclusion check if they shouldn't
+  ship to Fluency.
+- Legacy dashboard ticket filter is a no-op:
+  `client-portal.html:5455, 5636-5640` filter `t.status` but
+  `ticket_manager.list_tickets` (:220-232) returns `stage_label`.
+  Fix the JS to use `stage_label`.
+- Dead code: `_renderTicketCard` (:3934-3964, no call site) and
+  cosmetic `escalateTicket` (:3966-3974). Delete both plus their
+  now-unreachable helpers IF `loadTicketThread`/reply paths are truly
+  unreachable — verify first.
 
-## Out of scope
+## Commit sequence
 
-Retiring the HubSpot Service Hub ticket path (open decision, docs/
-ticket-page-scope.md), ticket attachments/file upload, the
-recommendations system, Google Drive work. Run
-`pytest tests/test_portal_tickets.py tests/test_brief_resolver.py tests/test_property_brief.py`
-before pushing; commit messages follow the repo's `feat(...)` style.
+1. `feat(tickets): brief-field mapping config + validity rules`
+2. `feat(tickets): brief-gaps computation + /api/portal-tickets/brief-gaps`
+3. `feat(tickets): profile check block in ticket form (callout, on-file, asks)`
+4. `feat(tickets): write profile_updates back via community_brief on create`
+5. `test(tickets): brief-gap + write-back coverage`
+6. cleanups (one commit each)
+
+## Acceptance criteria
+
+- [ ] Choosing `creative_ad_copy` on a property with taglines set but
+      no brand adjectives shows taglines under "Already on your
+      property profile" and asks for brand adjectives under the
+      callout.
+- [ ] Submitting with answers creates the ClickUp task, writes the
+      override props, logs audit rows, and the task description shows
+      the capture section.
+- [ ] Kill HubSpot writes (mock failure) → ticket still created,
+      failure surfaced in response + description.
+- [ ] `general` tickets look exactly like today.
+- [ ] Full listed pytest suite green.
