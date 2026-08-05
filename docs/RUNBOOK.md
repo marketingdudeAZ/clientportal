@@ -79,6 +79,36 @@ See `DEPLOY.md` for the HubL branch trap: new JS appended to `client-portal.html
 4. Add a `test_<foo>_client.py` under `tests/` that mocks `requests` and asserts the wire format. Follow `test_dataforseo_client.py`.
 5. If the integration has a webhook: add an `@app.route` and validate its signature. Match the fail-closed pattern used by `heygen_provider.py` and `creatify_provider.py`.
 
+## Turn on ticket brief gaps
+
+Full design: `docs/ticket-brief-gaps-scope.md`. The ticket form asks for the
+community-brief fields a request type needs and the property is still missing,
+then writes the answers onto the HubSpot company record.
+
+1. Set `PORTAL_TICKET_BRIEF_GAPS_ENABLED=true` in Render (optionally
+   `PORTAL_TICKET_BRIEF_MAX_ASK`, default 5) and **Redeploy** — env edits
+   aren't picked up without one.
+2. Verify on one property before announcing it:
+   `curl -s "$BASE/api/portal-tickets/brief-gaps?company_id=<id>&ticket_type=creative_ad_copy" -H "X-Portal-Email: you@rpmliving.com" | jq '.enabled, .counts'`
+   → `enabled: true` and counts summing to `mapped`.
+3. Open the portal ticket form, pick "Ad Updates: Photos & New Specials", and
+   confirm the block appears with ≤5 questions and a collapsed
+   "Already on your property profile" section.
+4. To roll back, set the flag to `false` and redeploy. No code revert needed —
+   the endpoint returns an empty ask and the UI renders nothing.
+
+**Reading the ClickUp task description.** Portal-created tasks carry a
+provenance block:
+
+- `Property profile updated from this request: …` — those fields are now on the
+  company record, attributed to the requester in the brief audit log.
+- `Skipped (filled in on the profile while this form was open): …` — someone
+  edited the brief mid-form; the existing value won, by design.
+- `⚠ Could NOT save to the property profile — please update manually: …` — the
+  HubSpot write failed. **The submitted values are echoed underneath** — copy
+  them onto the property profile by hand. Recurring ⚠ lines mean HubSpot writes
+  are failing; check the server log for `brief write-back failed`.
+
 ## Troubleshooting
 
 | Symptom                                              | First thing to check                                          |
@@ -89,6 +119,7 @@ See `DEPLOY.md` for the HubL branch trap: new JS appended to `client-portal.html
 | Video webhook returns 401 in production              | A webhook secret env var IS set but the provider is sending mismatched/missing signatures. If you don't sign webhooks at all, leave `HEYGEN_WEBHOOK_SECRET` / `CREATIFY_WEBHOOK_SECRET` blank. |
 | Config change deployed but not picked up             | Render requires an explicit Redeploy after env var edits      |
 | Portal template updated but property detail unchanged| HubL branch trap — see `DEPLOY.md`                            |
+| Ticket form shows no profile questions               | `PORTAL_TICKET_BRIEF_GAPS_ENABLED` unset/false, the type maps to no brief fields (`general`, `dispo_cancel`, `new_business`), the profile is already complete, or the gaps call returned `degraded` — check `.enabled` and `.degraded` on `/api/portal-tickets/brief-gaps` |
 | `ModuleNotFoundError` at startup                     | Dep missing from `webhook-server/requirements.txt` (root file is a re-export, edit the subdir version) |
 
 ## Known foundations work in flight
