@@ -615,6 +615,72 @@ the first behavior change is 3, and it's covered by T1.
   commit 8 does not land and the artifacts are marked deprecated instead.
 - Post-deploy: a property digest still renders a non-zero rec count.
 
+---
+
+## 9. Rollout checklist — needs Kyle
+
+Everything below needs eyes on something the terminal cannot reach. The repo
+side is done and merged; these are the steps that make it true in production.
+
+### Before/at deploy
+
+- [ ] **Run the supersede script.** `python3 scripts/supersede_legacy_rec_rows.py --dry-run`
+      first, confirm the legacy count looks sane, then `--apply`. It flips
+      pre-cutover uuid4 `pending` rows to `superseded`. It deletes nothing and
+      never touches a row a client already approved or dismissed. Not wired
+      into deploy on purpose — run it once, manually, after this branch ships.
+
+### Design Manager / live site (cannot be verified from the repo)
+
+The four deleted files were **never deployed by CI**. `scripts/deploy_template.py`
+uploads exactly one file — `client-portal.html`, pinned to template ID
+`210982557303`. Everything else under `hubspot-cms/` (css, js, partials) has
+only ever reached HubSpot by hand. So the repo deletion does not remove
+anything from Design Manager.
+
+- [ ] **Search Design Manager** for `rec-feed.html`, `digest.html`, `portal.js`,
+      `rec-feed.css`. If any exist as uploaded assets, delete them there too —
+      the repo no longer carries them, so a Design Manager copy is now
+      unreviewable orphaned code.
+- [ ] **Check every published page**, not just the portal, for a template that
+      includes `partials/rec-feed.html` or `partials/digest.html`. The repo
+      shows no includer, but the repo is not the deployment boundary.
+- [ ] **Confirm the live portal digest still renders its rec count** after
+      deploy, and that the number now matches what the client sees in Call
+      Prep. The count source changed from HubDB rows to the Call Prep payload,
+      so a property mid-cycle may legitimately show a different (usually
+      smaller, more honest) number than before.
+- [ ] **Spot-check voiced rationales on 3 real properties across ≥2 tiers**
+      before enabling the voice layer broadly. `recommend_for_property` only
+      voices when a `voice_profile` is passed, so this is opt-in per call site
+      and safe to stage.
+
+### Flagged, not fixed — decisions for you
+
+- [ ] **`hubspot-cms/hubspot.config.yml` contains live credentials in a PUBLIC
+      repo** — a `personalAccessKey` and an OAuth `accessToken` for portal
+      19843861. The `expiresAt` on the access token has passed, but the
+      personal access key does not self-expire. **Rotate the PAK in HubSpot,
+      then git-filter or BFG the file out of history.** Untouched here because
+      rotating a live credential is not a change to make inside an unrelated
+      feature branch, and doing it in a commit would publish the fact before
+      you can rotate.
+- [ ] **`red_light_pipeline.write_recs_to_hubdb` is now a write-only path.**
+      Its rows had exactly one reader (the digest count), and that reader now
+      derives from Call Prep instead. The writes were kept deliberately — the
+      findings are real data and the upsert makes them stable — but they need
+      an AM-facing surface to be worth anything. Either build that surface or
+      retire the writer; leaving it write-only indefinitely is the worst of
+      both.
+- [ ] **19 further orphaned partials.** `partials/` has 23 files; only the four
+      `loop-*` ones have an includer (`client-portal-loop.html`).
+      `client-portal.html` is a self-contained ~12k-line monolith with inline
+      CSS and JS, so the rest are pre-monolith legacy: `asset-library.html`,
+      `configurator.html`, `dashboard.html`, `recommendations.html`,
+      `self-checkout-recommendations.html`, and 14 more. Out of scope here —
+      this branch removed only the rec-feed render path — but it is a
+      one-commit cleanup once Design Manager is confirmed clean.
+
 **Immutable rules**
 
 - No code in this plan writes `uuid` (R1). `rec_voice.load_voice_profile` is
