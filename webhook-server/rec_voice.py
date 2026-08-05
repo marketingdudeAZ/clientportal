@@ -459,6 +459,92 @@ def render_property_voice_block(profile: VoiceProfile | None) -> str:
     return "\n".join(lines)
 
 
+# ── Compliance gate ─────────────────────────────────────────────────────────
+
+GATE_MODE_FULL = "full"
+GATE_MODE_HARD_ONLY = "hard_only"
+
+
+@dataclass(frozen=True)
+class GateResult:
+    """The verdict on a piece of generated client-facing copy.
+
+    `allowed` is the only thing a caller must obey. `mode` tells it which
+    check produced that verdict, so a caller can never be unable to tell
+    whether the LLM layer actually ran.
+    """
+    allowed: bool
+    mode: str = GATE_MODE_FULL
+    violations: list = field(default_factory=list)
+    forbidden_hits: list = field(default_factory=list)
+    reason: str = ""
+
+    @property
+    def degraded(self) -> bool:
+        return self.mode == GATE_MODE_HARD_ONLY
+
+    @property
+    def hard_only(self) -> bool:
+        return self.mode == GATE_MODE_HARD_ONLY
+
+
+def gate_client_copy(items, *, profile: VoiceProfile | None = None) -> GateResult:
+    """Screen generated copy before it is shown or written.
+
+    Fail-CLOSED on violations: any Fair Housing finding, hard-pattern or
+    LLM-found, returns allowed=False.
+
+    Fail-OPEN on infrastructure: a missing key, timeout or parse failure
+    degrades to hard-patterns-only and returns mode="hard_only" with a reason,
+    rather than blocking generation on an LLM outage.
+
+    Property `forbidden_phrases` are a BRAND rule, not a legal one. They
+    populate `forbidden_hits` and never set allowed=False. Wrong-brand copy is
+    a regenerate-or-flag problem; conflating it with a Fair Housing violation
+    would make the blocking signal untrustworthy and train callers to route
+    around the gate.
+
+    Never raises.
+    """
+    items = [it for it in (items or []) if (it.get("text") or "").strip()]
+    if not items:
+        return GateResult(allowed=True)
+
+    try:
+        import fair_housing_gate
+        fh = fair_housing_gate.check_fair_housing(items)
+    except Exception as e:
+        # The gate module itself failed. Fail open, but say so loudly.
+        logger.warning("rec_voice: fair housing gate unavailable (%s)", e)
+        return GateResult(allowed=True, mode=GATE_MODE_HARD_ONLY,
+                          reason=f"gate unavailable: {type(e).__name__}")
+
+    mode = GATE_MODE_HARD_ONLY if fh.get("degraded") else GATE_MODE_FULL
+    reason = fh.get("degraded_reason") or ""
+    if mode == GATE_MODE_HARD_ONLY:
+        logger.warning("rec_voice: compliance check degraded (%s) — hard patterns only",
+                       reason or "unknown")
+
+    forbidden_hits: list = []
+    if profile is not None and profile.forbidden_phrases:
+        blob = "\n".join(str(it.get("text") or "") for it in items).lower()
+        for phrase in profile.forbidden_phrases:
+            p = str(phrase).strip().lower()
+            if p and p in blob:
+                forbidden_hits.append(phrase)
+        if forbidden_hits:
+            logger.info("rec_voice: off-brand phrase(s) in generated copy: %s",
+                        forbidden_hits)
+
+    return GateResult(
+        allowed=bool(fh.get("compliant")),
+        mode=mode,
+        violations=list(fh.get("violations") or []),
+        forbidden_hits=forbidden_hits,
+        reason=reason,
+    )
+
+
 def build_system_prompt(
     *,
     task_rules: str,

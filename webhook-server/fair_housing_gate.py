@@ -76,17 +76,40 @@ def _hard_scan(items):
 def check_fair_housing(items):
     """Screen a list of {field, text} dicts for Fair Housing violations.
 
-    Returns {"compliant": bool, "violations": [...], "checked": True}. Fail-open
-    on LLM errors; HARD_PATTERNS are always enforced.
+    Returns:
+        compliant  — False if ANY violation was found (fail-CLOSED). The caller
+                     must not display, post, or write the copy.
+        violations — the findings.
+        checked    — True only when the FULL check ran (hard patterns + LLM).
+        degraded   — True when the LLM pass did not run.
+        hard_only  — True when the verdict rests on HARD_PATTERNS alone.
+        degraded_reason — why, when degraded.
+
+    Fail-OPEN on infrastructure errors: a missing API key, a timeout, a 5xx or
+    a parse failure never produces compliant=False. A compliance checker being
+    down must not block a business operation.
+
+    HARD_PATTERNS are never skipped — they are pure regex with no dependency,
+    so they run and are enforced in every branch including total LLM failure.
+    Fail-open never means unchecked.
+
+    Degradation is REPORTED, not hidden: `checked` used to be hardcoded True
+    whether the LLM ran, was skipped, or threw, so no caller could tell which
+    mode produced the verdict. Callers that must not ship unreviewed copy can
+    now treat `degraded` as blocking.
     """
     items = [it for it in (items or []) if (it.get("text") or "").strip()]
     if not items:
-        return {"compliant": True, "violations": [], "checked": True}
+        return {"compliant": True, "violations": [], "checked": True,
+                "degraded": False, "hard_only": False, "degraded_reason": ""}
 
     violations = _hard_scan(items)
+    degraded_reason = ""
 
     try:
         from config import ANTHROPIC_API_KEY, CLAUDE_BRIEF_MODEL
+        if not ANTHROPIC_API_KEY:
+            degraded_reason = "no ANTHROPIC_API_KEY"
         if ANTHROPIC_API_KEY:
             import anthropic
             client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -113,6 +136,18 @@ def check_fair_housing(items):
                     "suggestion": v.get("suggestion", ""),
                 })
     except Exception as e:
+        degraded_reason = f"{type(e).__name__}: {e}"
         logger.warning("fair_housing_gate: LLM pass unavailable, hard-scan only (%s)", e)
 
-    return {"compliant": len(violations) == 0, "violations": violations, "checked": True}
+    degraded = bool(degraded_reason)
+    if degraded_reason == "no ANTHROPIC_API_KEY":
+        logger.warning("fair_housing_gate: no ANTHROPIC_API_KEY — hard-scan only")
+
+    return {
+        "compliant": len(violations) == 0,
+        "violations": violations,
+        "checked": not degraded,
+        "degraded": degraded,
+        "hard_only": degraded,
+        "degraded_reason": degraded_reason,
+    }

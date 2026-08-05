@@ -12,6 +12,7 @@ exercised with fakes, following tests/test_recommendation_gen.py.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 
@@ -22,6 +23,54 @@ import pytest  # noqa: E402
 
 import fair_housing_gate  # noqa: E402
 import rec_voice as rv  # noqa: E402
+
+
+class _Block:
+    def __init__(self, text):
+        self.type = "text"
+        self.text = text
+
+
+class _Msg:
+    def __init__(self, text):
+        self.content = [_Block(text)]
+
+
+class _FakeAnthropic:
+    """Stands in for the `anthropic` module with a scripted violations list."""
+
+    def __init__(self, violations):
+        payload = json.dumps({"violations": violations})
+        outer = self
+
+        class _Messages:
+            def create(self, **kwargs):
+                return _Msg(outer._payload)
+
+        class _Client:
+            def __init__(self, *a, **kw):
+                self.messages = _Messages()
+
+        self._payload = payload
+        self.Anthropic = _Client
+
+
+class _ExplodingAnthropic:
+    """Stands in for the `anthropic` module, raising on use."""
+
+    def __init__(self, exc=RuntimeError):
+        outer = self
+
+        class _Messages:
+            def create(self, **kwargs):
+                raise outer._exc("anthropic unavailable")
+
+        class _Client:
+            def __init__(self, *a, **kw):
+                self.messages = _Messages()
+
+        self._exc = exc
+        self.Anthropic = _Client
 
 
 def _profile(**kw) -> rv.VoiceProfile:
@@ -166,6 +215,119 @@ def test_t3_the_phrasing_luxury_avoids_would_actually_be_blocked():
     assert any("exclusive" in v["phrase"].lower() for v in result["violations"])
 
 
+# ── T4: the gate fails CLOSED on violations ─────────────────────────────────
+
+def _no_llm(monkeypatch):
+    """Force the hard-scan-only path deterministically."""
+    import config
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "", raising=False)
+
+
+def test_t4_violation_blocks(monkeypatch):
+    _no_llm(monkeypatch)
+    r = rv.gate_client_copy([{"field": "rationale",
+                              "text": "Perfect for young professionals."}])
+    assert r.allowed is False
+    assert r.violations and r.violations[0]["protected_class"]
+
+
+def test_t4_hard_pattern_still_blocks_when_the_llm_dies(monkeypatch):
+    """Fail-open must never mean unchecked."""
+    import fair_housing_gate as fhg
+
+    def boom(*a, **kw):
+        raise RuntimeError("anthropic exploded")
+
+    monkeypatch.setattr(fhg, "_hard_scan", fhg._hard_scan)
+    import config
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "key", raising=False)
+    monkeypatch.setitem(sys.modules, "anthropic", _ExplodingAnthropic())
+
+    r = rv.gate_client_copy([{"field": "f", "text": "No children allowed."}])
+    assert r.allowed is False, "hard patterns must be enforced through LLM failure"
+    assert r.mode == rv.GATE_MODE_HARD_ONLY
+    assert r.degraded is True and r.hard_only is True
+    assert r.reason
+
+
+def test_t4_clean_copy_with_working_llm_is_full_mode(monkeypatch):
+    import config
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "key", raising=False)
+    monkeypatch.setitem(sys.modules, "anthropic", _FakeAnthropic(violations=[]))
+    r = rv.gate_client_copy([{"field": "f", "text": "A comfortable, updated home."}])
+    assert r.allowed is True
+    assert r.mode == rv.GATE_MODE_FULL
+    assert r.degraded is False
+
+
+def test_t4_llm_found_violation_blocks(monkeypatch):
+    import config
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "key", raising=False)
+    monkeypatch.setitem(sys.modules, "anthropic", _FakeAnthropic(violations=[{
+        "field": "f", "phrase": "ideal for a quiet mature crowd",
+        "protected_class": "familial status", "issue": "steering",
+        "suggestion": "describe the property"}]))
+    r = rv.gate_client_copy([{"field": "f", "text": "Ideal for a quiet mature crowd."}])
+    assert r.allowed is False
+    assert r.mode == rv.GATE_MODE_FULL
+
+
+# ── T5: the gate fails OPEN on infrastructure errors ────────────────────────
+
+def test_t5_clean_copy_survives_an_llm_timeout(monkeypatch):
+    import config
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "key", raising=False)
+    monkeypatch.setitem(sys.modules, "anthropic", _ExplodingAnthropic(TimeoutError))
+    r = rv.gate_client_copy([{"field": "f", "text": "A comfortable, updated home."}])
+    assert r.allowed is True, "an LLM outage must not block generation"
+    assert r.mode == rv.GATE_MODE_HARD_ONLY
+    assert r.degraded is True
+
+
+def test_t5_missing_api_key_degrades_but_allows(monkeypatch):
+    _no_llm(monkeypatch)
+    r = rv.gate_client_copy([{"field": "f", "text": "A comfortable, updated home."}])
+    assert r.allowed is True
+    assert r.mode == rv.GATE_MODE_HARD_ONLY
+    assert "ANTHROPIC_API_KEY" in r.reason
+
+
+def test_t5_caller_can_always_tell_which_mode_ran(monkeypatch):
+    """The defect this replaces: `checked` was hardcoded True in every branch."""
+    import fair_housing_gate as fhg
+    _no_llm(monkeypatch)
+    out = fhg.check_fair_housing([{"field": "f", "text": "A comfortable home."}])
+    assert out["checked"] is False
+    assert out["degraded"] is True and out["hard_only"] is True
+    assert out["degraded_reason"]
+
+
+def test_t5_forbidden_phrases_are_brand_not_legal(monkeypatch):
+    """Off-brand copy is reported, never blocked."""
+    _no_llm(monkeypatch)
+    p = _profile(forbidden_phrases=("luxury living", "resort-style"))
+    r = rv.gate_client_copy(
+        [{"field": "f", "text": "Enjoy luxury living in a comfortable home."}],
+        profile=p)
+    assert r.allowed is True, "a brand rule must not block like a legal one"
+    assert r.forbidden_hits == ["luxury living"]
+
+
+def test_t5_forbidden_phrase_does_not_mask_a_real_violation(monkeypatch):
+    _no_llm(monkeypatch)
+    p = _profile(forbidden_phrases=("luxury living",))
+    r = rv.gate_client_copy(
+        [{"field": "f", "text": "Luxury living, no children allowed."}], profile=p)
+    assert r.allowed is False
+    assert r.forbidden_hits == ["luxury living"]
+
+
+def test_t5_gate_never_raises_and_empty_input_is_allowed():
+    assert rv.gate_client_copy([]).allowed is True
+    assert rv.gate_client_copy(None).allowed is True
+    assert rv.gate_client_copy([{"field": "f", "text": "   "}]).allowed is True
+
+
 # ── tier resolution ─────────────────────────────────────────────────────────
 
 def test_unknown_tier_falls_back_to_standard():
@@ -234,7 +396,30 @@ def test_unit_noun_defaults_to_the_tier_default():
 def test_build_system_prompt_order_and_empty_segment_handling():
     out = rv.build_system_prompt(
         task_rules="TASK RULES", profile=_profile(), output_schema="SCHEMA")
-    assert out.index("PROPERTY VOICE") < out.index("TASK RULES") < out.index("SCHEMA")
-    # No profile, no schema -> just the task rules, no stray blank lines.
-    assert rv.build_system_prompt(task_rules="ONLY") == "ONLY"
+    # Shared rules first, then the property voice, then the caller's own rules.
+    # This ordering is what makes a caller-side rule that NARROWS a shared one
+    # (the budget numbers exception) always land after the rule it narrows.
+    assert out.index("RULES:") < out.index("PROPERTY VOICE") \
+        < out.index("TASK RULES") < out.index("SCHEMA")
+    assert out.startswith(rv.CLIENT_VOICE_RULES)
     assert "\n\n\n" not in out
+
+    # Empty segments are dropped entirely rather than leaving blank lines.
+    bare = rv.build_system_prompt(task_rules="ONLY")
+    assert bare.endswith("\n\nONLY")
+    assert "PROPERTY VOICE" not in bare
+    assert "\n\n\n" not in bare
+
+
+def test_new_callers_get_the_shared_rules_the_recap_used_to_hoard():
+    """The whole point of the extraction: the rules reach other generators."""
+    out = rv.build_system_prompt(task_rules="Write a recommendation.")
+    for marker in ("never state a specific dollar amount",
+                   "Boost AI", "TARGETING & LOCATION",
+                   "CRITICAL INTEGRITY RULE", "Do NOT use em-dashes"):
+        assert marker in out, f"shared rule missing for new callers: {marker}"
+    # Recap-specific clauses must NOT leak into the shared block.
+    for recap_only in ("INTERNAL support ticket", "2–4 sentences",
+                       "Say what we did and the outcome",
+                       "End forward-looking"):
+        assert recap_only not in out, f"recap-specific clause leaked: {recap_only}"
