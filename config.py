@@ -219,8 +219,29 @@ HEYGEN_API_KEY = os.getenv("HEYGEN_API_KEY", "")
 HEYGEN_BASE_URL = os.getenv("HEYGEN_BASE_URL", "https://api.heygen.com")
 HEYGEN_WEBHOOK_SECRET = os.getenv("HEYGEN_WEBHOOK_SECRET", "")
 
+# Refuse unsigned HeyGen webhook callbacks when no HEYGEN_WEBHOOK_SECRET is
+# configured. Off by default so enabling signing stays a config flip rather
+# than a deploy that breaks in-flight renders. With signing off, the receiver
+# is an unauthenticated write — see heygen_provider.normalize_webhook.
+HEYGEN_WEBHOOK_REQUIRE_SIGNATURE = os.getenv("HEYGEN_WEBHOOK_REQUIRE_SIGNATURE", "false")
+
 # Which provider to use when the enrollment request omits `provider`.
 VIDEO_PROVIDER_DEFAULT = os.getenv("VIDEO_PROVIDER_DEFAULT", "creatify")
+
+# --- Video pipeline behavior ---
+# Write the script from the property's Property Profile (community_brief,
+# override-wins) instead of the brief the browser assembles. Client-visible —
+# it changes what the script says — so it is off by default.
+VIDEO_BRIEF_FROM_PROFILE = os.getenv("VIDEO_BRIEF_FROM_PROFILE", "false")
+
+# Block generation when the script fails Fair Housing review. Defaults ON:
+# this is housing advertising, and a compliance guard that ships disabled is
+# not a guard. Set to "false" only to unblock a false positive.
+VIDEO_FAIR_HOUSING_BLOCK = os.getenv("VIDEO_FAIR_HOUSING_BLOCK", "true")
+
+# Minimum usable photos before we attempt a render. Below this the output is
+# the same two images on a loop, so we ask for more instead of shipping it.
+VIDEO_MIN_ASSETS = os.getenv("VIDEO_MIN_ASSETS", "3")
 
 # --- NinjaCat ---
 NINJACAT_EXPORT_BUCKET = os.getenv("NINJACAT_EXPORT_BUCKET")

@@ -4176,11 +4176,15 @@ def video_enroll():
         property_url = "https://" + (dom_props.get("domain") or "rpmliving.com")
         units = int(dom_props.get("totalunits") or 0)
 
-        from video_generator import generate_videos
+        from video_generator import generate_videos, CYCLE_FAILED
         import threading
         def _bg_generate():
+            # generate_videos writes a terminal cycle status on every exit, so a
+            # failure in here surfaces in the portal instead of pinning the
+            # property at "Processing" forever. The bare except is the last
+            # resort for a crash before that write can happen.
             try:
-                generate_videos(
+                result = generate_videos(
                     property_uuid=property_uuid,
                     hs_object_id=company_id,
                     property_name=property_name,
@@ -4192,9 +4196,21 @@ def video_enroll():
                     aptiq_market_id=dom_props.get("aptiq_market_id") or "",
                     provider=provider_name,
                 )
-                logger.info("Foundation batch generated for %s (provider=%s)", company_id, provider_name)
+                if result.ok:
+                    logger.info("Foundation batch generated for %s (provider=%s, %d variants)",
+                                company_id, provider_name, len(result.variants))
+                else:
+                    logger.warning("Foundation generation ended for %s: status=%s reason=%s",
+                                   company_id, result.cycle_status, result.reason)
             except Exception as exc:
-                logger.error("Foundation generation failed for %s: %s", company_id, exc, exc_info=True)
+                logger.error("Foundation generation crashed for %s: %s", company_id, exc, exc_info=True)
+                try:
+                    import hubspot_client
+                    hubspot_client.patch_company(company_id, {
+                        "video_cycle_status": CYCLE_FAILED,
+                    })
+                except Exception as write_exc:
+                    logger.error("Could not record the failure on %s: %s", company_id, write_exc)
         threading.Thread(target=_bg_generate, daemon=True).start()
         generation_triggered = True
     except Exception as exc:
@@ -4395,14 +4411,9 @@ def get_video_creative():
     # If any variants updated, persist back to HubSpot so subsequent requests
     # skip the poll and the history view stays consistent.
     if dirty:
-        pending_review = sum(1 for v in variants if isinstance(v, dict) and v.get("status") == "pending_review")
-        approved_count = sum(1 for v in variants if isinstance(v, dict) and v.get("status") == "approved")
-        if approved_count and approved_count == len(variants):
-            cycle_status = "Approved"
-        elif pending_review:
-            cycle_status = "Pending Review"
-        else:
-            cycle_status = p.get("video_cycle_status") or "Processing"
+        # Same derivation the webhook uses, so whichever path lands first the
+        # cycle status agrees with the variants.
+        cycle_status = _video_cycle_status_from(variants)
         try:
             req.patch(
                 f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
@@ -4464,10 +4475,12 @@ def video_approve():
 
     hs_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
 
-    # Fetch current variants
+    # Fetch current variants. `uuid` is the RPM property identifier the Files
+    # library is keyed by — NOT the HubSpot company id. Getting this wrong is
+    # what made approved videos invisible in Files.
     r = req.get(
         f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
-        "?properties=video_variants_json,video_cycle_month",
+        "?properties=video_variants_json,video_cycle_month,uuid",
         headers=hs_headers, timeout=10,
     )
     if not r.ok:
@@ -4475,22 +4488,125 @@ def video_approve():
 
     p = r.json().get("properties", {})
     cycle_month = p.get("video_cycle_month", "")
+    property_uuid = (p.get("uuid") or "").strip()
     try:
         variants = _json.loads(p.get("video_variants_json") or "[]")
     except Exception:
         variants = []
 
     now_ms = int(_time.time() * 1000)
-    approved_ids = set()
+    approved_ids = set()   # to file into the library on this call
+    newly_approved = 0     # variants that actually changed status
 
     for v in variants:
-        if variant_ids == "all" or v.get("variant_id") in variant_ids:
+        if not isinstance(v, dict):
+            continue
+        if variant_ids != "all" and v.get("variant_id") not in variant_ids:
+            continue
+        if v.get("status") != "approved":
             v["status"] = "approved"
             v["approved_at"] = now_ms
+            newly_approved += 1
+        # Idempotent: approving twice must not create a second Files entry.
+        # `asset_row_id` is the record that it already landed, so anything
+        # already in the library is skipped — including a variant re-approved
+        # after a filing failure, which has no row id and so is retried.
+        if not v.get("asset_row_id"):
             approved_ids.add(v.get("variant_id"))
 
-    all_approved = all(v.get("status") == "approved" for v in variants)
+    all_approved = all(
+        v.get("status") == "approved" for v in variants if isinstance(v, dict)
+    )
     new_cycle_status = "Approved" if all_approved else "Pending Review"
+
+    # Save each newly-approved variant into the Files library FIRST, then write
+    # the company record. Ordering matters: `asset_row_id` is what makes this
+    # idempotent, so it has to be on the variant before we persist it. A crash
+    # between the two leaves a Files row without the back-reference (a duplicate
+    # on the next approve) — strictly better than persisting "approved" and
+    # losing the video.
+    hubdb_url = f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_ASSET_TABLE_ID}/rows"
+    hubdb_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
+    hubdb_rows_created = 0
+    filing_failures = []
+
+    # The Files library is keyed by the RPM property uuid. Without one, client
+    # uploads and approved videos would live under different keys and neither
+    # would be visible to the other — refuse rather than file it wrong.
+    if approved_ids and not property_uuid:
+        logger.error("Cannot file approved videos for company %s — no `uuid` on the "
+                     "company record (see IMMUTABLE_RULES.md R1)", company_id)
+
+    for v in variants:
+        if not isinstance(v, dict) or v.get("variant_id") not in approved_ids:
+            continue
+
+        video_url = v.get("video_url") or v.get("video_output") or ""
+        if not video_url:
+            filing_failures.append({"variant_id": v.get("variant_id"),
+                                    "error": "variant has no rendered video yet"})
+            continue
+        if not property_uuid:
+            filing_failures.append({"variant_id": v.get("variant_id"),
+                                    "error": "property has no uuid — cannot file to Files"})
+            continue
+
+        month_label = cycle_month or _time.strftime("%Y-%m")
+        asset_name = f"{month_label} - {v.get('title', 'Video Variant')}"
+        # Derive the extension from the actual URL instead of assuming mp4;
+        # /api/property-assets filters on file_type, so a wrong value hides
+        # the asset from the library it was just saved into.
+        ext = video_url.lower().split("?")[0].rsplit(".", 1)[-1]
+        if ext not in ("mp4", "mov"):
+            ext = "mp4"
+        row = {
+            "property_uuid": property_uuid,
+            "file_url": video_url,
+            "thumbnail_url": v.get("poster_url") or v.get("thumbnail_url") or "",
+            "asset_name": asset_name,
+            "category": "Video",
+            "subcategory": "Ad Creative",
+            "status": "live",
+            "source": "video_pipeline",
+            "uploaded_by": "system",
+            "uploaded_at": now_ms,
+            "file_type": ext,
+            "file_size_bytes": 0,
+            "description": v.get("rationale", ""),
+        }
+        # HubDB SELECT columns need option-object shapes — reuse helper
+        try:
+            from asset_uploader import _coerce_hubdb_values
+            row_payload = _coerce_hubdb_values(row)
+        except Exception:
+            row_payload = row
+        rr = req.post(hubdb_url, headers=hubdb_headers, json={"values": row_payload}, timeout=10)
+        if rr.ok:
+            hubdb_rows_created += 1
+            try:
+                v["asset_row_id"] = (rr.json() or {}).get("id")
+            except Exception:
+                v["asset_row_id"] = "created"
+            v["filed_to_files_at"] = now_ms
+        else:
+            logger.warning("HubDB row failed for variant %s: %s", v.get("variant_id"), rr.text[:200])
+            filing_failures.append({"variant_id": v.get("variant_id"),
+                                    "error": f"Files write failed ({rr.status_code})"})
+
+    # Publish HubDB table if rows were added
+    if hubdb_rows_created:
+        pub = req.post(
+            f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_ASSET_TABLE_ID}/draft/publish",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"},
+            timeout=15,
+        )
+        if not pub.ok:
+            # Rows exist in draft but won't render in the client's Files tab.
+            logger.error("HubDB publish failed (%d) — %d approved videos are not yet "
+                         "visible in Files for company %s",
+                         pub.status_code, hubdb_rows_created, company_id)
+            filing_failures.append({"variant_id": None,
+                                    "error": "Files library did not publish"})
 
     # Write back to HubSpot company record
     update_r = req.patch(
@@ -4506,53 +4622,15 @@ def video_approve():
         logger.error("Company update failed (%d): %s", update_r.status_code, update_r.text[:200])
         return jsonify({"error": "Failed to update company record"}), 500
 
-    # Write approved variants to HubDB asset library
-    hubdb_url = f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_ASSET_TABLE_ID}/rows"
-    hubdb_headers = {"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"}
-    hubdb_rows_created = 0
-
-    for v in variants:
-        if v.get("variant_id") not in approved_ids:
-            continue
-        month_label = cycle_month or _time.strftime("%Y-%m")
-        asset_name = f"{month_label} - {v.get('title', 'Video Variant')}"
-        row = {
-            "property_uuid": company_id,
-            "file_url": v.get("video_url", ""),
-            "thumbnail_url": v.get("poster_url", ""),
-            "asset_name": asset_name,
-            "category": "Video",
-            "subcategory": "Ad Creative",
-            "status": "live",
-            "source": "video_pipeline",
-            "uploaded_by": "system",
-            "uploaded_at": now_ms,
-            "file_type": "mp4",
-            "file_size_bytes": 0,
-            "description": v.get("rationale", ""),
-        }
-        # HubDB SELECT columns need option-object shapes — reuse helper
-        try:
-            from asset_uploader import _coerce_hubdb_values
-            row_payload = _coerce_hubdb_values(row)
-        except Exception:
-            row_payload = row
-        rr = req.post(hubdb_url, headers=hubdb_headers, json={"values": row_payload}, timeout=10)
-        if rr.ok:
-            hubdb_rows_created += 1
-        else:
-            logger.warning("HubDB row failed for variant %s: %s", v.get("variant_id"), rr.text[:100])
-
-    # Publish HubDB table if rows were added
-    if hubdb_rows_created:
-        req.post(
-            f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_ASSET_TABLE_ID}/draft/publish",
-            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"},
-            timeout=15,
-        )
-
-    logger.info("Approved %d variants for company %s; %d HubDB rows created", len(approved_ids), company_id, hubdb_rows_created)
-    return jsonify({"approved": len(approved_ids), "cycle_status": new_cycle_status, "asset_rows": hubdb_rows_created})
+    logger.info("Approved %d variants for company %s (uuid=%s); %d Files rows created, %d failures",
+                newly_approved, company_id, property_uuid, hubdb_rows_created, len(filing_failures))
+    return jsonify({
+        "approved": newly_approved,
+        "cycle_status": new_cycle_status,
+        "asset_rows": hubdb_rows_created,
+        "saved_to_files": hubdb_rows_created,
+        "filing_failures": filing_failures,
+    })
 
 
 @app.route("/api/video-revise", methods=["POST", "OPTIONS"])
@@ -4660,6 +4738,81 @@ def video_revise():
     return jsonify({"revision_count": revision_count + 1, "status": "revision_in_progress"})
 
 
+def _resubmit_heygen_variant(*, target: dict, script: str, voice_id: str,
+                             media_urls: list, property_uuid: str) -> str:
+    """Re-render one HeyGen variant with an edited script. Returns the video id.
+
+    Reuses the variant's existing scene plan so a script-only edit keeps the
+    same shot order, re-chunking the voiceover across those scenes. When the
+    variant has no stored plan (older records), falls back to one scene per
+    supplied media URL.
+    """
+    from video_providers import HeyGenProvider
+    from video_pipeline_config import validate_scene_plan
+    from video_script_gate import gate_scene_plan
+
+    provider = HeyGenProvider()
+    if not provider.is_configured():
+        from video_providers import ProviderError
+        raise ProviderError("HeyGen is not configured",
+                            user_message="HeyGen API key missing on this server.")
+
+    scenes = [s for s in (target.get("scene_plan") or []) if isinstance(s, dict)]
+    if media_urls:
+        # The user changed the media selection — rebuild the plan around it.
+        scenes = [s for s in scenes if s.get("asset_url") in media_urls]
+    if not scenes:
+        scenes = HeyGenProvider._fallback_scene_plan(script, media_urls or [])
+    else:
+        # Re-spread the edited script across the retained scenes so the
+        # voiceover matches what the user actually wrote.
+        rechunked = HeyGenProvider._fallback_scene_plan(
+            script, [s.get("asset_url", "") for s in scenes]
+        )
+        for original, updated in zip(scenes, rechunked):
+            original["voiceover_text"] = updated["voiceover_text"]
+
+    scenes = validate_scene_plan(scenes)["plan"]
+    if not scenes:
+        from video_providers import ProviderError
+        raise ProviderError("No usable scenes for this variant",
+                            user_message="No usable property media for this variant — pick different photos.")
+
+    # On-screen overlays carried over from the old plan are client-facing copy
+    # too; re-screen them alongside the edited voiceover.
+    scene_gate = gate_scene_plan(scenes)
+    if not scene_gate.ok:
+        from video_providers import ProviderError
+        raise ProviderError(
+            f"scene plan blocked: {scene_gate.errors}",
+            user_message="The on-screen text didn't pass our Fair Housing review.",
+        )
+
+    webhook_base = os.getenv("WEBHOOK_SERVER_URL", "").strip() or "https://rpm-portal-server.onrender.com"
+    variant_id = target.get("variant_id") or ""
+    callback_id = f"{variant_id}|{property_uuid}" if property_uuid else variant_id
+
+    body = HeyGenProvider._build_generate_payload(
+        scenes=scenes,
+        voice_id=voice_id,
+        aspect_ratio=target.get("aspect_ratio") or "9:16",
+        webhook_url=webhook_base.rstrip("/") + "/api/heygen-webhook",
+        callback_id=callback_id,
+        script_fallback=script,
+    )
+    resp = provider._post("/v2/video/generate", body)
+
+    from video_providers.heygen_provider import _extract_video_id
+    video_id = _extract_video_id(resp)
+    if not video_id:
+        from video_providers import ProviderError
+        raise ProviderError(f"HeyGen did not return a video_id: {resp}",
+                            user_message="HeyGen accepted the request but returned no job id.")
+
+    target["scene_plan"] = scenes
+    return video_id
+
+
 @app.route("/api/video-regenerate", methods=["POST", "OPTIONS"])
 def video_regenerate():
     """Regenerate a single variant with edited script, voice, and/or media.
@@ -4748,29 +4901,53 @@ def video_regenerate():
     old_media = target.get("media_plan") or []
     old_media_urls = [m.get("asset_url", "") for m in old_media if isinstance(m, dict)]
 
-    # Determine new voice (fall back to current if not changed)
+    # Route to the provider that actually made this variant. Sending a HeyGen
+    # variant to Creatify stamps a creatify_job_id onto a variant still marked
+    # provider="heygen", so the poller looks for heygen_video_id, finds none,
+    # and the variant never leaves "pending".
+    from video_providers import normalize_provider_name
+    variant_provider = normalize_provider_name(target.get("provider"))
+
+    # Determine new voice (fall back to current if not changed). Each provider
+    # has its own catalog — Creatify uses accent UUIDs, HeyGen its own ids.
     voice_id = new_voice_id or old_voice_id
     voice_name = old_voice_name
 
     try:
-        from video_pipeline_config import _ALL_APPROVED
-        if voice_id and voice_id in _ALL_APPROVED:
-            voice_name = _ALL_APPROVED[voice_id].get("display", old_voice_name)
-        elif new_voice_id and new_voice_id not in _ALL_APPROVED:
-            return jsonify({"error": "Voice not in approved list"}), 400
+        if variant_provider == "heygen":
+            from video_pipeline_config import _HEYGEN_VOICES_BY_ID as _CATALOG
+        else:
+            from video_pipeline_config import _ALL_APPROVED as _CATALOG
+        if voice_id and voice_id in _CATALOG:
+            voice_name = _CATALOG[voice_id].get("display", old_voice_name)
+        elif new_voice_id and new_voice_id not in _CATALOG:
+            return jsonify({
+                "error": f"Voice not in the approved list for {variant_provider}",
+            }), 400
     except Exception as exc:
         logger.warning("Voice validation failed: %s", exc)
 
-    # Validate and sanitize the edited script (pricing rules)
+    # Validate and sanitize the edited script. The user typed this, so it is
+    # user-entered ad copy heading for a client-facing housing ad — it gets the
+    # same Fair Housing + pricing gate as a generated script.
     try:
-        from video_pipeline_config import validate_script
-        validation = validate_script(new_script)
-        if not validation["ok"]:
-            return jsonify({"error": "Script validation failed", "issues": validation["errors"]}), 400
-        clean_script = validation["cleaned_script"]
+        from video_script_gate import gate_script
+        gate = gate_script(new_script, field_name="video_script_edit")
     except Exception as exc:
-        logger.error("Script validation error: %s", exc)
+        logger.error("Script gate error: %s", exc, exc_info=True)
         return jsonify({"error": "Script validation failed"}), 500
+
+    if not gate.ok:
+        return jsonify({
+            "error": "Script validation failed",
+            "issues": gate.errors,
+            "violations": gate.violations,
+            "fair_housing": gate.fair_housing,
+        }), 400
+    clean_script = gate.script
+    if gate.degraded:
+        logger.warning("Fair Housing check DEGRADED on regenerate for variant %s (%s)",
+                       variant_id, gate.degraded_reason)
 
     # Determine media URLs. Filter out placeholder strings like
     # 'property_website_imagery' and require real http/https URLs — Creatify
@@ -4778,23 +4955,40 @@ def video_regenerate():
     raw_media = new_media_urls if new_media_urls is not None else old_media_urls
     media_urls = [u for u in (raw_media or []) if isinstance(u, str) and u.startswith(("http://", "https://"))]
 
-    # Submit new Creatify job
+    # Submit a new job to the variant's own provider.
+    job_id = ""
     try:
-        from creatify_client import create_video_job
-        job = create_video_job(
-            property_url=property_url,
-            script=clean_script,
-            accent_id=voice_id or None,
-            aspect_ratio=target.get("aspect_ratio"),
-            duration=target.get("duration_seconds", 15),
-            media_urls=media_urls or None,
-        )
+        if variant_provider == "heygen":
+            job_id = _resubmit_heygen_variant(
+                target=target,
+                script=clean_script,
+                voice_id=voice_id,
+                media_urls=media_urls,
+                property_uuid=target.get("property_uuid") or "",
+            )
+        else:
+            from creatify_client import create_video_job
+            job = create_video_job(
+                property_url=property_url,
+                script=clean_script,
+                accent_id=voice_id or None,
+                aspect_ratio=target.get("aspect_ratio"),
+                duration=target.get("duration_seconds", 15),
+                media_urls=media_urls or None,
+            )
+            job_id = job.get("id")
     except Exception as exc:
-        logger.error("Creatify job submission failed: %s", exc, exc_info=True)
-        return jsonify({"error": f"Creatify submission failed: {str(exc)}"}), 500
+        user_msg = getattr(exc, "user_message", "") or str(exc)
+        logger.error("%s job submission failed: %s", variant_provider, exc, exc_info=True)
+        return jsonify({"error": f"{variant_provider} submission failed: {user_msg}"}), 500
 
-    # Update the variant in place
-    target["creatify_job_id"] = job.get("id")
+    # Update the variant in place. Write the job id to the field this variant's
+    # poller actually reads.
+    if variant_provider == "heygen":
+        target["heygen_video_id"] = job_id
+    else:
+        target["creatify_job_id"] = job_id
+    target["provider"] = variant_provider
     target["status"] = "pending"
     target["video_output"] = None
     target["video_url"] = None
@@ -4804,6 +4998,12 @@ def video_regenerate():
     target["voice_name"] = voice_name
     target["script"] = clean_script
     target["revision_count"] = revision_count + 1
+    target["compliance"] = {
+        "fair_housing":          gate.fair_housing,
+        "fair_housing_degraded": gate.degraded,
+        "degraded_reason":       gate.degraded_reason,
+        "checks":                gate.describe_checks(),
+    }
     if new_media_urls is not None:
         target["media_plan"] = [{"asset_url": u, "reason": "user-selected"} for u in new_media_urls]
 
@@ -4840,12 +5040,16 @@ def video_regenerate():
     if not update_r.ok:
         return jsonify({"error": "Failed to update company record"}), 500
 
-    logger.info("Regeneration %d submitted for variant %s on company %s (job %s)",
-                revision_count + 1, variant_id, company_id, job.get("id"))
+    logger.info("Regeneration %d submitted for variant %s on company %s (provider=%s job=%s)",
+                revision_count + 1, variant_id, company_id, variant_provider, job_id)
     return jsonify({
         "status": "pending",
-        "creatify_job_id": job.get("id"),
+        "provider": variant_provider,
+        "job_id": job_id,
+        # Back-compat: the portal still reads creatify_job_id off this response.
+        "creatify_job_id": job_id if variant_provider == "creatify" else None,
         "revision_count": revision_count + 1,
+        "fair_housing": gate.fair_housing,
     })
 
 
@@ -4853,7 +5057,14 @@ def video_regenerate():
 def property_assets():
     """Return the list of visual assets (images + videos) for a property.
 
-    Query: company_id=<hs_object_id>
+    Query: property_uuid=<rpm uuid>  (preferred)
+           company_id=<hs_object_id> (accepted; resolved to the uuid)
+
+    The Files library (HubDB `rpm_assets`) is keyed by the RPM property uuid —
+    that is what `asset_uploader.process_asset_upload` writes and what
+    `video_generator.fetch_property_assets` reads. Querying it by the HubSpot
+    company id returns nothing, which is why uploaded photos and approved
+    videos could both be invisible here.
     """
     if request.method == "OPTIONS":
         return _preflight_response()
@@ -4862,15 +5073,31 @@ def property_assets():
     if not email:
         return jsonify({"error": "Authentication required"}), 401
 
-    company_id = request.args.get("company_id", "").strip()
-    if not company_id:
-        return jsonify({"error": "company_id required"}), 400
+    company_id    = request.args.get("company_id", "").strip()
+    property_uuid = request.args.get("property_uuid", "").strip()
+    if not company_id and not property_uuid:
+        return jsonify({"error": "property_uuid or company_id required"}), 400
 
     import requests as req
     from config import HUBSPOT_API_KEY, HUBDB_ASSET_TABLE_ID
 
     if not HUBDB_ASSET_TABLE_ID:
         return jsonify({"assets": [], "count": 0})
+
+    # Resolve the asset key. Callers historically passed the uuid in the
+    # `company_id` slot, so a failed lookup falls back to using the value
+    # as-is rather than returning an empty library.
+    if not property_uuid and company_id:
+        try:
+            lookup = req.get(
+                f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties=uuid",
+                headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"}, timeout=10,
+            )
+            if lookup.ok:
+                property_uuid = ((lookup.json().get("properties") or {}).get("uuid") or "").strip()
+        except Exception as exc:
+            logger.warning("property-assets uuid lookup failed for %s: %s", company_id, exc)
+    asset_key = property_uuid or company_id
 
     _VISUAL_TYPES = {"jpg", "jpeg", "png", "webp", "mp4", "mov"}
     assets = []
@@ -4885,7 +5112,7 @@ def property_assets():
         # status and category are SELECT columns — use option name for filter
         url = (
             f"https://api.hubapi.com/cms/v3/hubdb/tables/{HUBDB_ASSET_TABLE_ID}/rows"
-            f"?property_uuid__eq={company_id}&limit=100"
+            f"?property_uuid__eq={asset_key}&limit=100"
         )
         resp = req.get(url, headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"}, timeout=15)
         if resp.ok:
@@ -4960,6 +5187,32 @@ def video_providers_list():
 
 
 # ─── HeyGen webhook callback — signature-validated in the provider ──────────
+
+
+def _video_cycle_status_from(variants: list) -> str:
+    """Derive the cycle status from the variants themselves.
+
+    One rule, used by both the webhook and the auto-poller, so a render that
+    lands via one path can't leave the cycle disagreeing with the other.
+    "Processing" only survives while something is genuinely still rendering.
+    """
+    real = [v for v in variants if isinstance(v, dict)]
+    if not real:
+        return "Processing"
+
+    if any((v.get("status") or "pending") in ("pending", "running") for v in real):
+        return "Processing"
+    # A variant awaiting a revision isn't rendering — keep the status
+    # video_revise set rather than pushing it back to "Processing".
+    if any(v.get("status") == "revision_in_progress" for v in real):
+        return "Revision Requested"
+    if all(v.get("status") == "approved" for v in real):
+        return "Approved"
+    if any(v.get("status") == "pending_review" for v in real):
+        return "Pending Review"
+    if all(v.get("status") in ("failed", "error") for v in real):
+        return "Failed"
+    return "Pending Review"
 
 
 @app.route("/api/heygen-webhook", methods=["POST"])
@@ -5110,27 +5363,49 @@ def heygen_webhook():
         variants_now = _json.loads(r.json().get("properties", {}).get("video_variants_json") or "[]")
     except Exception:
         variants_now = []
+    matched_in_place = False
     for idx, v in enumerate(variants_now):
         if isinstance(v, dict) and (
             (job_id and v.get("heygen_video_id") == job_id)
             or (callback_id and v.get("variant_id") == callback_id)
         ):
             variants_now[idx] = {**v, **target_variant}
+            matched_in_place = True
             break
+    if not matched_in_place:
+        # The re-fetch didn't contain the variant (concurrent overwrite, or the
+        # re-read failed and returned []). Writing would drop the whole list.
+        logger.error("HeyGen webhook: variant vanished on re-read for company %s "
+                     "(job=%s callback=%s) — not writing", target_hs_object_id, job_id, callback_id)
+        return jsonify({"matched": True, "written": False,
+                        "error": "variant not found on re-read"}), 409
 
-    req.patch(
+    # Move the cycle off "Processing" once nothing is still rendering. Without
+    # this a cycle where every variant failed sat at "Processing" forever and
+    # the portal spun with nothing to show.
+    cycle_status = _video_cycle_status_from(variants_now)
+
+    write = req.patch(
         f"https://api.hubapi.com/crm/v3/objects/companies/{target_hs_object_id}",
         headers=hs_headers,
         json={"properties": {
             "video_variants_json": _json.dumps(variants_now),
-            "video_cycle_status":  "Pending Review" if status == "done" else "Processing",
+            "video_cycle_status":  cycle_status,
         }},
         timeout=10,
     )
+    if not write.ok:
+        # Do NOT report success — HeyGen retries on non-2xx, which is what we
+        # want when the render landed but our record of it didn't.
+        logger.error("HeyGen webhook write failed (%d) for company %s: %s",
+                     write.status_code, target_hs_object_id, write.text[:200])
+        return jsonify({"matched": True, "written": False,
+                        "error": "HubSpot write failed"}), 502
 
-    logger.info("HeyGen webhook applied: company=%s uuid=%s status=%s job=%s",
-                target_hs_object_id, property_uuid, status, job_id)
-    return jsonify({"matched": True, "status": status}), 200
+    logger.info("HeyGen webhook applied: company=%s uuid=%s status=%s job=%s cycle=%s",
+                target_hs_object_id, property_uuid, status, job_id, cycle_status)
+    return jsonify({"matched": True, "written": True,
+                    "status": status, "cycle_status": cycle_status}), 200
 
 
 # ─── Call Prep: monthly AI-generated recommendations + questions ───────────
@@ -5830,7 +6105,7 @@ def video_generate():
     props = ",".join([
         "name", "totalunits", "video_pipeline_enrolled",
         "video_pipeline_tier", "video_creative_brief_json",
-        "aptiq_property_id", "aptiq_market_id",
+        "aptiq_property_id", "aptiq_market_id", "uuid",
     ])
     try:
         r = req.get(
@@ -5856,11 +6131,16 @@ def video_generate():
     except Exception:
         return jsonify({"error": "Invalid creative brief data"}), 400
 
-    # Generate videos
+    # Generate videos. property_uuid is what asset lookups and webhook routing
+    # key on; fall back to the company_id only when the record has no uuid yet
+    # (pre-workflow legacy records — see IMMUTABLE_RULES.md R1).
+    property_uuid = (p.get("uuid") or "").strip() or company_id
+
     try:
         from video_generator import generate_videos
-        variants = generate_videos(
-            company_id=company_id,
+        result = generate_videos(
+            property_uuid=property_uuid,
+            hs_object_id=company_id,
             property_name=property_name,
             tier=tier,
             brief=brief,
@@ -5869,15 +6149,29 @@ def video_generate():
             aptiq_property_id=p.get("aptiq_property_id") or "",
             aptiq_market_id=p.get("aptiq_market_id") or "",
         )
-        return jsonify({
-            "status": "generating",
-            "property": property_name,
-            "tier": tier,
-            "variants": variants,
-        })
     except Exception as exc:
         logger.error("Video generation failed for %s: %s", company_id, exc, exc_info=True)
         return jsonify({"error": f"Video generation failed: {str(exc)}"}), 500
+
+    if not result.ok:
+        return jsonify({
+            "status":       result.cycle_status,
+            "property":     property_name,
+            "tier":         tier,
+            "reason":       result.reason,
+            "message":      result.user_message,
+            "asset_count":  result.asset_count,
+            "compliance":   result.compliance,
+            "variants":     result.variants,
+        }), 200
+
+    return jsonify({
+        "status": "generating",
+        "property": property_name,
+        "tier": tier,
+        "compliance": result.compliance,
+        "variants": result.variants,
+    })
 
 
 # ─── SEO + Content + Keywords + Trends ─────────────────────────────────────

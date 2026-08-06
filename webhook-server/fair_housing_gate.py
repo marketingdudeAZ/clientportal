@@ -76,17 +76,35 @@ def _hard_scan(items):
 def check_fair_housing(items):
     """Screen a list of {field, text} dicts for Fair Housing violations.
 
-    Returns {"compliant": bool, "violations": [...], "checked": True}. Fail-open
-    on LLM errors; HARD_PATTERNS are always enforced.
+    Returns:
+        {
+          "compliant":   bool,   # no violations found by the checks that RAN
+          "violations":  [...],
+          "checked":     True,   # the gate was invoked (back-compat key)
+          "llm_checked": bool,   # the nuance pass actually completed
+          "degraded":    bool,   # hard-scan only — nuance pass did NOT run
+          "degraded_reason": str # why, when degraded
+        }
+
+    Fail-open on LLM errors; HARD_PATTERNS are always enforced. `compliant`
+    alone does NOT mean "fully screened" — a caller that shows or ships the
+    copy must read `degraded` and report it, because a degraded pass only
+    caught the fixed-phrase blocklist. Never present a degraded result as a
+    completed check.
     """
     items = [it for it in (items or []) if (it.get("text") or "").strip()]
     if not items:
-        return {"compliant": True, "violations": [], "checked": True}
+        return {"compliant": True, "violations": [], "checked": True,
+                "llm_checked": True, "degraded": False, "degraded_reason": ""}
 
     violations = _hard_scan(items)
+    llm_checked = False
+    degraded_reason = ""
 
     try:
         from config import ANTHROPIC_API_KEY, CLAUDE_BRIEF_MODEL
+        if not ANTHROPIC_API_KEY:
+            degraded_reason = "ANTHROPIC_API_KEY not configured"
         if ANTHROPIC_API_KEY:
             import anthropic
             client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -112,7 +130,16 @@ def check_fair_housing(items):
                     "issue": v.get("issue", ""),
                     "suggestion": v.get("suggestion", ""),
                 })
+            llm_checked = True
     except Exception as e:
+        degraded_reason = f"LLM pass failed: {e}"
         logger.warning("fair_housing_gate: LLM pass unavailable, hard-scan only (%s)", e)
 
-    return {"compliant": len(violations) == 0, "violations": violations, "checked": True}
+    return {
+        "compliant":       len(violations) == 0,
+        "violations":      violations,
+        "checked":         True,
+        "llm_checked":     llm_checked,
+        "degraded":        not llm_checked,
+        "degraded_reason": degraded_reason,
+    }
