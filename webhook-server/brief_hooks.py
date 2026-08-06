@@ -44,8 +44,18 @@ def _leg_fluency(company_id: str, **_ctx) -> None:
         logger.exception("brief_hooks.fluency failed for company %s", company_id)
 
 
-# Ordered list of legs. Bridge 3 appends its ClickUp-notice leg here.
-_LEGS = [_leg_fluency]
+def _leg_clickup_notice(company_id: str, **ctx) -> None:
+    """Bridge 3 — tell the fulfillment team in ClickUp the brief changed.
+    Self-gated (BRIEF_CLICKUP_NOTICE); no-ops when disabled."""
+    try:
+        import brief_change_notifier
+        brief_change_notifier.leg(company_id, **ctx)
+    except Exception:
+        logger.exception("brief_hooks.clickup_notice failed for company %s", company_id)
+
+
+# Ordered list of legs. Each self-guards on its own flag/config.
+_LEGS = [_leg_fluency, _leg_clickup_notice]
 
 
 def on_field_written(
