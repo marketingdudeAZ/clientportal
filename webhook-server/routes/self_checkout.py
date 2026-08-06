@@ -200,6 +200,31 @@ def _current_period(today: date | None = None) -> str:
     return f"{today.year}-Q{(today.month - 1) // 3 + 1}"
 
 
+def _demo_islost(company_id: str) -> dict:
+    """Synthesized impression-share-lost signals for pilot demos.
+
+    Active only when SELF_CHECKOUT_DEMO_SIGNALS=true. Google Ads isn't
+    connected yet, so real IS-lost data is unavailable — this fabricates a
+    plausible signal (18% lost on search, 12% on pmax) ONLY for channels
+    the property genuinely spends on (real budgets from the deal line
+    items), so the cards read true except for the IS-lost trigger itself.
+    Remove once the Google Ads connector lands.
+    """
+    if os.environ.get("SELF_CHECKOUT_DEMO_SIGNALS", "").strip().lower() != "true":
+        return {}
+    try:
+        from spend_sheet import get_company_monthly_spend
+        by_sku = get_company_monthly_spend(company_id).get("by_sku", {})
+    except Exception:
+        return {}
+    demo = {}
+    if by_sku.get("search"):
+        demo["search"] = 0.18
+    if by_sku.get("pmax"):
+        demo["pmax"] = 0.12
+    return demo
+
+
 def _card(rec) -> dict:
     return {
         "channel": rec.channel,
@@ -231,7 +256,9 @@ def recommendations():
     try:
         islost = google_ads_islost.fetch_islost_by_channel(company_id)
     except google_ads_islost.GoogleAdsNotConfigured:
-        return jsonify({"cards": [], "reason": "google_ads_not_connected"}), 200
+        islost = _demo_islost(company_id)
+        if not islost:
+            return jsonify({"cards": [], "reason": "google_ads_not_connected"}), 200
     if not islost:
         return jsonify({"cards": [], "reason": "no_impression_share_loss"}), 200
 

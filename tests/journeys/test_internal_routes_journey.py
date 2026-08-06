@@ -32,6 +32,12 @@ class TestInternalKeyGuard(unittest.TestCase):
         cls.app = server.app
         cls.client = cls.app.test_client()
 
+    def setUp(self):
+        # The route reads INTERNAL_API_KEY at request time, and other test
+        # modules mutate it at run time (and don't restore it). Re-assert it
+        # before each request so this test is order-independent.
+        os.environ["INTERNAL_API_KEY"] = "internal-secret"
+
     def _missing_key_returns_401(self, route, body):
         resp = self.client.post(route, json=body) if body is not None \
             else self.client.post(route, data="id\n1")
@@ -92,6 +98,10 @@ class TestRedLightRunDualAuth(unittest.TestCase):
     def setUpClass(cls):
         import server
         cls.client = server.app.test_client()
+
+    def setUp(self):
+        # See TestInternalKeyGuard.setUp — keep the internal key stable per test.
+        os.environ["INTERNAL_API_KEY"] = "internal-secret"
 
     def test_neither_credential_returns_401(self):
         resp = self.client.post("/api/red-light/run",

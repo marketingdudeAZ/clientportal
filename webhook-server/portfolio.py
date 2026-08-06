@@ -41,6 +41,14 @@ COMPANY_PROPS = [
     "trending_120_days_lease_expiration", # Leases expiring in 120-day window
     "brf___renewal_leases_120_trend",     # Renewal lease 120-day trend
     "occupancy_status",                   # Lease-Up / Stabilized / In-Transition / Renovation
+    "managementend",                      # disposition guard (past date = property gone)
+    "disposition_retained",               # true = keep active despite disposition (retain toggle)
+    # Lease-up ramp inputs (time-aware occupancy target)
+    "lease_up_start_date",                # ramp start (delivery/reposition); preferred
+    "managementstart",                    # fallback ramp start (new construction ≈ delivery)
+    "if_it_s_a_new_acquisition__what_is_the_management_start_date_",  # acquisition fallback
+    "target_occupancy",                   # per-property target % (override; default 95)
+    "lease_up_ramp_months",               # per-property ramp length (override; default 12)
     # Red Light score fields
     "red_light_report_score", "red_light_report_status",
     "red_light_market_score", "red_light_marketing_score",
@@ -53,6 +61,20 @@ ROLE_EMAIL_FIELDS = {
     "marketing_director": ["marketing_director_email", "marketing_manager_email"],
     "marketing_rvp": ["marketing_rvp_email", "marketing_director_email", "marketing_manager_email"],
 }
+
+
+def _management_ended(managementend) -> bool:
+    """True if the Management End Date is set and in the past (disposition guard)."""
+    if not managementend:
+        return False
+    try:
+        from datetime import datetime, date
+        v = str(managementend).strip()
+        d = (datetime.utcfromtimestamp(int(v) / 1000).date() if v.isdigit()
+             else datetime.strptime(v[:10], "%Y-%m-%d").date())
+        return d < date.today()
+    except Exception:
+        return False
 
 
 def _build_filter_groups(email=None, role=None):
@@ -72,7 +94,13 @@ def _build_filter_groups(email=None, role=None):
                     "propertyName": "plestatus",
                     "operator": "IN",
                     "values": ["RPM Managed", "Onboarding"],
-                }
+                },
+                # A property MUST have a uuid to be addressable. Excludes duplicate /
+                # un-enrolled company records so we never link to a uuid=null page.
+                {
+                    "propertyName": "uuid",
+                    "operator": "HAS_PROPERTY",
+                },
             ]
         }
     ]
@@ -116,17 +144,48 @@ def fetch_portfolio(email, role):
         logger.debug("Cache hit for %s", cache_key)
         return cached[1]
 
-    filter_groups = _build_filter_groups(email, role)
+    # LIST endpoint enumeration (2026-07-06): the /search endpoint's
+    # pagination stops short non-deterministically at portfolio size — the
+    # Properties tab showed 874 while the true 2-status count is much
+    # higher. Same flakiness spend_sheet + triage already worked around.
+    # We enumerate every company via the fully-consistent LIST endpoint and
+    # filter plestatus client-side.
+    _ = _build_filter_groups(email, role)  # kept for back-compat/tests
+    allowed = {"RPM Managed", "Onboarding"}
 
-    # Paginate through all results
     all_companies = []
     seen_ids = set()
     after = None
-
-    for _ in range(100):  # Safety cap: max 10,000 companies (100 pages × 100 per page)
-        results, after = _search_companies(filter_groups, after)
+    for _ in range(100):  # Safety cap: max 10,000 companies
+        params = {"limit": 100, "properties": ",".join(COMPANY_PROPS)}
+        if after:
+            params["after"] = after
+        resp = requests.get(
+            f"{API_BASE}/crm/v3/objects/companies",
+            headers=HEADERS, params=params, timeout=25,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("results", [])
+        after = data.get("paging", {}).get("next", {}).get("after")
         for company in results:
             cid = company["id"]
+            _cp = company.get("properties", {})
+            # Disposition RETAINED (retain toggle): keep the property active —
+            # keeps its uuid + campaign, no Fluency re-setup — despite a
+            # Dispositioning status or a past management end date.
+            retained = str(_cp.get("disposition_retained") or "").strip().lower() in ("true", "yes", "1")
+            if not retained:
+                if (_cp.get("plestatus") or "").strip() not in allowed:
+                    continue
+                # Disposition guard: drop properties whose management has ended,
+                # even if plestatus is a stale "RPM Managed" from warehouse lag.
+                if _management_ended(_cp.get("managementend")):
+                    continue
+            # A property MUST have a uuid to be addressable. Drops duplicate /
+            # un-enrolled company records so we never list or link a uuid=null page.
+            if not str(_cp.get("uuid") or "").strip():
+                continue
             if cid not in seen_ids:
                 seen_ids.add(cid)
                 all_companies.append(company)
@@ -167,6 +226,64 @@ def _safe_int(val, default=0):
         return default
 
 
+def _spend_by_company():
+    """{company_id: monthly $} from the deal-line-item engine (spend_sheet).
+
+    The authoritative monthly spend lives on deal line items — the legacy
+    company-level *_monthly_spend fields this module used to sum are only
+    sparsely populated, which undercounted the dashboard KPI (showed $339k
+    portfolio-wide). spend_sheet keeps its own 30-min cache, so this join
+    is cheap after the first call. Empty dict on any failure — callers fall
+    back to the legacy per-property computation.
+    """
+    try:
+        from spend_sheet import get_spend_sheet_data, _SPEND_COLUMN_KEYS
+        out = {}
+        for row in get_spend_sheet_data():
+            total = 0.0
+            for k in _SPEND_COLUMN_KEYS:
+                v = row.get(k)
+                if v:
+                    try:
+                        total += float(v)
+                    except (TypeError, ValueError):
+                        pass
+            out[str(row.get("company_id"))] = total
+        return out
+    except Exception as e:
+        logger.warning("portfolio: spend_sheet join unavailable (%s) — legacy spend fields", e)
+        return {}
+
+
+def _digital_spend_by_company():
+    """{company_id: monthly digital $} — excludes mgmt_fee + website_hosting.
+
+    'Enrolled in digital' must mean actual paid media / SEO / reputation, NOT a
+    management-only deal. Emily's #1 ask: the Properties list mixes RPM's whole
+    book of business with digital clients, so a management-fee-only property must
+    read as 'Not enrolled'. spend_sheet is cached, so this second pass is cheap.
+    """
+    try:
+        from spend_sheet import get_spend_sheet_data, _SPEND_COLUMN_KEYS
+        skip = {"mgmt_fee", "website_hosting"}
+        keys = [k for k in _SPEND_COLUMN_KEYS if k not in skip]
+        out = {}
+        for row in get_spend_sheet_data():
+            total = 0.0
+            for k in keys:
+                v = row.get(k)
+                if v:
+                    try:
+                        total += float(v)
+                    except (TypeError, ValueError):
+                        pass
+            out[str(row.get("company_id"))] = total
+        return out
+    except Exception as e:
+        logger.warning("portfolio: digital-spend join unavailable (%s) — enrolled flag falls back", e)
+        return {}
+
+
 def _compute_monthly_spend(props):
     """Compute total monthly marketing spend for a property."""
     total = 0.0
@@ -199,6 +316,82 @@ def _compute_monthly_spend(props):
     return total
 
 
+# Minimum group size before per-city/market spend averages are exposed. Below
+# this, an "average" is effectively one property's spend — suppress the money
+# fields (count is still shown so the UI can say "only 2 in this city").
+BENCHMARK_MIN_N = 3
+
+
+def _median(vals):
+    s = sorted(vals)
+    n = len(s)
+    if n == 0:
+        return None
+    mid = n // 2
+    return s[mid] if n % 2 else (s[mid - 1] + s[mid]) / 2.0
+
+
+def compute_benchmarks(companies, spend_map=None):
+    """Spend benchmarks grouped by city and by RPM market, across the full
+    managed portfolio (all RPM Managed + Onboarding — not role-scoped).
+
+    Powers the "10 properties in Tempe spend ~$7K/mo, you're at $4K" story.
+    Per group we return count, mean + median monthly spend, and spend-per-unit
+    (sum spend / sum units — an honest size-normalized figure that a raw mean
+    hides). Money fields are null when count < BENCHMARK_MIN_N.
+    """
+    if spend_map is None:
+        spend_map = _spend_by_company()
+
+    def _blank():
+        return {"count": 0, "units": 0, "spend_total": 0.0, "spends": []}
+
+    by_city = {}
+    by_market = {}
+    for props in companies:
+        cid = str(props.get("hubspot_company_id") or "")
+        monthly = spend_map.get(cid) if cid in spend_map else _compute_monthly_spend(props)
+        units = _safe_int(props.get("totalunits"))
+
+        city = (props.get("city") or "").strip()
+        state = (props.get("state") or "").strip()
+        if city:
+            key = f"{city}, {state}" if state else city
+            g = by_city.setdefault(key, _blank())
+            g["count"] += 1
+            g["units"] += units
+            g["spend_total"] += monthly
+            g["spends"].append(monthly)
+
+        market = (props.get("rpmmarket") or "").strip()
+        if market:
+            g = by_market.setdefault(market, _blank())
+            g["count"] += 1
+            g["units"] += units
+            g["spend_total"] += monthly
+            g["spends"].append(monthly)
+
+    def _finalize(groups):
+        out = {}
+        for key, g in groups.items():
+            n = g["count"]
+            entry = {"count": n, "total_units": g["units"]}
+            if n >= BENCHMARK_MIN_N:
+                entry["avg_spend"] = round(g["spend_total"] / n, 2)
+                entry["median_spend"] = round(_median(g["spends"]), 2)
+                entry["avg_spend_per_unit"] = (
+                    round(g["spend_total"] / g["units"], 2) if g["units"] else None
+                )
+            else:
+                entry["avg_spend"] = None
+                entry["median_spend"] = None
+                entry["avg_spend_per_unit"] = None
+            out[key] = entry
+        return out
+
+    return {"by_city": _finalize(by_city), "by_market": _finalize(by_market)}
+
+
 def compute_rollups(companies):
     """Compute portfolio-level rollup KPIs from a list of company property dicts."""
     total_properties = len(companies)
@@ -212,6 +405,8 @@ def compute_rollups(companies):
     atr_scores = []
     lease_trend_total = 0
 
+    spend_map = _spend_by_company()  # deal-line-item truth; {} on failure
+
     for props in companies:
         # Units
         total_units += _safe_int(props.get("totalunits"))
@@ -219,8 +414,9 @@ def compute_rollups(companies):
         # Flags
         total_flags += _safe_int(props.get("redlight_flag_count"))
 
-        # Spend
-        total_spend += _compute_monthly_spend(props)
+        # Spend — deal line items when available, legacy fields otherwise
+        cid = str(props.get("hubspot_company_id") or "")
+        total_spend += spend_map.get(cid) if cid in spend_map else _compute_monthly_spend(props)
 
         # Health score — prefer pipeline score, fall back to leasing score
         rl = props.get("redlight_report_score")
@@ -296,12 +492,18 @@ def _compute_leasing_score(props):
     if occ is None and atr is None:
         return None
 
-    occ_status    = (props.get("occupancy_status") or "").strip()
-    is_lease_up   = occ_status in ("Lease-Up", "In-Transition")
-    is_renovation = occ_status == "Renovation"
+    import leasing_ramp as _lr
+    _cls = _lr.normalize_occupancy_status(props.get("occupancy_status"))
+    is_lease_up   = _cls == "lease_up"
+    is_renovation = _cls == "renovation"
 
     if is_renovation:
         return {"score": None, "status": "Renovation", "is_lease_up": False}
+
+    # Per-property occupancy target (default 95). Stabilized properties score
+    # against THIS, not a global 95 — offsets below preserve the old bands when
+    # target == 95 and shift for a custom target (e.g. 92 for a rent-push asset).
+    target_occ = _fv("target_occupancy") or 95.0
 
     def _occ_score(o):
         if o is None: return 75
@@ -311,12 +513,13 @@ def _compute_leasing_score(props):
             if o >= 60: return 60
             if o >= 45: return 45
             return 30
-        else:
-            if o >= 95: return 100
-            if o >= 93: return 85
-            if o >= 90: return 70
-            if o >= 87: return 55
-            return 35
+        # Stabilized: smooth linear curve (re-curved 2026-07 — see server.py).
+        if o >= target_occ:
+            return 100
+        gap = target_occ - o
+        if gap <= 5:
+            return round(100 - gap * 5)
+        return max(30, round(75 - (gap - 5) * 3.5))
 
     def _atr_score(a):
         if a is None: return 75
@@ -326,27 +529,37 @@ def _compute_leasing_score(props):
             if a <= 35: return 55
             if a <= 50: return 35
             return 20
-        else:
-            if a <= 4:  return 100
-            if a <= 6:  return 80
-            if a <= 9:  return 60
-            if a <= 13: return 40
-            return 20
+        if a <= 5:
+            return 100
+        return max(20, round(100 - (a - 5) * 5))
 
     def _exposure_score(t, u):
         if t is None or u == 0: return 75
         pct = (t / u) * 100
-        if pct <= 8:  return 100
-        if pct <= 15: return 75
-        if pct <= 22: return 50
-        return 25
+        if pct <= 8:
+            return 100
+        return max(25, round(100 - (pct - 8) * 3.5))
 
     o_score = _occ_score(occ)
     a_score = _atr_score(atr)
     e_score = _exposure_score(trend, units)
 
+    # Lease-up: score against the linear ramp from takeover date, not fixed bands.
+    ramp_info = None
     if is_lease_up:
-        overall = round(o_score * 0.60 + a_score * 0.40)
+        takeover = (props.get("lease_up_start_date")
+                    or props.get("managementstart")
+                    or props.get("if_it_s_a_new_acquisition__what_is_the_management_start_date_"))
+        ramp_info = _lr.lease_up_ramp(occ, takeover, _fv("target_occupancy"), _fv("lease_up_ramp_months"))
+        if ramp_info.get("applies") and not ramp_info.get("graduated"):
+            return {"score": ramp_info["score"], "status": ramp_info["status"],
+                    "is_lease_up": True, "ramp": ramp_info}
+        if ramp_info.get("graduated"):
+            is_lease_up = False  # hit the ramp end at/above target — score as stabilized
+
+    if is_lease_up:
+        # Lease-up with no takeover date on file: fixed occupancy bands, ATR dropped.
+        overall = o_score
     else:
         overall = round(o_score * 0.50 + a_score * 0.30 + e_score * 0.20)
 
@@ -357,7 +570,11 @@ def _compute_leasing_score(props):
     else:
         status = "NEEDS ATTENTION"
 
-    return {"score": overall, "status": status, "is_lease_up": is_lease_up}
+    # A real ramp already returned early; here ramp is always None (stabilized,
+    # graduated, or a lease-up missing its takeover date).
+    return {"score": overall, "status": status, "is_lease_up": is_lease_up, "ramp": None,
+            "occ_target": target_occ,
+            "occ_gap": (round(occ - target_occ, 1) if occ is not None else None)}
 
 
 def format_portfolio_response(companies):
@@ -367,8 +584,12 @@ def format_portfolio_response(companies):
 
     # Format individual properties for the table
     properties = []
+    _smap = _spend_by_company()
+    _dmap = _digital_spend_by_company()  # digital-only (excl mgmt fee/hosting)
+    benchmarks = compute_benchmarks(companies, _smap)
     for props in companies:
-        monthly = _compute_monthly_spend(props)
+        _cid = str(props.get("hubspot_company_id") or "")
+        monthly = _smap.get(_cid) if _cid in _smap else _compute_monthly_spend(props)
         rl_score = props.get("redlight_report_score")
 
         occ_raw = props.get("occupancy__")
@@ -407,6 +628,15 @@ def format_portfolio_response(companies):
             "monthly_spend": round(monthly, 2),
             "flags": _safe_int(props.get("redlight_flag_count")),
             "status": props.get("plestatus", ""),
+            # Enrolled in digital = has >$0 of DIGITAL spend (paid media / SEO /
+            # reputation) — a management-fee-only deal reads as NOT enrolled.
+            # Lets the Properties list separate digital clients from RPM's whole
+            # book of business (Emily's #1 ask: kills ticket confusion).
+            "enrolled_in_digital": _dmap.get(_cid, 0.0) > 0,
+            # Lease-Up vs Stabilized — the HubSpot occupancy_status field is the
+            # source of truth; fall back to the derived leasing state.
+            "occupancy_status": (props.get("occupancy_status") or "").strip(),
+            "is_lease_up": bool(ls.get("is_lease_up")) if ls else False,
             # Leasing health
             "occupancy": _safe_float(occ_raw) if occ_raw else None,
             "atr": _safe_float(atr_raw) if atr_raw else None,
@@ -417,4 +647,5 @@ def format_portfolio_response(companies):
     return {
         "rollups": rollups,
         "properties": properties,
+        "benchmarks": benchmarks,
     }

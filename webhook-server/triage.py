@@ -31,7 +31,11 @@ HS_HDRS = {
     "Content-Type": "application/json",
 }
 
-PLE_STATUSES = ["RPM Managed", "Dispositioning", "Onboarding"]
+# Scope ALIGNED with portfolio.py (Kyle 2026-07-06): Dispositioning is
+# intentionally excluded everywhere — those properties are on their way out
+# and shouldn't surface in triage counts, KPIs, or spend. Keeping triage and
+# the Properties/Dashboard tabs on the same scope so their totals match.
+PLE_STATUSES = ["RPM Managed", "Onboarding"]
 
 # Severity scale used by the frontend to color rows:
 #   critical → red, warning → amber, watch → grey-amber, on-track → sage
@@ -102,6 +106,19 @@ def _build_rows() -> list[dict]:
         red_score = _safe_float(c.get("red_light_report_score"))
         red_status = (c.get("red_light_report_status") or "").upper()
         flag_count = _safe_int(c.get("redlight_flag_count"))
+        # Fallback: the Red Light v1 pipeline fields are empty portfolio-wide
+        # (pipeline dormant), which made EVERY property classify "on-track"
+        # while the Properties tab showed real leasing-health variation.
+        # Use the same computed leasing score the Properties tab uses so the
+        # two views agree. (Kyle 2026-07-06)
+        if red_score is None:
+            try:
+                from portfolio import _compute_leasing_score
+                ls = _compute_leasing_score(c.get("_props") or {})
+                if ls and ls.get("score") is not None:
+                    red_score = float(ls["score"])
+            except Exception:
+                pass
         ticket_info = open_ticket_index.get(cid, {})
         oldest_age = ticket_info.get("oldest_age_days", 0)
         open_count = ticket_info.get("open_count", 0)
@@ -193,43 +210,50 @@ def _cta_for_kind(kind: str) -> str:
 
 
 def _list_managed_companies() -> list[dict]:
-    """CRM Search for all PLE-managed companies including health fields."""
+    """Enumerate all PLE-managed companies via the LIST endpoint.
+
+    Why not CRM Search: at portfolio size (~1,800 companies) the /search
+    endpoint's pagination stops short non-deterministically — back-to-back
+    identical calls return 500 / 700 / 1,200 rows (paging.next.after comes
+    back null prematurely). This surfaced as the portal triage view showing
+    exactly 500 properties. The LIST endpoint is fully consistent; we filter
+    plestatus client-side. Same fix spend_sheet._get_managed_companies made
+    in May — see the comment there.
+    """
     if not HUBSPOT_API_KEY:
         return []
 
     body_props = [
-        "name", "rpmmarket", "uuid",
+        "name", "rpmmarket", "uuid", "plestatus",
         "red_light_report_score", "red_light_report_status",
         "redlight_flag_count", "red_light_run_date",
+        # Leasing-health inputs — the computed fallback when the Red Light
+        # pipeline fields are empty (they currently are, portfolio-wide).
+        "totalunits", "occupancy__", "atr__",
+        "trending_120_days_lease_expiration",
+        "brf___renewal_leases_120_trend", "occupancy_status",
     ]
 
     out: list[dict] = []
     after = None
-    MAX_PAGES = 20  # 100 results/page → 2,000-company cap
-    pages_fetched = 0
-    for _ in range(MAX_PAGES):
-        body = {
-            "filterGroups": [{"filters": [
-                {"propertyName": "plestatus", "operator": "IN", "values": PLE_STATUSES}
-            ]}],
-            "properties": body_props,
-            "limit": 100,
-            "sorts": [{"propertyName": "name", "direction": "ASCENDING"}],
-        }
+    for _ in range(50):  # safety: max 5,000 companies
+        params = {"limit": 100, "properties": ",".join(body_props)}
         if after:
-            body["after"] = after
+            params["after"] = after
         try:
-            r = requests.post(
-                f"{HS_BASE}/crm/v3/objects/companies/search",
-                headers=HS_HDRS, json=body, timeout=20,
+            r = requests.get(
+                f"{HS_BASE}/crm/v3/objects/companies",
+                headers=HS_HDRS, params=params, timeout=20,
             )
             r.raise_for_status()
         except Exception as e:
-            logger.error("Triage company search failed: %s", e)
+            logger.error("Triage company list failed at after=%s: %s", after, e)
             break
         data = r.json()
         for c in data.get("results", []):
             props = c.get("properties", {})
+            if (props.get("plestatus") or "").strip() not in PLE_STATUSES:
+                continue
             out.append({
                 "id":     c["id"],
                 "name":   props.get("name", ""),
@@ -238,19 +262,11 @@ def _list_managed_companies() -> list[dict]:
                 "red_light_report_score":  props.get("red_light_report_score"),
                 "red_light_report_status": props.get("red_light_report_status"),
                 "redlight_flag_count":     props.get("redlight_flag_count"),
+                "_props":                  props,  # raw props for leasing-score fallback
             })
-        pages_fetched += 1
         after = data.get("paging", {}).get("next", {}).get("after")
         if not after:
             break
-    else:
-        # Loop exhausted without breaking — pagination kept going past the cap
-        if after:
-            logger.warning(
-                "Triage: hit MAX_PAGES (%d) cap with %d companies and more available; "
-                "raise the cap or paginate the API response",
-                MAX_PAGES, len(out),
-            )
     return out
 
 
