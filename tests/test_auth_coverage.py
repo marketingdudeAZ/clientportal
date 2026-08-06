@@ -51,6 +51,7 @@ AUTH_MARKERS = (
     "store.get(",                  # TOKEN_AUTH (community-brief editable token — unguessable token in URL is the auth)
     "_verify_signature",           # HMAC_BODY (HubSpot Loop webhook receivers)
     "_verify_clickup_signature",   # HMAC_BODY (property-brief ClickUp webhook)
+    "X-Signature",                 # HMAC_BODY (ClickUp native webhook — inline X-Signature verify)
     "_verify_hubspot_signature",   # HMAC_BODY (property-brief HubSpot quote webhook)
     "store.consume",               # TOKEN_AUTH (property-brief approval portal — single-use token)
 )

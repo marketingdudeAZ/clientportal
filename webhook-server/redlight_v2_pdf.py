@@ -243,7 +243,10 @@ def _loop_forecast_section(forecast: Optional[dict], styles: dict) -> list:
         return []
 
     elements = [
-        Paragraph("Loop forecast", styles["h2"]),
+        # styles has no "h2" — that KeyError killed EVERY report once the
+        # forecast backfill ran (this section only renders when a forecast
+        # exists, so it passed all pre-backfill testing). Use "section".
+        Paragraph("Loop forecast", styles["section"]),
         Paragraph("AI-projected lease velocity and channel allocation for the next 30 days.",
                   styles["subtitle"]),
         Spacer(1, 8),

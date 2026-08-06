@@ -53,6 +53,215 @@ def get_task(task_id: str) -> dict[str, Any] | None:
     return r.json()
 
 
+def get_list_fields(list_id: str) -> list[dict[str, Any]]:
+    """Return a list's custom-field definitions (`GET /list/{id}/field`).
+
+    Each field carries `id`, `name`, `type`, `required`, and (for
+    drop_down/labels) a `type_config.options` list. The portal renders its
+    per-type ticket form directly from this, so a field your team adds in
+    ClickUp shows up in the portal with no redeploy. Empty on any failure —
+    the caller degrades to a plain description-only form.
+    """
+    if not CLICKUP_API_KEY or not list_id:
+        return []
+    try:
+        r = requests.get(
+            f"{CU_BASE}/list/{list_id}/field",
+            headers=_headers(),
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp get_list_fields network error for %s: %s", list_id, e)
+        return []
+    if not _ok(r):
+        logger.warning("ClickUp get_list_fields %s -> %s %s", list_id, r.status_code, r.text[:200])
+        return []
+    return r.json().get("fields") or []
+
+
+def get_list(list_id: str) -> dict[str, Any] | None:
+    """Fetch a list's metadata (name, status set). Used to map ClickUp statuses."""
+    if not CLICKUP_API_KEY or not list_id:
+        return None
+    try:
+        r = requests.get(f"{CU_BASE}/list/{list_id}", headers=_headers(), timeout=_TIMEOUT)
+    except requests.RequestException as e:
+        logger.warning("ClickUp get_list network error for %s: %s", list_id, e)
+        return None
+    if not _ok(r):
+        logger.warning("ClickUp get_list %s -> %s %s", list_id, r.status_code, r.text[:200])
+        return None
+    return r.json()
+
+
+def get_tasks(list_id: str, *, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Fetch tasks in a list (single page). Best-effort — empty on failure."""
+    if not CLICKUP_API_KEY or not list_id:
+        return []
+    try:
+        r = requests.get(
+            f"{CU_BASE}/list/{list_id}/task",
+            headers=_headers(),
+            params=params or {},
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp get_tasks network error for %s: %s", list_id, e)
+        return []
+    if not _ok(r):
+        logger.warning("ClickUp get_tasks %s -> %s %s", list_id, r.status_code, r.text[:200])
+        return []
+    return r.json().get("tasks") or []
+
+
+def discover_workspace_lists(workspace_id: str) -> list[dict[str, Any]]:
+    """Walk a workspace → spaces → (folders) → lists and return every list.
+
+    Returns `[{id, name, space, folder}]`. This is the one-shot helper for
+    pulling the 7 ticket-list IDs the portal needs without hand-copying them
+    out of ClickUp URLs (which carry *view* IDs, not list IDs). Best-effort:
+    partial results are returned if any single call fails.
+    """
+    if not CLICKUP_API_KEY or not workspace_id:
+        return []
+
+    def _get(path: str, key: str) -> list[dict]:
+        try:
+            r = requests.get(f"{CU_BASE}/{path}", headers=_headers(), timeout=_TIMEOUT)
+        except requests.RequestException as e:
+            logger.warning("ClickUp discover %s network error: %s", path, e)
+            return []
+        if not _ok(r):
+            logger.warning("ClickUp discover %s -> %s %s", path, r.status_code, r.text[:200])
+            return []
+        return r.json().get(key) or []
+
+    out: list[dict[str, Any]] = []
+    for space in _get(f"team/{workspace_id}/space", "spaces"):
+        sid, sname = space.get("id"), space.get("name")
+        if not sid:
+            continue
+        for lst in _get(f"space/{sid}/list", "lists"):
+            out.append({"id": lst.get("id"), "name": lst.get("name"), "space": sname, "folder": None})
+        for folder in _get(f"space/{sid}/folder", "folders"):
+            fname = folder.get("name")
+            for lst in (folder.get("lists") or []):
+                out.append({"id": lst.get("id"), "name": lst.get("name"), "space": sname, "folder": fname})
+    return out
+
+
+def _shape_comment(c: dict) -> dict[str, Any]:
+    """Normalize one ClickUp comment into the recap's shape."""
+    user = c.get("user") or {}
+    assignee = c.get("assignee") or {}
+    return {
+        "id": c.get("id"),
+        "user": user,
+        "author": user.get("username") or user.get("email") or "team member",
+        "text": c.get("comment_text") or "",
+        "date": c.get("date"),
+        "resolved": bool(c.get("resolved")),
+        "assignee": (assignee.get("username") or assignee.get("email")) if assignee else None,
+        "reactions": len(c.get("reactions") or []),
+        "reply_count": c.get("reply_count") or 0,
+        "replies": [],
+    }
+
+
+def get_comment_replies(comment_id: str) -> list[dict[str, Any]]:
+    """Fetch threaded replies under one comment, oldest-first. Best-effort."""
+    if not CLICKUP_API_KEY or not comment_id:
+        return []
+    try:
+        r = requests.get(
+            f"{CU_BASE}/comment/{comment_id}/reply",
+            headers=_headers(),
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp get_comment_replies network error for %s: %s", comment_id, e)
+        return []
+    if not _ok(r):
+        logger.warning("ClickUp get_comment_replies %s -> %s %s", comment_id, r.status_code, r.text[:200])
+        return []
+    out = [_shape_comment(c) for c in (r.json().get("comments") or [])]
+    out.reverse()  # ClickUp returns newest-first
+    return out
+
+
+def get_comments(task_id: str, with_replies: bool = True, max_reply_fetches: int = 40) -> list[dict[str, Any]]:
+    """Fetch a task's full comment thread — the work log the recap summarizes.
+
+    Returns a list of shaped comments oldest-first, each carrying the author,
+    text, timestamp, resolved/assignee state, reaction count, and (when
+    with_replies) its threaded replies. Empty on any failure — a recap can
+    still be built from the task description alone.
+    """
+    if not CLICKUP_API_KEY or not task_id:
+        return []
+    try:
+        r = requests.get(
+            f"{CU_BASE}/task/{task_id}/comment",
+            headers=_headers(),
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp get_comments network error for %s: %s", task_id, e)
+        return []
+    if not _ok(r):
+        logger.warning("ClickUp get_comments %s -> %s %s", task_id, r.status_code, r.text[:200])
+        return []
+    out = [_shape_comment(c) for c in (r.json().get("comments") or [])]
+    out.reverse()  # ClickUp returns newest-first; recap reads chronologically
+    if with_replies:
+        fetched = 0
+        for c in out:
+            if c["reply_count"] and fetched < max_reply_fetches:
+                c["replies"] = get_comment_replies(c["id"])
+                fetched += 1
+    return out
+
+
+def people_involved(task: dict, comments: list[dict]) -> list[dict[str, Any]]:
+    """Roll up everyone who touched the ticket, with the role(s) they played.
+
+    Sources: task creator (Requested), assignees (Assigned), watchers
+    (Watching), and everyone who left a comment or reply (Commented). Deduped
+    by user id, ordered by role priority so the recap reads top-down.
+    """
+    order = ["Requested", "Assigned", "Watching", "Commented"]
+    people: dict[Any, dict] = {}
+
+    def add(user: dict | None, role: str):
+        if not user:
+            return
+        name = user.get("username") or user.get("email")
+        if not name:
+            return
+        key = user.get("id") or name
+        p = people.setdefault(key, {"name": name, "email": user.get("email"), "roles": []})
+        if role not in p["roles"]:
+            p["roles"].append(role)
+
+    add(task.get("creator"), "Requested")
+    for a in (task.get("assignees") or []):
+        add(a, "Assigned")
+    for w in (task.get("watchers") or []):
+        add(w, "Watching")
+    for c in comments:
+        add(c.get("user"), "Commented")
+        for rep in (c.get("replies") or []):
+            add(rep.get("user"), "Commented")
+
+    def sort_key(p):
+        first = min((order.index(r) for r in p["roles"] if r in order), default=99)
+        return (first, p["name"].lower())
+
+    for p in people.values():
+        p["roles"].sort(key=lambda r: order.index(r) if r in order else 99)
+    return sorted(people.values(), key=sort_key)
+
+
 def custom_field_value(task: dict, name: str) -> Any:
     """Return the value of a ClickUp custom field by case-insensitive name.
 
@@ -184,8 +393,14 @@ def create_task(
     status: str | None = None,
     priority: int | None = None,
     assignees: list[int] | None = None,
+    custom_fields: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
-    """Create a task in a ClickUp list. Returns the new task dict on success."""
+    """Create a task in a ClickUp list. Returns the new task dict on success.
+
+    `custom_fields` is ClickUp's `[{"id": field_id, "value": ...}]` shape —
+    the portal builds it from the list's field definitions so per-type form
+    inputs land on the right ClickUp fields.
+    """
     if not CLICKUP_API_KEY or not list_id or not name:
         return None
     payload: dict[str, Any] = {"name": name}
@@ -199,6 +414,8 @@ def create_task(
         payload["priority"] = priority
     if assignees:
         payload["assignees"] = assignees
+    if custom_fields:
+        payload["custom_fields"] = custom_fields
     try:
         r = requests.post(
             f"{CU_BASE}/list/{list_id}/task",
@@ -213,6 +430,25 @@ def create_task(
         logger.warning("ClickUp create_task list=%s -> %s %s", list_id, r.status_code, r.text[:200])
         return None
     return r.json()
+
+
+def add_tag(task_id: str, tag: str) -> bool:
+    """Add a tag to a task (used as a 'recap-posted' dedupe marker). Best-effort."""
+    if not CLICKUP_API_KEY or not task_id or not tag:
+        return False
+    try:
+        r = requests.post(
+            f"{CU_BASE}/task/{task_id}/tag/{tag}",
+            headers=_headers(),
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp add_tag network error for %s: %s", task_id, e)
+        return False
+    if not _ok(r):
+        logger.warning("ClickUp add_tag %s -> %s %s", task_id, r.status_code, r.text[:200])
+        return False
+    return True
 
 
 def tag_user_in_comment(task_id: str, user_id: str | int, text: str) -> bool:

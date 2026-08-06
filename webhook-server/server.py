@@ -63,6 +63,30 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 from _route_utils import ALLOWED_ORIGINS, require_access  # noqa: E402
 
 
+@app.before_request
+def _clerk_identity():
+    """Clerk auth (ADR 0002): verify a Bearer session JWT and back-fill the
+    X-Portal-Email header with the cryptographically-verified email, so every
+    existing endpoint's `request.headers.get("X-Portal-Email")` check works
+    unchanged — but on trusted input. A caller-supplied X-Portal-Email is
+    OVERWRITTEN whenever a Bearer token is present (verified beats asserted);
+    with no Bearer token, legacy header behavior is preserved."""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer ") and not auth[7:].startswith("pat-"):
+        try:
+            import clerk_auth
+            ident = clerk_auth.verify_bearer(auth)
+        except Exception:
+            ident = None
+        if ident:
+            request.environ["HTTP_X_PORTAL_EMAIL"] = ident["email"]
+            request.environ["HTTP_X_PORTAL_USER_ID"] = ident["user_id"]
+        elif os.environ.get("CLERK_SECRET_KEY"):
+            # A Bearer token was presented but failed verification — do not
+            # let a stale spoofable header ride along beside a bad token.
+            request.environ.pop("HTTP_X_PORTAL_EMAIL", None)
+
+
 @app.after_request
 def add_cors(response):
     """Add CORS headers to all responses."""
@@ -71,7 +95,7 @@ def add_cors(response):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email, Authorization"
     return response
 
 
@@ -114,6 +138,140 @@ def get_portfolio():
         return jsonify({"error": "Failed to load portfolio"}), 500
 
 
+# uuid → company_id is immutable (R1), so cache it forever per process.
+_UUID_TO_CID_CACHE = {}
+
+
+def _resolve_company_id_by_uuid(uuid):
+    """Resolve an RPM property uuid to its HubSpot company_id via CRM search.
+
+    crm_objects() returns blank in the templates/ CMS path, so the portal
+    template falls back to using the uuid itself as company_id — which only
+    works when the two happen to be equal. This gives the frontend a reliable
+    server-side resolution instead. Returns "" on miss.
+    """
+    uuid = (uuid or "").strip()
+    if not uuid:
+        return ""
+    if uuid in _UUID_TO_CID_CACHE:
+        return _UUID_TO_CID_CACHE[uuid]
+    import requests as req
+    from config import HUBSPOT_API_KEY
+    try:
+        r = req.post(
+            "https://api.hubapi.com/crm/v3/objects/companies/search",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "filterGroups": [{"filters": [{"propertyName": "uuid", "operator": "EQ", "value": uuid}]}],
+                "properties": ["name", "uuid"],
+                "limit": 1,
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+        results = r.json().get("results", [])
+        cid = results[0]["id"] if results else ""
+        name = (results[0]["properties"].get("name") if results else "") or ""
+    except Exception as e:
+        logger.warning("uuid resolve failed for %s: %s", uuid, e)
+        return ""
+    if cid:
+        _UUID_TO_CID_CACHE[uuid] = cid
+        _UUID_TO_CID_CACHE.setdefault(f"__name__{uuid}", name)
+    return cid
+
+
+@app.route("/api/internal/clerk-health", methods=["GET", "OPTIONS"])
+def clerk_health():
+    """Diagnostic: is the backend's Clerk config aligned with the frontend
+    instance that issues the tokens? Exposes only public values (the
+    publishable key + frontend domain are already public in the page HTML) —
+    never the secret key. If the derived domain doesn't match the template's
+    Clerk instance, every browser JWT fails verify_bearer() and the
+    before_request hook strips X-Portal-Email → 401 on every call."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    import clerk_auth
+    pk = os.environ.get("CLERK_PUBLISHABLE_KEY", "").strip()
+    return jsonify({
+        "clerk_publishable_key_present": bool(pk),
+        "clerk_publishable_key": pk,  # public value (also embedded in page HTML)
+        "clerk_secret_key_present": bool(os.environ.get("CLERK_SECRET_KEY", "").strip()),
+        "clerk_jwks_url_override_present": bool(os.environ.get("CLERK_JWKS_URL", "").strip()),
+        "derived_frontend_api_domain": clerk_auth._frontend_api_domain(),
+        "derived_jwks_url": clerk_auth._jwks_url(),
+    })
+
+
+@app.route("/api/whoami", methods=["GET", "OPTIONS"])
+def whoami():
+    """Diagnostic: echo what the auth layer resolved for THIS request. Called
+    from the portal console with the real Clerk token to see exactly why (or
+    whether) verification succeeds. No secrets returned."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    auth = request.headers.get("Authorization", "")
+    bearer_present = auth.startswith("Bearer ")
+    verify = None
+    if bearer_present:
+        import clerk_auth
+        try:
+            ident = clerk_auth.verify_bearer(auth)
+            verify = {"verified": bool(ident), "email": (ident or {}).get("email", ""),
+                      "user_id": (ident or {}).get("user_id", "")}
+        except Exception as e:
+            verify = {"verified": False, "error": str(e)[:200]}
+    return jsonify({
+        "bearer_present": bearer_present,
+        # Post-hook value: blank if a bad token got the asserted email stripped.
+        "resolved_x_portal_email": request.headers.get("X-Portal-Email", ""),
+        "verify_bearer": verify,
+    })
+
+
+@app.route("/api/resolve-uuid", methods=["GET", "OPTIONS"])
+def resolve_uuid_route():
+    """uuid → { company_id, name }. The portal bootstrap calls this first so
+    every downstream API call uses the true company_id, not the uuid fallback.
+
+    Auth: X-Portal-Email (any authenticated portal user)."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    uuid = (request.args.get("uuid") or "").strip()
+    if not uuid:
+        return jsonify({"error": "uuid required"}), 400
+    cid = _resolve_company_id_by_uuid(uuid)
+    if not cid:
+        return jsonify({"error": "not found", "uuid": uuid}), 404
+    return jsonify({"company_id": cid, "uuid": uuid,
+                    "name": _UUID_TO_CID_CACHE.get(f"__name__{uuid}", "")})
+
+
+@app.route("/api/portfolio/benchmarks", methods=["GET", "OPTIONS"])
+def get_portfolio_benchmarks():
+    """City / market spend benchmarks across the full managed portfolio.
+
+    Thin sibling of /api/portfolio for the property Overview spend-comparison
+    mini-view when the full portfolio wasn't loaded first (deep link). Reuses
+    the same 5-min portfolio cache, so it's cheap.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    try:
+        from portfolio import fetch_portfolio, compute_benchmarks
+        companies = fetch_portfolio(email, "marketing_director")
+        return jsonify(compute_benchmarks(companies))
+    except Exception as e:
+        logger.error("Benchmarks fetch failed: %s", e, exc_info=True)
+        return jsonify({"error": "Failed to load benchmarks"}), 500
+
+
 def _preflight_response():
     """Handle CORS preflight requests."""
     origin = request.headers.get("Origin", "")
@@ -121,7 +279,7 @@ def _preflight_response():
     if origin in ALLOWED_ORIGINS:
         resp.headers["Access-Control-Allow-Origin"] = origin
         resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
-        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email, Authorization"
         resp.headers["Access-Control-Allow-Credentials"] = "true"
         resp.headers["Access-Control-Max-Age"] = "86400"
     return resp
@@ -185,9 +343,10 @@ def _compute_leasing_score(props):
     if occ is None and atr is None:
         return None
 
-    occ_status   = (props.get("occupancy_status") or "").strip()
-    is_lease_up  = occ_status in ("Lease-Up", "In-Transition")
-    is_renovation = occ_status == "Renovation"
+    import leasing_ramp as _lr
+    _cls = _lr.normalize_occupancy_status(props.get("occupancy_status"))
+    is_lease_up  = _cls == "lease_up"
+    is_renovation = _cls == "renovation"
 
     if is_renovation:
         return {
@@ -196,6 +355,9 @@ def _compute_leasing_score(props):
             "occupancy_score": None, "atr_score": None, "exposure_score": None,
             "occupancy_raw": occ, "atr_raw": atr, "trend_raw": None,
         }
+
+    # Per-property occupancy target (default 95). Stabilized scores against this.
+    target_occ = _fv("target_occupancy") or 95.0
 
     def _occ_score(o):
         if o is None:
@@ -206,12 +368,15 @@ def _compute_leasing_score(props):
             if o >= 60: return 60
             if o >= 45: return 45
             return 30
-        else:
-            if o >= 95: return 100
-            if o >= 93: return 85
-            if o >= 90: return 70
-            if o >= 87: return 55
-            return 35
+        # Stabilized: smooth linear curve (no band cliffs). At/above target = 100;
+        # ~5 pts per 1% below target in the top zone, gentler further down.
+        # (Re-curved 2026-07 — old bands scored a healthy 92.7%/9.3% property a 62.)
+        if o >= target_occ:
+            return 100
+        gap = target_occ - o
+        if gap <= 5:
+            return round(100 - gap * 5)      # 94->95, 93->90, 90->75
+        return max(30, round(75 - (gap - 5) * 3.5))
 
     def _atr_score(a):
         if a is None:
@@ -222,28 +387,45 @@ def _compute_leasing_score(props):
             if a <= 35: return 55
             if a <= 50: return 35
             return 20
-        else:
-            if a <= 4:  return 100
-            if a <= 6:  return 80
-            if a <= 9:  return 60
-            if a <= 13: return 40
-            return 20
+        # Stabilized: 100 at <=5% availability, -5 pts per 1% above.
+        if a <= 5:
+            return 100
+        return max(20, round(100 - (a - 5) * 5))   # 6->95, 9->80, 13->60
 
     def _exposure_score(t, u):
         if t is None or u == 0:
             return 75
         pct = (t / u) * 100
-        if pct <= 8:  return 100
-        if pct <= 15: return 75
-        if pct <= 22: return 50
-        return 25
+        # 100 at <=8% exposure, gentle -3.5 pts per 1% above.
+        if pct <= 8:
+            return 100
+        return max(25, round(100 - (pct - 8) * 3.5))   # 10->93, 15->76, 22->51
 
     o_score = _occ_score(occ)
     a_score = _atr_score(atr)
     e_score = _exposure_score(trend, units)
 
+    # Lease-up: score against the linear ramp from the takeover date, not fixed
+    # bands (ATR dropped — early lease-ups have naturally high availability).
+    ramp_info = None
     if is_lease_up:
-        overall = round(o_score * 0.60 + a_score * 0.40)
+        takeover = (props.get("lease_up_start_date")
+                    or props.get("managementstart")
+                    or props.get("if_it_s_a_new_acquisition__what_is_the_management_start_date_"))
+        ramp_info = _lr.lease_up_ramp(occ, takeover, _fv("target_occupancy"), _fv("lease_up_ramp_months"))
+        if ramp_info.get("applies") and not ramp_info.get("graduated"):
+            return {
+                "score": ramp_info["score"], "status": ramp_info["status"],
+                "is_lease_up": True, "is_renovation": False,
+                "occupancy_score": o_score, "atr_score": None, "exposure_score": None,
+                "exposure_pct": None, "occupancy_raw": occ, "atr_raw": atr, "trend_raw": None,
+                "ramp": ramp_info,
+            }
+        if ramp_info.get("graduated"):
+            is_lease_up = False  # hit ramp end at/above target — score as stabilized
+
+    if is_lease_up:
+        overall = o_score  # lease-up, no takeover date on file: occ bands, ATR dropped
     else:
         overall = round(o_score * 0.50 + a_score * 0.30 + e_score * 0.20)
 
@@ -268,7 +450,208 @@ def _compute_leasing_score(props):
         "occupancy_raw":   occ,
         "atr_raw":         atr,
         "trend_raw":       int(trend) if trend is not None else None,
+        "ramp":            None,  # real ramps return early; None here by construction
+        "occ_target":      target_occ,
+        "occ_gap":         (round(occ - target_occ, 1) if occ is not None else None),
     }
+
+
+# AptIQ market context — cached 6h (rate-limited API, slow-moving data).
+_APTIQ_MARKET_CACHE = {}
+_APTIQ_MARKET_TTL = 6 * 3600
+
+
+@app.route("/api/internal/aptiq-probe", methods=["GET", "OPTIONS"])
+def aptiq_probe():
+    """Diagnostic: what does the live AptIQ REST API return for our IDs?
+    Surfaces token presence + raw status of property-details / market-narrative
+    so we know whether the account can see comp/narrative data. No secrets."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "auth"}), 401
+    pid = (request.args.get("aptiq_property_id") or "").strip()
+    mid = (request.args.get("aptiq_market_id") or "").strip()
+    out = {}
+    import os as _os
+    out["token_present"] = bool(_os.getenv("ApartmentIQ_Token"))
+    import requests as req
+    tok = _os.getenv("ApartmentIQ_Token", "")
+    base = "https://data.apartmentiq.io/apartmentiq/api/v1"
+    hdr = {"Authorization": f"Bearer {tok}"}
+    if pid:
+        try:
+            r = req.get(f"{base}/properties/bulk_details", headers=hdr, params={"property_ids": pid}, timeout=15)
+            out["property_details"] = {"status": r.status_code, "body": r.text[:400]}
+        except Exception as e:
+            out["property_details"] = {"error": str(e)[:200]}
+    if mid:
+        try:
+            r = req.get(f"{base}/markets/narratives", headers=hdr, params={"geo_boundary_id": mid}, timeout=15)
+            out["market_narrative"] = {"status": r.status_code, "body": r.text[:400]}
+        except Exception as e:
+            out["market_narrative"] = {"error": str(e)[:200]}
+    return jsonify(out)
+
+
+@app.route("/api/internal/bq-health", methods=["GET", "OPTIONS"])
+def bq_health():
+    """Diagnostic: is BigQuery configured, and is ninjacat_metrics populated?
+    Explains why the portal shows 'Awaiting NinjaCat'. No secrets."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "auth"}), 401
+    import os as _os
+    out = {}
+    try:
+        from config import BIGQUERY_PROJECT_ID, BIGQUERY_SERVICE_ACCOUNT_JSON, BIGQUERY_DATASET_PROD, BIGQUERY_DATASET_DEV
+        sa = BIGQUERY_SERVICE_ACCOUNT_JSON or ""
+        out["project_id_set"] = bool(BIGQUERY_PROJECT_ID)
+        out["sa_value_kind"] = ("empty" if not sa else
+                                "json_inline" if sa.strip().startswith("{") else
+                                "path_exists" if _os.path.exists(sa) else "path_missing")
+        out["datasets"] = {"prod": BIGQUERY_DATASET_PROD, "dev": BIGQUERY_DATASET_DEV}
+    except Exception as e:
+        out["config_error"] = str(e)[:200]
+    try:
+        import bigquery_client as bq
+        out["is_bigquery_configured"] = bq.is_bigquery_configured()
+        if out["is_bigquery_configured"]:
+            from config import BIGQUERY_PROJECT_ID
+            ds = bq._dataset()
+            try:
+                cols = bq.query(
+                    f"SELECT column_name, data_type FROM `{BIGQUERY_PROJECT_ID}.{ds}.INFORMATION_SCHEMA.COLUMNS` "
+                    f"WHERE table_name = 'ninjacat_metrics' ORDER BY ordinal_position", [])
+                out["ninjacat_columns"] = cols
+                out["row_count"] = (bq.query(f"SELECT COUNT(*) AS c FROM `{BIGQUERY_PROJECT_ID}.{ds}.ninjacat_metrics`", [])[0].get("c"))
+                sample = bq.query(f"SELECT * FROM `{BIGQUERY_PROJECT_ID}.{ds}.ninjacat_metrics` LIMIT 1", [])
+                out["sample_row"] = ({k: str(v)[:40] for k, v in sample[0].items()} if sample else None)
+            except Exception as e:
+                out["ninjacat_metrics_error"] = str(e)[:250]
+    except Exception as e:
+        out["bq_error"] = str(e)[:250]
+    return jsonify(out)
+
+
+@app.route("/api/internal/aptiq-csv", methods=["GET", "OPTIONS"])
+def aptiq_csv_diag():
+    """Diagnostic: AptIQ CSV column names + a sample row, so we can map the
+    submarket/occupancy/rent columns correctly."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "auth"}), 401
+    try:
+        from services.fluency_ingestion import apt_iq_csv_client as _csv
+        cols = _csv.column_names()
+        rows = _csv.get_all_rows()
+        sample = None
+        for _rid, r in rows.items():
+            sample = {k: r.get(k) for k in list(r.keys())}
+            break
+        return jsonify({"row_count": len(rows), "columns": cols,
+                        "sample_row": {k: str(v)[:40] for k, v in (sample or {}).items()}})
+    except Exception as e:
+        return jsonify({"error": str(e)[:300]})
+
+
+@app.route("/api/property/market", methods=["GET", "OPTIONS"])
+def get_property_market():
+    """AptIQ market context for a property: its own AptIQ read (rent/NER/occ/
+    exposure/class) + the submarket narrative (rent performance, occupancy,
+    supply pipeline, demographics). Grounds the “how do we compare to the
+    submarket” story (VP #1 ask)."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = (request.args.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    import time as _t
+    hit = _APTIQ_MARKET_CACHE.get(company_id)
+    if hit and (_t.time() - hit[0]) < _APTIQ_MARKET_TTL:
+        return jsonify(hit[1])
+
+    import requests as req
+    from config import HUBSPOT_API_KEY
+    try:
+        r = req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}"
+            "?properties=aptiq_property_id,aptiq_market_id,aptiq_market_name",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}"}, timeout=10,
+        )
+        r.raise_for_status()
+        props = r.json().get("properties", {})
+    except Exception as e:
+        logger.error("market: HubSpot fetch failed for %s: %s", company_id, e)
+        return jsonify({"error": "lookup failed"}), 502
+
+    pid = (props.get("aptiq_property_id") or "").strip()
+    if not pid:
+        return jsonify({"available": False, "reason": "no_aptiq_id"}), 200
+
+    # Source from the AptIQ daily CSV (APT_IQ_DAILY_SHEET_URL) — the live sheet,
+    # not the expired REST token. Every property's occupancy / rent / exposure /
+    # submarket is in there, so we can build the submarket comparison directly.
+    try:
+        from services.fluency_ingestion import apt_iq_csv_client as _csv
+        from services.fluency_ingestion import apt_iq_reader as _air
+    except Exception as e:
+        logger.error("market: AptIQ CSV client import failed: %s", e)
+        return jsonify({"available": False, "reason": "csv_unavailable"}), 200
+
+    subj_row = _csv.get_property_row(pid)
+    if not subj_row:
+        return jsonify({"available": False, "reason": "not_in_csv"}), 200
+
+    def _num(row, col):                      # handles "$1,575" and "97.3%"
+        return _air._to_float(row.get(col))
+
+    def _has_concession(row):
+        c = (row.get("Concessions") or "").strip()
+        d = (row.get("Concession Details") or "").strip()
+        return bool((c and c not in ("$0", "0", "-")) or d)
+
+    subj = {
+        "occupancy": _num(subj_row, "Advertised Occupancy %"),
+        "exposure":  _num(subj_row, "Exposure %"),
+        "rent":      _num(subj_row, "Avg Rent"),
+        "ner":       _num(subj_row, "Avg NER"),
+        "concession": (subj_row.get("Concession Details") or "").strip() or None,
+        "comp_score": _num(subj_row, "Comp Score"),
+        "market":    subj_row.get("Market Name") or props.get("aptiq_market_name", ""),
+    }
+    # Group by the AptIQ Market ID (the market on the company record).
+    market_id = (props.get("aptiq_market_id") or subj_row.get("Market ID") or "").strip()
+
+    peers = [r for _rid, r in _csv.get_all_rows().items()
+             if (r.get("Market ID") or "").strip() == market_id] if market_id else []
+
+    def _avg(col):
+        vals = [v for v in (_num(r, col) for r in peers) if v is not None]
+        return round(sum(vals) / len(vals), 1) if vals else None
+
+    conc_ct = sum(1 for r in peers if _has_concession(r))
+    payload = {
+        "available": True,
+        "market_name": subj["market"],
+        "subject": subj,
+        "market": {
+            "count": len(peers),
+            "avg_occupancy": _avg("Advertised Occupancy %"),
+            "avg_exposure": _avg("Exposure %"),
+            "avg_rent": _avg("Avg Rent"),
+            "avg_ner": _avg("Avg NER"),
+            "pct_offering_concessions": (round(conc_ct / len(peers) * 100) if peers else None),
+        },
+    }
+    _APTIQ_MARKET_CACHE[company_id] = (_t.time(), payload)
+    return jsonify(payload)
 
 
 @app.route("/api/property", methods=["GET", "OPTIONS"])
@@ -302,13 +685,17 @@ def get_property_metrics():
     from config import HUBSPOT_API_KEY
 
     PROPERTY_FIELDS = [
-        "name", "uuid", "rpmmarket", "totalunits",
+        "name", "uuid", "rpmmarket", "totalunits", "city", "state",
         # Leasing health
         "occupancy__", "atr__", "atr__formatted",
         "trending_120_days_lease_expiration",
         "brf___renewal_leases_120_trend",
         # Property type / occupancy status (for scoring model selection)
         "occupancy_status",
+        # Lease-up ramp inputs (time-aware occupancy target)
+        "lease_up_start_date", "managementstart",
+        "if_it_s_a_new_acquisition__what_is_the_management_start_date_",
+        "target_occupancy", "lease_up_ramp_months",
         # Red Light scores (pipeline-generated — may be null)
         "red_light_report_score", "red_light_report_status",
         "red_light_market_score", "red_light_marketing_score",
@@ -319,6 +706,8 @@ def get_property_metrics():
         # Budget channels (drives Performance Forecast simulator)
         "seo_budget", "paid_search_monthly_spend", "paid_social_monthly_spend",
         "video_pipeline_tier",
+        # AM-entered context explaining the score for special cases (#7)
+        "score_context_note",
     ]
 
     try:
@@ -343,13 +732,25 @@ def get_property_metrics():
             except (ValueError, TypeError):
                 return v
 
+        def _lr_date(v):
+            """HubSpot date value → YYYY-MM-DD (or '') for the date input."""
+            import leasing_ramp as _lr
+            dt = _lr.parse_date(v)
+            return dt.isoformat() if dt else ""
+
         ls = _compute_leasing_score(props)
 
         # Overall score: prefer pipeline score if populated, else use computed leasing score
         rl_overall = _f("red_light_report_score")
         rl_status  = props.get("red_light_report_status", "")
-        display_overall = rl_overall if rl_overall is not None else (ls["score"] if ls else None)
-        display_status  = rl_status  if rl_status  else (ls["status"] if ls else "Not Scored")
+        if ls and ls.get("ramp"):
+            # Lease-up on a ramp: the ramp score is the current truth — it wins
+            # over any (stabilized-oriented) pipeline score so banner = strip.
+            display_overall = ls["score"]
+            display_status  = ls["status"]
+        else:
+            display_overall = rl_overall if rl_overall is not None else (ls["score"] if ls else None)
+            display_status  = rl_status  if rl_status  else (ls["status"] if ls else "Not Scored")
 
         # Build channel package list for the Performance Forecast simulator.
         # Each entry: {channel, label, budget}
@@ -382,6 +783,18 @@ def get_property_metrics():
         except Exception as _e:
             logger.warning("current_perf lookup failed for %s: %s", company_id, _e)
 
+        # Authoritative monthly spend from the deal-line-item engine (same source
+        # as the portfolio + benchmarks), so the Overview spend-vs-city view
+        # compares like-for-like. Falls back to 0 if not in the spend sheet.
+        _monthly_spend = 0.0
+        try:
+            from spend_sheet import get_company_monthly_spend
+            _monthly_spend = round(get_company_monthly_spend(company_id).get("total", 0.0) or 0.0, 2)
+        except Exception as _e:
+            logger.warning("monthly_spend lookup failed for %s: %s", company_id, _e)
+
+        _city = (props.get("city") or "").strip()
+        _state = (props.get("state") or "").strip()
         return jsonify({
             "property": {
                 "name": props.get("name", ""),
@@ -390,6 +803,17 @@ def get_property_metrics():
                 "uuid": props.get("uuid", ""),
                 "hubspot_company_id": company_id,
                 "occupancy_status": props.get("occupancy_status", ""),
+                "score_context_note": props.get("score_context_note", ""),
+                # Lease-up ramp inputs (for the Property Targets editor)
+                "takeover_date": _lr_date(props.get("lease_up_start_date")
+                                          or props.get("managementstart")
+                                          or props.get("if_it_s_a_new_acquisition__what_is_the_management_start_date_")),
+                "target_occupancy": _f("target_occupancy"),
+                "ramp_months": _f("lease_up_ramp_months"),
+                "city": _city,
+                "state": _state,
+                "city_key": (f"{_city}, {_state}" if _city and _state else _city),
+                "monthly_spend": _monthly_spend,
             },
             "packages": _packages,
             "current_perf": current_perf,
@@ -413,6 +837,11 @@ def get_property_metrics():
                 # Computed leasing score (always present when data available)
                 "leasing_score": ls,
                 "is_lease_up": ls["is_lease_up"] if ls else False,
+                # Lease-up ramp (surfaced at top level for the exec dashboard strip)
+                "ramp": (ls or {}).get("ramp"),
+                # Stabilized target-vs-actual occupancy (per-property target)
+                "occ_target": (ls or {}).get("occ_target"),
+                "occ_gap": (ls or {}).get("occ_gap"),
             },
         })
     except Exception as e:
@@ -717,6 +1146,17 @@ def submit_call_notes():
     answered = [p for p in qa_pairs if p.get("answer", "").strip()]
     if not answered:
         return jsonify({"error": "No answered questions — nothing to save"}), 400
+
+    # Fair Housing gate — block non-compliant answers before they reach HubSpot
+    # (these feed the property profile and, downstream, ads).
+    try:
+        from fair_housing_gate import check_fair_housing as _fh_check
+        _fh = _fh_check([{"field": (p.get("question") or "Answer"), "text": p.get("answer", "")} for p in answered])
+        if not _fh["compliant"]:
+            return jsonify({"error": "fair_housing", "violations": _fh["violations"],
+                            "message": "These answers can't be saved — they contain Fair Housing issues. Please revise the highlighted text."}), 422
+    except Exception as _fhe:
+        logger.warning("call-notes fair-housing check errored (allowing save): %s", _fhe)
 
     try:
         from call_notes import save_call_notes
@@ -2984,6 +3424,19 @@ def update_client_brief():
     if not hs_props:
         return jsonify({"error": "No valid fields to update"}), 400
 
+    # Fair Housing gate — screen the free-text values before they hit HubSpot
+    # (Property Profile copy feeds Fluency ads).
+    try:
+        from fair_housing_gate import check_fair_housing as _fh_check
+        _fh_items = [{"field": k.replace("_", " ").title(), "text": str(v)}
+                     for k, v in fields.items() if isinstance(v, str) and v.strip()]
+        _fh = _fh_check(_fh_items)
+        if not _fh["compliant"]:
+            return jsonify({"error": "fair_housing", "violations": _fh["violations"],
+                            "message": "This can't be saved — it contains Fair Housing issues. Please revise the highlighted text."}), 422
+    except Exception as _fhe:
+        logger.warning("client-brief fair-housing check errored (allowing save): %s", _fhe)
+
     try:
         # 1. PATCH the company record
         r = req.patch(
@@ -5202,6 +5655,93 @@ def get_report_data():
     })
 
 
+_ACTIVITY_ALL_CACHE = {}
+_ACTIVITY_ALL_TTL = 300
+
+
+@app.route("/api/property/activity-all", methods=["GET", "OPTIONS"])
+def get_activity_all():
+    """Full history of activity + deals on a company — the VP ask, "everything
+    that's ever happened on this record." No 90-day cutoff. Deals via one batch
+    read. Cached 5 min. Powers the Activity & Deals tab."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = (request.args.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    import time as _t
+    hit = _ACTIVITY_ALL_CACHE.get(company_id)
+    if hit and (_t.time() - hit[0]) < _ACTIVITY_ALL_TTL:
+        return jsonify(hit[1])
+
+    import requests as req, datetime as _dt, concurrent.futures
+    from config import HUBSPOT_API_KEY
+    hs = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
+    base = "https://api.hubapi.com/crm/v3/objects/companies"
+    items = []
+
+    # ── Engagements (calls / notes / emails / meetings) — up to 150, no cutoff ──
+    try:
+        assoc = req.get(f"{base}/{company_id}/associations/engagements", headers=hs, params={"limit": 150}, timeout=12)
+        eng_ids = [i["id"] for i in assoc.json().get("results", [])] if assoc.ok else []
+
+        def _fetch(eid):
+            try:
+                r = req.get(f"https://api.hubapi.com/engagements/v1/engagements/{eid}", headers=hs, timeout=6)
+                if not r.ok:
+                    return None
+                d = r.json(); eng = d.get("engagement", {}); meta = d.get("metadata", {})
+                ts = eng.get("createdAt", 0)
+                if not ts:
+                    return None
+                etype = (eng.get("type", "") or "").capitalize()
+                import re as _re
+                raw = meta.get("subject") or meta.get("title") or meta.get("body") or ""
+                raw = _re.sub(r"<[^>]+>", " ", raw)          # strip HTML tags
+                raw = (raw.replace("&nbsp;", " ").replace("&amp;", "&")
+                          .replace("&lt;", "<").replace("&gt;", ">").replace("&#39;", "'"))
+                summ = _re.sub(r"\s+", " ", raw).strip()[:160]
+                return {"date": _dt.datetime.utcfromtimestamp(ts / 1000).strftime("%Y-%m-%d"),
+                        "type": etype, "summary": summ, "kind": "activity"}
+            except Exception:
+                return None
+
+        if eng_ids:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+                futs = [pool.submit(_fetch, e) for e in eng_ids]
+                done, _ = concurrent.futures.wait(futs, timeout=22)
+                items += [f.result() for f in done if f.result()]
+    except Exception as e:
+        logger.warning("activity-all engagements failed for %s: %s", company_id, e)
+
+    # ── Deals — all associated, one batch read ──
+    try:
+        dassoc = req.get(f"{base}/{company_id}/associations/deals", headers=hs, params={"limit": 100}, timeout=12)
+        deal_ids = [i["id"] for i in dassoc.json().get("results", [])] if dassoc.ok else []
+        if deal_ids:
+            br = req.post("https://api.hubapi.com/crm/v3/objects/deals/batch/read", headers={**hs, "Content-Type": "application/json"},
+                         json={"inputs": [{"id": x} for x in deal_ids],
+                               "properties": ["dealname", "dealstage", "amount", "createdate", "closedate", "pipeline"]}, timeout=15)
+            for d in (br.json().get("results", []) if br.ok else []):
+                p = d.get("properties", {})
+                raw = (p.get("createdate") or "")[:10]
+                amt = p.get("amount")
+                summ = (p.get("dealname") or "Deal") + (f" — ${int(float(amt)):,}/mo" if amt else "")
+                items.append({"date": raw or "", "type": "Deal", "summary": summ, "kind": "deal",
+                              "stage": p.get("dealstage", ""), "amount": (float(amt) if amt else None)})
+    except Exception as e:
+        logger.warning("activity-all deals failed for %s: %s", company_id, e)
+
+    items = [it for it in items if it.get("date")]
+    items.sort(key=lambda x: x["date"], reverse=True)
+    payload = {"activity": items, "count": len(items)}
+    _ACTIVITY_ALL_CACHE[company_id] = (_t.time(), payload)
+    return jsonify(payload)
+
+
 # ─── Portal identity helper + report data ───────────────────────────────────
 
 
@@ -5341,6 +5881,423 @@ def video_generate():
 # ─── SEO + Content + Keywords + Trends ─────────────────────────────────────
 # Extracted to webhook-server/routes/seo.py — see Blueprint registration below.
 # Routes covered: /api/seo/*, /api/content/*, /api/keywords/*, /api/trends/*.
+
+
+# ─── Full-funnel forecast (v1 funnel-sufficiency model) ─────────────────────
+
+
+@app.route("/api/forecast/funnel", methods=["GET", "OPTIONS"])
+def get_funnel_forecast():
+    """Goal-based full-funnel media-mix forecast for one property.
+
+    Works backwards from a leasing goal to the impressions/sessions/conversions
+    the funnel needs, overlays actual NinjaCat performance, and reports where the
+    funnel is starved. Spend from HubSpot, funnel volumes from NinjaCat (BQ),
+    context from the property record.
+
+    Query params:
+      company_id     (required unless uuid given)
+      uuid           (resolved to company_id)
+      goal_leases    (optional; defaults to ~3%/mo of units)
+      leads_per_lease(optional; default 32)
+      context        (optional; lease_up|new_supply|btr|stabilized — else derived)
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    company_id = request.args.get("company_id", "").strip()
+    uuid = request.args.get("uuid", "").strip()
+    if not company_id and uuid:
+        company_id = _resolve_company_id_by_uuid(uuid)
+    if not company_id:
+        return jsonify({"error": "company_id or uuid required"}), 400
+
+    import requests as _req
+    from config import HUBSPOT_API_KEY as _HK
+    import funnel_forecast as _ff
+    import bigquery_client as _bq
+
+    # 1. Property context from HubSpot
+    props = "name,ninjacat_system_id,totalunits,occupancy_status,developtype,proptype,target_occupancy,aptiq_property_id"
+    try:
+        r = _req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props}",
+            headers={"Authorization": f"Bearer {_HK}"}, timeout=12,
+        )
+        p = r.json().get("properties", {}) if r.ok else {}
+    except Exception as e:
+        logger.error("funnel-forecast HubSpot fetch failed: %s", e)
+        return jsonify({"error": "property lookup failed"}), 502
+
+    ncid = (p.get("ninjacat_system_id") or "").strip()
+    if not ncid:
+        return jsonify({"error": "no_ninjacat_id", "available": False,
+                        "message": "This property has no NinjaCat account mapped."}), 200
+
+    units = float(p.get("totalunits") or 0)
+
+    # AptIQ occupancy/exposure — the real leasing need (units to lease)
+    apt_occ = apt_exp = None
+    apt_pid = (p.get("aptiq_property_id") or "").strip()
+    if apt_pid:
+        try:
+            from services.fluency_ingestion import apt_iq_csv_client as _csv
+            _ar = _csv.get_property_row(apt_pid)
+
+            def _apt_num(col):
+                if not _ar:
+                    return None
+                s = str(_ar.get(col, "")).replace("%", "").replace(",", "").strip()
+                try:
+                    return float(s)
+                except ValueError:
+                    return None
+            apt_occ = _apt_num("Advertised Occupancy %")
+            apt_exp = _apt_num("Exposure %")
+        except Exception as e:
+            logger.warning("funnel-forecast AptIQ lookup failed for %s: %s", apt_pid, e)
+
+    # 2. Derive goal + context (goal overridable via query param)
+    try:
+        goal_leases = float(request.args.get("goal_leases") or 0)
+    except ValueError:
+        goal_leases = 0
+    goal_basis = "your override"
+    if goal_leases <= 0:
+        # Real leasing need from AptIQ: exposure = units available / coming
+        # available to rent = the true media-plan goal. Fall back to vacancy
+        # from occupancy, then to a turnover estimate only if AptIQ is absent.
+        if apt_exp is not None and units:
+            goal_leases = max(1.0, round(units * apt_exp / 100.0))
+            goal_basis = f"{apt_exp:.1f}% exposure (AptIQ)"
+        elif apt_occ is not None and units:
+            goal_leases = max(1.0, round(units * (100.0 - apt_occ) / 100.0))
+            goal_basis = f"{apt_occ:.1f}% occupancy (AptIQ)"
+        elif units:
+            goal_leases = max(1.0, round(units * 0.03))
+            goal_basis = "3%/mo turnover estimate (no AptIQ data)"
+        else:
+            goal_leases = 5.0
+            goal_basis = "default"
+
+    try:
+        leads_per_lease = float(request.args.get("leads_per_lease") or 0) or _ff.DEFAULT_LEADS_PER_LEASE
+    except ValueError:
+        leads_per_lease = _ff.DEFAULT_LEADS_PER_LEASE
+
+    context = (request.args.get("context") or "").strip().lower()
+    if context not in _ff.CONTEXT_TOPFUNNEL_MULTIPLIER:
+        status = (p.get("occupancy_status") or "").lower()
+        proptype = (p.get("proptype") or "").lower()
+        if "lease" in status and "up" in status:
+            context = "lease_up"
+        elif "build" in proptype and "rent" in proptype:
+            context = "btr"
+        else:
+            context = "stabilized"
+
+    # 3. Funnel actuals from NinjaCat (latest complete month) via BigQuery
+    if not _bq.is_bigquery_configured():
+        return jsonify({"error": "bq_unconfigured", "available": False}), 200
+    from google.cloud import bigquery as _gbq
+    dataset = _bq._dataset()
+    proj = _bq.BIGQUERY_PROJECT_ID
+    sql = f"""
+      WITH latest AS (
+        SELECT MAX(REPORT_MONTH) AS m
+        FROM `{proj}.{dataset}.ninjacat_metrics`
+        WHERE CAST(NINJACAT_ACCOUNT_ID AS STRING) = @ncid
+      )
+      SELECT CHANNEL_BUCKET AS channel_bucket, MAX(REPORT_MONTH) AS report_month,
+             SUM(IMPRESSIONS) AS impressions, SUM(CLICKS) AS clicks,
+             SUM(SESSIONS) AS sessions, SUM(LEADS) AS leads, SUM(SPEND) AS spend
+      FROM `{proj}.{dataset}.ninjacat_metrics`, latest
+      WHERE CAST(NINJACAT_ACCOUNT_ID AS STRING) = @ncid
+        AND REPORT_MONTH = latest.m
+      GROUP BY channel_bucket
+    """
+    try:
+        rows = _bq.query(sql, [_gbq.ScalarQueryParameter("ncid", "STRING", ncid)])
+    except Exception as e:
+        logger.error("funnel-forecast BQ query failed for %s: %s", ncid, e)
+        return jsonify({"error": "bq_query_failed", "available": False}), 200
+    if not rows:
+        return jsonify({"available": False, "message": "No NinjaCat performance data yet."}), 200
+
+    channel_rows = [{
+        "channel_bucket": r.get("channel_bucket"),
+        "impressions": r.get("impressions") or 0, "clicks": r.get("clicks") or 0,
+        "sessions": r.get("sessions") or 0, "leads": r.get("leads") or 0,
+        "spend": float(r.get("spend") or 0),
+    } for r in rows]
+
+    # 4. Current budget from the property's HubSpot DEAL line items — the same
+    #    source the Enrolled Services table reads, so "Current" always matches it.
+    #    (The old spend sheet is portfolio-scoped and misses un-synced properties.)
+    current_channels = {}
+    try:
+        import requests as _r2
+        from config import HUBSPOT_API_KEY as _HK2
+        _hh = {"Authorization": f"Bearer {_HK2}", "Content-Type": "application/json"}
+        _hb = "https://api.hubapi.com"
+        _da = _r2.get(f"{_hb}/crm/v3/objects/companies/{company_id}/associations/deals", headers=_hh, timeout=10)
+        _dids = [a["id"] for a in _da.json().get("results", [])] if _da.ok else []
+        if _dids:
+            _db = _r2.post(f"{_hb}/crm/v3/objects/deals/batch/read", headers=_hh,
+                           json={"inputs": [{"id": d} for d in _dids[:100]],
+                                 "properties": ["dealstage", "closedate"]}, timeout=10)
+            _deals = _db.json().get("results", []) if _db.ok else []
+            _deals.sort(key=lambda d: (1 if "won" in (d.get("properties", {}).get("dealstage") or "").lower() else 0,
+                                       d.get("properties", {}).get("closedate") or ""), reverse=True)
+            if _deals:
+                _did = _deals[0]["id"]
+                _li = _r2.get(f"{_hb}/crm/v3/objects/deals/{_did}/associations/line_items", headers=_hh, timeout=10)
+                _lids = [a["id"] for a in _li.json().get("results", [])] if _li.ok else []
+                if _lids:
+                    _lb = _r2.post(f"{_hb}/crm/v3/objects/line_items/batch/read", headers=_hh,
+                                   json={"inputs": [{"id": x} for x in _lids],
+                                         "properties": ["hs_sku", "name", "amount", "price"]}, timeout=10)
+                    for _l in (_lb.json().get("results", []) if _lb.ok else []):
+                        _lp = _l.get("properties", {})
+                        _ch = _ff.lineitem_to_channel(_lp.get("hs_sku") or "", _lp.get("name") or "")
+                        if not _ch:
+                            continue
+                        try:
+                            _amt = float(str(_lp.get("amount") or _lp.get("price") or 0).replace(",", ""))
+                        except (ValueError, TypeError):
+                            _amt = 0.0
+                        if _amt > 0:
+                            current_channels[_ch] = current_channels.get(_ch, 0) + _amt
+    except Exception as e:
+        logger.warning("funnel-forecast deal-budget lookup failed: %s", e)
+    sku_budget = dict(current_channels)  # response compatibility
+    observed = _ff.compute_actual_funnel(channel_rows)
+
+    # 5. Scenario budget (sc_<channel> query params) -> project; else actual funnel
+    scenario_ch = {}
+    for ch in _ff.CHANNEL_STAGE_MULT:
+        v = request.args.get("sc_" + ch)
+        if v is not None:
+            try:
+                scenario_ch[ch] = float(v)
+            except ValueError:
+                pass
+    if scenario_ch:
+        merged = dict(current_channels)
+        merged.update(scenario_ch)
+        result = _ff.project_funnel_from_budget(
+            goal_leases=goal_leases, budget_by_channel=merged,
+            observed=observed, leads_per_lease=leads_per_lease, context=context,
+            current_budget_by_channel=current_channels,
+        )
+        result["scenario"] = True
+    else:
+        result = _ff.run_funnel_forecast(
+            goal_leases=goal_leases, channel_rows=channel_rows,
+            leads_per_lease=leads_per_lease, context=context,
+            spend_by_channel=(current_channels or None),
+        )
+        result["scenario"] = False
+
+    result["available"] = True
+    result["month"] = rows[0].get("report_month") if rows else None
+    result["goal_basis"] = goal_basis
+    result["occupancy"] = apt_occ
+    result["exposure"] = apt_exp
+    result["current_budget"] = sku_budget
+    result["current_budget_channels"] = {k: round(v, 2) for k, v in current_channels.items()}
+    result["current_budget_total"] = round(sum(sku_budget.values()), 2)
+    result["property"] = {"name": p.get("name"), "units": units, "ninjacat_id": ncid}
+    return jsonify(result)
+
+
+@app.route("/api/plan/stages", methods=["GET", "OPTIONS"])
+def get_plan_stages():
+    """Need-aware, budget-bounded stage plan for the Plan & Spend page.
+
+    Reframes the funnel as stage COVERAGE (are you represented?) and sizes
+    Good/Better/Best to the property's mode inside a budget envelope. Current
+    spend = the property's deal line items (same as Enrolled Services).
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = request.args.get("company_id", "").strip()
+    uuid = request.args.get("uuid", "").strip()
+    if not company_id and uuid:
+        company_id = _resolve_company_id_by_uuid(uuid)
+    if not company_id:
+        return jsonify({"error": "company_id or uuid required"}), 400
+
+    import requests as _req
+    from config import HUBSPOT_API_KEY as _HK
+    import plan_stages as _ps
+
+    props = "name,totalunits,occupancy_status,occupancy__,target_occupancy,aptiq_property_id"
+    try:
+        r = _req.get(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props}",
+            headers={"Authorization": f"Bearer {_HK}"}, timeout=12,
+        )
+        p = r.json().get("properties", {}) if r.ok else {}
+    except Exception as e:
+        logger.error("plan-stages HubSpot fetch failed: %s", e)
+        return jsonify({"error": "property lookup failed"}), 502
+
+    # AptIQ occupancy/exposure (preferred over the HubSpot occupancy field)
+    apt_occ = apt_exp = None
+    apt_pid = (p.get("aptiq_property_id") or "").strip()
+    if apt_pid:
+        try:
+            from services.fluency_ingestion import apt_iq_csv_client as _csv
+            _ar = _csv.get_property_row(apt_pid)
+
+            def _apt_num(col):
+                if not _ar:
+                    return None
+                s = str(_ar.get(col, "")).replace("%", "").replace(",", "").strip()
+                try:
+                    return float(s)
+                except ValueError:
+                    return None
+            apt_occ = _apt_num("Advertised Occupancy %")
+            apt_exp = _apt_num("Exposure %")
+        except Exception as e:
+            logger.warning("plan-stages AptIQ lookup failed for %s: %s", apt_pid, e)
+
+    current_channels = _ps.get_current_channel_spend(company_id)
+    plan = _ps.build_plan(company_id, p, current_channels, occ=apt_occ, exposure=apt_exp)
+    return jsonify(plan)
+
+
+@app.route("/api/webhooks/clickup/ticket-complete", methods=["POST", "OPTIONS"])
+def clickup_ticket_complete():
+    """ClickUp ticket Done → client-facing recap note on the matched HubSpot company.
+
+    Auth: ClickUp native webhook X-Signature (HMAC-SHA256 of the raw body with
+    a CLICKUP_WEBHOOK_SECRET entry — comma-separated, one per webhook) OR a
+    ?token= matching one of those secrets (for a ClickUp Automation 'call
+    webhook' action). ?dry_run=1 returns the draft WITHOUT posting — use it to
+    validate on a real completed ticket first.
+    See docs/RUNBOOKS/ticket-recap-activation.md for go-live steps.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    import threading as _threading
+    import clickup_recap
+
+    raw = request.get_data() or b""
+    if not clickup_recap.verify_webhook_auth(
+            raw, request.headers.get("X-Signature", ""), request.args.get("token", "")):
+        return jsonify({"error": "unauthorized"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    task_id = (payload.get("task_id") or payload.get("id")
+               or (payload.get("task") or {}).get("id")
+               or (payload.get("payload") or {}).get("id") or "")
+    task_id = str(task_id).strip()
+    if not task_id:
+        return jsonify({"error": "no task_id in payload"}), 400
+
+    if request.args.get("dry_run") in ("1", "true", "yes"):
+        return jsonify(clickup_recap.process_completed_task(task_id, dry_run=True))
+
+    def _bg(tid):
+        try:
+            clickup_recap.process_completed_task(tid)
+        except Exception as exc:
+            logger.exception("clickup_recap bg error for %s: %s", tid, exc)
+    _threading.Thread(target=_bg, args=(task_id,), daemon=True).start()
+    return jsonify({"status": "accepted", "task_id": task_id}), 202
+
+
+@app.route("/api/disposition/list", methods=["GET", "OPTIONS"])
+def disposition_list():
+    """Properties that are dispositioning or retained — the AM/PM review report."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
+    import disposition
+    return jsonify({"properties": disposition.list_dispositioning()})
+
+
+@app.route("/api/disposition/retain", methods=["POST", "OPTIONS"])
+def disposition_retain():
+    """Set the disposition_retained flag on a company (retain vs let it turn off)."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
+    body = request.get_json(force=True) or {}
+    cid = str(body.get("company_id", "")).strip()
+    retained = bool(body.get("retained"))
+    if not cid:
+        return jsonify({"error": "company_id required"}), 400
+    import disposition
+    ok = disposition.set_retained(cid, retained)
+    return jsonify({"status": "ok" if ok else "error", "company_id": cid,
+                    "retained": retained}), (200 if ok else 502)
+
+
+@app.route("/api/needs-you", methods=["GET", "OPTIONS"])
+def needs_you():
+    """The 'What needs you' action inbox: onboarding + dispositions + open tickets.
+
+    Onboarding = properties coming online + completeness flags. Dispositions =
+    retain/turn-off review. Attention = aging/open tickets (the non-health
+    triage signals). Health-score rows are intentionally dropped — Properties
+    and Portfolio Dashboard already show those.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    if not request.headers.get("X-Portal-Email", "").strip():
+        return jsonify({"error": "Authentication required"}), 401
+    onb = dispo = attn = []
+    try:
+        import onboarding
+        onb = onboarding.list_onboarding()
+    except Exception as e:
+        logger.warning("needs-you onboarding failed: %s", e)
+    try:
+        import disposition
+        dispo = disposition.list_dispositioning()
+    except Exception as e:
+        logger.warning("needs-you dispositions failed: %s", e)
+    try:
+        import triage as _tri
+        rows = (_tri.get_portfolio_triage() or {}).get("rows", [])
+        attn = [r for r in rows if r.get("reason_kind") in ("ticket_aging", "ticket_open")]
+    except Exception as e:
+        logger.warning("needs-you attention failed: %s", e)
+    return jsonify({"onboarding": onb, "dispositions": dispo, "attention": attn})
+
+
+# ─── AI SWOT (Performance page) ─────────────────────────────────────────────
+
+
+@app.route("/api/performance/swot", methods=["GET", "OPTIONS"])
+def get_performance_swot():
+    """Channel-aware AI SWOT for one property's digital marketing (cached 24h)."""
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    company_id = request.args.get("company_id", "").strip()
+    uuid = request.args.get("uuid", "").strip()
+    if not company_id and uuid:
+        company_id = _resolve_company_id_by_uuid(uuid)
+    if not company_id:
+        return jsonify({"error": "company_id or uuid required"}), 400
+    import swot as _swot
+    return jsonify(_swot.generate_swot(company_id, force=(request.args.get("force") == "1")))
 
 
 # ─── Health check (public) ──────────────────────────────────────────────────
@@ -5806,6 +6763,211 @@ def creative_transition_run():
     import creative_transition
     result = creative_transition.handle_plestatus_change(str(company_id), "RPM Managed")
     return jsonify(result)
+
+
+@app.route("/api/property/context-note", methods=["POST", "OPTIONS"])
+def property_context_note():
+    """Save the AM-entered Health Score context note on a company (#7).
+
+    A visible explanation for special cases (e.g. '88% occupied by design —
+    remainder in remodel') so the score is understood without a manual
+    override. Written to the score_context_note company property.
+    Auth: X-Portal-Email (any authenticated portal user).
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    payload = request.get_json(silent=True) or {}
+    company_id = (payload.get("company_id") or "").strip()
+    note = payload.get("note", "")
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+    if note is None:
+        note = ""
+    if len(str(note)) > 2000:
+        return jsonify({"error": "note too long (max 2000 chars)"}), 400
+    import requests as req
+    from config import HUBSPOT_API_KEY
+    try:
+        r = req.patch(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"},
+            json={"properties": {"score_context_note": str(note)}},
+            timeout=15,
+        )
+        if r.status_code >= 400:
+            return jsonify({"error": "HubSpot write failed", "detail": r.text[:200]}), 502
+    except Exception as e:
+        logger.error("context-note write failed: %s", e)
+        return jsonify({"error": "write failed"}), 500
+    return jsonify({"status": "ok", "note": str(note), "edited_by": email})
+
+
+@app.route("/api/property/targets", methods=["POST", "OPTIONS"])
+def property_targets():
+    """Save per-property occupancy target inputs (lease-up ramp).
+
+    Body (all optional except company_id): occupancy_status, takeover_date
+    (YYYY-MM-DD → managementstart), target_occupancy (0-100), ramp_months (1-60).
+    Only the provided keys are written. Auth: X-Portal-Email.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    email = request.headers.get("X-Portal-Email", "").lower().strip()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+    payload = request.get_json(silent=True) or {}
+    company_id = (payload.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    updates = {}
+    if "occupancy_status" in payload:
+        st = (payload.get("occupancy_status") or "").strip()
+        allowed = {"", "Stabilized", "Lease-Up", "Renovation", "In-Transition"}
+        if st not in allowed:
+            return jsonify({"error": f"occupancy_status must be one of {sorted(allowed)}"}), 400
+        updates["occupancy_status"] = st
+    if "takeover_date" in payload:
+        td = (payload.get("takeover_date") or "").strip()
+        if td:
+            import datetime as _dt
+            try:
+                _dt.datetime.strptime(td, "%Y-%m-%d")
+            except ValueError:
+                return jsonify({"error": "takeover_date must be YYYY-MM-DD"}), 400
+        updates["lease_up_start_date"] = td  # never overwrite managementstart; blank clears it
+    if "target_occupancy" in payload:
+        v = payload.get("target_occupancy")
+        if v in (None, ""):
+            updates["target_occupancy"] = ""
+        else:
+            try:
+                fv = float(v)
+            except (ValueError, TypeError):
+                return jsonify({"error": "target_occupancy must be a number"}), 400
+            if not (0 < fv <= 100):
+                return jsonify({"error": "target_occupancy must be between 0 and 100"}), 400
+            updates["target_occupancy"] = fv
+    if "ramp_months" in payload:
+        v = payload.get("ramp_months")
+        if v in (None, ""):
+            updates["lease_up_ramp_months"] = ""
+        else:
+            try:
+                iv = int(float(v))
+            except (ValueError, TypeError):
+                return jsonify({"error": "ramp_months must be a number"}), 400
+            if not (1 <= iv <= 60):
+                return jsonify({"error": "ramp_months must be between 1 and 60"}), 400
+            updates["lease_up_ramp_months"] = iv
+
+    if not updates:
+        return jsonify({"error": "no fields to update"}), 400
+
+    import requests as req
+    from config import HUBSPOT_API_KEY
+    try:
+        r = req.patch(
+            f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}",
+            headers={"Authorization": f"Bearer {HUBSPOT_API_KEY}", "Content-Type": "application/json"},
+            json={"properties": updates},
+            timeout=15,
+        )
+        if r.status_code >= 400:
+            return jsonify({"error": "HubSpot write failed", "detail": r.text[:300]}), 502
+    except Exception as e:
+        logger.error("property-targets write failed: %s", e)
+        return jsonify({"error": "write failed"}), 500
+    return jsonify({"status": "ok", "updated": list(updates.keys()), "edited_by": email})
+
+
+@app.route("/api/internal/warm-caches", methods=["GET", "POST", "OPTIONS"])
+def warm_caches_route():
+    """Keep-warm: pre-populate the expensive portal caches so the first real
+    user request after an idle window is fast, not a cold 3-5s HubSpot sweep.
+
+    Warms: portfolio (874-company query), spend_sheet (deal line items),
+    triage ('What needs you'). Lauren's #1 pilot complaint was load speed;
+    a Render cron hitting this every ~10 min keeps every cache hot.
+    Auth: X-Internal-Key. Cheap + idempotent.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+    import time as _t
+    out = {}
+    t0 = _t.time()
+    try:
+        from portfolio import fetch_portfolio, format_portfolio_response
+        format_portfolio_response(fetch_portfolio("keep-warm@rpmliving.com", "marketing_director"))
+        out["portfolio"] = "ok"
+    except Exception as e:
+        out["portfolio"] = f"err: {e}"
+    try:
+        from spend_sheet import get_spend_sheet_data
+        out["spend_sheet_rows"] = len(get_spend_sheet_data())
+    except Exception as e:
+        out["spend_sheet"] = f"err: {e}"
+    try:
+        from triage import get_portfolio_triage
+        get_portfolio_triage()
+        out["triage"] = "ok"
+    except Exception as e:
+        out["triage"] = f"err: {e}"
+    out["elapsed_s"] = round(_t.time() - t0, 1)
+    return jsonify(out)
+
+
+@app.route("/api/internal/red-light-v2-batch", methods=["GET", "POST", "OPTIONS"])
+def red_light_v2_batch_route():
+    """Portfolio sweep of Red Light v2 PDF reports (monthly cron).
+
+    POST body: {"max_age_days": 25, "limit": 0, "states": ["AZ","CA"]}
+      states — optional region filter (2-letter or full names) so a demo
+      region can be prioritized ahead of the full portfolio sweep.
+    GET: live progress of the current/last sweep ({} if never run since
+      boot) + build marker — sweep introspection.
+    Auth: X-Internal-Key.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+    import batch_runs
+    if request.method == "GET":
+        return jsonify({"build": batch_runs.BUILD,
+                        "status": batch_runs._status["red_light_v2"]})
+    body = request.get_json(silent=True) or {}
+    return jsonify(batch_runs.red_light_v2_batch(
+        max_age_days=int(body.get("max_age_days") or 25),
+        limit=int(body.get("limit") or 0),
+        states=body.get("states") or None,
+    ))
+
+
+@app.route("/api/internal/forecast-batch", methods=["GET", "POST", "OPTIONS"])
+def forecast_batch_route():
+    """Portfolio sweep of Loop forecasts (daily cron).
+
+    POST body: {"limit": 0}. GET: sweep progress. Auth: X-Internal-Key.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    expected = os.getenv("INTERNAL_API_KEY", "")
+    if not (expected and request.headers.get("X-Internal-Key") == expected):
+        return jsonify({"error": "Authentication required"}), 401
+    import batch_runs
+    if request.method == "GET":
+        return jsonify({"build": batch_runs.BUILD,
+                        "status": batch_runs._status["forecast"]})
+    body = request.get_json(silent=True) or {}
+    return jsonify(batch_runs.forecast_batch(limit=int(body.get("limit") or 0)))
 
 
 @app.route("/api/internal/fluency-feed-sync", methods=["POST", "OPTIONS"])

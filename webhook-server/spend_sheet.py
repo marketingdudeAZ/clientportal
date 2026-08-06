@@ -39,6 +39,22 @@ EXCLUDED_PLE_STATUSES = {"Disposition Complete", "Management Not Awarded"}
 # build. Will be removed in a follow-up after callers are updated.
 PLE_STATUSES = ["RPM Managed", "Dispositioning", "Onboarding"]
 
+
+def _management_ended(managementend) -> bool:
+    """True if the property's Management End Date is set and in the past."""
+    if not managementend:
+        return False
+    try:
+        from datetime import datetime, date
+        v = str(managementend).strip()
+        if v.isdigit():                       # HubSpot date = epoch millis
+            d = datetime.utcfromtimestamp(int(v) / 1000).date()
+        else:
+            d = datetime.strptime(v[:10], "%Y-%m-%d").date()
+        return d < date.today()
+    except Exception:
+        return False
+
 # HubSpot SKU → column key returned in each row
 SKU_COLUMN_MAP = {
     "SEO_Package":                "seo",
@@ -293,6 +309,11 @@ def _base_row(company: dict) -> dict:
         "market":            company.get("market", ""),
         "marketing_manager": company.get("manager", ""),
         "ple_status":        company.get("ple_status", ""),
+        # ILS spends — company-level, not deal line items
+        "zillow_per_month":  company.get("zillow_per_month"),
+        "zillow_per_lease":  company.get("zillow_per_lease"),
+        "costar_package":    company.get("costar_package", ""),
+        "cx_bundle":         company.get("cx_bundle", False),
         # line-item columns default to None
         "seo": None, "search": None, "pmax": None, "paid_social": None,
         "tiktok": None, "geofence": None, "mgmt_fee": None,
@@ -335,7 +356,16 @@ def _get_managed_companies() -> list[dict]:
     # with no deal aren't billable / managed surface — exclude them.
     props = ["name", "rpmmarket", "marketing_manager",
              "marketing_manager_email", "plestatus",
-             "num_associated_deals"]
+             "num_associated_deals",
+             # Management End Date — the disposition guard. The warehouse feed
+             # lags (a "Disposition Complete" property still reads
+             # "Dispositioning" in HubSpot), so a past management-end date is
+             # the reliable signal the property is gone. (Kyle + VP, 2026-07-09)
+             "managementend",
+             # ILS spends (populated from the Marketing Spends tracker,
+             # Kyle 2026-07-06) — surfaced as spend-sheet columns.
+             "zillow_per_month", "zillow_spend", "costar_package",
+             "customerexperiencebundle"]
 
     for _ in range(50):  # safety: max 5,000 companies
         params = {
@@ -362,6 +392,10 @@ def _get_managed_companies() -> list[dict]:
             # Exclude finished / never-active properties.
             if status in EXCLUDED_PLE_STATUSES:
                 continue
+            # Disposition guard: drop anything whose management has ended, even
+            # if plestatus is a stale "Dispositioning" from the warehouse lag.
+            if _management_ended(cp.get("managementend")):
+                continue
             # Require at least one associated deal — every row in the
             # /accounts table represents a deal.
             try:
@@ -376,6 +410,10 @@ def _get_managed_companies() -> list[dict]:
                 "market":     cp.get("rpmmarket", ""),
                 "manager":    cp.get("marketing_manager") or cp.get("marketing_manager_email", ""),
                 "ple_status": status,
+                "zillow_per_month": _f(cp.get("zillow_per_month")),
+                "zillow_per_lease": _f(cp.get("zillow_spend")),
+                "costar_package":   cp.get("costar_package") or "",
+                "cx_bundle":        (cp.get("customerexperiencebundle") or "") in ("true", "True"),
             })
 
         after = data.get("paging", {}).get("next", {}).get("after")
