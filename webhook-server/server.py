@@ -32,6 +32,8 @@ When extracting a section into a blueprint, follow the pattern in
 `routes/paid.py`. Add the new blueprint to `routes/__init__.register_all`.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import sys
