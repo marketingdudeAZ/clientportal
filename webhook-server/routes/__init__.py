@@ -4,6 +4,7 @@ Add new blueprints here as they're extracted from server.py. server.py
 calls `register_all(app)` once at startup.
 """
 
+from .assets import assets_bp
 from .loop import loop_bp
 from .onboarding import onboarding_bp
 from .paid import paid_bp
@@ -31,4 +32,8 @@ def register_all(app):
     # Loop 1 self-checkout — every endpoint 404s until SELF_CHECKOUT_ENABLED=true,
     # so registering here is inert until you flip the flag.
     app.register_blueprint(self_checkout_bp)
+    # ADR 0020 Drive asset pipeline — every endpoint 404s until
+    # ASSETS_DRIVE_ENABLED=true, so this is inert next to the existing
+    # HubSpot-Files + HubDB asset path, which keeps running unchanged.
+    app.register_blueprint(assets_bp)
     register_webhook_blueprints(app)

@@ -584,6 +584,14 @@ select.brief-input{height:34px;cursor:pointer}
 .asset-info{padding:10px 12px}
 .asset-name{font-size:11px;font-weight:700;color:var(--jd);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .asset-meta{font-size:10px;color:var(--tm);margin-top:2px}
+/* Drive-backed cards (ADR 0020) carry rename/remove; the legacy HubSpot-Files
+   cards render without them, so the actions row only exists in Drive mode. */
+.asset-card-actions{display:flex;gap:6px;padding:0 12px 10px;opacity:0;transition:opacity .15s}
+.asset-card:hover .asset-card-actions,.asset-card:focus-within .asset-card-actions{opacity:1}
+.asset-card-action{flex:1;padding:4px 6px;border:1px solid var(--bd);border-radius:6px;background:#fff;font-size:10px;font-weight:700;color:var(--ts);cursor:pointer;font-family:inherit}
+.asset-card-action:hover{border-color:var(--cu);color:var(--cu)}
+.asset-card-action.danger:hover{border-color:#991B1B;color:#991B1B}
+.asset-card-action[disabled]{opacity:.5;cursor:default}
 /* Drag-drop zone */
 .asset-dropzone{border:2px dashed var(--bd);border-radius:12px;padding:32px 24px;text-align:center;background:#fafafa;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .asset-dropzone:hover,.asset-dropzone.dragover{border-color:var(--cu);background:var(--cug)}
@@ -8533,6 +8541,58 @@ function assetRenderBatch() {
   }).join('');
 }
 
+// ── Drive asset pipeline (ADR 0020) ──────────────────────────────────────────
+// /api/assets/* is flag-gated server-side and 404s while ASSETS_DRIVE_ENABLED
+// is off, so the Files section FEATURE-DETECTS instead of needing a template
+// redeploy in lockstep with the Render env var. Until the flag flips, every
+// path below falls through to the existing HubSpot-Files + HubDB behavior,
+// unchanged.
+//   null = not probed yet · true = Drive · false = legacy
+var _assetDriveMode = null;
+var _assetDriveProbe = null;
+var _assetDriveItems = [];
+var _assetTab = 'photo';
+
+// Library tab → the ADR 0020 asset kind stored in the index.
+var _ASSET_TAB_KIND = { photo: 'photo', video: 'video', brand: 'logo', collateral: 'promo' };
+// The batch UI's category → the same vocabulary, so per-file labels survive.
+var _ASSET_CATEGORY_KIND = {
+  'Photography': 'photo',
+  'Video': 'video',
+  'Brand & Creative': 'logo',
+  'Marketing Collateral': 'promo',
+};
+
+function _assetHeaders() { return { 'X-Portal-Email': _assetEmail() }; }
+
+// Which pipeline is live, probed once and memoized. Upload AWAITS this rather
+// than reading _assetDriveMode directly: a fast drop-and-submit could otherwise
+// beat the probe and silently send the batch down the legacy path while the
+// Drive flag was on.
+// Always resolves to {mode, data} — including on the memoized path, so callers
+// can read .mode without caring whether the probe already ran.
+function _assetProbeMode() {
+  if (_assetDriveMode !== null) return Promise.resolve({ mode: _assetDriveMode, data: null });
+  if (_assetDriveProbe) return _assetDriveProbe;
+  _assetDriveProbe = fetch(
+    _assetApiBase() + '/api/assets?uuid=' + encodeURIComponent(_assetUuid()),
+    { headers: _assetHeaders() }
+  )
+    .then(function(r) {
+      if (r.status === 404) { _assetDriveMode = false; return { mode: false, data: null }; }
+      if (!r.ok) throw new Error('assets ' + r.status);
+      _assetDriveMode = true;
+      return r.json().then(function(d){ return { mode: true, data: d }; });
+    })
+    .catch(function(err) {
+      // An error is NOT proof the flag is off — leave the mode unlatched so a
+      // blip doesn't strand the page (or an upload) on the old library.
+      _assetDriveProbe = null;
+      throw err;
+    });
+  return _assetDriveProbe;
+}
+
 function assetSubmitBatch() {
   var ready = _assetBatch.filter(function(e){ return e.status === 'ready' || e.status === 'analyzing'; });
   if (!ready.length) return;
@@ -8543,30 +8603,70 @@ function assetSubmitBatch() {
   ready.forEach(function(e){ e.status = 'uploading'; });
   assetRenderBatch();
 
+  // Legacy is the safe default if the probe itself fails — the old path is
+  // what's live today.
+  _assetProbeMode()
+    .catch(function(){ return { mode: false }; })
+    .then(function(probe) { _assetPostBatch(ready, probe.mode === true, btn, statusEl); });
+}
+
+function _assetPostBatch(ready, drive, btn, statusEl) {
   var fd = new FormData();
-  fd.append('property_uuid', _assetUuid());
-  fd.append('metadata', JSON.stringify(ready.map(function(e) {
-    return { category: e.category, subcategory: e.subcategory, description: e.description };
-  })));
+  if (drive) {
+    fd.append('uuid', _assetUuid());
+    fd.append('names', JSON.stringify(ready.map(function(e){ return e.description || ''; })));
+    fd.append('kinds', JSON.stringify(ready.map(function(e) {
+      return _ASSET_CATEGORY_KIND[e.category] || 'photo';
+    })));
+  } else {
+    fd.append('property_uuid', _assetUuid());
+    fd.append('metadata', JSON.stringify(ready.map(function(e) {
+      return { category: e.category, subcategory: e.subcategory, description: e.description };
+    })));
+  }
   ready.forEach(function(e){ fd.append('files', e.file); });
 
   // Multipart upload — let the browser set Content-Type with its
   // boundary. Auth header must be present or the route 401s silently
   // (was the cause of "upload not working" in production 2026-06-10).
-  fetch(_assetApiBase() + '/api/asset-upload', {
+  fetch(_assetApiBase() + (drive ? '/api/assets/upload' : '/api/asset-upload'), {
     method: 'POST', body: fd,
-    headers: { 'X-Portal-Email': _getEmail() },
+    headers: _assetHeaders(),
   })
     .then(function(r){ return r.json(); })
     .then(function(d) {
+      var uploaded = (d && d.assets) || [];
+      var rejected = (d && d.rejected) || [];
       if (d.error) {
         ready.forEach(function(e){ e.status = 'failed'; });
         if (statusEl) { statusEl.style.background = '#fef2f2'; statusEl.style.color = '#991b1b'; statusEl.textContent = 'Error: ' + d.error; }
       } else {
-        ready.forEach(function(e){ e.status = 'done'; });
-        if (statusEl) { statusEl.style.background = '#f0fdf4'; statusEl.style.color = '#166534'; statusEl.textContent = 'Uploaded ' + (d.assets || []).length + ' asset(s)'; }
+        // Per-file outcomes: a batch where one photo was too small still
+        // uploads the rest, and says which one didn't make it and why.
+        // Matched by position, not by filename — two files can share a name.
+        var badIndexes = {};
+        rejected.forEach(function(item, n) {
+          badIndexes[typeof item.index === 'number' ? item.index : n] = item.reason;
+        });
+        ready.forEach(function(e, i) { e.status = badIndexes[i] ? 'failed' : 'done'; });
+        if (statusEl) {
+          if (rejected.length) {
+            statusEl.style.background = '#fffbeb'; statusEl.style.color = '#92400e';
+            statusEl.textContent = 'Uploaded ' + uploaded.length + ' asset(s). ' +
+              rejected.length + ' skipped — ' +
+              rejected.map(function(x){ return x.filename + ': ' + x.reason; }).join(' · ');
+          } else {
+            statusEl.style.background = '#f0fdf4'; statusEl.style.color = '#166534';
+            statusEl.textContent = 'Uploaded ' + uploaded.length + ' asset(s)';
+          }
+          if (d.warning) { statusEl.textContent += ' — ' + d.warning; }
+        }
         try { _assetCache = null; } catch(e){}
-        setTimeout(function() { assetCancelBatch(); loadAssets(); }, 1500);
+        // Rejections stay on screen so the reason is readable; a clean batch clears.
+        setTimeout(function() {
+          if (!rejected.length) assetCancelBatch();
+          loadAssets();
+        }, rejected.length ? 4000 : 1500);
       }
       if (btn) { btn.disabled = false; btn.textContent = 'Upload All'; }
       assetRenderBatch();
@@ -8579,11 +8679,112 @@ function assetSubmitBatch() {
     });
 }
 
+function _assetGridMessage(text) {
+  var grid = document.getElementById('asset-grid');
+  if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--tm);font-size:12px;grid-column:1/-1">' + _escHtml(text) + '</div>';
+}
+
 function loadAssets() {
   var grid = document.getElementById('asset-grid');
   var uuid = _assetUuid();
   if (!grid || !uuid) return;
-  grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--tm);font-size:12px;grid-column:1/-1">Loading assets…</div>';
+  _assetGridMessage('Loading assets…');
+
+  // A 404 means the flag is off — fall back to the legacy library for good.
+  if (_assetDriveMode === false) return _loadLegacyAssets();
+
+  // Re-probing after the first call would skip the memoized result and miss
+  // refreshes, so force a re-read whenever we already know we're in Drive mode.
+  var probe = (_assetDriveMode === true)
+    ? fetch(_assetApiBase() + '/api/assets?uuid=' + encodeURIComponent(uuid),
+            { headers: _assetHeaders() })
+        .then(function(r){ return r.json(); })
+        .then(function(d){ return { mode: true, data: d }; })
+    : _assetProbeMode();
+
+  probe
+    .then(function(res) {
+      if (res.mode !== true) return _loadLegacyAssets();
+      _assetDriveItems = (res.data && res.data.assets) || [];
+      _assetRenderDriveGrid();
+    })
+    .catch(function() { _assetGridMessage('Could not load assets.'); });
+}
+
+function _assetPreviewUrl(asset) {
+  var v = asset.variants || {};
+  return v.square_1200x1200 || v.landscape_1200x628 || v.original || '';
+}
+
+function _assetRenderDriveGrid() {
+  var grid = document.getElementById('asset-grid');
+  if (!grid) return;
+  var kind = _ASSET_TAB_KIND[_assetTab] || 'photo';
+  var items = _assetDriveItems.filter(function(a){ return (a.kind || 'photo') === kind; });
+  if (!items.length) {
+    _assetGridMessage(_assetDriveItems.length
+      ? 'Nothing in this category yet.'
+      : 'No assets yet. Drop some above to get started.');
+    return;
+  }
+  grid.innerHTML = items.map(function(a) {
+    var url = _assetPreviewUrl(a);
+    var thumb = (a.kind === 'video')
+      ? '<div class="asset-thumb" style="background:linear-gradient(135deg,#AB784A,#8BA395)">VIDEO</div>'
+      : '<div class="asset-thumb" style="background:url(' + _escAttr(url) + ') center/cover;background-size:cover"></div>';
+    var id = _escAttr(a.asset_id);
+    return '<div class="asset-card">' +
+      '<div onclick="window.open(\'' + _escAttr(url) + '\',\'_blank\')">' + thumb +
+        '<div class="asset-info"><div class="asset-name">' + _escHtml(a.name || 'Asset') + '</div>' +
+        '<div class="asset-meta">' + _escHtml(a.kind || '') + '</div></div></div>' +
+      '<div class="asset-card-actions">' +
+        '<button class="asset-card-action" onclick="assetRename(\'' + id + '\')">Rename</button>' +
+        '<button class="asset-card-action danger" onclick="assetRemove(\'' + id + '\')">Remove</button>' +
+      '</div></div>';
+  }).join('');
+}
+
+function assetRename(assetId) {
+  var current = _assetDriveItems.filter(function(a){ return a.asset_id === assetId; })[0];
+  var name = window.prompt('Rename this asset', (current && current.name) || '');
+  if (name === null) return;
+  name = name.trim();
+  if (!name) return;
+  fetch(_assetApiBase() + '/api/assets/' + encodeURIComponent(assetId), {
+    method: 'PATCH',
+    headers: Object.assign({ 'Content-Type': 'application/json' }, _assetHeaders()),
+    body: JSON.stringify({ uuid: _assetUuid(), name: name }),
+  })
+    .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
+    .then(function(res) {
+      if (!res.ok) { alert(res.d.error || 'Rename failed.'); return; }
+      if (current) current.name = name;   // metadata only — no re-fetch needed
+      _assetRenderDriveGrid();
+    })
+    .catch(function(){ alert('Rename failed. Please try again.'); });
+}
+
+function assetRemove(assetId) {
+  // Removal archives rather than deletes (ADR 0020), but it does pull the
+  // asset out of the live ad path — so say that, not "delete".
+  if (!confirm('Remove this asset? It stops being used in ads. It is archived, not deleted.')) return;
+  fetch(_assetApiBase() + '/api/assets/' + encodeURIComponent(assetId) +
+        '?uuid=' + encodeURIComponent(_assetUuid()), {
+    method: 'DELETE', headers: _assetHeaders(),
+  })
+    .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
+    .then(function(res) {
+      if (!res.ok) { alert(res.d.error || 'Could not remove the asset.'); return; }
+      _assetDriveItems = _assetDriveItems.filter(function(a){ return a.asset_id !== assetId; });
+      _assetRenderDriveGrid();
+    })
+    .catch(function(){ alert('Could not remove the asset. Please try again.'); });
+}
+
+function _loadLegacyAssets() {
+  var grid = document.getElementById('asset-grid');
+  var uuid = _assetUuid();
+  if (!grid || !uuid) return;
   fetch(_assetApiBase() + '/api/property-assets?company_id=' + encodeURIComponent(uuid), {
     headers: { 'X-Portal-Email': _assetEmail() }
   })
@@ -8623,6 +8824,10 @@ if (typeof document !== 'undefined') {
 function switchAssetTab(btn, tab) {
   document.querySelectorAll('.asset-tab').forEach(function(b){b.classList.remove('active')});
   btn.classList.add('active');
+  _assetTab = tab;
+  // Legacy mode keeps its existing behavior (the tabs were cosmetic there);
+  // only the Drive-backed grid filters by kind.
+  if (_assetDriveMode === true) _assetRenderDriveGrid();
 }
 
 // ── Call Notes: Save to HubSpot ──

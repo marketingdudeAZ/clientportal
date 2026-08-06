@@ -1,6 +1,8 @@
 # ADR 0020 — Asset pipeline: Client Portal → Google Drive → Fluency
 
-**Status:** Proposed
+**Status:** Accepted — **Stages 1 + 2 built, flag-gated OFF** (`ASSETS_DRIVE_ENABLED`).
+Stages 3 (Fluency wiring) and 4 (backfill) not started; both blocked on the
+paid team confirming the folder convention. See "Implementation status" below.
 **Date:** 2026-07-15 (supersedes the R2 draft — paid team prefers Google Drive)
 **Authors:** Kyle Shipp, Claude
 
@@ -202,6 +204,58 @@ binding constraint later, R2-for-video + Drive-for-images is a fallback.)
    verify a test property ingests into a Blueprint end-to-end.
 4. **Backfill** — migrate existing HubSpot-Files assets → Drive + BQ index;
    retire the HubDB asset table (repoint ADR 0017 video-approve writes).
+
+## Implementation status
+
+**Shipped (flag-gated OFF behind `ASSETS_DRIVE_ENABLED`, default false).**
+While the flag is off every `/api/assets/*` route 404s and the existing
+HubSpot-Files + HubDB path (`/api/asset-upload`, `/api/property-assets`,
+`asset_uploader.py`, `HUBDB_ASSET_TABLE_ID`) runs exactly as before. The portal
+Files section feature-detects the new API and falls back to the old library on
+a 404, so the template and the env var don't have to ship in lockstep.
+
+| Stage | State | Where |
+|---|---|---|
+| 1 — Drive client + resize on new uploads | built | `webhook-server/drive_client.py`, `asset_resizer.py`, `asset_index.py`, `migrations/0013_assets_table.py`, `POST /api/assets/upload` |
+| 2 — Portal CRUD | built | `webhook-server/routes/assets.py`, Files section of `hubspot-cms/templates/client-portal.html` |
+| 3 — Fluency wiring | **not started** — blocked on action item #2 | — |
+| 4 — Backfill + retire the HubDB asset table | **not started** — depends on Stage 3 | — |
+
+**Decisions taken during the build that this ADR didn't settle:**
+
+- **Rename writes metadata, never a Drive *name*.** The ADR says rename edits
+  "the Drive file name" while also requiring that paths don't change. Those
+  conflict: a Drive file's name *is* its path segment, and the variant
+  filenames are what Fluency reads. Rename therefore updates BQ `name` (the
+  portal's authority) plus the asset folder's Drive `description` /
+  `appProperties.display_name`. No path moves, so no ad churn.
+- **The index is written with DML, not streaming inserts.** Rows in BigQuery's
+  streaming buffer reject `UPDATE` for up to ~90 minutes, which would break
+  "upload a photo, rename it immediately". An upload batch is written as one
+  multi-row `INSERT` so the per-table DML quota isn't burned per file.
+- **Drive scope defaults to full `drive`, not `drive.file`.** `drive.file` is
+  scoped to app-created files, which doesn't reliably cover folder discovery or
+  creating children under a human-made `RPM_ASSETS_ROOT_FOLDER_ID`. The real
+  boundary is Shared Drive membership — the service account is a Content
+  Manager on one dedicated Drive and can see nothing else in the org.
+  Overridable via `RPM_ASSETS_DRIVE_SCOPE`.
+- **Variants may upscale.** A 1400×400 panorama can't fill 1200×1200 without
+  it. The ADR's rule is auto-fix rather than reject, and the 1200px long-edge
+  floor keeps the upscale modest.
+- **Per-file rejection, not per-batch.** Dropping twelve photos where one is a
+  400px screenshot uploads eleven and reports the twelfth with a reason.
+
+**Open — per-property write scoping is NOT enforced.** The "Upload flow &
+permissions" section above says the portal's existing auth resolves user →
+company → uuid. It does not: `portfolio.fetch_portfolio` returns every active
+RPM property to any authenticated portal member, and `routes/self_checkout.py`
+carries the same open seam. What the asset routes enforce today is that the
+caller is authenticated, that the target uuid resolves to a real addressable
+company, that the Drive folder name is derived from that company record rather
+than from request input, and that mutations are uuid-scoped so a guessed
+`asset_id` from another property is a no-op. Which of the 700+ properties a
+given PM may write to needs a real user→property grant, which the portal
+doesn't have. That's an auth-model decision, not an asset-pipeline task.
 
 ## Kyle / paid-team action items (unblock Stage 1)
 
