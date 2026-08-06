@@ -7,6 +7,8 @@ Endpoints map to the DataForSEO v3 REST API:
   https://docs.dataforseo.com/v3/
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any
 

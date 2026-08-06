@@ -1,16 +1,27 @@
-"""Video Generator — Brief → Script → Asset-Matched Creatify Submission
+"""Video Generator — Property Profile → Script → Asset-Matched Provider Submission
 
 Orchestrates the full video creation flow:
-1. Fetch property-specific assets from HubDB (isolated by property_uuid)
-2. Call Claude to generate a voiceover script + visual asset plan
-3. Submit to Creatify with the script and matched media URLs
-4. Store variant data on the HubSpot company record
+1. Build the creative brief from the Property Profile (override-wins)
+2. Fetch property-specific assets from HubDB (isolated by property_uuid)
+3. Call Claude to generate a voiceover script + visual asset plan
+4. Screen the script + every on-screen overlay for Fair Housing and pricing
+5. Submit to the provider with the script and matched media URLs
+6. Store variant data and a terminal cycle status on the HubSpot company record
+
+**Every exit writes a cycle status.** The old version let a provider error
+escape into the caller's daemon thread, which left the company pinned at
+`Processing` forever and the portal spinning with nothing to show. Callers
+now get a `GenerationResult` describing what happened, and the company record
+always ends on one of the statuses in `CYCLE_*` below.
 """
+
+from __future__ import annotations
 
 import json
 import logging
 import os
 import sys
+from dataclasses import dataclass, field
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -32,10 +43,67 @@ from video_providers import get_provider, normalize_provider_name
 
 logger = logging.getLogger(__name__)
 
-# Media file types we send to Creatify
+# Media file types we send to a provider
 _VISUAL_FILE_TYPES = {"jpg", "jpeg", "png", "webp", "mp4", "mov"}
 
 HS_HEADERS = {"Authorization": f"Bearer {HUBSPOT_API_KEY}"}
+
+# Terminal cycle statuses. "Processing" is the only non-terminal one; anything
+# that ends generation must land on one of the others so the portal can render
+# a real outcome instead of an indefinite spinner.
+CYCLE_PROCESSING = "Processing"
+CYCLE_PENDING_REVIEW = "Pending Review"
+CYCLE_NEEDS_PHOTOS = "Needs Photos"
+CYCLE_NEEDS_PROFILE = "Needs Profile"
+CYCLE_BLOCKED_COMPLIANCE = "Blocked - Compliance"
+CYCLE_FAILED = "Failed"
+
+# Fewer usable photos than this and the output is a slideshow of the same two
+# images. Tunable because it is a quality call, not a hard provider limit.
+MIN_USABLE_ASSETS = int(os.getenv("VIDEO_MIN_ASSETS", "3"))
+
+
+def _brief_from_profile_enabled() -> bool:
+    """Source the script from the Property Profile instead of the caller's brief.
+
+    Client-visible (it changes what the script says), so it is off by default
+    per the repo's flag rule. Read at call time so Render config and tests can
+    flip it per-process.
+    """
+    return os.getenv("VIDEO_BRIEF_FROM_PROFILE", "false").strip().lower() in (
+        "true", "1", "yes", "on",
+    )
+
+
+@dataclass
+class GenerationResult:
+    """What happened on one generation run.
+
+    `ok` means variants were submitted to a provider. Everything else carries
+    a `cycle_status` that has already been written to HubSpot and a
+    `user_message` the portal can render verbatim.
+    """
+
+    ok: bool
+    cycle_status: str
+    variants: list = field(default_factory=list)
+    user_message: str = ""
+    reason: str = ""
+    """Machine-readable cause: needs_photos | needs_profile | fair_housing |
+    script_failed | provider_failed | store_failed."""
+
+    asset_count: int = 0
+    compliance: dict = field(default_factory=dict)
+    """What the Fair Housing / pricing gate actually did — including whether
+    it degraded. Persisted alongside the variants."""
+
+    def __iter__(self):
+        """Back-compat: the old API returned a bare list of variants, and one
+        caller still unpacks/iterates it directly."""
+        return iter(self.variants)
+
+    def __len__(self):
+        return len(self.variants)
 
 
 # ─── 1. Fetch property assets from HubDB ────────────────────────────────────
@@ -118,6 +186,9 @@ def generate_script_with_assets(
     units: int = 0,
     assets: list[dict] | None = None,
     comp_context: str = "",
+    profile_facts: str = "",
+    voice_guidance: str = "",
+    forbidden_phrases=(),
 ) -> dict:
     """Call Claude to generate a voiceover script and select matching assets.
 
@@ -127,6 +198,11 @@ def generate_script_with_assets(
         units: Unit count.
         assets: Property-specific visual assets from HubDB.
         comp_context: Formatted ApartmentIQ market intelligence string.
+        profile_facts: Ad-copy-legal Property Profile fields, section-grouped
+            (`community_brief.ad_copy_fact_block`). Internal fields are already
+            excluded upstream and must never be passed in here.
+        voice_guidance: How copy should feel, from `fluency_voice_tier`.
+        forbidden_phrases: The property's "Things NOT to Say".
 
     Returns:
         {
@@ -138,10 +214,22 @@ def generate_script_with_assets(
     if not ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
-    # Build the user prompt: brief info + market intelligence + asset inventory
+    # Build the user prompt: brief info + profile facts + voice + market
+    # intelligence + asset inventory
     brief_prompt = build_script_prompt(brief, property_name, units)
     asset_inventory = _build_asset_inventory(assets or [])
     parts = [brief_prompt]
+    if profile_facts.strip():
+        parts.append("PROPERTY PROFILE — ground every claim in these facts:\n"
+                     + profile_facts.strip())
+    if voice_guidance:
+        parts.append(voice_guidance)
+    if forbidden_phrases:
+        parts.append(
+            "NEVER USE these phrases or topics — the property has explicitly "
+            "ruled them out:\n"
+            + "\n".join(f"  - {p}" for p in forbidden_phrases)
+        )
     if comp_context:
         parts.append(comp_context)
     parts.append(asset_inventory)
@@ -203,6 +291,56 @@ def generate_script_with_assets(
 
 # ─── 4. Orchestrator: full generation pipeline ──────────────────────────────
 
+def _write_cycle_status(hs_object_id: str, properties: dict) -> bool:
+    """Persist cycle state to the company record. Returns success.
+
+    Routed through the central HubSpot client so the R1 guard (`uuid` is never
+    written from code) and the 401/429 handling apply. Falls back to nothing —
+    a failed write is reported, never swallowed, because a silent failure here
+    is exactly what stranded properties at `Processing`.
+    """
+    try:
+        import hubspot_client
+        hubspot_client.patch_company(hs_object_id, properties)
+        return True
+    except Exception as exc:
+        logger.error("Failed to write cycle status to company %s: %s", hs_object_id, exc)
+        return False
+
+
+def _terminal(hs_object_id: str, status: str, *, reason: str, message: str,
+              asset_count: int = 0, compliance: dict | None = None,
+              cycle_month: str = "") -> GenerationResult:
+    """Land the run on a terminal status and tell the caller what happened."""
+    props = {"video_cycle_status": status}
+    if cycle_month:
+        props["video_cycle_month"] = cycle_month
+    _write_cycle_status(hs_object_id, props)
+    logger.warning("Video generation ended: company=%s status=%s reason=%s",
+                   hs_object_id, status, reason)
+    return GenerationResult(
+        ok=False,
+        cycle_status=status,
+        user_message=message,
+        reason=reason,
+        asset_count=asset_count,
+        compliance=compliance or {},
+    )
+
+
+def usable_media_urls(assets: list[dict]) -> list[str]:
+    """Real http(s) asset URLs, in inventory order.
+
+    Providers reject placeholder strings like `property_website_imagery`, so
+    anything that isn't a fetchable URL is not a usable photo.
+    """
+    return [
+        a.get("file_url", "") for a in (assets or [])
+        if isinstance(a.get("file_url"), str)
+        and a["file_url"].startswith(("http://", "https://"))
+    ]
+
+
 def generate_videos(
     property_uuid: str,
     hs_object_id: str,
@@ -216,8 +354,8 @@ def generate_videos(
     provider: str | None = None,
     # Back-compat alias so older callers that still pass company_id keep working.
     company_id: str | None = None,
-) -> list[dict]:
-    """End-to-end: brief → AptIQ context → script → asset matching → provider submit.
+) -> GenerationResult:
+    """End-to-end: profile → script → compliance → asset matching → provider submit.
 
     Identifiers:
       - property_uuid: the stable RPM property identifier. Used for asset
@@ -228,7 +366,9 @@ def generate_videos(
     The `provider` arg routes to the chosen video backend (creatify or heygen).
     When omitted it falls back to VIDEO_PROVIDER_DEFAULT in config.
 
-    Returns list of variant dicts ready to store on HubSpot.
+    Returns a GenerationResult. It iterates as the variant list for callers
+    written against the old return type, but check `.ok` and `.cycle_status`
+    rather than truthiness — a failed run legitimately has zero variants.
     """
     # Back-compat: accept the old single-identifier call style.
     if not hs_object_id and company_id:
@@ -236,13 +376,64 @@ def generate_videos(
     if not property_uuid and company_id:
         property_uuid = company_id
 
+    import datetime
+    cycle_month = datetime.date.today().strftime("%Y-%m")
+
     provider_name = normalize_provider_name(provider)
     vp = get_provider(provider_name)
 
-    # 1. Fetch property-specific assets (isolated by property UUID)
-    assets = fetch_property_assets(property_uuid)
+    # 1. Build the creative brief from the Property Profile. Override-wins and
+    #    the internal-field exclusion both live in community_brief/video_brief;
+    #    nothing about that rule is reimplemented here.
+    brief = dict(brief or {})
+    profile_facts = ""
+    voice_guide = ""
+    forbidden_phrases: list = []
+    if _brief_from_profile_enabled():
+        try:
+            import video_brief as vb
+            profile = vb.load_video_brief(hs_object_id)
+            if profile.is_thin:
+                return _terminal(
+                    hs_object_id, CYCLE_NEEDS_PROFILE,
+                    reason="needs_profile",
+                    message=(
+                        "Your Property Profile doesn't have enough detail to write "
+                        "from yet. Fill in differentiators, amenities, or neighborhood "
+                        "highlights, then generate again."
+                    ),
+                    cycle_month=cycle_month,
+                )
+            # Profile values win over whatever the caller passed in — the
+            # profile is the source of truth the portal promises the client.
+            brief.update(profile.brief)
+            profile_facts = profile.facts
+            voice_guide = vb.voice_guidance(profile.voice_tier)
+            forbidden_phrases = profile.forbidden_phrases
+            logger.info("Brief sourced from Property Profile for %s (%d substantive fields, voice_tier=%r)",
+                        property_name, len(profile.substantive_fields), profile.voice_tier)
+        except Exception as exc:
+            logger.error("Property Profile load failed for %s — falling back to the "
+                         "supplied brief: %s", hs_object_id, exc)
 
-    # 2. Fetch ApartmentIQ market intelligence
+    # 2. Fetch property-specific assets (isolated by property UUID) and decide
+    #    up front whether there is enough to build a watchable video from.
+    assets = fetch_property_assets(property_uuid)
+    usable = usable_media_urls(assets)
+    if len(usable) < MIN_USABLE_ASSETS:
+        return _terminal(
+            hs_object_id, CYCLE_NEEDS_PHOTOS,
+            reason="needs_photos",
+            message=(
+                f"We found {len(usable)} usable photo{'' if len(usable) == 1 else 's'} "
+                f"for this property and need at least {MIN_USABLE_ASSETS}. Upload more "
+                "images or short clips to your Files library, then generate again."
+            ),
+            asset_count=len(usable),
+            cycle_month=cycle_month,
+        )
+
+    # 3. Fetch ApartmentIQ market intelligence
     comp_context_str = ""
     if aptiq_property_id or aptiq_market_id:
         try:
@@ -254,20 +445,76 @@ def generate_videos(
         except Exception as exc:
             logger.warning("ApartmentIQ fetch failed (continuing without): %s", exc)
 
-    # 3. Generate script + asset plan via Claude (with market intelligence)
-    script_result = generate_script_with_assets(
-        brief=brief,
-        property_name=property_name,
-        units=units,
-        assets=assets,
-        comp_context=comp_context_str,
-    )
+    # 4. Generate script + asset plan via Claude (with market intelligence)
+    try:
+        script_result = generate_script_with_assets(
+            brief=brief,
+            property_name=property_name,
+            units=units,
+            assets=assets,
+            comp_context=comp_context_str,
+            profile_facts=profile_facts,
+            voice_guidance=voice_guide,
+            forbidden_phrases=forbidden_phrases,
+        )
+    except Exception as exc:
+        logger.error("Script generation failed for %s: %s", property_name, exc, exc_info=True)
+        return _terminal(
+            hs_object_id, CYCLE_FAILED,
+            reason="script_failed",
+            message="We couldn't write a script for this property. The team has been notified.",
+            asset_count=len(usable),
+            cycle_month=cycle_month,
+        )
 
-    # 4. Build provider brief (shared contract between Creatify and HeyGen).
-    # property_uuid rides along so HeyGen can echo it back in the webhook
-    # callback_id and we can route updates without scanning every company.
+    # 5. COMPLIANCE GATE — the script is client-facing housing ad copy. Nothing
+    #    below this line may reach a provider, the portal, or the Files library
+    #    without having gone through it. A degraded Fair Housing pass is
+    #    recorded as degraded, never as a pass.
+    from video_script_gate import gate_script, gate_scene_plan
+    gate = gate_script(
+        script_result["script"],
+        field_name="video_script",
+        forbidden_phrases=forbidden_phrases,
+    )
+    compliance = {
+        "fair_housing":        gate.fair_housing,
+        "fair_housing_degraded": gate.degraded,
+        "degraded_reason":     gate.degraded_reason,
+        "violations":          gate.violations,
+        "forbidden_used":      gate.forbidden_used,
+        "checks":              gate.describe_checks(),
+    }
+    if gate.degraded:
+        logger.warning("Fair Housing check DEGRADED for %s — hard blocklist only (%s)",
+                       property_name, gate.degraded_reason)
+    if not gate.ok:
+        return _terminal(
+            hs_object_id, CYCLE_BLOCKED_COMPLIANCE,
+            reason="fair_housing",
+            message=(
+                "The generated script didn't pass our Fair Housing review, so we "
+                "stopped before creating anything. Your marketing team has the details."
+            ),
+            asset_count=len(usable),
+            compliance=compliance,
+            cycle_month=cycle_month,
+        )
+    clean_script = gate.script
+
+    # 6. Media URLs for the provider. Claude's plan is preferred (it ordered the
+    #    shots to match the voiceover); the raw inventory is the fallback.
+    plan_urls = [
+        u for u in (script_result.get("media_urls") or [])
+        if isinstance(u, str) and u.startswith(("http://", "https://"))
+    ]
+    media_urls = plan_urls or usable[:10]
+
+    # 7. Build the provider brief (shared contract between Creatify and HeyGen).
+    #    property_uuid rides along so HeyGen can echo it back in the webhook
+    #    callback_id and we can route updates without scanning every company.
     provider_brief = {
-        "script":   script_result["script"],
+        "script":   clean_script,
         "duration": brief.get("duration", 15),
         "property_uuid": property_uuid,
         # Keep the original creative brief fields around — HeyGen's scene
@@ -278,23 +525,15 @@ def generate_videos(
         "differentiators": brief.get("differentiators"),
     }
 
-    # 5. Always filter to real http/https URLs — Claude's media_plan may include
-    # placeholders like "property_website_imagery" which providers reject.
-    # If no real URLs are available, fall back to raw asset file_urls from HubDB
-    # so the video uses property photos instead of any website-scrape fallback.
-    plan_urls = [u for u in (script_result.get("media_urls") or []) if isinstance(u, str) and u.startswith(("http://", "https://"))]
-    if not plan_urls and assets:
-        plan_urls = [a.get("file_url") for a in assets if a.get("file_url", "").startswith(("http://", "https://"))][:10]
-    media_urls = plan_urls or None
-
-    # 6. For HeyGen, ask Claude to design a scene plan so the AI drives shot
-    # order + on-screen text. Creatify ignores this field.
+    # 8. For HeyGen, ask Claude to design a scene plan so the AI drives shot
+    #    order + on-screen text. Creatify ignores this field. On-screen text is
+    #    burned into the frame, so it goes through the same compliance gate.
     scene_plan: list[dict] = []
     if provider_name == "heygen":
         try:
             from heygen_scene_planner import plan_scenes
             scene_plan = plan_scenes(
-                script=script_result["script"],
+                script=clean_script,
                 assets=assets or [],
                 property_name=property_name,
                 brief=brief,
@@ -302,21 +541,66 @@ def generate_videos(
         except Exception as exc:
             logger.warning("HeyGen scene planner failed (falling back): %s", exc)
 
-    # 7. Submit to provider
+        if scene_plan:
+            scene_gate = gate_scene_plan(scene_plan, forbidden_phrases=forbidden_phrases)
+            compliance["scene_checks"] = scene_gate.describe_checks()
+            if scene_gate.violations:
+                compliance["violations"] = compliance["violations"] + scene_gate.violations
+            if scene_gate.degraded:
+                compliance["fair_housing_degraded"] = True
+            if not scene_gate.ok:
+                return _terminal(
+                    hs_object_id, CYCLE_BLOCKED_COMPLIANCE,
+                    reason="fair_housing",
+                    message=(
+                        "The on-screen text didn't pass our Fair Housing review, so we "
+                        "stopped before creating anything. Your marketing team has the details."
+                    ),
+                    asset_count=len(usable),
+                    compliance=compliance,
+                    cycle_month=cycle_month,
+                )
+
+    # 9. Submit to provider.
     # HeyGen needs a callback URL or its render webhook never fires — variants
     # stay stuck at 'pending' forever. Use WEBHOOK_SERVER_URL from config, falling
     # back to the production Render URL so this works out of the box.
     _webhook_base = os.getenv("WEBHOOK_SERVER_URL", "").strip() or "https://rpm-portal-server.onrender.com"
     heygen_webhook = _webhook_base.rstrip("/") + "/api/heygen-webhook"
-    variants = vp.build_variants_for_brief(
-        brief=provider_brief,
-        property_url=property_url,
-        tier=tier,
-        assets=assets,
-        media_urls=media_urls,
-        scene_plan=scene_plan or None,
-        webhook_url=heygen_webhook if provider_name == "heygen" else None,
-    )
+    try:
+        variants = vp.build_variants_for_brief(
+            brief=provider_brief,
+            property_url=property_url,
+            tier=tier,
+            assets=assets,
+            media_urls=media_urls,
+            scene_plan=scene_plan or None,
+            webhook_url=heygen_webhook if provider_name == "heygen" else None,
+        )
+    except Exception as exc:
+        user_message = getattr(exc, "user_message", "") or (
+            "We couldn't start the video render. The team has been notified."
+        )
+        logger.error("Provider %s rejected the submission for %s: %s",
+                     provider_name, property_name, exc, exc_info=True)
+        return _terminal(
+            hs_object_id, CYCLE_FAILED,
+            reason="provider_failed",
+            message=user_message,
+            asset_count=len(usable),
+            compliance=compliance,
+            cycle_month=cycle_month,
+        )
+
+    if not variants:
+        return _terminal(
+            hs_object_id, CYCLE_FAILED,
+            reason="provider_failed",
+            message="The video provider didn't accept any variants. The team has been notified.",
+            asset_count=len(usable),
+            compliance=compliance,
+            cycle_month=cycle_month,
+        )
 
     # Attach the media plan + script + property_uuid to each variant.
     # property_uuid is what the webhook handler and the auto-poller use to
@@ -325,28 +609,56 @@ def generate_videos(
     # searching by hs_object_id.
     for v in variants:
         v["media_plan"] = script_result["media_plan"]
-        v["script"] = script_result["script"]
+        v["script"] = clean_script
         v.setdefault("provider", provider_name)
         v["property_uuid"] = property_uuid
+        # Travels with the variant so a reviewer looking at it months later can
+        # see whether the Fair Housing pass actually ran or only degraded.
+        v["compliance"] = compliance
 
-    # 5. Store on HubSpot
-    import datetime
-    cycle_month = datetime.date.today().strftime("%Y-%m")
+    # 10. Store on HubSpot. Every variant failing to submit is still a failure
+    #     even though we have variant records for them.
+    submitted = [v for v in variants if v.get("status") != "error"]
+    cycle_status = CYCLE_PROCESSING if submitted else CYCLE_FAILED
 
-    try:
-        requests.patch(
-            f"https://api.hubapi.com/crm/v3/objects/companies/{hs_object_id}",
-            headers={**HS_HEADERS, "Content-Type": "application/json"},
-            json={"properties": {
-                "video_variants_json":     json.dumps(variants),
-                "video_cycle_status":      "Processing",
-                "video_cycle_month":       cycle_month,
-                "video_pipeline_enrolled": "true",
-            }},
-            timeout=10,
+    stored = _write_cycle_status(hs_object_id, {
+        "video_variants_json":     json.dumps(variants),
+        "video_cycle_status":      cycle_status,
+        "video_cycle_month":       cycle_month,
+        "video_pipeline_enrolled": "true",
+    })
+    if not stored:
+        # The provider is already rendering, but nothing on the record points at
+        # those jobs. Say so rather than reporting success.
+        return GenerationResult(
+            ok=False,
+            cycle_status=CYCLE_FAILED,
+            variants=variants,
+            user_message="Your videos are rendering but we couldn't save them to your record. The team has been notified.",
+            reason="store_failed",
+            asset_count=len(usable),
+            compliance=compliance,
         )
-        logger.info("Stored %d variants on company %s (uuid=%s)", len(variants), hs_object_id, property_uuid)
-    except Exception as exc:
-        logger.error("Failed to store variants on HubSpot: %s", exc)
 
-    return variants
+    logger.info("Stored %d variants (%d submitted) on company %s (uuid=%s)",
+                len(variants), len(submitted), hs_object_id, property_uuid)
+
+    if not submitted:
+        return GenerationResult(
+            ok=False,
+            cycle_status=CYCLE_FAILED,
+            variants=variants,
+            user_message="The video provider rejected every variant. The team has been notified.",
+            reason="provider_failed",
+            asset_count=len(usable),
+            compliance=compliance,
+        )
+
+    return GenerationResult(
+        ok=True,
+        cycle_status=cycle_status,
+        variants=variants,
+        user_message="",
+        asset_count=len(usable),
+        compliance=compliance,
+    )

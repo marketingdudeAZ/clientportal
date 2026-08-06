@@ -470,6 +470,12 @@ def _split_for_pills(value: str) -> list[str]:
     return [x for x in items if x]
 
 
+# Public name for the same splitting rule — brief fields are stored as one
+# item per line (or comma/semicolon separated) and every consumer needs to
+# break them apart the same way.
+split_multivalue = _split_for_pills
+
+
 # ── Structured (JSON) field helpers ─────────────────────────────────────────
 
 
@@ -767,6 +773,51 @@ def _effective_display(field: BriefField, props: dict) -> str:
     return v
 
 
+def ad_copy_fields(props: dict) -> list[tuple[BriefField, str]]:
+    """Every brief field that is legal to feed into generated ad copy.
+
+    One implementation of the "what may reach a client-facing ad" rule, so
+    the brief preview and the video script generator can never disagree
+    about it. Excluded:
+
+      - `internal=True` fields — budget, resident demographics (ICP),
+        excluded neighborhoods, client expectations, PMS/CMS. These are
+        operational or Fair-Housing-sensitive context, never ad input.
+      - tracking tables and document attachments — not prose.
+      - fields whose effective value is empty.
+
+    Values come from `resolve_value()` via `_effective_display`, so human
+    overrides win here exactly as they do everywhere else.
+    """
+    out: list[tuple[BriefField, str]] = []
+    for _section_label, fields in SECTIONS:
+        for f in fields:
+            if f.type in ("tracking_table", "documents") or f.internal:
+                continue
+            value = _effective_display(f, props)
+            if value:
+                out.append((f, value))
+    return out
+
+
+def ad_copy_fact_block(props: dict) -> str:
+    """`ad_copy_fields` rendered as the section-grouped prompt block."""
+    by_section: dict[str, list[str]] = {}
+    order: list[str] = []
+    for f, value in ad_copy_fields(props):
+        if f.section not in by_section:
+            by_section[f.section] = []
+            order.append(f.section)
+        by_section[f.section].append(f"  - {f.label}: {value}")
+
+    lines: list[str] = []
+    for section in order:
+        lines.append(f"{section}:")
+        lines.extend(by_section[section])
+        lines.append("")
+    return "\n".join(lines)
+
+
 def generate_summary(company_props: dict, property_name: str) -> str:
     """2-3 sentence executive summary of the community.
 
@@ -838,25 +889,14 @@ def _llm_call(*, company_props: dict, property_name: str,
     if not ANTHROPIC_API_KEY:
         return "Preview unavailable: ANTHROPIC_API_KEY not set."
 
-    facts = []
-    for section_label, fields in SECTIONS:
-        section_lines = []
-        for f in fields:
-            # Tracking, documents, and internal/sensitive fields (budget,
-            # resident demographics, PMS/CMS, ...) are never ad-copy inputs.
-            if f.type in ("tracking_table", "documents") or f.internal:
-                continue
-            v = _effective_display(f, company_props)
-            if v:
-                section_lines.append(f"  - {f.label}: {v}")
-        if section_lines:
-            facts.append(f"{section_label}:")
-            facts.extend(section_lines)
-            facts.append("")
-    if not facts:
+    # Tracking, documents, and internal/sensitive fields (budget, resident
+    # demographics, PMS/CMS, ...) are never ad-copy inputs — ad_copy_fields
+    # owns that rule for every surface that generates copy.
+    facts = ad_copy_fact_block(company_props)
+    if not facts.strip():
         return "Not enough field data to draft a preview yet."
 
-    user_input = f"PROPERTY: {property_name}\n\n" + "\n".join(facts)
+    user_input = f"PROPERTY: {property_name}\n\n" + facts
 
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)

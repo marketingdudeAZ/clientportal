@@ -16,6 +16,8 @@ Error contract:
       failure — the module may be deployed without every integration enabled.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any
 

@@ -13,6 +13,8 @@ schema inspection is complete. Use get_ninjacat_metrics() only after
 actual column names are documented.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
