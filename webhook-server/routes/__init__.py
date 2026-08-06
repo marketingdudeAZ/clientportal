@@ -16,6 +16,7 @@ from .property_brief import property_brief_bp
 from .redlight import redlight_lite_bp
 from .self_checkout import self_checkout_bp
 from .seo import seo_bp
+from .ticket_profile import ticket_profile_bp
 from .webhooks import register_webhook_blueprints
 
 
@@ -35,4 +36,7 @@ def register_all(app):
     # Loop 1 self-checkout — every endpoint 404s until SELF_CHECKOUT_ENABLED=true,
     # so registering here is inert until you flip the flag.
     app.register_blueprint(self_checkout_bp)
+    # Ticket → property-profile loop — every endpoint 404s until
+    # TICKET_PROFILE_LOOP_ENABLED=true, so this is inert until the flag flips.
+    app.register_blueprint(ticket_profile_bp)
     register_webhook_blueprints(app)
