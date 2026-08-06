@@ -54,6 +54,26 @@ DATAFORSEO_DEFAULT_LANGUAGE = os.getenv("DATAFORSEO_DEFAULT_LANGUAGE", "en")
 BIGQUERY_SEO_RANKS_TABLE = os.getenv("BIGQUERY_SEO_RANKS_TABLE", "seo_ranks_daily")
 BIGQUERY_SEO_AUDIT_TABLE = os.getenv("BIGQUERY_SEO_AUDIT_TABLE", "seo_onpage_audit")
 
+# --- Apartments.com ILS Performance Summary API (Layer 1 connector) ---
+# Account-scoped daily listing performance + lead data. See ADR 0021 and
+# webhook-server/apartmentscom_client.py.
+# Env var name on Render is `Costar_Rental_Manager_API_Key`; APARTMENTSCOM_API_KEY
+# is accepted as a local/dev fallback (see apartmentscom_client._api_key).
+APARTMENTSCOM_API_KEY = os.getenv("Costar_Rental_Manager_API_Key", "") or os.getenv(
+    "APARTMENTSCOM_API_KEY", ""
+)
+APARTMENTSCOM_BASE_URL = os.getenv(
+    "APARTMENTSCOM_BASE_URL",
+    "https://www.apartments.com/routes/mkt/vendor/analytics",
+)
+# BigQuery landing tables for apartments.com ILS data.
+BIGQUERY_APARTMENTSCOM_DAILY_TABLE = os.getenv(
+    "BIGQUERY_APARTMENTSCOM_DAILY_TABLE", "apartmentscom_ils_daily"
+)
+BIGQUERY_APARTMENTSCOM_MAP_TABLE = os.getenv(
+    "BIGQUERY_APARTMENTSCOM_MAP_TABLE", "apartmentscom_listing_map"
+)
+
 # --- Google Sheets ---
 GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID", "1jRqmEzhOIe72zgwIOcDZTyvde_Y0_jvayaLTZhva9mk")
 GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
