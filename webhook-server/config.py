@@ -86,6 +86,9 @@ CLICKUP_LISTS = {
     "onboarding": os.getenv("CLICKUP_LIST_ONBOARDING"),
     # Property brief intake — drives the automation in property_brief.py.
     "property_brief": os.getenv("CLICKUP_LIST_PROPERTY_BRIEF"),
+    # Fulfillment hand-off for self-checkout deals (fulfillment_task.py,
+    # Bridge 1). Unset → the deal→ClickUp bridge no-ops.
+    "fulfillment": os.getenv("CLICKUP_LIST_FULFILLMENT"),
 }
 # Per-stage ClickUp ticket statuses for the property brief workflow.
 # These slugs are passed to ClickUp's update-task API; they must match the

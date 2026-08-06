@@ -715,6 +715,22 @@ def write_field(company_id: str, field_key: str, value: str,
                 except Exception as e:
                     logger.warning("audit write failed %s/%s: %s",
                                    company_id, field_key, e)
+                # Fan the real change out to downstream systems (Bridge 2:
+                # real-time Fluency; Bridge 3: ClickUp notice). Off-thread and
+                # self-guarded — never blocks or fails the save.
+                try:
+                    import brief_hooks
+                    brief_hooks.on_field_written(
+                        company_id=str(company_id),
+                        field_key=field_key,
+                        field_label=field.label,
+                        old_value=str(old_value),
+                        new_value=new_value,
+                        edited_by=edited_by,
+                    )
+                except Exception as e:
+                    logger.warning("brief hook dispatch failed %s/%s: %s",
+                                   company_id, field_key, e)
             return True, new_value
         logger.warning("write_field %s/%s -> %s %s", company_id, field_key, r.status_code, r.text[:200])
         return False, f"HubSpot {r.status_code}"

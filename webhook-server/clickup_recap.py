@@ -10,6 +10,8 @@ never returns a fuzzy or ambiguous result — zero or >1 uuid matches → skip.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 
 import requests
@@ -23,6 +25,32 @@ from brief_ai_drafter import normalize_domain
 logger = logging.getLogger(__name__)
 HS = "https://api.hubapi.com"
 PROCESSED_TAG = "recap-posted"
+
+
+def verify_webhook_auth(raw: bytes, signature: str, token: str) -> bool:
+    """Auth for the ticket-complete receiver: ClickUp native webhook
+    X-Signature (HMAC-SHA256 of the raw body) OR a ?token= matching a secret
+    (ClickUp Automation 'call webhook' action).
+
+    ClickUp generates a distinct server-side secret per native webhook, so
+    CLICKUP_WEBHOOK_SECRET is a comma-separated list — the same convention the
+    property-brief receiver uses. Unlike that receiver, no configured secret
+    means REJECT: this endpoint writes client-visible notes, so it never runs
+    unauthenticated.
+    """
+    from config import CLICKUP_WEBHOOK_SECRET
+    secrets = [s.strip() for s in (CLICKUP_WEBHOOK_SECRET or "").split(",") if s.strip()]
+    if not secrets:
+        return False
+    if signature:
+        for secret in secrets:
+            expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+            if hmac.compare_digest(expected, signature):
+                return True
+        return False
+    if token:
+        return any(hmac.compare_digest(token, secret) for secret in secrets)
+    return False
 
 
 def _hdrs():

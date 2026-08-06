@@ -6181,27 +6181,20 @@ def clickup_ticket_complete():
     """ClickUp ticket Done → client-facing recap note on the matched HubSpot company.
 
     Auth: ClickUp native webhook X-Signature (HMAC-SHA256 of the raw body with
-    CLICKUP_WEBHOOK_SECRET) OR a ?token= matching that secret (for a ClickUp
-    Automation 'call webhook' action). ?dry_run=1 returns the draft WITHOUT
-    posting — use it to validate on a real completed ticket first.
+    a CLICKUP_WEBHOOK_SECRET entry — comma-separated, one per webhook) OR a
+    ?token= matching one of those secrets (for a ClickUp Automation 'call
+    webhook' action). ?dry_run=1 returns the draft WITHOUT posting — use it to
+    validate on a real completed ticket first.
+    See docs/RUNBOOKS/ticket-recap-activation.md for go-live steps.
     """
     if request.method == "OPTIONS":
         return _preflight_response()
-    import hmac as _hmac, hashlib as _hashlib, threading as _threading
-    from config import CLICKUP_WEBHOOK_SECRET
+    import threading as _threading
+    import clickup_recap
 
     raw = request.get_data() or b""
-    secret = CLICKUP_WEBHOOK_SECRET or ""
-    sig = request.headers.get("X-Signature", "")
-    token = request.args.get("token", "")
-    authed = False
-    if secret:
-        if sig:
-            expected = _hmac.new(secret.encode(), raw, _hashlib.sha256).hexdigest()
-            authed = _hmac.compare_digest(expected, sig)
-        elif token:
-            authed = _hmac.compare_digest(token, secret)
-    if not authed:
+    if not clickup_recap.verify_webhook_auth(
+            raw, request.headers.get("X-Signature", ""), request.args.get("token", "")):
         return jsonify({"error": "unauthorized"}), 401
 
     payload = request.get_json(silent=True) or {}
@@ -6212,7 +6205,6 @@ def clickup_ticket_complete():
     if not task_id:
         return jsonify({"error": "no task_id in payload"}), 400
 
-    import clickup_recap
     if request.args.get("dry_run") in ("1", "true", "yes"):
         return jsonify(clickup_recap.process_completed_task(task_id, dry_run=True))
 
