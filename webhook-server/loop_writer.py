@@ -74,6 +74,8 @@ LOOP_EVENT_TYPES = {
     "property_brief_published", "community_brief_published",
     "aeo_content_generated", "aeo_citation_detected",
     "review_received", "page_health_changed",
+    # engage — ticket → property-profile loop (ticket_profile_sync.py)
+    "profile_update_proposed", "profile_update_accepted", "profile_update_rejected",
     # convert
     "lead_submitted", "tour_scheduled", "application_received",
     "lease_signed", "am_activity",

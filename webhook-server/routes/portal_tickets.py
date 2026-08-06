@@ -57,7 +57,17 @@ def ticket_types():
     except Exception as e:  # noqa: BLE001
         logger.warning("portal ticket types failed: %s", e)
         types = []
-    return jsonify({"types": types})
+    # The property fields we attach server-side. Returned so the form can SAY
+    # what it's pre-filling instead of the requester wondering where the
+    # property info went (scope doc §2 — "the big UX win").
+    from config import PORTAL_TICKET_PREFILL_FIELDS
+    seen, prefill = {"uuid"}, []   # uuid is plumbing; don't show it to a client
+    for name in PORTAL_TICKET_PREFILL_FIELDS:
+        key = name.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            prefill.append(name.strip())
+    return jsonify({"types": types, "prefill_fields": prefill})
 
 
 # ── POST /api/portal-tickets/create ──────────────────────────────────────────
