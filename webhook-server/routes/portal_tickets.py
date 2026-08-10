@@ -12,29 +12,24 @@ Endpoints:
   GET  /api/portal-tickets/admin/discover    (internal) map ClickUp lists → env list ids
 
 Auth — dual, mirroring the Loop blueprint:
-  * Portal user via a VERIFIED Clerk session JWT (Authorization: Bearer …)
+  * Portal user via X-Portal-Email (the requester's own address)
   * Internal/server via X-Internal-Key (required for the admin discover route)
 
-These routes file work into ClickUp and read a property's request history, so
-a bare X-Portal-Email header is not accepted as identity — see `_identity()`.
-Portal users are additionally gated behind the `portal_tickets` feature, which
-is what keeps the pilot to named people rather than the whole portal.
+Read `_identity()` before trusting the email for anything: it is ATTRIBUTION,
+not authentication. What bounds the pilot is `PORTAL_TICKETS_PILOT_EMAILS`
+plus the `portal_tickets` feature gate, not the address itself.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 
 from flask import Blueprint, jsonify, request
 
 import portal_tickets
-from _route_utils import (
-    current_portal_email,
-    preflight_response,
-    require_access,
-    verified_portal_email,
-)
+from _route_utils import current_portal_email, preflight_response, require_access
 
 logger = logging.getLogger(__name__)
 
@@ -42,52 +37,82 @@ portal_tickets_bp = Blueprint("portal_tickets", __name__)
 
 FEATURE_KEY = "portal_tickets"
 
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# The frontend historically sent `window.__PORTAL_EMAIL__ || 'portal@rpmliving.com'`,
+# so every unresolved user collapsed into one shared address. Once the mapping
+# table fills with it, "who filed this?" is unanswerable for those rows and
+# cannot be reconstructed — so the sentinel is rejected at the door rather than
+# cleaned up later.
+_SENTINEL_EMAILS = {"portal@rpmliving.com", "portal@rpmliving.com".upper()}
+
 
 def _is_internal(req) -> bool:
     key = req.headers.get("X-Internal-Key", "")
     return bool(key and key == os.environ.get("INTERNAL_API_KEY", ""))
 
 
-def _dev_mode() -> bool:
-    """Local development only — never true on Render."""
-    return os.environ.get("FLASK_ENV") == "development"
+def _pilot_allowlist() -> set:
+    """Emails permitted to use ticketing, from PORTAL_TICKETS_PILOT_EMAILS.
+
+    Empty (the default) means "no extra restriction — the feature gate decides".
+    Set it to the pilot's addresses and ticketing is closed to everyone else,
+    including other RPM staff, who would otherwise pass the Beta gate on the
+    strength of their email domain alone.
+    """
+    raw = os.environ.get("PORTAL_TICKETS_PILOT_EMAILS", "")
+    return {p.strip().lower() for p in raw.split(",") if p.strip()}
 
 
 def _identity(req):
     """Resolve the caller. Returns (email, is_internal) or None if unauthorized.
 
-    Fails CLOSED: a caller-supplied X-Portal-Email is not identity here. The
-    old check accepted any non-empty header, so `curl -H 'X-Portal-Email: x'`
-    could file tickets against, and enumerate the request history of, any
-    property in the portfolio. Only two things authenticate now:
+    ATTRIBUTION, NOT AUTHENTICATION. The requester's email is asserted — typed
+    by them, or prefilled by the portal from their HubSpot membership — and we
+    take it at face value. Anyone who can reach this API can claim any address;
+    CORS constrains browsers, not curl. Nothing downstream should treat this
+    email as proof of anything, and it must never become the basis for showing
+    one property's data to another property's people.
 
-      * X-Internal-Key  — server-to-server (also grants internal audience)
-      * a verified Clerk Bearer token — the portal frontend already attaches
-        one to every fetch (client-portal.html)
+    What actually bounds exposure, in order:
+      * PORTAL_TICKETS_PILOT_EMAILS — the pilot roster, exact-match
+      * require_access("portal_tickets") — the Beta feature gate
+      * the ticket surface itself, which is dark until CLICKUP_LIST_* is set
 
-    The header fallback survives only under FLASK_ENV=development so local work
-    doesn't need a live Clerk session.
+    The address must be well-formed and must not be the shared sentinel, so
+    `submitted_by` is a real person from the first row onward.
     """
     if _is_internal(req):
         return (current_portal_email() or "internal@rpmliving.com", True)
-    email = verified_portal_email()
-    if email:
-        return (email, False)
-    if _dev_mode() and current_portal_email():
-        return (current_portal_email(), False)
-    return None
+    email = current_portal_email()
+    if not email or not _EMAIL_RE.match(email):
+        return None
+    if email.lower() in _SENTINEL_EMAILS:
+        return None
+    return (email, False)
 
 
 def _gate(req):
-    """Authenticate + feature-gate. Returns (identity, None) or (None, response)."""
+    """Identify + gate. Returns (identity, None) or (None, response)."""
     ident = _identity(req)
     if not ident:
-        return None, (jsonify({"error": "auth required"}), 401)
+        return None, (jsonify({
+            "error": "Enter the email address you want updates sent to.",
+        }), 401)
     email, is_internal = ident
-    if not is_internal:
-        denied = require_access(FEATURE_KEY, email)
-        if denied:
-            return None, denied
+    if is_internal:
+        return ident, None
+    roster = _pilot_allowlist()
+    if roster and email.lower() not in roster:
+        logger.info("portal ticket: %r is not on the pilot roster", email)
+        return None, (jsonify({
+            "error": "Portal ticketing is in a limited pilot and isn't open to "
+                     "this account yet.",
+            "feature": FEATURE_KEY,
+        }), 403)
+    denied = require_access(FEATURE_KEY, email)
+    if denied:
+        return None, denied
     return ident, None
 
 

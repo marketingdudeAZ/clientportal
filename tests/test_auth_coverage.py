@@ -29,8 +29,8 @@ os.environ.setdefault("WEBHOOK_SECRET", "test")
 #   HMAC_BODY       — webhook body HMAC via hmac_validator.validate_signature
 #   INTERNAL_KEY    — server-to-server shared secret via require_internal_key
 #   PORTAL_EMAIL    — interim portal trust via X-Portal-Email header read
-#   VERIFIED_CLERK  — proven identity: a Clerk session JWT verified in-request,
-#                     NOT an asserted header (portal ticketing)
+#   PILOT_ROSTER    — asserted portal email + exact-match pilot allowlist +
+#                     feature gate (portal ticketing; attribution, not proof)
 #   PROVIDER_SIG    — delegated provider signature check via normalize_webhook
 #   SIGNED_REQUEST  — future signed-request decorator (reserved)
 AUTH_MARKERS = (
@@ -46,8 +46,7 @@ AUTH_MARKERS = (
     "_resolve_onboarding_context", # PORTAL_EMAIL (onboarding context helper)
     "_is_authorized",              # INTERNAL_KEY/PORTAL_EMAIL (loop blueprint helper)
     "_is_internal",                # INTERNAL_KEY (loop blueprint internal-only helper)
-    "_gate",                       # VERIFIED_CLERK + feature gate (portal-tickets blueprint)
-    "verified_portal_email",       # VERIFIED_CLERK (Clerk JWT verified in-request)
+    "_gate",                       # PILOT_ROSTER (portal-tickets blueprint)
     "normalize_webhook",           # PROVIDER_SIG
     "require_portal_auth",         # SIGNED_REQUEST (reserved)
     "verify_request_signature",    # SIGNED_REQUEST (raw helper)

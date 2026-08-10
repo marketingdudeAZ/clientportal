@@ -1,15 +1,16 @@
-"""Auth boundary on the portal ticket routes.
+"""Who may use the portal ticket routes, and what the email actually means.
 
-The old check treated ANY non-empty X-Portal-Email as authorization, and
-`company_id` flowed from the request body/query straight into ClickUp and
-BigQuery. So `curl -H 'X-Portal-Email: anything'` could file tickets against,
-and read the request history of, any property in the portfolio. CORS
-constrains browsers, not curl.
+The requester's email is ASSERTED — typed by them, or prefilled by the portal
+from their HubSpot membership. It is attribution, not authentication: anyone
+who can reach the API can claim any address. These tests pin the three things
+that do bound exposure, so nobody later mistakes the email for proof:
 
-These tests pin the two things that close it: identity must be PROVEN (a
-verified Clerk session token, or the internal key), and portal users must hold
-the `portal_tickets` feature — which is what keeps the pilot to named people
-instead of everyone with a portal login.
+  * PORTAL_TICKETS_PILOT_EMAILS — the pilot roster, exact-match
+  * require_access("portal_tickets") — the Beta feature gate
+  * a well-formed, non-sentinel address, so `submitted_by` names a real person
+
+The sentinel rule is the one that cannot be retrofitted: once the mapping table
+fills with a shared address, those rows can never be attributed.
 """
 
 from __future__ import annotations
@@ -48,23 +49,17 @@ class RouteTest(unittest.TestCase):
     this file first broke the loop-dashboard tests.
     """
 
-    #: overridden by the dev-mode suite
-    flask_env = "production"
+    #: overridden per suite; "" means no roster restriction
+    roster = ""
 
     def setUp(self):
         self.c = _app()
         patcher = mock.patch.dict(os.environ, {
             "INTERNAL_API_KEY": INTERNAL_KEY,
-            "FLASK_ENV": self.flask_env,
+            "PORTAL_TICKETS_PILOT_EMAILS": self.roster,
         })
         patcher.start()
         self.addCleanup(patcher.stop)
-
-
-def _verified(email):
-    """Patch Clerk verification to accept exactly one bearer token."""
-    return mock.patch("clerk_auth.verify_bearer",
-                      return_value={"email": email, "user_id": "u_1"})
 
 
 def _access(granted=True):
@@ -80,61 +75,97 @@ def _access(granted=True):
     return mock.patch("routes.portal_tickets.require_access", return_value=denial)
 
 
-class Unauthenticated(RouteTest):
-    def test_no_credentials_is_401(self):
+class EmailIsRequiredAndMustBeReal(RouteTest):
+    def test_no_email_is_401(self):
         self.assertEqual(self.c.get("/api/portal-tickets/types").status_code, 401)
 
-    def test_asserted_portal_email_alone_is_no_longer_identity(self):
-        """The regression this whole change exists for."""
-        r = self.c.get("/api/portal-tickets?company_id=cid-someone-elses",
-                       headers={"X-Portal-Email": "attacker@example.com"})
+    def test_malformed_email_is_401(self):
+        r = self.c.get("/api/portal-tickets/types",
+                       headers={"X-Portal-Email": "not-an-email"})
         self.assertEqual(r.status_code, 401)
 
-    def test_asserted_email_cannot_file_a_ticket(self):
+    def test_the_shared_sentinel_is_rejected(self):
+        """`portal@rpmliving.com` was the frontend's fallback for every
+        unresolved user. Letting it through poisons submitted_by permanently."""
+        r = self.c.get("/api/portal-tickets/types",
+                       headers={"X-Portal-Email": "portal@rpmliving.com"})
+        self.assertEqual(r.status_code, 401)
+
+    def test_sentinel_cannot_file_a_ticket_either(self):
         with mock.patch.object(portal_tickets, "create_ticket") as create:
             r = self.c.post("/api/portal-tickets/create",
-                            headers={"X-Portal-Email": "attacker@example.com"},
+                            headers={"X-Portal-Email": "PORTAL@rpmliving.com"},
                             json={"company_id": "cid-42", "ticket_type": "general",
                                   "subject": "x"})
         self.assertEqual(r.status_code, 401)
         create.assert_not_called()
 
-    def test_an_unverifiable_bearer_token_is_401(self):
-        with mock.patch("clerk_auth.verify_bearer", return_value=None):
+    def test_a_real_address_gets_through(self):
+        with _access(True), mock.patch.object(portal_tickets, "types_with_schema",
+                                              return_value=[]):
             r = self.c.get("/api/portal-tickets/types",
-                           headers={"Authorization": "Bearer forged"})
-        self.assertEqual(r.status_code, 401)
-
-
-class FeatureGate(RouteTest):
-    def test_verified_user_without_the_feature_is_403(self):
-        with _verified("cm@example.com"), _access(False):
-            r = self.c.get("/api/portal-tickets/types",
-                           headers={"Authorization": "Bearer good"})
-        self.assertEqual(r.status_code, 403)
-
-    def test_verified_pilot_user_gets_through(self):
-        with _verified("pilot@example.com"), _access(True), \
-                mock.patch.object(portal_tickets, "types_with_schema", return_value=[]):
-            r = self.c.get("/api/portal-tickets/types",
-                           headers={"Authorization": "Bearer good"})
+                           headers={"X-Portal-Email": "cm@rpmliving.com"})
         self.assertEqual(r.status_code, 200)
 
-    def test_verified_identity_overrides_a_spoofed_email_header(self):
-        """A caller may send both; only the token's email may be recorded."""
-        with _verified("real@example.com"), _access(True), \
-                mock.patch.object(portal_tickets, "create_ticket",
-                                  return_value=({"ok": True}, 201)) as create:
+    def test_the_typed_email_is_what_gets_attributed(self):
+        with _access(True), mock.patch.object(portal_tickets, "create_ticket",
+                                              return_value=({"ok": True}, 201)) as create:
             self.c.post("/api/portal-tickets/create",
-                        headers={"Authorization": "Bearer good",
-                                 "X-Portal-Email": "spoofed@example.com"},
+                        headers={"X-Portal-Email": "Dana@rpmliving.com"},
                         json={"company_id": "cid-42", "ticket_type": "general",
                               "subject": "x"})
-        self.assertEqual(create.call_args.kwargs["submitted_by"], "real@example.com")
+        self.assertEqual(create.call_args.kwargs["submitted_by"], "dana@rpmliving.com")
+
+
+class PilotRoster(RouteTest):
+    roster = "pilot.one@rpmliving.com, Pilot.Two@rpmliving.com"
+
+    def test_roster_member_is_allowed(self):
+        with _access(True), mock.patch.object(portal_tickets, "types_with_schema",
+                                              return_value=[]):
+            r = self.c.get("/api/portal-tickets/types",
+                           headers={"X-Portal-Email": "pilot.one@rpmliving.com"})
+        self.assertEqual(r.status_code, 200)
+
+    def test_roster_match_is_case_insensitive(self):
+        with _access(True), mock.patch.object(portal_tickets, "types_with_schema",
+                                              return_value=[]):
+            r = self.c.get("/api/portal-tickets/types",
+                           headers={"X-Portal-Email": "pilot.two@rpmliving.com"})
+        self.assertEqual(r.status_code, 200)
+
+    def test_other_rpm_staff_are_kept_out_while_the_roster_is_set(self):
+        """The Beta feature gate admits anyone on the RPM domain. During a
+        1-3 person pilot that is far too wide, so the roster overrides it."""
+        with _access(True):
+            r = self.c.get("/api/portal-tickets/types",
+                           headers={"X-Portal-Email": "someone.else@rpmliving.com"})
+        self.assertEqual(r.status_code, 403)
+
+    def test_roster_blocks_filing_not_just_reading(self):
+        with _access(True), mock.patch.object(portal_tickets, "create_ticket") as create:
+            r = self.c.post("/api/portal-tickets/create",
+                            headers={"X-Portal-Email": "stranger@example.com"},
+                            json={"company_id": "cid-42", "ticket_type": "general",
+                                  "subject": "x"})
+        self.assertEqual(r.status_code, 403)
+        create.assert_not_called()
+
+
+class NoRosterFallsBackToTheFeatureGate(RouteTest):
+    roster = ""
+
+    def test_feature_denial_is_honoured(self):
+        with _access(False):
+            r = self.c.get("/api/portal-tickets/types",
+                           headers={"X-Portal-Email": "cm@example.com"})
+        self.assertEqual(r.status_code, 403)
 
 
 class InternalCaller(RouteTest):
-    def test_internal_key_authenticates_and_skips_the_feature_gate(self):
+    roster = "pilot.one@rpmliving.com"
+
+    def test_internal_key_bypasses_roster_and_feature_gate(self):
         with mock.patch.object(portal_tickets, "types_with_schema",
                                return_value=[]) as types:
             r = self.c.get("/api/portal-tickets/types",
@@ -142,55 +173,33 @@ class InternalCaller(RouteTest):
         self.assertEqual(r.status_code, 200)
         self.assertTrue(types.call_args.kwargs["include_internal"])
 
-    def test_wrong_internal_key_is_401(self):
+    def test_wrong_internal_key_without_an_email_is_401(self):
         r = self.c.get("/api/portal-tickets/types",
                        headers={"X-Internal-Key": "wrong"})
         self.assertEqual(r.status_code, 401)
 
     def test_portal_user_never_gets_the_internal_audience(self):
-        with _verified("pilot@example.com"), _access(True), \
-                mock.patch.object(portal_tickets, "types_with_schema",
-                                  return_value=[]) as types:
+        with _access(True), mock.patch.object(portal_tickets, "types_with_schema",
+                                              return_value=[]) as types:
             self.c.get("/api/portal-tickets/types",
-                       headers={"Authorization": "Bearer good"})
+                       headers={"X-Portal-Email": "pilot.one@rpmliving.com"})
         self.assertFalse(types.call_args.kwargs["include_internal"])
 
     def test_create_passes_the_internal_flag_through(self):
-        with _verified("pilot@example.com"), _access(True), \
-                mock.patch.object(portal_tickets, "create_ticket",
-                                  return_value=({"ok": True}, 201)) as create:
+        with _access(True), mock.patch.object(portal_tickets, "create_ticket",
+                                              return_value=({"ok": True}, 201)) as create:
             self.c.post("/api/portal-tickets/create",
-                        headers={"Authorization": "Bearer good"},
+                        headers={"X-Portal-Email": "pilot.one@rpmliving.com"},
                         json={"company_id": "cid-42", "ticket_type": "general",
                               "subject": "x"})
         self.assertFalse(create.call_args.kwargs["internal"])
 
 
-class DevModeEscapeHatch(RouteTest):
-    """Local work shouldn't need a live Clerk session — but this must never be
-    reachable on Render, so it is keyed to FLASK_ENV=development only."""
-
-    flask_env = "development"
-
-    def test_header_fallback_works_in_development(self):
-        with _access(True), mock.patch.object(portal_tickets, "types_with_schema",
-                                              return_value=[]):
-            r = self.c.get("/api/portal-tickets/types",
-                           headers={"X-Portal-Email": "dev@rpmliving.com"})
-        self.assertEqual(r.status_code, 200)
-
-    def test_header_fallback_is_closed_outside_development(self):
-        with mock.patch.dict(os.environ, {"FLASK_ENV": "production"}):
-            r = self.c.get("/api/portal-tickets/types",
-                           headers={"X-Portal-Email": "dev@rpmliving.com"})
-        self.assertEqual(r.status_code, 401)
-
-
 class DiscoverRouteStaysInternalOnly(RouteTest):
-    def test_verified_portal_user_cannot_discover_list_ids(self):
-        with _verified("pilot@example.com"), _access(True):
+    def test_portal_user_cannot_discover_list_ids(self):
+        with _access(True):
             r = self.c.get("/api/portal-tickets/admin/discover",
-                           headers={"Authorization": "Bearer good"})
+                           headers={"X-Portal-Email": "pilot.one@rpmliving.com"})
         self.assertEqual(r.status_code, 401)
 
 
