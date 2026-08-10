@@ -228,19 +228,34 @@ def _coerce(field_def: dict, value: Any) -> Any:
 
 def _build_custom_fields(
     list_id: str, inputs: dict | None, prefill: dict | None
-) -> tuple[list[dict], dict]:
+) -> tuple[list[dict], set, dict]:
     """Build ClickUp's `[{id, value}]` custom-fields payload.
 
     `inputs` keys may be field ids OR names (the dynamic form sends ids);
     `prefill` keys are ClickUp field names. Inputs win over prefill on overlap.
-    Returns (payload, applied) where `applied` is {field name: value} used for
-    the human-readable identity stamp in the task description.
+
+    Returns (payload, applied_keys, label_by_key):
+      * `applied_keys` holds BOTH the field id and the lowercased field name for
+        every field that made it onto the task. The description filter tests
+        membership against this, and the form posts ids while prefill posts
+        names — so a name-only set would never match and every mapped value
+        would be duplicated into the description (the bug this shape prevents).
+      * `label_by_key` maps either key space to the human field name, so any
+        leftover value renders as "Priority: High" and not as a raw field uuid.
     """
     defs = clickup_client.get_list_fields(list_id)
     by_id = {d.get("id"): d for d in defs}
     by_name = {(d.get("name") or "").strip().lower(): d for d in defs}
-    merged: dict[str, Any] = {}   # field_id -> coerced value
-    applied: dict[str, Any] = {}  # field name -> original value
+    merged: dict[str, Any] = {}      # field_id -> coerced value
+    applied_keys: set = set()        # {field id, lowercased field name}
+    label_by_key: dict[str, str] = {}
+
+    for d in defs:
+        name = (d.get("name") or "").strip()
+        if d.get("id"):
+            label_by_key[str(d["id"])] = name
+        if name:
+            label_by_key[name.lower()] = name
 
     def resolve(key: Any, value: Any) -> None:
         d = by_id.get(key) or by_name.get(str(key).strip().lower())
@@ -250,7 +265,8 @@ def _build_custom_fields(
         if cu_val is None:
             return
         merged[d.get("id")] = cu_val
-        applied[d.get("name")] = value
+        applied_keys.add(d.get("id"))
+        applied_keys.add((d.get("name") or "").strip().lower())
 
     for name, value in (prefill or {}).items():
         resolve(name, value)
@@ -258,11 +274,12 @@ def _build_custom_fields(
         resolve(key, value)
 
     payload = [{"id": fid, "value": v} for fid, v in merged.items()]
-    return payload, applied
+    return payload, applied_keys, label_by_key
 
 
-def _description(applied: dict, submitted_by: str, company_id: str,
-                 property_uuid: str, extra: dict | None) -> str:
+def _description(applied_keys: set, submitted_by: str, company_id: str,
+                 property_uuid: str, extra: dict | None,
+                 label_by_key: dict | None = None) -> str:
     """A provenance + identity stamp so the recap automation can match the task
     back to the property with confidence."""
     lines = ["Submitted via the RPM client portal."]
@@ -276,11 +293,16 @@ def _description(applied: dict, submitted_by: str, company_id: str,
     if ident:
         lines.append("Property: " + " · ".join(ident))
     # Surface any free-text the form collected that isn't a mapped custom field.
+    # `extra` is keyed by ClickUp field IDs; `applied_keys` carries ids AND
+    # lowercased names, so a value that landed on the task is never repeated here.
+    labels = label_by_key or {}
     for k, v in (extra or {}).items():
         if k in ("subject", "name") or not v:
             continue
-        if k not in applied:
-            lines.append(f"{k}: {v}")
+        key = str(k).strip()
+        if key in applied_keys or key.lower() in applied_keys:
+            continue
+        lines.append(f"{labels.get(key) or labels.get(key.lower()) or key}: {v}")
     return "\n".join(lines)
 
 
@@ -294,10 +316,26 @@ def create_ticket(
     fields: dict | None = None,
     submitted_by: str = "",
     property_uuid: str = "",
+    internal: bool = False,
 ) -> tuple[dict, int]:
-    """Create a ClickUp task for a portal ticket. Returns (body, http_status)."""
+    """Create a ClickUp task for a portal ticket. Returns (body, http_status).
+
+    `internal` mirrors the read-side audience filter in `configured_types()`.
+    Without it a portal user could POST any registry key — including
+    `dispo_cancel`, the list that governs whether a property gets cancelled —
+    because knowing the key was the only thing standing in the way. Callers
+    pass the SAME internal signal they use to decide `include_internal`.
+    """
     t = _type_by_key(type_key)
     if not t:
+        return {"ok": False, "error": "Unknown ticket type."}, 400
+    # Deliberately the identical response to an unknown key: a client caller
+    # must not be able to probe which internal ticket types exist.
+    if t.get("audience") != "client" and not internal:
+        logger.warning(
+            "portal ticket: non-internal caller %r attempted internal type %r",
+            submitted_by or "anonymous", type_key,
+        )
         return {"ok": False, "error": "Unknown ticket type."}, 400
     list_id = _list_id_for(t)
     if not list_id:
@@ -307,8 +345,9 @@ def create_ticket(
 
     subject = (subject or "").strip() or t["label"]
     prefill = _prefill_values(company_id, property_uuid)
-    cf_payload, applied = _build_custom_fields(list_id, fields, prefill)
-    description = _description(applied, submitted_by, company_id, property_uuid, fields)
+    cf_payload, applied_keys, labels = _build_custom_fields(list_id, fields, prefill)
+    description = _description(applied_keys, submitted_by, company_id, property_uuid,
+                               fields, labels)
 
     task = clickup_client.create_task(
         list_id,
@@ -321,6 +360,7 @@ def create_ticket(
         return {"ok": False, "error": "Couldn't create the ticket. Please try again."}, 502
 
     _record_mapping(task.get("id"), company_id, property_uuid, type_key, submitted_by)
+    _emit_filed(task.get("id"), company_id, property_uuid, type_key, submitted_by)
     return {"ok": True, "ticket": _shape_task(task, type_key)}, 201
 
 
@@ -384,6 +424,55 @@ def _record_mapping(task_id, company_id, property_uuid, type_key, submitted_by) 
         logger.warning("portal ticket mapping write failed for %s: %s", task_id, e)
 
 
+def _emit_filed(task_id, company_id, property_uuid, type_key, submitted_by) -> None:
+    """Best-effort funnel event. Never let instrumentation fail a ticket."""
+    if not task_id:
+        return
+    try:
+        import loop_ticket_events
+        loop_ticket_events.record_ticket_filed(
+            property_uuid or None,
+            company_id or None,
+            task_id=str(task_id),
+            ticket_type=type_key or "",
+            submitted_by=submitted_by or None,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("portal ticket loop event failed for %s: %s", task_id, e)
+
+
+def mapping_for_task(task_id: str) -> dict | None:
+    """The stored {company_id, property_uuid, ticket_type, submitted_by} for a
+    portal-created task, or None if this task didn't come from the portal.
+
+    This is the exact-lookup counterpart to `clickup_recap`'s domain/name
+    guessing: the portal wrote this row when it created the task, so for its
+    own tickets there is nothing to infer.
+    """
+    if not task_id:
+        return None
+    try:
+        import bigquery_client
+        if not bigquery_client.is_bigquery_configured():
+            return None
+        from google.cloud import bigquery
+        from config import BIGQUERY_PROJECT_ID
+        dataset = bigquery_client._dataset()
+        sql = f"""
+            SELECT company_id, property_uuid, ticket_type, submitted_by
+            FROM `{BIGQUERY_PROJECT_ID}.{dataset}.{_MAPPING_TABLE}`
+            WHERE task_id = @tid
+            ORDER BY created_at DESC
+            LIMIT 1
+        """
+        params = [bigquery.ScalarQueryParameter("tid", "STRING", str(task_id))]
+        rows = bigquery_client.query(sql, params)
+        return rows[0] if rows else None
+    except Exception as e:  # noqa: BLE001 — fall back to the search path
+        logger.warning("portal ticket mapping lookup failed for %s: %s", task_id, e)
+        return None
+
+
 def _read_mappings(company_id: str, property_uuid: str, limit: int) -> list[dict]:
     try:
         import bigquery_client
@@ -421,7 +510,7 @@ def discover_list_ids() -> dict[str, Any]:
     lists = clickup_client.discover_workspace_lists(CLICKUP_WORKSPACE_ID)
     by_name = {(l.get("name") or "").strip().lower(): l for l in lists if l.get("id")}
 
-    matched, unmatched, env_lines = [], [], []
+    matched, unmatched, env_lines, internal_env_lines = [], [], [], []
     for t in PORTAL_TICKET_TYPES:
         candidates = [t["label"], *(t.get("aliases") or [])]
         found = None
@@ -435,18 +524,27 @@ def discover_list_ids() -> dict[str, Any]:
                 if any(c.strip().lower() in name or name in c.strip().lower() for c in candidates):
                     found = lst
                     break
+        audience = t.get("audience", "client")
         if found:
             matched.append({"key": t["key"], "label": t["label"],
                             "list_id": found["id"], "list_name": found["name"],
-                            "env": t["list_env"]})
-            env_lines.append(f'{t["list_env"]}={found["id"]}')
+                            "env": t["list_env"], "audience": audience})
+            line = f'{t["list_env"]}={found["id"]}'
+            (env_lines if audience == "client" else internal_env_lines).append(line)
         else:
-            unmatched.append({"key": t["key"], "label": t["label"], "env": t["list_env"]})
+            unmatched.append({"key": t["key"], "label": t["label"],
+                              "env": t["list_env"], "audience": audience})
 
     return {
         "workspace_id": CLICKUP_WORKSPACE_ID,
         "lists_found": len(lists),
         "matched": matched,
         "unmatched_types": unmatched,
+        # Client-facing types ONLY. `discover` used to emit all 8 types in one
+        # block, so the natural "paste this into Render" step silently turned on
+        # dispo_cancel and new_business — the lists that govern cancelling a
+        # property and sales intake. Those are split out deliberately: pasting
+        # them is a separate, conscious act.
         "env_block": "\n".join(env_lines),
+        "env_block_internal": "\n".join(internal_env_lines),
     }

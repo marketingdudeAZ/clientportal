@@ -154,6 +154,100 @@ class CoerceAndCreate(unittest.TestCase):
         self.assertEqual(body["ticket"]["status"], "Open")   # "to do" → Open
         self.assertEqual(body["ticket"]["type_label"], "General Ticket")
 
+    def test_mapped_values_are_not_duplicated_into_the_description(self):
+        """Regression: `extra` is keyed by field IDs and the applied set used to
+        be keyed by field NAMES, so the two key spaces never intersected and
+        every value the requester typed was echoed into the description behind
+        a raw ClickUp field uuid."""
+        with mock.patch.object(portal_tickets, "_record_mapping"):
+            portal_tickets.create_ticket(
+                "cid-42", "general",
+                subject="Update our hours",
+                fields={"f_pri": "High", "f_details": "Please update the pool photos"},
+                submitted_by="user@rpmliving.com",
+                property_uuid="u-1",
+            )
+        desc = self.created["description"]
+        self.assertNotIn("f_pri", desc)
+        self.assertNotIn("f_details", desc)
+        self.assertNotIn("Please update the pool photos", desc)
+        # The provenance stamp the recap matches on must survive.
+        self.assertIn("hubspot_company=cid-42", desc)
+        self.assertIn("uuid=u-1", desc)
+        self.assertIn("user@rpmliving.com", desc)
+
+    def test_unmapped_freetext_still_surfaces_under_its_field_label(self):
+        with mock.patch.object(portal_tickets, "_record_mapping"):
+            portal_tickets.create_ticket(
+                "cid-42", "general", subject="x",
+                fields={"not_a_clickup_field": "ring the doorbell twice"},
+                property_uuid="u-1",
+            )
+        self.assertIn("ring the doorbell twice", self.created["description"])
+
+    def test_filing_emits_a_loop_event(self):
+        import loop_ticket_events
+        with mock.patch.object(portal_tickets, "_record_mapping"), \
+                mock.patch.object(loop_ticket_events, "record_ticket_filed") as ev:
+            portal_tickets.create_ticket(
+                "cid-42", "general", subject="x", fields={},
+                submitted_by="user@rpmliving.com", property_uuid="u-1")
+        ev.assert_called_once()
+        self.assertEqual(ev.call_args.kwargs["task_id"], "task-1")
+        self.assertEqual(ev.call_args.kwargs["ticket_type"], "general")
+
+    def test_a_failing_loop_event_never_fails_the_ticket(self):
+        import loop_ticket_events
+        with mock.patch.object(portal_tickets, "_record_mapping"), \
+                mock.patch.object(loop_ticket_events, "record_ticket_filed",
+                                  side_effect=RuntimeError("BQ down")):
+            body, status = portal_tickets.create_ticket(
+                "cid-42", "general", subject="x", fields={}, property_uuid="u-1")
+        self.assertEqual(status, 201)
+        self.assertTrue(body["ok"])
+
+
+class InternalAudienceGuard(unittest.TestCase):
+    """A portal user must not be able to file into an internal list just by
+    knowing its key — `dispo_cancel` governs whether a property gets cancelled."""
+
+    def test_client_caller_cannot_file_an_internal_type(self):
+        body, status = portal_tickets.create_ticket(
+            "cid-42", "dispo_cancel", subject="cancel us", fields={}, internal=False)
+        self.assertEqual(status, 400)
+        self.assertFalse(body["ok"])
+
+    def test_response_is_indistinguishable_from_an_unknown_type(self):
+        # Otherwise the error message itself enumerates the internal types.
+        internal_body, internal_status = portal_tickets.create_ticket(
+            "cid-42", "dispo_cancel", subject="x", fields={}, internal=False)
+        unknown_body, unknown_status = portal_tickets.create_ticket(
+            "cid-42", "no_such_type", subject="x", fields={}, internal=False)
+        self.assertEqual(internal_status, unknown_status)
+        self.assertEqual(internal_body, unknown_body)
+
+    def test_default_is_closed(self):
+        # Callers that forget the flag get the safe behaviour.
+        _, status = portal_tickets.create_ticket(
+            "cid-42", "dispo_cancel", subject="x", fields={})
+        self.assertEqual(status, 400)
+
+    def test_internal_caller_may_file_an_internal_type(self):
+        def _fake_create_task(list_id, name, **kw):
+            return {"id": "task-9", "name": name, "url": "u",
+                    "status": {"status": "to do"}, "date_created": "1720000000000"}
+
+        with mock.patch.object(clickup_client, "CLICKUP_API_KEY", "test-key"), \
+                mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()), \
+                mock.patch.object(clickup_client, "create_task", side_effect=_fake_create_task), \
+                mock.patch("hubspot_client.get_company", return_value={}), \
+                mock.patch.object(portal_tickets, "_record_mapping"), \
+                mock.patch.object(portal_tickets, "_emit_filed"):
+            body, status = portal_tickets.create_ticket(
+                "cid-42", "dispo_cancel", subject="x", fields={}, internal=True)
+        self.assertEqual(status, 201)
+        self.assertTrue(body["ok"])
+
 
 class CreateGuards(unittest.TestCase):
     def test_unknown_type_is_400(self):
@@ -182,6 +276,23 @@ class Discovery(unittest.TestCase):
         # alias: registry label is "Digital Marketing Review" (campaign_review)
         self.assertEqual(matched["campaign_review"], "L1")
         self.assertIn("CLICKUP_LIST_GENERAL=L2", out["env_block"])
+
+    def test_internal_list_ids_are_split_out_of_the_paste_block(self):
+        """The env block is pasted into Render as one step. Emitting the
+        internal lists alongside the client ones is what turns that paste into
+        a live authorization hole."""
+        lists = [
+            {"id": "L2", "name": "General Ticket", "space": "S", "folder": None},
+            {"id": "L9", "name": "Dispo / Cancel", "space": "S", "folder": None},
+            {"id": "L8", "name": "New Business", "space": "S", "folder": None},
+        ]
+        with mock.patch.object(clickup_client, "discover_workspace_lists", return_value=lists):
+            out = portal_tickets.discover_list_ids()
+        self.assertIn("CLICKUP_LIST_GENERAL=L2", out["env_block"])
+        self.assertNotIn("DISPO", out["env_block"])
+        self.assertNotIn("NEW_BUSINESS", out["env_block"])
+        self.assertIn("CLICKUP_LIST_DISPO_CANCEL=L9", out["env_block_internal"])
+        self.assertIn("CLICKUP_LIST_NEW_BUSINESS=L8", out["env_block_internal"])
 
 
 if __name__ == "__main__":

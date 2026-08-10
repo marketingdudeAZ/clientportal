@@ -78,8 +78,77 @@ def _one_with_uuid(results):
     return withu[0] if len(withu) == 1 else None
 
 
+def _company_by_id(company_id):
+    """Fetch one company by HubSpot id, shaped like a search result."""
+    try:
+        import hubspot_client
+        props = hubspot_client.get_company(
+            company_id, ["name", "domain", "website", "uuid", "property_code"]
+        ) or {}
+    except Exception as e:  # noqa: BLE001 — fall back to the search path
+        logger.warning("clickup_recap: company fetch %s failed: %s", company_id, e)
+        return None
+    if not props:
+        return None
+    return {"id": str(company_id), "properties": props}
+
+
+def _match_from_portal_mapping(task_id):
+    """Exact company for a PORTAL-created task, via the portal_tickets mapping.
+
+    The portal recorded task_id → company_id when it created the task, so for
+    its own tickets there is nothing to infer. Without this the recap re-derives
+    the company from the website domain, and any property whose `website` is
+    stale or missing gets NO recap at all — silently. That recap is the entire
+    reason a requester files in the portal instead of ClickUp.
+    """
+    if not task_id:
+        return None
+    try:
+        import portal_tickets
+        row = portal_tickets.mapping_for_task(str(task_id))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("clickup_recap: portal mapping lookup failed for %s: %s", task_id, e)
+        return None
+    if not row:
+        return None
+    company_id = (row.get("company_id") or "").strip()
+    if not company_id:
+        return None
+    return _company_by_id(company_id)
+
+
+def _emit_matched(task_id, company, method):
+    """Best-effort funnel event — never let instrumentation break a recap."""
+    try:
+        import loop_ticket_events
+        props = company.get("properties") or {}
+        loop_ticket_events.record_recap_matched(
+            (props.get("uuid") or "").strip() or None,
+            str(company.get("id") or "") or None,
+            task_id=str(task_id),
+            method=method,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("clickup_recap: match event failed for %s: %s", task_id, e)
+
+
+def _emit_unmatched(task_id, reason, portal_created):
+    try:
+        import loop_ticket_events
+        loop_ticket_events.record_recap_unmatched(
+            task_id=str(task_id), reason=reason, portal_created=bool(portal_created),
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("clickup_recap: unmatched event failed for %s: %s", task_id, e)
+
+
 def match_company_for_ticket(task):
     """Return (company_dict, method) or (None, reason). Never fuzzy/ambiguous."""
+    # 0. Portal-created tickets carry an exact mapping — always prefer it.
+    hit = _match_from_portal_mapping(task.get("id"))
+    if hit:
+        return hit, "portal_mapping"
     cf = clickup_client.custom_field_value
     # 1. Property URL → domain (primary). Try exact domain, then website contains.
     url = cf(task, "Property URL") or cf(task, "Property Domain") or cf(task, "Website")
@@ -132,10 +201,27 @@ def process_completed_task(task_id, dry_run=False):
         return {"skipped": "already processed"}
 
     company, method = match_company_for_ticket(task)
+    portal_created = "portal" in tags
     if not company:
-        logger.info("clickup_recap: no company match for task %s — %s", task_id, method)
-        return {"skipped": f"no match ({method})", "type": ttype}
+        # A portal-created task that fails to match is a real defect, not a
+        # miss: we wrote the mapping row ourselves when we created it. Most
+        # likely the mapping write silently no-op'd (BigQuery unconfigured),
+        # which is invisible from every other surface.
+        if portal_created:
+            logger.error(
+                "clickup_recap: PORTAL-created task %s failed to match a company — %s. "
+                "The portal_tickets mapping row is missing; check BigQuery config.",
+                task_id, method,
+            )
+        else:
+            logger.info("clickup_recap: no company match for task %s — %s", task_id, method)
+        if not dry_run:
+            _emit_unmatched(task_id, method, portal_created)
+        return {"skipped": f"no match ({method})", "type": ttype,
+                "portal_created": portal_created}
     company_id = company.get("id")
+    if not dry_run:
+        _emit_matched(task_id, company, method)
     name = (company.get("properties") or {}).get("name") or task.get("name") or "this property"
 
     comments = clickup_client.get_comments(task_id)

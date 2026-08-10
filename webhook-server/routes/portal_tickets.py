@@ -12,8 +12,13 @@ Endpoints:
   GET  /api/portal-tickets/admin/discover    (internal) map ClickUp lists → env list ids
 
 Auth — dual, mirroring the Loop blueprint:
-  * Portal user via X-Portal-Email
+  * Portal user via a VERIFIED Clerk session JWT (Authorization: Bearer …)
   * Internal/server via X-Internal-Key (required for the admin discover route)
+
+These routes file work into ClickUp and read a property's request history, so
+a bare X-Portal-Email header is not accepted as identity — see `_identity()`.
+Portal users are additionally gated behind the `portal_tickets` feature, which
+is what keeps the pilot to named people rather than the whole portal.
 """
 
 from __future__ import annotations
@@ -24,23 +29,66 @@ import os
 from flask import Blueprint, jsonify, request
 
 import portal_tickets
-from _route_utils import preflight_response
+from _route_utils import (
+    current_portal_email,
+    preflight_response,
+    require_access,
+    verified_portal_email,
+)
 
 logger = logging.getLogger(__name__)
 
 portal_tickets_bp = Blueprint("portal_tickets", __name__)
 
-
-def _is_authorized(req) -> bool:
-    if req.headers.get("X-Portal-Email", "").strip():
-        return True
-    key = req.headers.get("X-Internal-Key", "")
-    return bool(key and key == os.environ.get("INTERNAL_API_KEY", ""))
+FEATURE_KEY = "portal_tickets"
 
 
 def _is_internal(req) -> bool:
     key = req.headers.get("X-Internal-Key", "")
     return bool(key and key == os.environ.get("INTERNAL_API_KEY", ""))
+
+
+def _dev_mode() -> bool:
+    """Local development only — never true on Render."""
+    return os.environ.get("FLASK_ENV") == "development"
+
+
+def _identity(req):
+    """Resolve the caller. Returns (email, is_internal) or None if unauthorized.
+
+    Fails CLOSED: a caller-supplied X-Portal-Email is not identity here. The
+    old check accepted any non-empty header, so `curl -H 'X-Portal-Email: x'`
+    could file tickets against, and enumerate the request history of, any
+    property in the portfolio. Only two things authenticate now:
+
+      * X-Internal-Key  — server-to-server (also grants internal audience)
+      * a verified Clerk Bearer token — the portal frontend already attaches
+        one to every fetch (client-portal.html)
+
+    The header fallback survives only under FLASK_ENV=development so local work
+    doesn't need a live Clerk session.
+    """
+    if _is_internal(req):
+        return (current_portal_email() or "internal@rpmliving.com", True)
+    email = verified_portal_email()
+    if email:
+        return (email, False)
+    if _dev_mode() and current_portal_email():
+        return (current_portal_email(), False)
+    return None
+
+
+def _gate(req):
+    """Authenticate + feature-gate. Returns (identity, None) or (None, response)."""
+    ident = _identity(req)
+    if not ident:
+        return None, (jsonify({"error": "auth required"}), 401)
+    email, is_internal = ident
+    if not is_internal:
+        denied = require_access(FEATURE_KEY, email)
+        if denied:
+            return None, denied
+    return ident, None
 
 
 # ── GET /api/portal-tickets/types ────────────────────────────────────────────
@@ -49,11 +97,12 @@ def _is_internal(req) -> bool:
 def ticket_types():
     if request.method == "OPTIONS":
         return preflight_response()
-    if not _is_authorized(request):
-        return jsonify({"error": "auth required"}), 401
-    include_internal = _is_internal(request)
+    ident, denied = _gate(request)
+    if denied:
+        return denied
+    _, is_internal = ident
     try:
-        types = portal_tickets.types_with_schema(include_internal=include_internal)
+        types = portal_tickets.types_with_schema(include_internal=is_internal)
     except Exception as e:  # noqa: BLE001
         logger.warning("portal ticket types failed: %s", e)
         types = []
@@ -66,8 +115,10 @@ def ticket_types():
 def ticket_create():
     if request.method == "OPTIONS":
         return preflight_response()
-    if not _is_authorized(request):
-        return jsonify({"error": "auth required"}), 401
+    ident, denied = _gate(request)
+    if denied:
+        return denied
+    submitted_by, is_internal = ident
 
     body = request.get_json(silent=True) or {}
     company_id = (body.get("company_id") or "").strip()
@@ -75,7 +126,6 @@ def ticket_create():
     subject = (body.get("subject") or "").strip()
     fields = body.get("fields") or {}
     property_uuid = (body.get("uuid") or "").strip()
-    submitted_by = request.headers.get("X-Portal-Email", "").strip()
 
     if not company_id:
         return jsonify({"ok": False, "error": "company_id required"}), 400
@@ -91,6 +141,7 @@ def ticket_create():
         fields=fields,
         submitted_by=submitted_by,
         property_uuid=property_uuid,
+        internal=is_internal,
     )
     return jsonify(body_out), status
 
@@ -101,8 +152,9 @@ def ticket_create():
 def ticket_list():
     if request.method == "OPTIONS":
         return preflight_response()
-    if not _is_authorized(request):
-        return jsonify({"error": "auth required"}), 401
+    _, denied = _gate(request)
+    if denied:
+        return denied
     company_id = (request.args.get("company_id") or "").strip()
     property_uuid = (request.args.get("uuid") or "").strip()
     if not company_id and not property_uuid:

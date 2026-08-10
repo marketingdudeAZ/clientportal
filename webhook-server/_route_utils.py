@@ -65,6 +65,29 @@ def current_portal_email():
     return request.headers.get("X-Portal-Email", "").lower().strip()
 
 
+def verified_portal_email():
+    """The portal email PROVEN by a Clerk session JWT, or "" if unproven.
+
+    Deliberately different from `current_portal_email()`, which reads a header
+    any caller can set. server.py's `_clerk_identity` back-fills X-Portal-Email
+    from a verified Bearer token, but with no Bearer present it preserves
+    "legacy header behavior" — so reading the header can confirm a claim, never
+    prove one. Routes handling multi-tenant writes verify the token directly.
+
+    Returns "" when no Bearer is present, the token fails verification, or
+    Clerk isn't configured — callers decide whether that is fatal.
+    """
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer ") or auth[7:].startswith("pat-"):
+        return ""
+    try:
+        import clerk_auth
+        ident = clerk_auth.verify_bearer(auth)
+    except Exception:  # noqa: BLE001 — an unverifiable token is simply not proof
+        return ""
+    return ((ident or {}).get("email") or "").lower().strip()
+
+
 def require_access(feature_key, email=None):
     """Reject unless the logged-in user may see `feature_key` (Beta/Prod).
 
