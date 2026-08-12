@@ -441,6 +441,8 @@ class TestCommercialPath(unittest.TestCase):
         self.drafter.resolve_company_by_domain.return_value = {
             "id": "company-7", "name": "Maple Court", "domain": "maplecourtaustin.com",
         }
+        # No website-address scrape by default; tests opt in explicitly.
+        self.drafter.scrape_site_address.return_value = ""
 
         import product_catalog as _product_catalog
 
@@ -608,6 +610,59 @@ class TestCommercialPath(unittest.TestCase):
         parsed = property_brief.parse_ticket(task)
         with self.assertRaises(property_brief.CompanyMatchAmbiguous):
             property_brief.match_or_create_company(parsed)
+
+    def test_no_ticket_address_scrapes_website_to_disambiguate(self):
+        """Ticket has no Property Address, but the property's own website
+        does — the scraped address separates same-named candidates."""
+        self.drafter.resolve_company_by_domain.return_value = None
+        self.drafter.scrape_site_address.return_value = "5800 Legacy Dr"
+        candidates = [
+            {"id": "c-uptown", "name": "Maple Court", "rpmmarket": "Dallas",
+             "address": "2011 Cedar Springs Rd"},
+            {"id": "c-plano", "name": "Maple Court", "rpmmarket": "Dallas",
+             "address": "5800 Legacy Dr"},
+        ]
+        with mock.patch.object(property_brief, "_search_companies_by_name",
+                               return_value=candidates):
+            parsed = property_brief.parse_ticket(_task())
+            company = property_brief.match_or_create_company(parsed)
+            self.assertEqual(company["id"], "c-plano")
+            self.drafter.scrape_site_address.assert_called_once_with("maplecourtaustin.com")
+
+    def test_scraped_address_stamped_on_created_company(self):
+        """When the scrape rejects every candidate, the new company gets
+        the scraped address so future matches can disambiguate."""
+        self.drafter.resolve_company_by_domain.return_value = None
+        self.drafter.scrape_site_address.return_value = "5800 Legacy Dr"
+        with mock.patch.object(property_brief, "_search_companies_by_name",
+                               return_value=[{"id": "c-other", "name": "Maple Court",
+                                              "address": "2011 Cedar Springs Rd"}]), \
+             mock.patch.object(property_brief, "_create_company",
+                               return_value={"id": "new-3", "name": "Maple Court"}) as create:
+            parsed = property_brief.parse_ticket(_task())
+            company = property_brief.match_or_create_company(parsed)
+            self.assertEqual(company["id"], "new-3")
+            self.assertEqual(create.call_args.kwargs["address"], "5800 Legacy Dr")
+
+    def test_scrape_site_address_parses_jsonld_and_footer(self):
+        import brief_ai_drafter as bad
+
+        def _resp(text):
+            m = mock.MagicMock()
+            m.text = text
+            m.raise_for_status = mock.MagicMock()
+            return m
+
+        jsonld = '<script type="application/ld+json">{"@type":"ApartmentComplex","address":{"streetAddress":"5800 Legacy Dr","addressLocality":"Plano"}}</script>'
+        with mock.patch("requests.get", return_value=_resp(jsonld)):
+            self.assertEqual(bad.scrape_site_address("example.com"), "5800 Legacy Dr")
+
+        footer = "<footer><p>Visit us at 2011 Cedar Springs Rd, Dallas, TX 75201</p></footer>"
+        with mock.patch("requests.get", return_value=_resp(footer)):
+            self.assertEqual(bad.scrape_site_address("example.com"), "2011 Cedar Springs Rd")
+
+        with mock.patch("requests.get", side_effect=Exception("boom")):
+            self.assertEqual(bad.scrape_site_address("example.com"), "")
 
     def test_address_comparison_rules(self):
         # Suffix + containment tolerance.

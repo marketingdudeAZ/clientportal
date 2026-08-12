@@ -244,6 +244,51 @@ def scrape_site_text(domain: str, max_chars: int = 20000) -> str:
     return full[:max_chars]
 
 
+_STREET_SUFFIXES = (
+    r"(?:St|Street|Ave|Avenue|Blvd|Boulevard|Dr|Drive|Rd|Road|Ln|Lane|Pkwy|"
+    r"Parkway|Pl|Place|Ct|Court|Cir|Circle|Hwy|Highway|Trl|Trail|Way|Ter|Terrace)"
+)
+_STREET_ADDRESS_RE = re.compile(
+    r"\b(\d{2,6}\s+(?:[A-Z][A-Za-z'.]*\s+){1,4}" + _STREET_SUFFIXES + r")\b\.?"
+)
+
+
+def scrape_site_address(domain: str) -> str:
+    """Best-effort street address from a property website's homepage.
+
+    Apartment sites nearly always publish the community's street address —
+    in schema.org JSON-LD ("streetAddress") or in the footer. The company
+    matcher uses this to disambiguate same-named properties when the
+    ClickUp ticket doesn't carry an address. Returns "" when nothing
+    address-shaped is found; never raises.
+    """
+    import requests
+
+    if not domain:
+        return ""
+    try:
+        r = requests.get(f"https://{normalize_domain(domain)}", timeout=15,
+                         headers=_SCRAPE_HEADERS, allow_redirects=True)
+        r.raise_for_status()
+    except Exception as e:
+        logger.info("brief_ai_drafter: address scrape failed for %s: %s", domain, e)
+        return ""
+    html = r.text or ""
+
+    # 1) schema.org JSON-LD — the most reliable source when present.
+    m = re.search(r'"streetAddress"\s*:\s*"([^"]{4,120})"', html)
+    if m:
+        return m.group(1).strip()
+
+    # 2) Visible text — first thing shaped like "1234 Main St" (usually
+    #    the footer). Requires a leading street number, so marketing copy
+    #    like "Luxury Living Way" doesn't false-positive.
+    m = _STREET_ADDRESS_RE.search(_strip_html(html))
+    if m:
+        return m.group(1).strip()
+    return ""
+
+
 def draft_brief(
     domain: str,
     deck_pdf_bytes: bytes | None = None,

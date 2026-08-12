@@ -890,6 +890,11 @@ def match_or_create_company(parsed: dict[str, Any]) -> dict[str, Any]:
     Blank address/market on a company record is unknown, NOT a conflict,
     so legacy records with thin data keep matching as before.
 
+    When the ticket has no Property Address but same-named companies
+    exist, the property's street address is scraped off its own website
+    (schema.org JSON-LD, then footer text) and used as if the form had
+    carried it — including being stamped onto a newly created company.
+
     On CREATE: stamp address / city / property_code from the ticket so the
     IO render has real "Prepared for the property:" content instead of a
     blank section. Existing-matched companies are left untouched — their
@@ -924,6 +929,22 @@ def match_or_create_company(parsed: dict[str, Any]) -> dict[str, Any]:
 
     name = parsed["property_name"]
     candidates = _search_companies_by_name(name)
+
+    if candidates and not ticket_address and domain:
+        # Ticket carries no address but same-named companies exist — pull
+        # the property's street address off its own website so the
+        # candidates can be separated (or all safely rejected). Scrape
+        # only in this branch: it costs an HTTP fetch and is pointless
+        # when the name search came back empty or the form had an address.
+        try:
+            ticket_address = _str(drafter.scrape_site_address(domain))
+        except Exception as e:
+            logger.info("Website address scrape failed for %s: %s", domain, e)
+            ticket_address = ""
+        if ticket_address:
+            logger.info("Company match: using website address for '%s': "
+                        "'%s' (scraped from %s)", name, ticket_address, domain)
+
     if candidates and (ticket_address or ticket_market):
         # Drop candidates that confidently belong to a DIFFERENT property.
         survivors = [
@@ -979,7 +1000,10 @@ def match_or_create_company(parsed: dict[str, Any]) -> dict[str, Any]:
     return _create_company(
         name=name,
         domain=domain,
-        address=parsed.get("property_address") or "",
+        # ticket_address = the form's Property Address, or the address
+        # scraped off the property's website — either way, stamp it so
+        # the new record disambiguates future same-name matches.
+        address=ticket_address,
         market=ticket_market,
         property_code=parsed.get("property_code") or "",
     )
