@@ -433,7 +433,7 @@ def resolve_company_by_domain(domain: str) -> dict | None:
         "Authorization": f"Bearer {HUBSPOT_API_KEY}",
         "Content-Type": "application/json",
     }
-    props = ["name", "domain", "website", "uuid", "rpmmarket", "city", "state"]
+    props = ["name", "domain", "website", "uuid", "rpmmarket", "city", "state", "address"]
 
     def _search(prop: str, value: str) -> dict | None:
         body = {
@@ -467,6 +467,7 @@ def resolve_company_by_domain(domain: str) -> dict | None:
             "rpmmarket": p.get("rpmmarket"),
             "city":      p.get("city"),
             "state":     p.get("state"),
+            "address":   p.get("address"),
         }
 
     # Exact domain match first.
@@ -501,6 +502,7 @@ def resolve_company_by_domain(domain: str) -> dict | None:
                 "rpmmarket": p.get("rpmmarket"),
                 "city":      p.get("city"),
                 "state":     p.get("state"),
+                "address":   p.get("address"),
             }
     except Exception as e:
         logger.warning("brief_ai_drafter: website-fallback lookup failed: %s", e)

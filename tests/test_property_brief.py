@@ -558,6 +558,73 @@ class TestCommercialPath(unittest.TestCase):
             company = property_brief.match_or_create_company(parsed)
             self.assertEqual(company["id"], "c-legacy")
 
+    def test_same_name_same_market_picks_ticket_address(self):
+        """Markets are big: two same-named properties can share one. The
+        street address must separate them when market can't."""
+        self.drafter.resolve_company_by_domain.return_value = None
+        candidates = [
+            {"id": "c-uptown", "name": "The Parker", "rpmmarket": "Dallas",
+             "address": "2011 Cedar Springs Rd"},
+            {"id": "c-plano", "name": "The Parker", "rpmmarket": "Dallas",
+             "address": "5800 Legacy Dr"},
+        ]
+        with mock.patch.object(property_brief, "_search_companies_by_name",
+                               return_value=candidates):
+            task = _task()
+            task["custom_fields"].append({"name": "Market", "value": "Dallas"})
+            task["custom_fields"].append(
+                {"name": "Property Address", "value": "5800 Legacy Drive, Plano, TX 75024"})
+            parsed = property_brief.parse_ticket(task)
+            company = property_brief.match_or_create_company(parsed)
+            self.assertEqual(company["id"], "c-plano")
+
+    def test_single_match_at_wrong_address_creates_new_company(self):
+        """Same name, same market, but a different street — the ticket's
+        property is new; don't hijack the existing record."""
+        self.drafter.resolve_company_by_domain.return_value = None
+        with mock.patch.object(property_brief, "_search_companies_by_name",
+                               return_value=[{"id": "c-old", "name": "The Parker",
+                                              "rpmmarket": "Dallas",
+                                              "address": "2011 Cedar Springs Rd"}]), \
+             mock.patch.object(property_brief, "_create_company",
+                               return_value={"id": "new-2", "name": "The Parker"}) as create:
+            task = _task()
+            task["custom_fields"].append({"name": "Market", "value": "Dallas"})
+            task["custom_fields"].append(
+                {"name": "Property Address", "value": "5800 Legacy Dr"})
+            parsed = property_brief.parse_ticket(task)
+            company = property_brief.match_or_create_company(parsed)
+            self.assertEqual(company["id"], "new-2")
+            create.assert_called_once()
+
+    def test_domain_match_at_wrong_address_raises(self):
+        self.drafter.resolve_company_by_domain.return_value = {
+            "id": "c-old", "name": "The Parker", "domain": "maplecourtaustin.com",
+            "address": "2011 Cedar Springs Rd",
+        }
+        task = _task()
+        task["custom_fields"].append(
+            {"name": "Property Address", "value": "5800 Legacy Dr"})
+        parsed = property_brief.parse_ticket(task)
+        with self.assertRaises(property_brief.CompanyMatchAmbiguous):
+            property_brief.match_or_create_company(parsed)
+
+    def test_address_comparison_rules(self):
+        # Suffix + containment tolerance.
+        self.assertTrue(property_brief._addresses_agree(
+            "5800 Legacy Dr", "5800 Legacy Drive, Plano, TX 75024"))
+        self.assertTrue(property_brief._addresses_agree(
+            "1234 Main Street", "1234 Main St."))
+        # Different street number, or same number on a different street = conflict.
+        self.assertTrue(property_brief._addresses_conflict(
+            "5800 Legacy Dr", "2011 Cedar Springs Rd"))
+        self.assertTrue(property_brief._addresses_conflict(
+            "5800 Legacy Dr", "5800 Preston Rd"))
+        # Blank or free-form (no street number) is unknown, never a conflict.
+        self.assertFalse(property_brief._addresses_conflict("5800 Legacy Dr", ""))
+        self.assertFalse(property_brief._addresses_conflict(
+            "5800 Legacy Dr", "Legacy West area"))
+
     def test_market_labels_compare_on_words(self):
         self.assertTrue(property_brief._markets_agree("Dallas", "Dallas-Fort Worth"))
         self.assertTrue(property_brief._markets_agree("Austin", "Austin, TX"))

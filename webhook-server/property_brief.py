@@ -868,22 +868,27 @@ def _find_existing_deal(ticket_id: str) -> str:
 def match_or_create_company(parsed: dict[str, Any]) -> dict[str, Any]:
     """Look up a HubSpot company; create one if no match exists.
 
-    Match order: exact-domain → name + market → name only. Auto-pick only
-    when the match is unambiguous; otherwise the caller stops the workflow
-    and flags for human review.
+    Match order: exact-domain → name + address → name + market → name
+    only. Auto-pick only when the match is unambiguous; otherwise the
+    caller stops the workflow and flags for human review.
 
-    Market is a hard constraint, not a tiebreaker. RPM has same-named
-    properties in different markets ("The Parker" in Austin AND Dallas —
-    2026-08-12 incident: the Austin ticket's deal landed on the Dallas
-    company). A candidate whose market clearly conflicts with the ticket's
-    Market field is never auto-picked:
-      - domain match in the wrong market → human review (the domain says
-        the company exists, so silently creating a duplicate is worse);
-      - name matches only in other markets → treated as no-match, and a
-        NEW company is created for this market (the New Account Build
+    Address and market are hard constraints, not tiebreakers. RPM has
+    same-named properties in different markets ("The Parker" in Austin
+    AND Dallas — 2026-08-12 incident: the Austin ticket's deal landed on
+    the Dallas company) and markets are big enough that same-named
+    properties can share one, so the street address is the strongest
+    disambiguator and market the fallback. A candidate that confidently
+    disagrees with the ticket — different street number, or same number
+    on a different street, or a clearly different market — is never
+    auto-picked:
+      - domain match at the wrong address/market → human review (the
+        domain says the company exists, so silently creating a duplicate
+        is worse);
+      - name matches only at other addresses/markets → treated as
+        no-match, and a NEW company is created (the New Account Build
         case: the property genuinely isn't in HubSpot yet).
-    Companies with no market recorded are treated as unknown (eligible),
-    so pre-existing records with blank rpmmarket keep matching as before.
+    Blank address/market on a company record is unknown, NOT a conflict,
+    so legacy records with thin data keep matching as before.
 
     On CREATE: stamp address / city / property_code from the ticket so the
     IO render has real "Prepared for the property:" content instead of a
@@ -892,59 +897,77 @@ def match_or_create_company(parsed: dict[str, Any]) -> dict[str, Any]:
     """
     drafter = _import("brief_ai_drafter")
     ticket_market = _str(parsed.get("property_market") or "")
+    ticket_address = _str(parsed.get("property_address") or "")
+
+    def _company_market(c: dict) -> str:
+        return c.get("rpmmarket") or c.get("city") or ""
 
     domain = drafter.normalize_domain(parsed.get("property_domain") or "")
     if domain:
         match = drafter.resolve_company_by_domain(domain)
         if match:
-            company_market = match.get("rpmmarket") or match.get("city") or ""
-            if _markets_conflict(ticket_market, company_market):
+            if _addresses_conflict(ticket_address, match.get("address") or ""):
+                raise CompanyMatchAmbiguous(
+                    f"Domain '{domain}' matches HubSpot company "
+                    f"'{match.get('name')}' (id {match.get('id')}) at "
+                    f"'{match.get('address')}', but the ticket says the "
+                    f"property is at '{ticket_address}'"
+                )
+            if _markets_conflict(ticket_market, _company_market(match)):
                 raise CompanyMatchAmbiguous(
                     f"Domain '{domain}' matches HubSpot company "
                     f"'{match.get('name')}' (id {match.get('id')}) in market "
-                    f"'{company_market}', but the ticket says market "
+                    f"'{_company_market(match)}', but the ticket says market "
                     f"'{ticket_market}'"
                 )
             return match
 
     name = parsed["property_name"]
     candidates = _search_companies_by_name(name)
-    if candidates and ticket_market:
-        in_market = [c for c in candidates
-                     if _markets_agree(ticket_market,
-                                       c.get("rpmmarket") or c.get("city") or "")]
-        unknown = [c for c in candidates
-                   if not (c.get("rpmmarket") or c.get("city"))]
-        if len(in_market) == 1:
-            # Exactly one candidate in the right market — even if same-named
-            # companies exist in OTHER markets, this one is unambiguous.
-            logger.info("Company match: '%s' in market '%s' -> %s "
-                        "(%d same-name candidate(s) in other markets ignored)",
-                        name, ticket_market, in_market[0]["id"],
-                        len(candidates) - 1)
-            return in_market[0]
-        if len(in_market) > 1:
+    if candidates and (ticket_address or ticket_market):
+        # Drop candidates that confidently belong to a DIFFERENT property.
+        survivors = [
+            c for c in candidates
+            if not _addresses_conflict(ticket_address, c.get("address") or "")
+            and not _markets_conflict(ticket_market, _company_market(c))
+        ]
+        if len(survivors) > 1:
+            # Multiple plausible candidates — pick on the strongest positive
+            # signal: exact address agreement first, market second.
+            addr_hits = [c for c in survivors
+                         if _addresses_agree(ticket_address, c.get("address") or "")]
+            if len(addr_hits) == 1:
+                logger.info("Company match: '%s' at '%s' -> %s "
+                            "(%d other same-name candidate(s) ignored)",
+                            name, ticket_address, addr_hits[0]["id"],
+                            len(candidates) - 1)
+                return addr_hits[0]
+            market_hits = [c for c in (addr_hits or survivors)
+                           if _markets_agree(ticket_market, _company_market(c))]
+            if len(market_hits) == 1:
+                logger.info("Company match: '%s' in market '%s' -> %s "
+                            "(%d other same-name candidate(s) ignored)",
+                            name, ticket_market, market_hits[0]["id"],
+                            len(candidates) - 1)
+                return market_hits[0]
             raise CompanyMatchAmbiguous(
-                f"{len(in_market)} HubSpot companies match '{name}' in market "
-                f"'{ticket_market}' — needs human review"
+                f"{len(survivors)} HubSpot companies match '{name}' and the "
+                f"ticket's address/market can't separate them — needs human review"
             )
-        # Nobody in-market. Blank-market candidates are still eligible
-        # (unknown ≠ conflict); market-conflicting ones are not.
-        if len(unknown) == 1:
-            return unknown[0]
-        if len(unknown) > 1:
-            raise CompanyMatchAmbiguous(
-                f"{len(unknown)} HubSpot companies match '{name}' with no "
-                f"market recorded — needs human review"
-            )
-        # Every same-named company is in a DIFFERENT market — this
-        # property doesn't exist in HubSpot yet. Create it.
-        logger.info("Company match: '%s' exists only in other markets (%s) — "
-                    "creating a new company for market '%s'",
+        if len(survivors) == 1:
+            if len(candidates) > 1:
+                logger.info("Company match: '%s' -> %s (%d same-name candidate(s) "
+                            "at other addresses/markets excluded)",
+                            name, survivors[0]["id"], len(candidates) - 1)
+            return survivors[0]
+        # Every same-named company is confidently a different property —
+        # this one doesn't exist in HubSpot yet. Create it.
+        logger.info("Company match: '%s' exists only at other addresses/markets "
+                    "(%s) — creating a new company (ticket: %s / %s)",
                     name,
-                    ", ".join(filter(None, ((c.get("rpmmarket") or c.get("city"))
+                    "; ".join(filter(None, ((c.get("address") or _company_market(c))
                                             for c in candidates))),
-                    ticket_market)
+                    ticket_address or "(no address)", ticket_market or "(no market)")
         candidates = []
     if len(candidates) == 1:
         return candidates[0]
@@ -993,6 +1016,66 @@ def _markets_conflict(ticket_market: str, company_market: str) -> bool:
     return not _markets_agree(ticket_market, company_market)
 
 
+# Common street-suffix spellings → canonical short form, so
+# "1234 Main Street" and "1234 Main St." compare equal.
+_ADDRESS_SUFFIXES = {
+    "street": "st", "avenue": "ave", "boulevard": "blvd", "drive": "dr",
+    "road": "rd", "lane": "ln", "parkway": "pkwy", "place": "pl",
+    "court": "ct", "circle": "cir", "highway": "hwy", "trail": "trl",
+    "terrace": "ter", "square": "sq", "north": "n", "south": "s",
+    "east": "e", "west": "w",
+}
+
+
+def _normalize_address(value: str) -> str:
+    """Lowercase, strip punctuation, canonicalize street suffixes."""
+    import re as _re
+    words = _re.sub(r"[^a-z0-9]+", " ", (value or "").strip().lower()).split()
+    return " ".join(_ADDRESS_SUFFIXES.get(w, w) for w in words)
+
+
+def _street_key(value: str) -> tuple[str, str]:
+    """(street number, first street-name word) — '' for parts not present."""
+    words = _normalize_address(value).split()
+    if not words:
+        return ("", "")
+    if words[0].isdigit():
+        return (words[0], words[1] if len(words) > 1 else "")
+    return ("", words[0])
+
+
+def _addresses_agree(ticket_address: str, company_address: str) -> bool:
+    """True when both addresses are known and point at the same street.
+
+    Containment either way handles specificity differences ('1234 Main St'
+    vs '1234 Main Street, Dallas, TX 75201'); otherwise the street number
+    plus first street-name word must both match.
+    """
+    a, b = _normalize_address(ticket_address), _normalize_address(company_address)
+    if not a or not b:
+        return False
+    if a == b or a in b or b in a:
+        return True
+    (num_a, street_a), (num_b, street_b) = _street_key(ticket_address), _street_key(company_address)
+    return bool(num_a) and num_a == num_b and bool(street_a) and street_a == street_b
+
+
+def _addresses_conflict(ticket_address: str, company_address: str) -> bool:
+    """True only on a CONFIDENT different-street signal: both sides carry a
+    street number and the numbers differ, or the numbers match but the
+    street names don't. Blank or free-form (no street number) addresses
+    are unknown, never conflicts — HubSpot address hygiene varies."""
+    a, b = _normalize_address(ticket_address), _normalize_address(company_address)
+    if not a or not b:
+        return False
+    (num_a, street_a), (num_b, street_b) = _street_key(ticket_address), _street_key(company_address)
+    if not num_a or not num_b:
+        return False
+    if num_a != num_b:
+        return True
+    return bool(street_a) and bool(street_b) and street_a != street_b
+
+
 def _search_companies_by_name(name: str) -> list[dict]:
     """HubSpot company search by exact name. Empty list if nothing matches."""
     if not name:
@@ -1005,7 +1088,7 @@ def _search_companies_by_name(name: str) -> list[dict]:
         "filterGroups": [{
             "filters": [{"propertyName": "name", "operator": "EQ", "value": name}],
         }],
-        "properties": ["name", "domain", "website", "uuid", "rpmmarket", "city"],
+        "properties": ["name", "domain", "website", "uuid", "rpmmarket", "city", "address"],
         "limit": 10,
     }
     try:
@@ -1029,6 +1112,7 @@ def _search_companies_by_name(name: str) -> list[dict]:
             "uuid":      p.get("uuid"),
             "rpmmarket": p.get("rpmmarket"),
             "city":      p.get("city"),
+            "address":   p.get("address"),
         })
     return out
 
