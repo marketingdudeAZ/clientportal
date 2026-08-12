@@ -498,6 +498,74 @@ class TestCommercialPath(unittest.TestCase):
             self.assertEqual(result["company_id"], "new-1")
             create.assert_called_once()
 
+    def test_same_name_two_markets_picks_ticket_market(self):
+        """"The Parker" exists in Austin AND Dallas. The ticket's Market
+        field must pick the right one instead of raising ambiguous."""
+        self.drafter.resolve_company_by_domain.return_value = None
+        candidates = [
+            {"id": "c-dallas", "name": "The Parker", "rpmmarket": "Dallas"},
+            {"id": "c-austin", "name": "The Parker", "rpmmarket": "Austin"},
+        ]
+        with mock.patch.object(property_brief, "_search_companies_by_name",
+                               return_value=candidates):
+            task = _task()
+            task["custom_fields"].append({"name": "Market", "value": "Austin"})
+            parsed = property_brief.parse_ticket(task)
+            company = property_brief.match_or_create_company(parsed)
+            self.assertEqual(company["id"], "c-austin")
+
+    def test_single_name_match_in_wrong_market_creates_new_company(self):
+        """The 2026-08-12 Parker bug: only the Dallas "The Parker" exists in
+        HubSpot, the ticket is for the (new) Austin one. The old code
+        blindly took the single name match; now it must create a fresh
+        company for the ticket's market."""
+        self.drafter.resolve_company_by_domain.return_value = None
+        with mock.patch.object(property_brief, "_search_companies_by_name",
+                               return_value=[{"id": "c-dallas", "name": "The Parker",
+                                              "rpmmarket": "Dallas"}]), \
+             mock.patch.object(property_brief, "_create_company",
+                               return_value={"id": "new-atx", "name": "The Parker"}) as create:
+            task = _task()
+            task["custom_fields"].append({"name": "Market", "value": "Austin"})
+            parsed = property_brief.parse_ticket(task)
+            company = property_brief.match_or_create_company(parsed)
+            self.assertEqual(company["id"], "new-atx")
+            self.assertEqual(create.call_args.kwargs["market"], "Austin")
+
+    def test_domain_match_in_wrong_market_raises(self):
+        """A domain match pointing at a company in a different market is
+        suspicious enough to stop for human review — creating a duplicate
+        company that shares the domain would be worse."""
+        self.drafter.resolve_company_by_domain.return_value = {
+            "id": "c-dallas", "name": "The Parker",
+            "domain": "maplecourtaustin.com", "rpmmarket": "Dallas",
+        }
+        task = _task()
+        task["custom_fields"].append({"name": "Market", "value": "Austin"})
+        parsed = property_brief.parse_ticket(task)
+        with self.assertRaises(property_brief.CompanyMatchAmbiguous):
+            property_brief.match_or_create_company(parsed)
+
+    def test_blank_market_candidate_still_matches(self):
+        """Legacy records without rpmmarket must keep matching — unknown
+        market is not a conflict."""
+        self.drafter.resolve_company_by_domain.return_value = None
+        with mock.patch.object(property_brief, "_search_companies_by_name",
+                               return_value=[{"id": "c-legacy", "name": "Maple Court"}]):
+            task = _task()
+            task["custom_fields"].append({"name": "Market", "value": "Austin"})
+            parsed = property_brief.parse_ticket(task)
+            company = property_brief.match_or_create_company(parsed)
+            self.assertEqual(company["id"], "c-legacy")
+
+    def test_market_labels_compare_on_words(self):
+        self.assertTrue(property_brief._markets_agree("Dallas", "Dallas-Fort Worth"))
+        self.assertTrue(property_brief._markets_agree("Austin", "Austin, TX"))
+        self.assertFalse(property_brief._markets_agree("Austin", "Dallas"))
+        self.assertFalse(property_brief._markets_conflict("Austin", ""))
+        self.assertFalse(property_brief._markets_conflict("", "Dallas"))
+        self.assertTrue(property_brief._markets_conflict("Austin", "Dallas"))
+
     def test_create_company_does_not_write_uuid(self):
         """R1: code MUST NOT write uuid. A HubSpot workflow copies
         Record ID -> uuid once a deal is associated. Setting uuid here

@@ -868,9 +868,22 @@ def _find_existing_deal(ticket_id: str) -> str:
 def match_or_create_company(parsed: dict[str, Any]) -> dict[str, Any]:
     """Look up a HubSpot company; create one if no match exists.
 
-    Match order: exact-domain → name + market → name only. If the name-only
-    search returns more than one company we refuse to auto-pick — the
-    caller stops the workflow and flags for human review.
+    Match order: exact-domain → name + market → name only. Auto-pick only
+    when the match is unambiguous; otherwise the caller stops the workflow
+    and flags for human review.
+
+    Market is a hard constraint, not a tiebreaker. RPM has same-named
+    properties in different markets ("The Parker" in Austin AND Dallas —
+    2026-08-12 incident: the Austin ticket's deal landed on the Dallas
+    company). A candidate whose market clearly conflicts with the ticket's
+    Market field is never auto-picked:
+      - domain match in the wrong market → human review (the domain says
+        the company exists, so silently creating a duplicate is worse);
+      - name matches only in other markets → treated as no-match, and a
+        NEW company is created for this market (the New Account Build
+        case: the property genuinely isn't in HubSpot yet).
+    Companies with no market recorded are treated as unknown (eligible),
+    so pre-existing records with blank rpmmarket keep matching as before.
 
     On CREATE: stamp address / city / property_code from the ticket so the
     IO render has real "Prepared for the property:" content instead of a
@@ -878,15 +891,61 @@ def match_or_create_company(parsed: dict[str, Any]) -> dict[str, Any]:
     address is owned by the team's data hygiene, not by us.
     """
     drafter = _import("brief_ai_drafter")
+    ticket_market = _str(parsed.get("property_market") or "")
 
     domain = drafter.normalize_domain(parsed.get("property_domain") or "")
     if domain:
         match = drafter.resolve_company_by_domain(domain)
         if match:
+            company_market = match.get("rpmmarket") or match.get("city") or ""
+            if _markets_conflict(ticket_market, company_market):
+                raise CompanyMatchAmbiguous(
+                    f"Domain '{domain}' matches HubSpot company "
+                    f"'{match.get('name')}' (id {match.get('id')}) in market "
+                    f"'{company_market}', but the ticket says market "
+                    f"'{ticket_market}'"
+                )
             return match
 
     name = parsed["property_name"]
     candidates = _search_companies_by_name(name)
+    if candidates and ticket_market:
+        in_market = [c for c in candidates
+                     if _markets_agree(ticket_market,
+                                       c.get("rpmmarket") or c.get("city") or "")]
+        unknown = [c for c in candidates
+                   if not (c.get("rpmmarket") or c.get("city"))]
+        if len(in_market) == 1:
+            # Exactly one candidate in the right market — even if same-named
+            # companies exist in OTHER markets, this one is unambiguous.
+            logger.info("Company match: '%s' in market '%s' -> %s "
+                        "(%d same-name candidate(s) in other markets ignored)",
+                        name, ticket_market, in_market[0]["id"],
+                        len(candidates) - 1)
+            return in_market[0]
+        if len(in_market) > 1:
+            raise CompanyMatchAmbiguous(
+                f"{len(in_market)} HubSpot companies match '{name}' in market "
+                f"'{ticket_market}' — needs human review"
+            )
+        # Nobody in-market. Blank-market candidates are still eligible
+        # (unknown ≠ conflict); market-conflicting ones are not.
+        if len(unknown) == 1:
+            return unknown[0]
+        if len(unknown) > 1:
+            raise CompanyMatchAmbiguous(
+                f"{len(unknown)} HubSpot companies match '{name}' with no "
+                f"market recorded — needs human review"
+            )
+        # Every same-named company is in a DIFFERENT market — this
+        # property doesn't exist in HubSpot yet. Create it.
+        logger.info("Company match: '%s' exists only in other markets (%s) — "
+                    "creating a new company for market '%s'",
+                    name,
+                    ", ".join(filter(None, ((c.get("rpmmarket") or c.get("city"))
+                                            for c in candidates))),
+                    ticket_market)
+        candidates = []
     if len(candidates) == 1:
         return candidates[0]
     if len(candidates) > 1:
@@ -898,9 +957,40 @@ def match_or_create_company(parsed: dict[str, Any]) -> dict[str, Any]:
         name=name,
         domain=domain,
         address=parsed.get("property_address") or "",
-        market=parsed.get("property_market") or "",
+        market=ticket_market,
         property_code=parsed.get("property_code") or "",
     )
+
+
+def _normalize_market(value: str) -> str:
+    """Lowercase and collapse punctuation so 'Dallas-Fort Worth', 'dallas'
+    and 'Dallas, TX' compare on their words."""
+    import re as _re
+    return _re.sub(r"[^a-z0-9]+", " ", (value or "").strip().lower()).strip()
+
+
+def _markets_agree(ticket_market: str, company_market: str) -> bool:
+    """True when both markets are known and refer to the same place.
+
+    Containment either way counts as agreement ('dallas' vs
+    'dallas fort worth') since RPM market labels vary in specificity.
+    """
+    a, b = _normalize_market(ticket_market), _normalize_market(company_market)
+    if not a or not b:
+        return False
+    return a == b or a in b or b in a
+
+
+def _markets_conflict(ticket_market: str, company_market: str) -> bool:
+    """True only when both markets are known AND they disagree.
+
+    A blank market on either side is unknown, not a conflict — most
+    legacy company records predate rpmmarket hygiene.
+    """
+    a, b = _normalize_market(ticket_market), _normalize_market(company_market)
+    if not a or not b:
+        return False
+    return not _markets_agree(ticket_market, company_market)
 
 
 def _search_companies_by_name(name: str) -> list[dict]:
@@ -915,7 +1005,7 @@ def _search_companies_by_name(name: str) -> list[dict]:
         "filterGroups": [{
             "filters": [{"propertyName": "name", "operator": "EQ", "value": name}],
         }],
-        "properties": ["name", "domain", "website", "uuid", "rpmmarket"],
+        "properties": ["name", "domain", "website", "uuid", "rpmmarket", "city"],
         "limit": 10,
     }
     try:
@@ -933,9 +1023,12 @@ def _search_companies_by_name(name: str) -> list[dict]:
     for rec in r.json().get("results") or []:
         p = rec.get("properties") or {}
         out.append({
-            "id":     rec.get("id"),
-            "name":   p.get("name"),
-            "domain": p.get("domain"),
+            "id":        rec.get("id"),
+            "name":      p.get("name"),
+            "domain":    p.get("domain"),
+            "uuid":      p.get("uuid"),
+            "rpmmarket": p.get("rpmmarket"),
+            "city":      p.get("city"),
         })
     return out
 
