@@ -204,7 +204,7 @@ def plan(expected: dict[str, dict],
             if label not in rows:
                 continue
             want = exp["budgets"][label]
-            if rows[label] == want:
+            if rec.same_money(rows[label], want):
                 continue                       # already correct — idempotence
             rownum = index.get((uuid, label))
             if rownum is None:
@@ -277,7 +277,7 @@ def touched_properties(expected: dict, actual: dict, plan_obj: dict) -> set[str]
         rows = actual.get(uuid)
         if rows is None:
             continue                      # already counted via appends
-        if any(label in rows and rows[label] != exp["budgets"][label]
+        if any(label in rows and not rec.same_money(rows[label], exp["budgets"][label])
                for _, label in rec.BUDGET_CHANNELS):
             touched.add(uuid)
     return touched

@@ -244,3 +244,40 @@ class ChannelRegistry(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MoneyComparison(unittest.TestCase):
+    """Found by the first live reconcile, 2026-08-13.
+
+    gspread's get_all_values() returns DISPLAYED values, and the budget column
+    carries a currency number format — so Sheets hands back '$1,000.00' for a
+    cell written as '$1000.00'. Raw string comparison reported false drift on
+    every property with a budget of $1,000 or more: 29 of that run's 70
+    'value mismatches' were this and nothing else.
+    """
+
+    def test_thousands_separator_does_not_count_as_drift(self):
+        self.assertTrue(br.same_money("$1,000.00", "$1000.00"))
+        self.assertTrue(br.same_money("$12,345.67", "$12345.67"))
+
+    def test_genuinely_different_amounts_still_differ(self):
+        self.assertFalse(br.same_money("$1,700.00", "$1200.00"))
+
+    def test_not_purchased_stays_distinct_from_zero(self):
+        """'$ -' means the property does not buy the channel; '$0.00' means the
+        line item exists and is zeroed. Collapsing them hides real drift."""
+        self.assertFalse(br.same_money(br.NOT_PURCHASED, "$0.00"))
+
+    def test_surrounding_whitespace_is_ignored(self):
+        self.assertTrue(br.same_money(" $500.00 ", "$500.00"))
+
+    def test_diff_no_longer_reports_formatted_values_as_drift(self):
+        expected = {"u1": {"company_id": "1", "account_name": "A",
+                           "deal_id": "d", "deal_name": "d", "closedate": "",
+                           "budgets": {l: br.NOT_PURCHASED
+                                       for _, l in br.BUDGET_CHANNELS}}}
+        label = br.BUDGET_CHANNELS[0][1]
+        expected["u1"]["budgets"][label] = "$2060.00"
+        actual = {"u1": {l: br.NOT_PURCHASED for _, l in br.BUDGET_CHANNELS}}
+        actual["u1"][label] = "$2,060.00"          # what Sheets returns
+        self.assertEqual(br.diff(expected, actual), [])

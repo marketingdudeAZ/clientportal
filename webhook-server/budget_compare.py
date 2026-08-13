@@ -131,7 +131,9 @@ def classify(expected: dict[str, dict],
             want = exp["budgets"][label]
             live_val = live_rows.get(label, MISSING)
             shadow_val = shadow_rows.get(label, MISSING)
-            verdict = _verdict(live_val == want, shadow_val == want)
+            verdict = _verdict(
+                live_val is not None and rec.same_money(live_val, want),
+                shadow_val is not None and rec.same_money(shadow_val, want))
             if verdict != VERDICT_BOTH_RIGHT:
                 cells.append({"channel": label, "verdict": verdict,
                               "hubspot": want,

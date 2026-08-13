@@ -138,6 +138,35 @@ def format_money(amount: Any) -> str:
     return f"${val:.2f}"
 
 
+def money_key(value: Any) -> str:
+    """Canonical form of a budget value, for COMPARISON only.
+
+    Strips thousands separators and surrounding whitespace. Nothing else.
+
+    Why this exists (found by the first live reconcile, 2026-08-13): gspread's
+    `get_all_values()` returns the sheet's DISPLAYED values, and the budget
+    column carries a currency number format. So Sheets hands back '$1,000.00'
+    for a cell the action wrote as '$1000.00'. Comparing the raw strings
+    reported false drift on every property with a budget of $1,000 or more —
+    29 of the first run's 70 'value mismatches' were this and nothing else.
+
+    Deliberately does NOT touch what we write. format_money still reproduces
+    the action's output exactly; this only decides whether two values MEAN the
+    same number.
+
+    Also deliberately preserves the '$ -' vs '$0.00' distinction, which is
+    load-bearing: '$ -' means the property does not buy the channel, '$0.00'
+    means the line item exists and is zeroed. Collapsing them would hide a real
+    class of drift.
+    """
+    return str(value).replace(",", "").strip()
+
+
+def same_money(a: Any, b: Any) -> bool:
+    """True if two budget values mean the same amount. See money_key."""
+    return money_key(a) == money_key(b)
+
+
 def normalize_sheet_value(raw: Any) -> str:
     """Normalise a cell for comparison.
 
@@ -460,7 +489,7 @@ def diff(expected: dict[str, dict], actual: dict[str, dict]) -> list[dict]:
                 out.append(_drift(KIND_MISSING_CHANNEL, uuid, name,
                                   channel=label, expected_value=want,
                                   deal_id=exp["deal_id"]))
-            elif rows[label] != want:
+            elif not same_money(rows[label], want):
                 out.append(_drift(KIND_VALUE_MISMATCH, uuid, name,
                                   channel=label, sheet_value=rows[label],
                                   expected_value=want,
