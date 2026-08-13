@@ -427,3 +427,48 @@ class TabThreading(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BootstrapHeader(unittest.TestCase):
+    """parse_sheet skips row 1 as the header unconditionally. A tab without one
+    silently loses its first data row on every read — and an empty shadow tab
+    is exactly that case."""
+
+    def test_detects_a_tab_with_no_header(self):
+        self.assertTrue(bs.needs_header([]))
+        self.assertTrue(bs.needs_header([[]]))
+        self.assertTrue(bs.needs_header([["", "", "", ""]]))
+
+    def test_a_populated_header_is_left_alone(self):
+        self.assertFalse(bs.needs_header([rec.SHEET_HEADER]))
+
+    def test_bootstrap_writes_the_header_before_the_data(self):
+        expected = _expected(("u1", "Citria", {}))
+        with mock.patch.object(rec, "expected_budgets", return_value=expected), \
+             mock.patch.object(rec, "read_sheet_rows", return_value=[[]]), \
+             mock.patch.object(bs, "SYNC_ENABLED", True), \
+             mock.patch.object(bs, "MIN_EXPECTED_PROPERTIES", 0), \
+             mock.patch.object(bs, "_worksheet"), \
+             mock.patch.object(bs, "_verify", return_value=[]), \
+             mock.patch.object(bs, "_apply") as apply_:
+            r = bs.sync(dry_run=False, target="shadow", bootstrap=True)
+        appends = apply_.call_args[0][1]["appends"]
+        self.assertEqual(appends[0], rec.SHEET_HEADER)
+        self.assertEqual(len(appends), 1 + len(rec.BUDGET_CHANNELS))
+        self.assertTrue(r["wrote_header"])
+
+    def test_a_normal_run_never_writes_a_header(self):
+        """Only bootstrap does this. A routine run appending a new property to
+        a populated tab must not insert a second header mid-sheet."""
+        expected = _expected(("u1", "Citria", {}))
+        rows = _rows(("u2", "Other", {}))
+        with mock.patch.object(rec, "expected_budgets", return_value=expected), \
+             mock.patch.object(rec, "read_sheet_rows", return_value=rows), \
+             mock.patch.object(bs, "SYNC_ENABLED", True), \
+             mock.patch.object(bs, "MIN_EXPECTED_PROPERTIES", 0), \
+             mock.patch.object(bs, "MAX_DRIFT_RATIO", 0), \
+             mock.patch.object(bs, "_worksheet"), \
+             mock.patch.object(bs, "_verify", return_value=[]), \
+             mock.patch.object(bs, "_apply") as apply_:
+            bs.sync(dry_run=False, target="shadow")
+        self.assertNotIn(rec.SHEET_HEADER, apply_.call_args[0][1]["appends"])

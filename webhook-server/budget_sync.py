@@ -307,6 +307,20 @@ def _worksheet(tab: str | None = None):
         tab or rec.BUDGET_TAB_NAME)
 
 
+def needs_header(rows: list[list[str]]) -> bool:
+    """True if the tab has no usable header row.
+
+    parse_sheet() skips row 1 unconditionally as the header. A tab that does
+    not actually have one therefore loses its first data row on every read —
+    silently, and only for whichever property happens to sort first. Seeding an
+    empty shadow tab is exactly the case that produces it, so bootstrap writes
+    the header before the data.
+    """
+    if not rows:
+        return True
+    return not any(str(cell).strip() for cell in rows[0])
+
+
 def _apply(ws, plan_obj: dict) -> None:
     """Execute the plan. Updates first, then appends.
 
@@ -433,6 +447,14 @@ def sync(dry_run: bool = True, target: str | None = None,
             report.update({"ok": True, "no_changes": True,
                            "elapsed_s": round(time.monotonic() - started, 2)})
             return report
+
+        if bootstrap and needs_header(rows):
+            # Must go first, and must match the live tab byte for byte — the
+            # reader's contract is "row 1 is the header", not "row 1 looks
+            # like one".
+            plan_obj = dict(plan_obj)
+            plan_obj["appends"] = [list(rec.SHEET_HEADER)] + plan_obj["appends"]
+            report["wrote_header"] = True
 
         _apply(_worksheet(tab), plan_obj)
 

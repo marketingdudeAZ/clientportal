@@ -55,6 +55,12 @@ BUDGET_TAB_NAME = os.getenv("FLUENCY_BUDGET_TAB", "DO NOT RENAME - Fluency Budge
 # Column layout of the budget tab: A=uuid, B=account name, C=budget group, D=value.
 _COL_UUID, _COL_ACCOUNT, _COL_GROUP, _COL_VALUE = 0, 1, 2, 3
 
+# The live tab's header, verified against production 2026-08-13. parse_sheet
+# skips row 1 unconditionally, so a tab WITHOUT this row silently loses its
+# first data row on every read — which is what an empty shadow tab would have
+# done to whichever property sorted first.
+SHEET_HEADER = ["Account UUID", "Account Name", "Budget Group", "Budget"]
+
 # Sentinel the writer uses for "this property does not buy this channel".
 # DISTINCT from "$0.00", which means the line item exists and is zeroed. The
 # HubSpot action draws that distinction (nameBudgetMap defaults to '$ -' and is
