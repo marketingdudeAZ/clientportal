@@ -955,12 +955,10 @@ test asserting the writer client is never constructed.
   part of it is unsafe.
 - **Clears are written before sets**, so a run that dies partway leaves
   "flagged" rather than "silently cleared".
-- **Watchdog** — flags raised on an earlier date with no `_task_id`. Day
-  granularity is deliberate: the workflow fires within seconds, so anything
-  unstamped on a later date certainly did not fire, and a date avoids the
-  timezone trap an hours threshold carries across UTC/Central.
-  `BUDGET_VARIANCE_WATCHDOG_PROPERTY` repoints it if the ClickUp integration
-  cannot write a task id back.
+- **Watchdog** — flags raised on an earlier date with no evidence the workflow
+  ran. Day granularity is deliberate: the workflow fires within seconds, so
+  anything unstamped on a later date certainly did not fire, and a date avoids
+  the timezone trap an hours threshold carries across UTC/Central.
 - Off by default (`BUDGET_VARIANCE_FLAGS_ENABLED`), dry-run by default, writes
   via `hubspot_client` so R1 refuses `uuid`. CLI: `--flags`.
 
@@ -971,14 +969,50 @@ a floor, not an exact figure.
 
 Still to build:
 
-- **The HubSpot workflow's remaining wiring.** The workflow *Fluency Budget
-  Discrepancy Alert to Clickup* exists and is ON, and correctly does not clear
-  the checkbox. Three gaps as of 2026-08-13: **re-enrolment is OFF** (so a
-  company flagged, resolved, then flagged again never tickets a second time —
-  §1a exactly); no step writes `budget_discrepancy_task_id` back, leaving the
-  watchdog blind; and it is unconfirmed whether its "Create a task" step is the
-  ClickUp integration action or HubSpot's native one, which create very
-  different things.
+### The watchdog is on the weak evidence, and why
+
+**Confirmed 2026-08-13:** the workflow's step IS the ClickUp integration action,
+so tickets do reach the space — but it does **not** expose the created task's id
+as a token for a later step. The strong evidence (a real ClickUp task id) is not
+obtainable, so `WATCHDOG_PROPERTY` defaults to `budget_discrepancy_notified_at`:
+a datetime the workflow stamps on itself, which any HubSpot workflow can do
+unaided.
+
+Weaker, and worth being explicit about the gap: it proves the workflow **ran**,
+not that a ticket **exists**. A workflow that runs and whose ClickUp step fails
+looks identical to a healthy one. What it does still catch is non-enrolment —
+which is §1a, and the failure that actually happened on 8/1. Repoint the env var
+at `budget_discrepancy_task_id` if a future integration can write one back.
+
+Two consequences that were not obvious until the fallback was chosen:
+
+- **Clearing must reset the watchdog property, not just the task id.** Otherwise
+  the next flag on that company inherits the previous ticket's evidence and the
+  watchdog reads it as already-notified — a workflow that stops enrolling would
+  look healthy forever. Both are cleared.
+- **HubSpot returns datetimes as epoch milliseconds in some responses**, and a
+  naive `value[:10]` turns `1755043200000` into `1755043200`, which
+  string-compares as older than any real date and marks every flag stale
+  forever. `_as_date()` parses ISO and epoch (s and ms) and returns None rather
+  than guess. A watchdog that cries wolf is worse than no watchdog: it trains
+  people to ignore the one signal this project exists to make trustworthy.
+
+### Still open in HubSpot (Kyle, config only)
+
+1. **Re-enrolment is OFF** on *Fluency Budget Discrepancy Alert to Clickup*. A
+   company flagged → resolved → flagged again never tickets the second time.
+   §1a exactly, in the alert path this time. Highest-value fix outstanding.
+2. **Add the stamp step** — a *Set property value* action after the ClickUp step
+   writing `budget_discrepancy_notified_at`. Until it exists the watchdog reports
+   every flag as stale, because nothing ever writes the evidence.
+3. **Create the property** `budget_discrepancy_notified_at` (Company, date
+   picker or datetime — `_as_date()` reads either).
+
+The workflow correctly does **not** clear the checkbox. Keep it that way.
+
+Neither 1 nor 2 is urgent in the sense of something being broken right now:
+`BUDGET_VARIANCE_FLAGS_ENABLED` is unset, so nothing sets the flag and the
+workflow cannot fire at all. They are prerequisites for turning it on.
 
 Carried over from 8-12:
 

@@ -60,6 +60,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import date, datetime, timezone
+from typing import Any
 
 import budget_compare as bc
 
@@ -73,14 +74,20 @@ PROP_FLAG = "budget_discrepancy"
 PROP_DETAIL = "budget_discrepancy_detail"
 PROP_FLAGGED_AT = "budget_discrepancy_flagged_at"
 PROP_TASK_ID = "budget_discrepancy_task_id"
+PROP_NOTIFIED_AT = "budget_discrepancy_notified_at"
 
-# The property the workflow stamps to prove it ran. Configurable because the
-# HubSpot ClickUp integration may not be able to hand a created task's id to a
-# later workflow step; if it cannot, the workflow stamps a datetime instead and
-# this points at that. Weaker evidence — it proves the workflow ran, not that a
-# ticket exists — but it still catches non-enrolment, which is the failure that
-# actually happened.
-WATCHDOG_PROPERTY = os.getenv("BUDGET_VARIANCE_WATCHDOG_PROPERTY", PROP_TASK_ID)
+# The property the workflow stamps to prove it ran.
+#
+# CONFIRMED 2026-08-13: the workflow's step IS the ClickUp integration action —
+# tickets do reach the space — but it does NOT expose the created task's id as a
+# token for a later step. So the strong evidence (a real ClickUp task id) is not
+# obtainable, and the default is the weaker one the workflow can always produce
+# unaided: a datetime it stamps on itself.
+#
+# Weaker because it proves the workflow RAN, not that a ticket EXISTS. It still
+# catches non-enrolment, which is §1a and the failure that actually happened on
+# 8/1. Repoint this at PROP_TASK_ID if a future integration can write one back.
+WATCHDOG_PROPERTY = os.getenv("BUDGET_VARIANCE_WATCHDOG_PROPERTY", PROP_NOTIFIED_AT)
 
 # HubSpot date properties take YYYY-MM-DD. Day granularity is deliberate: the
 # workflow fires within seconds, so anything still unstamped on a LATER date
@@ -95,6 +102,43 @@ MAX_DETAIL_CHARS = 1000
 
 class FlagsAborted(RuntimeError):
     """Raised when the run refuses to write. Nothing was written."""
+
+
+# ── Reading dates back out of HubSpot ────────────────────────────────────────
+
+def _as_date(raw: Any) -> str | None:
+    """HubSpot date/datetime value → 'YYYY-MM-DD', or None if unreadable.
+
+    Defensive about the format on purpose. HubSpot's CRM API usually returns
+    date properties as ISO strings, but datetime properties come back as epoch
+    MILLISECONDS in some responses, and a naive `value[:10]` turns
+    '1755043200000' into '1755043200' — which string-compares as older than any
+    real date and marks every flag stale forever.
+
+    A watchdog that cries wolf is worse than no watchdog: it trains people to
+    ignore the one signal this project exists to make trustworthy. So parse
+    both, and return None rather than guess.
+    """
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    if text.isdigit():
+        # Epoch: milliseconds if it is too large to be seconds.
+        ts = int(text)
+        if ts > 10_000_000_000:
+            ts //= 1000
+        try:
+            return datetime.fromtimestamp(ts, timezone.utc).strftime(_DATE_FMT)
+        except (OverflowError, OSError, ValueError):
+            return None
+    head = text[:10]
+    try:
+        datetime.strptime(head, _DATE_FMT)
+    except ValueError:
+        return None
+    return head
 
 
 # ── Rendering the detail ─────────────────────────────────────────────────────
@@ -179,15 +223,15 @@ def plan_flags(comparison: dict, flagged_now: list[dict]) -> dict:
         props = company.get("properties") or {}
         uuid = props.get("uuid") or ""
         if uuid and uuid in evaluated:
-            to_clear.append({
-                "id": cid,
-                "properties": {
-                    PROP_FLAG: "false",
-                    PROP_DETAIL: "",
-                    PROP_TASK_ID: "",
-                },
-                "_uuid": uuid,
-            })
+            # Reset the workflow's evidence property as well as the flag.
+            # Otherwise the NEXT flag on this company inherits the previous
+            # ticket's evidence and the watchdog reads it as already-notified —
+            # a workflow that fails to enrol would then look fine forever.
+            # Both the task id and the configured watchdog property are
+            # cleared, since which one carries the evidence is configurable.
+            cleared = {PROP_FLAG: "false", PROP_DETAIL: "",
+                       PROP_TASK_ID: "", WATCHDOG_PROPERTY: ""}
+            to_clear.append({"id": cid, "properties": cleared, "_uuid": uuid})
         else:
             # Not re-verified this run. Hold the flag and say so.
             held.append({"id": cid, "uuid": uuid,
@@ -207,9 +251,9 @@ def watchdog(flagged_now: list[dict], today: str | None = None) -> dict:
     stale: list[dict] = []
     for company in flagged_now:
         props = company.get("properties") or {}
-        if (props.get(WATCHDOG_PROPERTY) or "").strip():
+        if str(props.get(WATCHDOG_PROPERTY) or "").strip():
             continue                      # workflow left evidence — fine
-        flagged_at = (props.get(PROP_FLAGGED_AT) or "").strip()[:10]
+        flagged_at = _as_date(props.get(PROP_FLAGGED_AT))
         if not flagged_at:
             stale.append({"id": str(company.get("id", "")),
                           "flagged_at": None, "reason": "no_flag_date"})
@@ -234,8 +278,9 @@ def _currently_flagged() -> list[dict]:
     import hubspot_client as hs
     return hs.search_companies(
         [{"propertyName": PROP_FLAG, "operator": "EQ", "value": "true"}],
-        properties=["uuid", PROP_FLAG, PROP_DETAIL, PROP_FLAGGED_AT,
-                    PROP_TASK_ID, WATCHDOG_PROPERTY, "name"])
+        properties=list(dict.fromkeys(
+            ["uuid", PROP_FLAG, PROP_DETAIL, PROP_FLAGGED_AT,
+             PROP_TASK_ID, WATCHDOG_PROPERTY, "name"])))
 
 
 def _apply(items: list[dict]) -> None:

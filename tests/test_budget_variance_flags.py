@@ -45,11 +45,17 @@ def _comparison(new_wrong=(), evaluated=(), flood=False, **extra):
             "flood": flood, "flag_ceiling": 25, **extra}
 
 
-def _company(cid, uuid="", flagged_at=TODAY, task_id="", name="Citria"):
+def _company(cid, uuid="", flagged_at=TODAY, task_id="", name="Citria",
+             notified_at=""):
+    """A flagged company as HubSpot search returns it.
+
+    `notified_at` is the evidence the workflow ran — the default watchdog
+    property, since the ClickUp action cannot hand back a task id.
+    """
     return {"id": cid, "properties": {
         "uuid": uuid, "name": name,
         vf.PROP_FLAG: "true", vf.PROP_FLAGGED_AT: flagged_at,
-        vf.PROP_TASK_ID: task_id}}
+        vf.PROP_TASK_ID: task_id, vf.PROP_NOTIFIED_AT: notified_at}}
 
 
 class Setting(unittest.TestCase):
@@ -102,11 +108,21 @@ class Clearing(unittest.TestCase):
         self.assertEqual(len(plan["clear"]), 1)
         self.assertEqual(plan["clear"][0]["properties"][vf.PROP_FLAG], "false")
 
-    def test_clearing_also_resets_the_task_id(self):
-        """Otherwise the next flag on that company inherits the old ticket's id
-        and the watchdog reads it as already-notified."""
-        plan = vf.plan_flags(_comparison([], ["u1"]),
-                             [_company("101", "u1", task_id="CU-123")])
+    def test_clearing_also_resets_the_workflow_evidence(self):
+        """Otherwise the next flag on that company inherits the previous
+        ticket's evidence and the watchdog reads it as already-notified — a
+        workflow that fails to enrol would then look fine forever."""
+        plan = vf.plan_flags(
+            _comparison([], ["u1"]),
+            [_company("101", "u1", task_id="CU-123", notified_at="2026-08-01")])
+        cleared = plan["clear"][0]["properties"]
+        self.assertEqual(cleared[vf.PROP_TASK_ID], "")
+        self.assertEqual(cleared[vf.WATCHDOG_PROPERTY], "")
+
+    def test_clearing_resets_a_repointed_watchdog_property(self):
+        with mock.patch.object(vf, "WATCHDOG_PROPERTY", vf.PROP_TASK_ID):
+            plan = vf.plan_flags(_comparison([], ["u1"]),
+                                 [_company("101", "u1", task_id="CU-123")])
         self.assertEqual(plan["clear"][0]["properties"][vf.PROP_TASK_ID], "")
 
     def test_holds_a_flag_the_run_had_no_opinion_about(self):
@@ -144,20 +160,62 @@ class FloodCeiling(unittest.TestCase):
         self.assertIn("flood ceiling", plan["aborted"])
 
 
+class DateParsing(unittest.TestCase):
+    """HubSpot returns datetimes as epoch millis in some responses. A naive
+    slice turns '1755043200000' into '1755043200', which string-compares as
+    older than any real date and marks every flag stale forever — a watchdog
+    that cries wolf is worse than no watchdog."""
+
+    def test_iso_date(self):
+        self.assertEqual(vf._as_date("2026-08-01"), "2026-08-01")
+
+    def test_iso_datetime(self):
+        self.assertEqual(vf._as_date("2026-08-01T14:03:00Z"), "2026-08-01")
+
+    def test_epoch_milliseconds(self):
+        self.assertEqual(vf._as_date("1785542400000"), "2026-08-01")
+
+    def test_epoch_seconds(self):
+        self.assertEqual(vf._as_date("1785542400"), "2026-08-01")
+
+    def test_blank_and_garbage_return_none_rather_than_guessing(self):
+        for raw in ("", None, "   ", "not-a-date", "2026-13-99"):
+            self.assertIsNone(vf._as_date(raw), raw)
+
+
 class Watchdog(unittest.TestCase):
     """A flag with no evidence the workflow ran is an enrolment failure — §1a,
     the original defect."""
 
-    def test_counts_a_stale_flag_with_no_task_id(self):
+    def test_counts_a_stale_flag_with_no_evidence(self):
         out = vf.watchdog([_company("101", "u1", flagged_at="2026-08-01")],
                           today="2026-08-13")
         self.assertEqual(out["stale_count"], 1)
         self.assertEqual(out["stale"][0]["reason"], "no_workflow_evidence")
 
-    def test_a_flag_with_a_task_id_is_fine(self):
+    def test_a_flag_the_workflow_stamped_is_fine(self):
+        """The ClickUp action cannot return a task id, so the evidence is the
+        datetime the workflow stamps on itself."""
         out = vf.watchdog(
-            [_company("101", "u1", flagged_at="2026-08-01", task_id="CU-9")],
+            [_company("101", "u1", flagged_at="2026-08-01",
+                      notified_at="2026-08-01T14:03:00Z")],
             today="2026-08-13")
+        self.assertEqual(out["stale_count"], 0)
+
+    def test_epoch_valued_evidence_still_counts_as_evidence(self):
+        out = vf.watchdog(
+            [_company("101", "u1", flagged_at="2026-08-01",
+                      notified_at="1785542400000")],
+            today="2026-08-13")
+        self.assertEqual(out["stale_count"], 0)
+
+    def test_epoch_valued_flag_date_is_not_falsely_stale(self):
+        """The regression this parsing exists for."""
+        today = vf.date.today().strftime("%Y-%m-%d")
+        epoch_ms = str(int(vf.datetime.strptime(today, "%Y-%m-%d")
+                           .replace(tzinfo=vf.timezone.utc).timestamp() * 1000))
+        out = vf.watchdog([_company("101", "u1", flagged_at=epoch_ms)],
+                          today=today)
         self.assertEqual(out["stale_count"], 0)
 
     def test_a_flag_raised_today_is_not_yet_stale(self):
