@@ -399,6 +399,12 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 .ticket-status.open{background:#FEF9C3;color:#854D0E}
 .ticket-status.in-progress{background:#DBEAFE;color:#1D4ED8}
 .ticket-status.resolved{background:#DCFCE7;color:#166534}
+/* Done shared in-progress's blue, so the two states a requester most needs to
+   tell apart looked identical. needs-you is the only status they can act on,
+   so it gets the strongest treatment. unresolved reads as absent-not-closed. */
+.ticket-status.done{background:#DCFCE7;color:#166534}
+.ticket-status.needs-you{background:#FFEDD5;color:#9A3412}
+.ticket-status.unresolved{background:#F1F5F9;color:#64748B}
 .ticket-status.escalated{background:#EDE9FE;color:#5B21B6}
 .ticket-chevron{color:var(--tm);transition:transform .25s}
 .ticket-card.expanded .ticket-chevron{transform:rotate(180deg)}
@@ -3702,21 +3708,75 @@ function _loadTicketTypes(force) {
   if (!sel) return;
   if (__TICKET_TYPES__ && !force) return;
   var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
-  fetch(API_BASE + '/api/portal-tickets/types', {
+  // company_id lets the API tell a prefill field it WILL fill (hide it) from
+  // one it cannot (render it, so the requester can). Read off window here —
+  // COMPANY_ID/UUID are function-local in loadTickets et al, not globals.
+  var CID  = window.__PORTAL_COMPANY_ID__ || '';
+  var PUID = window.__PORTAL_UUID__ || '';
+  fetch(API_BASE + '/api/portal-tickets/types?company_id=' + encodeURIComponent(CID)
+        + '&uuid=' + encodeURIComponent(PUID), {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     __TICKET_TYPES__ = {};
     var types = (data && data.types) || [];
-    if (!types.length) { sel.innerHTML = '<option value="">No request types available</option>'; return; }
+    var unavailable = (data && data.unavailable) || [];
+
+    // Nothing online at all: don't open a form the requester can't submit.
+    // Point them at the fallback instead of a dropdown containing a sentence.
+    if (!types.length) {
+      _renderNoTicketTypes(unavailable, (data && data.fallback_email) || '');
+      return;
+    }
+
+    // Available and unavailable, merged back into registry order. An
+    // unavailable type renders DISABLED with the reason attached rather than
+    // being omitted — with 3 of 6 silently missing, a requester can't tell
+    // "my type isn't on yet" from "I'm misreading these labels", so they pick
+    // the nearest wrong one. That misroute is what this prevents.
+    var merged = types.concat(unavailable).sort(function(a, b){
+      return (a.order || 0) - (b.order || 0);
+    });
     sel.innerHTML = '<option value="">Select a request type…</option>' +
-      types.map(function(t){
-        __TICKET_TYPES__[t.key] = t;
-        return '<option value="' + _escAttr(t.key) + '">' + _escHtml(t.label) + '</option>';
+      merged.map(function(t){
+        if (t.available) {
+          __TICKET_TYPES__[t.key] = t;
+          return '<option value="' + _escAttr(t.key) + '">' + _escHtml(t.label) + '</option>';
+        }
+        return '<option value="" disabled>' + _escHtml(t.label) +
+               ' — not online yet</option>';
       }).join('');
   })
-  .catch(function(){ sel.innerHTML = '<option value="">Could not load request types</option>'; });
+  .catch(function(){
+    sel.innerHTML = '<option value="">Could not load request types — refresh, ' +
+                    'or email your Account Manager</option>';
+  });
+}
+
+// Zero types online. Replace the form with the fallback route rather than
+// leaving a dropdown that reads as broken.
+function _renderNoTicketTypes(unavailable, fallbackEmail) {
+  var form = document.getElementById('create-ticket-form');
+  if (!form) return;
+  // form_url is null unless CLICKUP_FORM_BASE_URL is configured — a dead
+  // "use the form instead" link strands the requester twice, so only render
+  // links we know resolve.
+  var links = (unavailable || []).filter(function(t){ return t.form_url; })
+    .map(function(t){
+      return '<li><a href="' + _escAttr(t.form_url) + '" target="_blank" rel="noopener">' +
+             _escHtml(t.label) + '</a></li>';
+    }).join('');
+  var mail = fallbackEmail
+    ? '<a href="mailto:' + _escAttr(fallbackEmail) + '">' + _escHtml(fallbackEmail) + '</a>'
+    : 'your Account Manager';
+  form.innerHTML =
+    '<div style="padding:24px;font-size:13px;color:var(--tm)">' +
+      '<div style="font-weight:600;color:var(--ts);margin-bottom:8px">' +
+        'Requests aren\'t open in the portal yet</div>' +
+      (links ? '<p>Use the request forms for now:</p><ul>' + links + '</ul>'
+             : '<p>Send your request to ' + mail + ' and we\'ll take it from there.</p>') +
+    '</div>';
 }
 
 // Render the selected type's fields into the form.
@@ -3886,12 +3946,35 @@ function loadTickets() {
     var list = document.getElementById('tickets-list');
     if (!list) return;
     var tickets = (data && data.tickets) || [];
+    // True on day 1 and every day after: _read_mappings only returns rows the
+    // portal itself wrote, so this list is structurally incomplete whether it
+    // holds 0 rows or 6. Say so rather than imply completeness.
+    var SCOPE_NOTE = '<div style="padding:10px 16px;color:var(--tm);font-size:12px">' +
+      'This shows requests filed through the portal. Requests filed outside it ' +
+      '— by email, or on the ClickUp forms — aren\'t shown here.</div>';
+
     if (!tickets.length) {
-      list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tm);font-size:13px">No open requests</div><div id="submitted-ticket-placeholder"></div>';
+      list.innerHTML =
+        '<div style="padding:24px 24px 4px;text-align:center;color:var(--tm);font-size:13px">' +
+          '<div style="font-weight:600;color:var(--ts);margin-bottom:6px">No open requests</div>' +
+        '</div>' + SCOPE_NOTE + '<div id="submitted-ticket-placeholder"></div>';
       return;
     }
-    list.innerHTML = tickets.map(_renderClickupTicketCard).join('') +
-      '<div id="submitted-ticket-placeholder"></div>';
+
+    // Partial rendered as complete is the worst failure available on a status
+    // surface — a requester concludes their request was never filed. Say how
+    // many we couldn't check.
+    var banner = '';
+    if (data && data.degraded) {
+      var n = data.unresolved_count || 0;
+      banner = '<div style="padding:10px 16px;margin-bottom:8px;border-radius:6px;' +
+        'background:rgba(180,120,20,.10);color:var(--ts);font-size:12.5px">' +
+        n + (n === 1 ? ' request couldn\'t' : ' requests couldn\'t') +
+        ' be checked just now — they\'re still open. Refresh to retry.</div>';
+    }
+    list.innerHTML = banner + tickets.map(_renderClickupTicketCard).join('') +
+      SCOPE_NOTE + '<div id="submitted-ticket-placeholder"></div>';
+    // Placeholders count as open — they are.
     var open = tickets.filter(function(t){ return t.status !== 'Done'; }).length;
     var badge = document.getElementById('tickets-badge');
     if (badge) badge.textContent = open;
@@ -3908,7 +3991,14 @@ function loadTickets() {
 // A ClickUp-backed ticket card: subject, type, client-safe status, age, and a
 // deep-link. No inline thread \u2014 the client-facing record is the on-Done recap.
 function _renderClickupTicketCard(t) {
-  var statusClass = (t.status === 'In progress' || t.status === 'Done') ? 'in-progress' : 'open';
+  // 'Done' and 'In progress' shared one class, so the two states a requester
+  // most needs to tell apart looked identical. 'Needs your approval' is the
+  // one that wants to stand out — it's the only status they can act on.
+  var statusClass = 'open';
+  if (t.status === 'Done') statusClass = 'done';
+  else if (t.status === 'In progress') statusClass = 'in-progress';
+  else if (t.status === 'Needs your approval') statusClass = 'needs-you';
+  else if (t.unresolved) statusClass = 'unresolved';
   var dateStr = '';
   if (t.created_ts) { try { dateStr = new Date(t.created_ts).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}); } catch(e){} }
   var age = (typeof t.age_days === 'number') ? (t.age_days === 0 ? 'today' : t.age_days + 'd ago') : '';
@@ -3923,6 +4013,12 @@ function _renderClickupTicketCard(t) {
       '<svg class="ticket-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>' +
     '</div>' +
     '<div class="ticket-body">' +
+      (t.unresolved
+        ? '<div style="padding:8px 0;color:var(--tm);font-size:12.5px">' +
+            'We couldn\'t reach ClickUp for this request just now. It was filed' +
+            (dateStr ? ' on ' + _escHtml(dateStr) : '') +
+            ' and is still open \u2014 refresh in a minute.</div>'
+        : '') +
       '<div class="ticket-foot">' +
         '<div class="ticket-date">Opened ' + dateStr + (age ? ' \u00b7 ' + age : '') + '</div>' +
         '<div style="display:flex;gap:8px;">' + link + '</div>' +

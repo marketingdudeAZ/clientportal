@@ -196,7 +196,10 @@ PORTAL_TICKET_PREFILL_SOURCES = {
     "Property URL":    os.getenv("CLICKUP_PREFILL_PROP_URL_FIELD",  "website"),
     "Property Code":   os.getenv("CLICKUP_PREFILL_PROP_CODE_FIELD", "property_code"),
     "Market":          os.getenv("CLICKUP_PREFILL_MARKET_FIELD",    "market"),
-    "Account Manager": os.getenv("CLICKUP_PREFILL_AM_FIELD",        "account_manager"),
+    # There is no `account_manager` company property (verified against the live
+    # schema, 838 properties). The AM is the record owner, so resolve it from
+    # hubspot_owner_id via the owners API — see portal_tickets._prefill_values.
+    "Account Manager": os.getenv("CLICKUP_PREFILL_AM_FIELD",        "hubspot_owner_id"),
     "uuid": "uuid",
     "UUID": "uuid",
 }
@@ -206,7 +209,11 @@ PORTAL_TICKET_PREFILL_SOURCES = {
 # of the raw ClickUp status rather than leaking an internal slug verbatim.
 PORTAL_TICKET_STATUS_MAP = {
     "to do": "Open", "open": "Open", "new": "Open", "backlog": "Open",
-    "in progress": "In progress", "pending pm approval": "In progress",
+    "in progress": "In progress",
+    # NOT "In progress". This is the one status where the requester can act, and
+    # showing it as in-progress makes them wait on us while we wait on them.
+    "pending pm approval": "Needs your approval",
+    "pending approval": "Needs your approval",
     "in review": "In progress", "review": "In progress", "awaiting review": "In progress",
     "complete": "Done", "completed": "Done", "closed": "Done", "done": "Done",
 }

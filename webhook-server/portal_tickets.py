@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -117,26 +118,110 @@ def _shape_field(f: dict) -> dict[str, Any]:
     }
 
 
-def form_schema(list_id: str) -> list[dict[str, Any]]:
+def form_schema(list_id: str, prefill: dict | None = None) -> "list[dict[str, Any]] | None":
     """Client-facing form fields for a list — ClickUp fields minus the ones we
-    pre-fill from the property record."""
+    can actually pre-fill from the property record.
+
+    `prefill` is optional: with none supplied, no field is hidden, which is the
+    safe direction (the requester sees a field we would have filled, rather than
+    a field nobody fills).
+
+    None means ClickUp would not tell us the schema. That must propagate all the
+    way to `available: false`; collapsing it into an empty form lets a requester
+    submit into a task missing every required field.
+    """
+    defs = clickup_client.get_list_fields(list_id)
+    if defs is None:
+        return None
+    # `resolved` is the prefill map we WILL actually stamp on the task. A
+    # prefill field is hidden only when we can genuinely fill it.
+    #
+    # This used to strip every prefill-NAMED field unconditionally, before
+    # knowing whether prefill would resolve anything — and _prefill_values
+    # swallows failures by design. So a mapping that broke (Account Manager
+    # pointed at a HubSpot property that does not exist) left the field neither
+    # on the form NOR on the task: permanently blank on every ticket reaching
+    # the services team, with no error. That is strictly worse than the ClickUp
+    # form this replaces, and the failure is generic — it fires for any prefill
+    # mapping that breaks later.
+    resolved = {k.strip().lower() for k, v in (prefill or {}).items() if v}
     return [
-        _shape_field(f)
-        for f in clickup_client.get_list_fields(list_id)
-        if not _is_prefill(f.get("name"))
+        _shape_field(f) for f in defs
+        if not (_is_prefill(f.get("name"))
+                and (f.get("name") or "").strip().lower() in resolved)
     ]
 
 
-def types_with_schema(include_internal: bool = False) -> list[dict[str, Any]]:
-    """The picker payload: every available type with its live form schema."""
-    out = []
-    for t in configured_types(include_internal):
-        out.append({
-            "key": t["key"],
-            "label": t["label"],
-            "audience": t["audience"],
-            "fields": form_schema(t["list_id"]),
-        })
+_REASON_NOT_CONFIGURED = ("This request type isn't online in the portal yet — "
+                          "use the form for now.")
+_REASON_SCHEMA_DOWN = ("We can't load this form right now. Try again in a few "
+                       "minutes, or use the form.")
+
+
+def _form_url(t: dict) -> str | None:
+    """Public ClickUp form URL for a type, or None if we cannot build a real one.
+
+    `form_slug` in the registry is a SLUG, not a URL (config.py says so), and no
+    full form URL has ever been exercised by this codebase. So this returns None
+    unless CLICKUP_FORM_BASE_URL is set — a dead "use the form instead" link is
+    worse than no link, because it strands the requester twice. The per-type
+    override wins so a URL that does not follow the base pattern can be pinned
+    without a code change.
+    """
+    override = (os.getenv(f"CLICKUP_FORM_URL_{t['key'].upper()}", "") or "").strip()
+    if override:
+        return override
+    base = (os.getenv("CLICKUP_FORM_BASE_URL", "") or "").rstrip("/")
+    slug = (t.get("form_slug") or "").strip()
+    return f"{base}/{slug}" if (base and slug) else None
+
+
+def types_with_schema(include_internal: bool = False, company_id: str = "",
+                      property_uuid: str = "") -> list[dict[str, Any]]:
+    """EVERY audience-appropriate registry type, each marked available or not.
+
+    `configured_types()` omits unconfigured types, which made the endorsed
+    "lights up type-by-type" rollout the WORST case: with 3 of 6 showing, a
+    requester cannot tell "my type isn't on yet" from "I'm misreading these
+    labels", so they pick the nearest wrong one — the exact silent misroute the
+    picker exists to prevent. Absence is not a message. This is.
+
+    SECURITY: internal types are still OMITTED ENTIRELY for client callers, not
+    listed as unavailable. Marking them unavailable would enumerate
+    `dispo_cancel` and `new_business` to every portal user — the disclosure that
+    create_ticket's identical-error-for-unknown-and-internal branch is
+    specifically written to prevent.
+    """
+    # Resolved ONCE for the whole picker, not per type: prefill depends on the
+    # property, not the ticket type, and this is what lets an unresolvable field
+    # render on the form instead of vanishing from it (see form_schema).
+    prefill = _prefill_values(company_id, property_uuid) if company_id else {}
+
+    out: list[dict[str, Any]] = []
+    for idx, t in enumerate(PORTAL_TICKET_TYPES):
+        audience = t.get("audience", "client")
+        if audience != "client" and not include_internal:
+            continue
+        entry = {
+            "key": t["key"], "label": t["label"], "audience": audience,
+            "order": idx, "available": False, "reason": None,
+            "reason_code": None, "form_url": _form_url(t), "fields": [],
+        }
+        list_id = _list_id_for(t)
+        if not list_id:
+            entry["reason_code"] = "not_configured"
+            entry["reason"] = _REASON_NOT_CONFIGURED
+            out.append(entry)
+            continue
+        schema = form_schema(list_id, prefill)
+        if schema is None:
+            entry["reason_code"] = "schema_unavailable"
+            entry["reason"] = _REASON_SCHEMA_DOWN
+            out.append(entry)
+            continue
+        entry["available"] = True
+        entry["fields"] = schema
+        out.append(entry)
     return out
 
 
@@ -152,6 +237,45 @@ def client_status(raw: str) -> str:
 
 
 # ── prefill (property fields the portal already knows) ───────────────────────
+
+_OWNER_CACHE: dict[str, tuple[float, dict[str, str]]] = {}
+_OWNER_CACHE_TTL = 900.0
+
+
+def _owner_name(owner_id: str) -> str:
+    """HubSpot owner id → "First Last". Cached 15 min; "" if unresolvable.
+
+    The owners list is small and near-static, and `GET /crm/v3/owners` returns
+    it whole — so caching turns a per-ticket round trip into one per quarter
+    hour. Modelled on ticket_manager._get_owner_names, which does the same
+    lookup uncached in the module A4 will retire.
+    """
+    if not owner_id:
+        return ""
+    now = time.monotonic()
+    hit = _OWNER_CACHE.get("all")
+    if not hit or (now - hit[0]) >= _OWNER_CACHE_TTL:
+        owners: dict[str, str] = {}
+        try:
+            # Through hubspot_client, the central Layer-1 connector: it owns the
+            # token, the 401/429 handling and the backoff, so this does not
+            # become a 40th place that hand-rolls HubSpot auth.
+            import hubspot_client
+            r = hubspot_client._request(
+                "GET", f"{hubspot_client.API_BASE}/crm/v3/owners")
+            for o in r.json().get("results", []):
+                name = f"{o.get('firstName','')} {o.get('lastName','')}".strip()
+                owners[str(o["id"])] = name or o.get("email", "")
+        except Exception as e:  # noqa: BLE001 — prefill is never load-bearing
+            logger.warning("portal ticket owner lookup failed: %s", e)
+            # Cache the failure briefly too, so a HubSpot outage doesn't cost a
+            # round trip on every single ticket render.
+            _OWNER_CACHE["all"] = (now, (hit[1] if hit else {}))
+            return (hit[1] if hit else {}).get(owner_id, "")
+        _OWNER_CACHE["all"] = (now, owners)
+        hit = _OWNER_CACHE["all"]
+    return hit[1].get(str(owner_id), "")
+
 
 def _prefill_values(company_id: str, property_uuid: str = "") -> dict[str, str]:
     """{ClickUp field name: value} for the prefilled fields, from HubSpot.
@@ -178,6 +302,9 @@ def _prefill_values(company_id: str, property_uuid: str = "") -> dict[str, str]:
         val = data.get(src)
         if not val and src == "uuid":
             val = property_uuid
+        # An owner id is a number; nobody wants "1284471" on their ticket.
+        if val and src == "hubspot_owner_id":
+            val = _owner_name(str(val)) or ""
         if val:
             out[cu_name] = str(val)
     return out
@@ -228,11 +355,18 @@ def _coerce(field_def: dict, value: Any) -> Any:
 
 def _build_custom_fields(
     list_id: str, inputs: dict | None, prefill: dict | None
-) -> tuple[list[dict], set, dict]:
+) -> "tuple[list[dict], set, dict] | None":
     """Build ClickUp's `[{id, value}]` custom-fields payload.
 
     `inputs` keys may be field ids OR names (the dynamic form sends ids);
     `prefill` keys are ClickUp field names. Inputs win over prefill on overlap.
+
+    Returns None when the list schema is unavailable. Silently returning an
+    empty payload is worse than failing: the task is created with ZERO
+    structured fields, and every value the requester typed is echoed into the
+    description behind a raw ClickUp field uuid (via _description's `extra`
+    loop, since applied_keys and label_by_key are both empty). Marketing reads
+    that as a sloppy requester rather than a degraded fetch.
 
     Returns (payload, applied_keys, label_by_key):
       * `applied_keys` holds BOTH the field id and the lowercased field name for
@@ -244,6 +378,8 @@ def _build_custom_fields(
         leftover value renders as "Priority: High" and not as a raw field uuid.
     """
     defs = clickup_client.get_list_fields(list_id)
+    if defs is None:
+        return None
     by_id = {d.get("id"): d for d in defs}
     by_name = {(d.get("name") or "").strip().lower(): d for d in defs}
     merged: dict[str, Any] = {}      # field_id -> coerced value
@@ -345,7 +481,19 @@ def create_ticket(
 
     subject = (subject or "").strip() or t["label"]
     prefill = _prefill_values(company_id, property_uuid)
-    cf_payload, applied_keys, labels = _build_custom_fields(list_id, fields, prefill)
+    built = _build_custom_fields(list_id, fields, prefill)
+    if built is None:
+        # Fail closed. After the field cache landed this branch fires only when
+        # the schema was never obtainable — the /types call that rendered this
+        # form seconds ago would otherwise have warmed it — so a retry is
+        # genuinely the right advice. 503 mirrors the unconfigured-type response
+        # above: transient, try again.
+        logger.warning("portal ticket create aborted: schema unavailable for "
+                       "list %s (type=%s, by=%s)",
+                       list_id, type_key, submitted_by or "anonymous")
+        return {"ok": False, "error": "We can't load this request form right "
+                                      "now. Please try again in a few minutes."}, 503
+    cf_payload, applied_keys, labels = built
     description = _description(applied_keys, submitted_by, company_id, property_uuid,
                                fields, labels)
 
@@ -364,18 +512,118 @@ def create_ticket(
     return {"ok": True, "ticket": _shape_task(task, type_key)}, 201
 
 
+_FETCH_WORKERS = int(os.getenv("PORTAL_TICKETS_FETCH_WORKERS", "4"))
+_FETCH_BUDGET = float(os.getenv("PORTAL_TICKETS_FETCH_BUDGET", "12"))
+
+
+def _fetch_tasks(task_ids: list[str]) -> dict[str, dict]:
+    """{task_id: task}, fetched concurrently under one wall-clock budget.
+
+    ClickUp v2 has no bulk task-by-id read — `GET /task/{id}` is one task per
+    call, and `GET /list/{id}/task` cannot be filtered to a set of ids. So N
+    calls are unavoidable; what IS avoidable is making them sequential on a
+    request thread. 50 serial calls at a 10s timeout is 500 seconds holding one
+    of a handful of server threads, which is how four colleagues opening this
+    tab took the whole portal down.
+
+    _FETCH_WORKERS is 4, not 10, on purpose: it multiplies against the server's
+    thread count, so 16 × 4 = 64 concurrent ClickUp sockets is the process-wide
+    worst case. Anything unfetched inside the budget becomes a visible
+    placeholder, never a silent omission.
+    """
+    import concurrent.futures
+    out: dict[str, dict] = {}
+    if not task_ids:
+        return out
+    pool = concurrent.futures.ThreadPoolExecutor(
+        max_workers=min(_FETCH_WORKERS, len(task_ids)),
+        thread_name_prefix="portal-tickets")
+    try:
+        futures = {pool.submit(clickup_client.get_task, tid): tid for tid in task_ids}
+        done, pending = concurrent.futures.wait(futures, timeout=_FETCH_BUDGET)
+        for fut in done:
+            try:
+                task = fut.result()
+            except Exception as e:  # noqa: BLE001 — one bad task ≠ a blank page
+                logger.warning("portal ticket fetch failed for %s: %s", futures[fut], e)
+                continue
+            if task:
+                out[futures[fut]] = task
+        if pending:
+            logger.warning("portal ticket fetch budget exhausted: %d of %d unresolved",
+                           len(pending), len(task_ids))
+    finally:
+        # wait=False + cancel_futures, NOT `with ...:`. __exit__ calls
+        # shutdown(wait=True), which blocks until every straggler returns and
+        # makes the budget above a lie.
+        pool.shutdown(wait=False, cancel_futures=True)
+    return out
+
+
 def list_tickets(company_id: str, *, property_uuid: str = "", limit: int = 50) -> list[dict]:
-    """Open + recent tickets for a property, newest first. Reads the stored
-    mapping, then fetches live status from ClickUp."""
-    refs = _read_mappings(company_id, property_uuid, limit)
-    out: list[dict] = []
-    for ref in refs:
-        task = clickup_client.get_task(ref.get("task_id"))
-        if not task:
+    """Open + recent tickets for a property, newest first.
+
+    Every mapping row produces exactly one row in the output. A task ClickUp
+    would not resolve becomes a placeholder, never a silent drop: partial
+    rendered as complete is the worst failure available on a status surface, and
+    the mapping row is our own write receipt that the request exists.
+    """
+    refs: list[dict] = []
+    seen: set = set()
+    for ref in _read_mappings(company_id, property_uuid, limit):
+        tid = str(ref.get("task_id") or "")
+        # The mapping table is append-only and mapping_for_task already assumes
+        # duplicate task_id rows, so dedupe here or the same ticket renders twice.
+        if not tid or tid in seen:
             continue
-        out.append(_shape_task(task, ref.get("ticket_type")))
+        seen.add(tid)
+        refs.append(ref)
+
+    tasks = _fetch_tasks([str(r["task_id"]) for r in refs])
+    out = [
+        _shape_task(tasks[str(r["task_id"])], r.get("ticket_type"))
+        if str(r["task_id"]) in tasks else _placeholder_task(r)
+        for r in refs
+    ]
     out.sort(key=lambda x: x.get("created_ts") or 0, reverse=True)
     return out
+
+
+def _created_ms(created_at: Any) -> int | None:
+    """BigQuery TIMESTAMP (datetime or ISO string) → epoch ms, so a placeholder
+    sorts correctly and shows its REAL filing date — we wrote that row."""
+    if not created_at:
+        return None
+    try:
+        dt = (created_at if isinstance(created_at, datetime)
+              else datetime.fromisoformat(str(created_at).replace("Z", "+00:00")))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1000)
+    except (TypeError, ValueError):
+        return None
+
+
+def _placeholder_task(ref: dict) -> dict[str, Any]:
+    """A request we KNOW exists, whose live state ClickUp would not give us.
+
+    `unresolved` drives both the card styling and the list-level banner.
+    """
+    t = _type_by_key(ref.get("ticket_type")) or {}
+    created = _created_ms(ref.get("created_at"))
+    tid = str(ref.get("task_id") or "")
+    return {
+        "id": tid,
+        "type": ref.get("ticket_type") or "",
+        "type_label": t.get("label", ""),
+        "subject": f"{t.get('label') or 'Request'} · {tid[-6:]}" if tid else "Request",
+        "status": "Status unavailable",
+        "raw_status": "",
+        "created_ts": created,
+        "age_days": _age_days(created),
+        "url": None,
+        "unresolved": True,
+    }
 
 
 def _age_days(created_ms: Any) -> int | None:
@@ -400,6 +648,7 @@ def _shape_task(task: dict, type_key: str | None = None) -> dict[str, Any]:
         "created_ts": int(created) if created else None,
         "age_days": _age_days(created),
         "url": task.get("url"),
+        "unresolved": False,
     }
 
 

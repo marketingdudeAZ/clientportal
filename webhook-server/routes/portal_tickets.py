@@ -126,12 +126,37 @@ def ticket_types():
     if denied:
         return denied
     _, is_internal = ident
+    # Optional: with a company the picker can tell a prefill field it WILL fill
+    # (hide it) from one it cannot (render it, so the requester can). Absent, no
+    # field is hidden — the safe direction.
+    company_id = (request.args.get("company_id") or "").strip()
+    property_uuid = (request.args.get("uuid") or "").strip()
     try:
-        types = portal_tickets.types_with_schema(include_internal=is_internal)
+        all_types = portal_tickets.types_with_schema(
+            include_internal=is_internal,
+            company_id=company_id, property_uuid=property_uuid)
     except Exception as e:  # noqa: BLE001
         logger.warning("portal ticket types failed: %s", e)
-        types = []
-    return jsonify({"types": types})
+        all_types = []
+
+    # `types` KEEPS ITS EXACT CONTRACT — available types only. The unavailable
+    # ones ship in a sibling key instead.
+    #
+    # Why: the HubSpot CDN holds the portal template for up to 10 hours while
+    # the API deploys in minutes, so there is a guaranteed window where this new
+    # response is served to the OLD JavaScript. That renderer maps whatever is
+    # in `types` straight into selectable <option>s — so folding unavailable
+    # entries in here would reintroduce the silent misroute during the go-live
+    # window itself. This shape also makes the frontend independently
+    # revertible.
+    available = [t for t in all_types if t.get("available")]
+    return jsonify({
+        "types": available,
+        "unavailable": [t for t in all_types if not t.get("available")],
+        "any_available": bool(available),
+        "fallback_email": os.environ.get("PORTAL_TICKETS_FALLBACK_EMAIL",
+                                         "portal@rpmliving.com"),
+    })
 
 
 # ── POST /api/portal-tickets/create ──────────────────────────────────────────
@@ -189,7 +214,14 @@ def ticket_list():
     except Exception as e:  # noqa: BLE001
         logger.warning("portal ticket list failed for %s: %s", company_id, e)
         tickets = []
-    return jsonify({"tickets": tickets})
+    # Additive: the count lets the UI say "2 of your requests couldn't be
+    # checked" instead of quietly rendering a short list as if it were complete.
+    unresolved = sum(1 for t in tickets if t.get("unresolved"))
+    return jsonify({
+        "tickets": tickets,
+        "unresolved_count": unresolved,
+        "degraded": bool(unresolved),
+    })
 
 
 # ── GET /api/portal-tickets/admin/discover (internal) ────────────────────────

@@ -49,9 +49,17 @@ def _fields():
 
 class StatusMapping(unittest.TestCase):
     def test_known_statuses_map_to_client_labels(self):
-        self.assertEqual(portal_tickets.client_status("pending pm approval"), "In progress")
         self.assertEqual(portal_tickets.client_status("TO DO"), "Open")
         self.assertEqual(portal_tickets.client_status("complete"), "Done")
+        self.assertEqual(portal_tickets.client_status("in progress"), "In progress")
+
+    def test_awaiting_the_requester_is_not_shown_as_in_progress(self):
+        """The one status where the requester can act. Showing it as
+        'In progress' makes them wait on us while we wait on them."""
+        self.assertEqual(portal_tickets.client_status("pending pm approval"),
+                         "Needs your approval")
+        self.assertEqual(portal_tickets.client_status("Pending PM Approval"),
+                         "Needs your approval")
 
     def test_unknown_status_falls_through_titlecased(self):
         # Never leak a raw internal slug — title-case it instead.
@@ -63,14 +71,42 @@ class StatusMapping(unittest.TestCase):
 
 
 class FormSchema(unittest.TestCase):
-    def test_prefill_fields_are_filtered_out(self):
+    def test_prefill_fields_are_filtered_out_when_we_can_fill_them(self):
+        prefill = {"Property URL": "https://x.com", "uuid": "u-1"}
         with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
-            schema = portal_tickets.form_schema("901-general")
+            schema = portal_tickets.form_schema("901-general", prefill)
         names = [f["name"] for f in schema]
-        self.assertNotIn("Property URL", names)   # prefilled → hidden
-        self.assertNotIn("uuid", names)           # prefilled → hidden
+        self.assertNotIn("Property URL", names)   # resolved → hidden
+        self.assertNotIn("uuid", names)           # resolved → hidden
         self.assertIn("Priority", names)
         self.assertIn("Details", names)
+
+    def test_an_unresolvable_prefill_field_is_RENDERED_not_hidden(self):
+        """The Account Manager class of bug: the mapping pointed at a HubSpot
+        property that does not exist, prefill swallowed the failure, and the
+        field ended up neither on the form nor on the task — permanently blank
+        on every ticket, silently. Strictly worse than the ClickUp form."""
+        prefill = {"uuid": "u-1"}                  # Property URL did NOT resolve
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
+            schema = portal_tickets.form_schema("901-general", prefill)
+        names = [f["name"] for f in schema]
+        self.assertIn("Property URL", names)
+        self.assertNotIn("uuid", names)
+
+    def test_no_prefill_map_hides_nothing(self):
+        """Safe direction: show a field we would have filled, rather than hide
+        one nobody fills."""
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
+            schema = portal_tickets.form_schema("901-general")
+        self.assertIn("Property URL", [f["name"] for f in schema])
+
+    def test_form_schema_returns_none_when_clickup_will_not_say(self):
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=None):
+            self.assertIsNone(portal_tickets.form_schema("901-general"))
+
+    def test_a_genuinely_fieldless_list_is_empty_not_none(self):
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=[]):
+            self.assertEqual(portal_tickets.form_schema("901-general"), [])
 
     def test_dropdown_options_and_input_kind_shaped(self):
         with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
@@ -297,3 +333,145 @@ class Discovery(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ListTickets(unittest.TestCase):
+    """The status surface. Previously untested, and its failure mode —
+    silently rendering a partial list as complete — is the worst one available
+    here: a requester concludes their request was never filed."""
+
+    def _refs(self, n=3):
+        return [{"task_id": f"t{i}", "ticket_type": "general",
+                 "submitted_by": "cm@rpmliving.com",
+                 "created_at": f"2026-08-0{i+1}T12:00:00+00:00"} for i in range(n)]
+
+    def _task(self, tid):
+        return {"id": tid, "name": f"Subject {tid}", "status": {"status": "to do"},
+                "date_created": "1754049600000", "url": f"https://clickup.com/t/{tid}"}
+
+    def test_every_mapping_row_produces_a_row(self):
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=self._refs(3)), \
+             mock.patch.object(clickup_client, "get_task",
+                               side_effect=lambda t: self._task(t) if t != "t1" else None):
+            out = portal_tickets.list_tickets("c1")
+        self.assertEqual(len(out), 3)
+        self.assertEqual(sum(1 for t in out if t.get("unresolved")), 1)
+
+    def test_a_resolvable_task_is_shaped_normally(self):
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=self._refs(1)), \
+             mock.patch.object(clickup_client, "get_task", side_effect=self._task):
+            out = portal_tickets.list_tickets("c1")
+        self.assertFalse(out[0]["unresolved"])
+        self.assertEqual(out[0]["status"], "Open")
+        self.assertTrue(out[0]["url"])
+
+    def test_placeholder_carries_the_stored_filing_date_and_no_url(self):
+        """We wrote the mapping row, so we know when it was filed even when
+        ClickUp won't tell us its state."""
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=self._refs(1)), \
+             mock.patch.object(clickup_client, "get_task", return_value=None):
+            out = portal_tickets.list_tickets("c1")
+        self.assertTrue(out[0]["unresolved"])
+        self.assertIsNotNone(out[0]["created_ts"])
+        self.assertIsNone(out[0]["url"])
+        self.assertEqual(out[0]["status"], "Status unavailable")
+
+    def test_duplicate_mapping_rows_render_once(self):
+        refs = self._refs(1) * 2
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=refs), \
+             mock.patch.object(clickup_client, "get_task", side_effect=self._task):
+            out = portal_tickets.list_tickets("c1")
+        self.assertEqual(len(out), 1)
+
+    def test_tasks_are_fetched_concurrently_not_serially(self):
+        import time as _t
+        def slow(tid):
+            _t.sleep(0.2)
+            return self._task(tid)
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=self._refs(8)), \
+             mock.patch.object(clickup_client, "get_task", side_effect=slow):
+            start = _t.monotonic()
+            out = portal_tickets.list_tickets("c1")
+            elapsed = _t.monotonic() - start
+        self.assertEqual(len(out), 8)
+        self.assertLess(elapsed, 1.2, "8 × 0.2s ran serially — the fan-out is not working")
+
+    def test_the_wall_clock_budget_bounds_the_call(self):
+        """The regression test for the 500-second page load."""
+        import time as _t
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=self._refs(4)), \
+             mock.patch.object(portal_tickets, "_FETCH_BUDGET", 0.2), \
+             mock.patch.object(clickup_client, "get_task",
+                               side_effect=lambda t: (_t.sleep(3), self._task(t))[1]):
+            start = _t.monotonic()
+            out = portal_tickets.list_tickets("c1")
+            elapsed = _t.monotonic() - start
+        self.assertLess(elapsed, 1.5)
+        self.assertTrue(all(t["unresolved"] for t in out))
+
+    def test_a_raising_get_task_becomes_a_placeholder_not_a_500(self):
+        def boom(tid):
+            raise RuntimeError("clickup exploded")
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=self._refs(2)), \
+             mock.patch.object(clickup_client, "get_task", side_effect=boom):
+            out = portal_tickets.list_tickets("c1")
+        self.assertEqual(len(out), 2)
+        self.assertTrue(all(t["unresolved"] for t in out))
+
+    def test_no_mappings_never_touches_clickup(self):
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=[]), \
+             mock.patch.object(clickup_client, "get_task") as g:
+            self.assertEqual(portal_tickets.list_tickets("c1"), [])
+        g.assert_not_called()
+
+
+class RegistryTypes(unittest.TestCase):
+    def test_every_client_type_appears_even_unconfigured(self):
+        types = portal_tickets.types_with_schema()
+        keys = {t["key"] for t in types}
+        self.assertIn("rebrand", keys)       # no CLICKUP_LIST_* set for it
+        rebrand = next(t for t in types if t["key"] == "rebrand")
+        self.assertFalse(rebrand["available"])
+        self.assertEqual(rebrand["reason_code"], "not_configured")
+        self.assertTrue(rebrand["reason"])
+
+    def test_a_throttled_schema_marks_the_type_unavailable_not_fieldless(self):
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=None):
+            types = portal_tickets.types_with_schema()
+        general = next(t for t in types if t["key"] == "general")
+        self.assertFalse(general["available"])
+        self.assertEqual(general["reason_code"], "schema_unavailable")
+        self.assertEqual(general["fields"], [])
+
+    def test_a_genuinely_fieldless_list_is_still_available(self):
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=[]):
+            types = portal_tickets.types_with_schema()
+        general = next(t for t in types if t["key"] == "general")
+        self.assertTrue(general["available"])
+        self.assertEqual(general["fields"], [])
+
+    def test_internal_types_are_OMITTED_not_marked_unavailable(self):
+        """Listing them would enumerate dispo_cancel and new_business to every
+        portal user — the disclosure create_ticket's identical-error branch
+        exists to prevent."""
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=[]):
+            keys = {t["key"] for t in portal_tickets.types_with_schema()}
+        self.assertNotIn("dispo_cancel", keys)
+        self.assertNotIn("new_business", keys)
+
+    def test_internal_caller_sees_internal_types(self):
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=[]):
+            keys = {t["key"] for t in portal_tickets.types_with_schema(include_internal=True)}
+        self.assertIn("dispo_cancel", keys)
+
+    def test_order_preserves_registry_order(self):
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=[]):
+            types = portal_tickets.types_with_schema()
+        self.assertEqual([t["order"] for t in types], sorted(t["order"] for t in types))
+
+    def test_form_url_is_none_without_a_configured_base(self):
+        """form_slug is a slug, not a URL. A dead 'use the form instead' link
+        strands the requester twice."""
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=[]):
+            types = portal_tickets.types_with_schema()
+        self.assertTrue(all(t["form_url"] is None for t in types))
