@@ -924,21 +924,29 @@ minutes, and it prevents a repeat on its own.
 
 ### Not yet built
 
-The parallel run (§4e) — **none of it exists yet**, in dependency order:
+**BUILT 2026-08-13** — the comparator half of §4e, 88 tests green:
 
-- **Tab as a parameter.** `BUDGET_TAB_NAME` is a module-level global read by both
-  `budget_reconcile.read_sheet_rows()` and `budget_sync._worksheet()`. Thread it
-  through. ~20 lines, and everything below depends on it.
-- **`--bootstrap`** — seed the shadow tab from HubSpot, header row included, with
-  `MAX_CELL_WRITES` / `MAX_DRIFT_RATIO` exempted and a hard refusal to target the
-  live tab. `MIN_EXPECTED_PROPERTIES` stays enforced.
-- **Three-way comparison** — parse both tabs, run the existing `diff()` against
-  `expected` twice, classify into §4e's four rows. No new comparison logic, just
-  the classifier and a report.
-- **Variance flags** — write the four company properties, honour
-  `BUDGET_VARIANCE_MAX_FLAGS`, and **clear the flag when the variance resolves**.
-  The clearing is the load-bearing half; a flag-setter without a flag-clearer is
-  worse than nothing.
+| Piece | Where |
+|---|---|
+| Tab as a parameter | `read_sheet_rows(tab)`, `reconcile(tab)`, `_worksheet(tab)`, `_verify(expected, tab)` |
+| Target resolution | `budget_sync.target_tab()` — **defaults to shadow**, refuses an unrecognised value rather than guessing |
+| Bootstrap | `sync(bootstrap=True)` + `_assert_bootstrap_safe()`, which fires before the HubSpot sweep and before any Sheets call |
+| Ceiling exemption | `_preflight(..., bootstrap=True)` — write ceilings off, volume floor still on |
+| Three-way comparison | `webhook-server/budget_compare.py` — `classify()` pure, `compare()` does the I/O |
+| CLI | `--compare`, `--bootstrap`, `--target`, `--tab` |
+| Tests | `tests/test_budget_compare.py` (24), `TargetResolution` / `BootstrapGuard` / `TabThreading` in `test_budget_sync.py` |
+
+`budget_compare` writes nothing — to either tab or to HubSpot — and there is a
+test asserting the writer client is never constructed.
+
+Still to build, in dependency order:
+
+- **Variance flags** — write `budget_discrepancy` (created in HubSpot
+  2026-08-13, company / single checkbox / true-false) plus the three companion
+  properties, honour `BUDGET_VARIANCE_MAX_FLAGS`, and **clear the flag when the
+  variance resolves**. The clearing is the load-bearing half; a flag-setter
+  without a flag-clearer is worse than nothing. `budget_compare.flagworthy()` is
+  the input and is already public for exactly this.
 - **Task-id watchdog** — count flags older than N hours with no
   `budget_discrepancy_task_id`. That number is "how many times the workflow
   silently didn't fire."

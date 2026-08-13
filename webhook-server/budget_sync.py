@@ -59,6 +59,17 @@ logger = logging.getLogger(__name__)
 
 SYNC_ENABLED = os.getenv("BUDGET_SYNC_ENABLED", "").lower() == "true"
 
+# The shadow tab of the parallel run (docs/budget-sync-plan.md §4e). Same
+# spreadsheet as the live tab; nothing reads it. Created 2026-08-13.
+SHADOW_TAB_NAME = os.getenv("FLUENCY_BUDGET_SHADOW_TAB",
+                            "SHADOW - Fluency Budgets (DO NOT USE)")
+
+# Which tab this process writes. DEFAULTS TO SHADOW, deliberately: during the
+# parallel run the loop must not touch what Fluency reads, and a default of
+# "live" would make a forgotten env var the difference between a shadow write
+# and a production one. Flipping this to "live" is the cutover.
+SYNC_TARGET = os.getenv("BUDGET_SYNC_TARGET", "shadow").lower()
+
 # Circuit breaker 1 — refuse to run if HubSpot returned implausibly few
 # properties. Measured 2026-08-12: 741 managed companies → 666 with a
 # closed-won deal → 664 with a uuid. 500 leaves room for real portfolio
@@ -90,6 +101,40 @@ _write_lock = threading.Lock()
 
 class SyncAborted(RuntimeError):
     """Raised when a circuit breaker trips. Nothing was written."""
+
+
+# ── Which tab are we writing? ────────────────────────────────────────────────
+
+def target_tab(target: str | None = None) -> str:
+    """Resolve 'live' / 'shadow' to a worksheet name.
+
+    Deliberately refuses an unrecognised value rather than falling back to a
+    default. "BUDGET_SYNC_TARGET=Live" quietly writing the shadow tab — or,
+    far worse, a typo quietly writing the live one — is exactly the class of
+    silent misbehaviour this project exists to remove.
+    """
+    t = (target or SYNC_TARGET).lower()
+    if t == "live":
+        return rec.BUDGET_TAB_NAME
+    if t == "shadow":
+        return SHADOW_TAB_NAME
+    raise SyncAborted(
+        f"BUDGET_SYNC_TARGET must be 'live' or 'shadow', got {t!r}. "
+        f"Refusing to guess which tab you meant.")
+
+
+def _assert_bootstrap_safe(tab: str) -> None:
+    """Bootstrap exempts the write ceilings, so it must never target the live tab.
+
+    Checked before anything is computed, not on the way out: the point is that
+    the combination "ceilings off" + "live tab" is unreachable, not that it is
+    caught late. See docs/budget-sync-plan.md §4e.
+    """
+    if tab == rec.BUDGET_TAB_NAME:
+        raise SyncAborted(
+            f"bootstrap targets {tab!r}, which is the live tab Fluency reads. "
+            f"Bootstrap disables the write ceilings and is only ever valid "
+            f"against the shadow tab. Refusing.")
 
 
 # ── Sheet addressing ─────────────────────────────────────────────────────────
@@ -171,11 +216,26 @@ def plan(expected: dict[str, dict],
     return {"updates": updates, "appends": appends, "skipped": skipped}
 
 
-def _preflight(expected: dict, actual: dict, plan_obj: dict) -> None:
+def _preflight(expected: dict, actual: dict, plan_obj: dict,
+               bootstrap: bool = False) -> None:
     """Circuit breakers. Raise SyncAborted rather than write something wrong.
 
     Ordered cheapest-first so a catastrophic input is rejected before the more
     nuanced ratio check has to reason about it.
+
+    `bootstrap` exempts the two WRITE ceilings and keeps the volume floor. The
+    asymmetry is the point (docs/budget-sync-plan.md §4e):
+
+      * The volume floor guards against bad HubSpot data. A run that sees 12
+        properties is wrong no matter which tab it is about to write, so it
+        stays enforced always.
+      * The write ceilings guard the tab Fluency reads against an unattended
+        loop mass-rewriting it. Seeding an empty shadow tab is ~6,640 cells and
+        100% "drift" by definition, and nothing consumes the result. That
+        justification simply does not reach it.
+
+    _assert_bootstrap_safe guarantees bootstrap cannot be pointed at the live
+    tab, which is what keeps this exemption narrow.
     """
     n_expected = len(expected)
     if MIN_EXPECTED_PROPERTIES and n_expected < MIN_EXPECTED_PROPERTIES:
@@ -184,6 +244,9 @@ def _preflight(expected: dict, actual: dict, plan_obj: dict) -> None:
             f"{MIN_EXPECTED_PROPERTIES}. Refusing to write — this is far more "
             f"likely to be an auth or pagination failure than a real portfolio "
             f"change, and treating it as desired state would zero live budgets.")
+
+    if bootstrap:
+        return
 
     n_writes = len(plan_obj["updates"]) + len(plan_obj["appends"])
     if n_writes > MAX_CELL_WRITES:
@@ -237,10 +300,11 @@ def _rw_client():
     return gspread.authorize(creds)
 
 
-def _worksheet():
+def _worksheet(tab: str | None = None):
     if not rec.BUDGET_SHEET_ID:
         raise RuntimeError("FLUENCY_BUDGET_SHEET_ID not set")
-    return _rw_client().open_by_key(rec.BUDGET_SHEET_ID).worksheet(rec.BUDGET_TAB_NAME)
+    return _rw_client().open_by_key(rec.BUDGET_SHEET_ID).worksheet(
+        tab or rec.BUDGET_TAB_NAME)
 
 
 def _apply(ws, plan_obj: dict) -> None:
@@ -259,13 +323,17 @@ def _apply(ws, plan_obj: dict) -> None:
                        insert_data_option="INSERT_ROWS")
 
 
-def _verify(expected: dict[str, dict]) -> list[dict]:
+def _verify(expected: dict[str, dict], tab: str | None = None) -> list[dict]:
     """Re-read the sheet and diff again. Returns remaining drift.
 
     This is the difference between "we sent the write" and "the budget is
     correct". The old action reported success on the former.
+
+    Reads back the tab that was just written, not whichever tab is the default
+    — verifying the live tab after writing the shadow one would report clean
+    while proving nothing.
     """
-    rows = rec.read_sheet_rows()
+    rows = rec.read_sheet_rows(tab)
     actual, structural = rec.parse_sheet(rows)
     return [d for d in rec.diff(expected, actual)
             if d["kind"] != rec.KIND_ORPHAN_PROPERTY] + [
@@ -289,18 +357,38 @@ def _deadletter(payload: dict) -> None:
 
 # ── Entry point ──────────────────────────────────────────────────────────────
 
-def sync(dry_run: bool = True) -> dict:
-    """Converge the budget sheet onto HubSpot. Returns a report.
+def sync(dry_run: bool = True, target: str | None = None,
+         bootstrap: bool = False) -> dict:
+    """Converge a budget tab onto HubSpot. Returns a report.
 
     dry_run=True (THE DEFAULT) computes and returns the plan without writing.
     The default is deliberate: every accidental invocation is a no-op.
+
+    `target` is 'shadow' (the default, during the parallel run) or 'live'.
+    `bootstrap` seeds an empty tab: it exempts the two write ceilings and
+    refuses to target the live tab. See docs/budget-sync-plan.md §4e.
     """
     started = time.monotonic()
     stamp = datetime.now(timezone.utc).isoformat()
 
+    # Resolve and validate the target FIRST — before the HubSpot sweep, before
+    # any Sheets call. A run that is going to refuse should refuse immediately
+    # and cheaply, and the bootstrap guard is only meaningful if nothing has
+    # happened yet when it fires.
+    try:
+        tab = target_tab(target)
+        if bootstrap:
+            _assert_bootstrap_safe(tab)
+    except SyncAborted as e:
+        report = {"ok": False, "aborted": str(e), "dry_run": dry_run,
+                  "bootstrap": bootstrap, "at": stamp}
+        _deadletter({"kind": "invalid_target", **report})
+        logger.error("budget sync ABORTED before any read: %s", e)
+        return report
+
     if not dry_run and not SYNC_ENABLED:
         return {"ok": False, "skipped": "BUDGET_SYNC_ENABLED is not true",
-                "dry_run": dry_run, "at": stamp}
+                "dry_run": dry_run, "tab": tab, "at": stamp}
 
     if not _write_lock.acquire(blocking=False):
         # Overlapping runs are the race. Skipping is correct — the next run
@@ -310,7 +398,7 @@ def sync(dry_run: bool = True) -> dict:
 
     try:
         expected = rec.expected_budgets()
-        rows = rec.read_sheet_rows()
+        rows = rec.read_sheet_rows(tab)
         actual, structural = rec.parse_sheet(rows)
         index = index_rows(rows)
         plan_obj = plan(expected, actual, index)
@@ -318,6 +406,8 @@ def sync(dry_run: bool = True) -> dict:
         report: dict[str, Any] = {
             "at": stamp,
             "dry_run": dry_run,
+            "tab": tab,
+            "bootstrap": bootstrap,
             "properties_expected": len(expected),
             "properties_in_sheet": len(actual),
             "planned_updates": len(plan_obj["updates"]),
@@ -327,7 +417,7 @@ def sync(dry_run: bool = True) -> dict:
         }
 
         try:
-            _preflight(expected, actual, plan_obj)
+            _preflight(expected, actual, plan_obj, bootstrap=bootstrap)
         except SyncAborted as e:
             report.update({"ok": False, "aborted": str(e)})
             _deadletter({"kind": "circuit_breaker", **report})
@@ -344,9 +434,9 @@ def sync(dry_run: bool = True) -> dict:
                            "elapsed_s": round(time.monotonic() - started, 2)})
             return report
 
-        _apply(_worksheet(), plan_obj)
+        _apply(_worksheet(tab), plan_obj)
 
-        remaining = _verify(expected)
+        remaining = _verify(expected, tab)
         report["ok"] = not remaining
         report["unverified"] = remaining
         report["elapsed_s"] = round(time.monotonic() - started, 2)

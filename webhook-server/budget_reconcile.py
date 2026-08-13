@@ -374,12 +374,19 @@ def _readonly_client():
     return gspread.authorize(creds)
 
 
-def read_sheet_rows() -> list[list[str]]:
-    """Raw rows of the budget tab, header included. One API call."""
+def read_sheet_rows(tab: str | None = None) -> list[list[str]]:
+    """Raw rows of a budget tab, header included. One API call.
+
+    `tab` defaults to the live tab. It is a parameter rather than the module
+    global it used to be because the parallel run (docs/budget-sync-plan.md
+    §4e) reads the live tab and the shadow tab in the same process, and a
+    global would make "which tab did this report describe?" depend on
+    execution order.
+    """
     if not BUDGET_SHEET_ID:
         raise RuntimeError("FLUENCY_BUDGET_SHEET_ID not set")
     sh = _readonly_client().open_by_key(BUDGET_SHEET_ID)
-    return sh.worksheet(BUDGET_TAB_NAME).get_all_values()
+    return sh.worksheet(tab or BUDGET_TAB_NAME).get_all_values()
 
 
 def parse_sheet(rows: list[list[str]]) -> tuple[dict[str, dict], list[dict]]:
@@ -467,15 +474,18 @@ def diff(expected: dict[str, dict], actual: dict[str, dict]) -> list[dict]:
 
 # ── Entry point ──────────────────────────────────────────────────────────────
 
-def reconcile() -> dict:
+def reconcile(tab: str | None = None) -> dict:
     """Run a full reconciliation. Returns a report; writes nothing anywhere.
 
     The caller decides what to do with the report — render it, post it to a
     channel, append it to a tracking sheet. Keeping delivery out of here means
     this function is safe to run by hand at any time, including in prod.
+
+    `tab` defaults to the live tab. Pass the shadow tab to reconcile that one
+    instead; budget_compare does exactly that, twice.
     """
     expected = expected_budgets()
-    rows = read_sheet_rows()
+    rows = read_sheet_rows(tab)
     actual, structural = parse_sheet(rows)
     drift = structural + diff(expected, actual)
 
@@ -485,6 +495,7 @@ def reconcile() -> dict:
 
     return {
         "ok": not drift,
+        "tab": tab or BUDGET_TAB_NAME,
         "properties_expected": len(expected),
         "properties_in_sheet": len(actual),
         "sheet_rows": max(0, len(rows) - 1),

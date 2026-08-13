@@ -316,5 +316,114 @@ class SyncEntryPoint(unittest.TestCase):
         bs._write_lock.release()
 
 
+class TargetResolution(unittest.TestCase):
+    """Which tab a run writes. See docs/budget-sync-plan.md §4e."""
+
+    def test_shadow_is_the_default(self):
+        """A forgotten env var must not be the difference between a shadow
+        write and a production one."""
+        with mock.patch.object(bs, "SYNC_TARGET", "shadow"):
+            self.assertEqual(bs.target_tab(), bs.SHADOW_TAB_NAME)
+
+    def test_live_resolves_to_the_tab_fluency_reads(self):
+        self.assertEqual(bs.target_tab("live"), rec.BUDGET_TAB_NAME)
+
+    def test_case_is_tolerated(self):
+        self.assertEqual(bs.target_tab("LIVE"), rec.BUDGET_TAB_NAME)
+
+    def test_unrecognised_target_refuses_rather_than_defaulting(self):
+        """A typo must abort, not silently pick a tab."""
+        with self.assertRaises(bs.SyncAborted):
+            bs.target_tab("liev")
+
+    def test_the_two_tabs_are_different(self):
+        self.assertNotEqual(bs.target_tab("live"), bs.target_tab("shadow"))
+
+
+class BootstrapGuard(unittest.TestCase):
+    """Bootstrap exempts the write ceilings, so it must be unreachable against
+    the live tab — not merely discouraged there."""
+
+    def test_bootstrap_against_the_live_tab_is_refused(self):
+        with self.assertRaises(bs.SyncAborted) as cm:
+            bs._assert_bootstrap_safe(rec.BUDGET_TAB_NAME)
+        self.assertIn("live tab", str(cm.exception))
+
+    def test_bootstrap_against_the_shadow_tab_is_allowed(self):
+        bs._assert_bootstrap_safe(bs.SHADOW_TAB_NAME)      # does not raise
+
+    def test_sync_refuses_a_live_bootstrap_before_reading_anything(self):
+        """The guard fires before the HubSpot sweep and before any Sheets call.
+
+        Checked by asserting the expensive calls never happened: a guard that
+        only fires after a full portfolio read is a guard that already let the
+        run begin.
+        """
+        with mock.patch.object(rec, "expected_budgets") as exp, \
+             mock.patch.object(rec, "read_sheet_rows") as read, \
+             mock.patch.object(bs, "_deadletter"):
+            r = bs.sync(dry_run=False, target="live", bootstrap=True)
+        self.assertFalse(r["ok"])
+        self.assertIn("live tab", r["aborted"])
+        exp.assert_not_called()
+        read.assert_not_called()
+
+    def test_bootstrap_exempts_the_write_ceilings(self):
+        """~6,640 appends into an empty tab is the seed, not a runaway."""
+        expected = _expected(*[(f"u{i}", f"P{i}", {}) for i in range(600)])
+        plan_obj = {"updates": [], "skipped": [],
+                    "appends": [[f"u{i}", "n", "l", "$1.00"] for i in range(6000)]}
+        with mock.patch.object(bs, "MIN_EXPECTED_PROPERTIES", 500):
+            with self.assertRaises(bs.SyncAborted):
+                bs._preflight(expected, {}, plan_obj)          # normal run: refused
+            bs._preflight(expected, {}, plan_obj, bootstrap=True)   # seed: allowed
+
+    def test_bootstrap_still_enforces_the_volume_floor(self):
+        """The floor guards against bad HubSpot data, which is tab-independent.
+
+        A run that sees 12 properties is wrong wherever it is about to write.
+        """
+        expected = _expected(*[(f"u{i}", f"P{i}", {}) for i in range(12)])
+        plan_obj = {"updates": [], "appends": [], "skipped": []}
+        with mock.patch.object(bs, "MIN_EXPECTED_PROPERTIES", 500):
+            with self.assertRaises(bs.SyncAborted) as cm:
+                bs._preflight(expected, {}, plan_obj, bootstrap=True)
+        self.assertIn("below the floor", str(cm.exception))
+
+
+class TabThreading(unittest.TestCase):
+    """The tab is a parameter, not a global — the parallel run reads both in
+    one process, and a global would make the answer depend on call order."""
+
+    def test_sync_reads_and_verifies_the_tab_it_writes(self):
+        reads: list = []
+        expected = _expected(("u1", "Citria", {"Geofence": "$500.00"}))
+        rows = _rows(("u1", "Citria", {}))
+
+        with mock.patch.object(rec, "expected_budgets", return_value=expected), \
+             mock.patch.object(rec, "read_sheet_rows",
+                               side_effect=lambda tab=None: (reads.append(tab), rows)[1]), \
+             mock.patch.object(bs, "SYNC_ENABLED", True), \
+             mock.patch.object(bs, "_apply") as apply_, \
+             mock.patch.object(bs, "_worksheet") as ws, \
+             mock.patch.object(bs, "MIN_EXPECTED_PROPERTIES", 0), \
+             mock.patch.object(bs, "MAX_DRIFT_RATIO", 0):
+            bs.sync(dry_run=False, target="shadow")
+
+        apply_.assert_called_once()
+        ws.assert_called_once_with(bs.SHADOW_TAB_NAME)
+        # Read for the plan, then re-read for verification — both the shadow tab.
+        self.assertEqual(reads, [bs.SHADOW_TAB_NAME, bs.SHADOW_TAB_NAME])
+
+    def test_report_names_the_tab(self):
+        expected = _expected(("u1", "Citria", {}))
+        rows = _rows(("u1", "Citria", {}))
+        with mock.patch.object(rec, "expected_budgets", return_value=expected), \
+             mock.patch.object(rec, "read_sheet_rows", return_value=rows), \
+             mock.patch.object(bs, "MIN_EXPECTED_PROPERTIES", 0):
+            r = bs.sync(dry_run=True, target="shadow")
+        self.assertEqual(r["tab"], bs.SHADOW_TAB_NAME)
+
+
 if __name__ == "__main__":
     unittest.main()
