@@ -5,6 +5,7 @@ calls `register_all(app)` once at startup.
 """
 
 from .ils import ils_bp
+from .budget_sync_api import budget_sync_api_bp
 from .clickup import clickup_bp
 from .loop import loop_bp
 from .onboarding import onboarding_bp
@@ -32,6 +33,7 @@ def register_all(app):
     app.register_blueprint(loop_bp)
     app.register_blueprint(ils_bp)
     app.register_blueprint(clickup_bp)
+    app.register_blueprint(budget_sync_api_bp)
     # Loop 1 self-checkout — every endpoint 404s until SELF_CHECKOUT_ENABLED=true,
     # so registering here is inert until you flip the flag.
     app.register_blueprint(self_checkout_bp)
