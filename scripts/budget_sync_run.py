@@ -52,6 +52,9 @@ def main() -> int:
     ap.add_argument("--bootstrap", action="store_true",
                     help="seed an empty shadow tab. Exempts the write ceilings; "
                          "refuses to target the live tab. Implies --apply.")
+    ap.add_argument("--flags", action="store_true",
+                    help="compare, then set/clear budget_discrepancy on company "
+                         "records. Plans only unless --apply.")
     ap.add_argument("--target", choices=["shadow", "live"], default=None,
                     help="which tab to write. Defaults to BUDGET_SYNC_TARGET, "
                          "which itself defaults to shadow.")
@@ -73,6 +76,9 @@ def main() -> int:
         elif args.compare:
             import budget_compare
             report = budget_compare.compare()
+        elif args.flags:
+            import budget_variance_flags
+            report = budget_variance_flags.run(dry_run=not args.apply)
         else:
             import budget_sync
             # --bootstrap is a write by definition; a dry-run bootstrap would
@@ -104,6 +110,10 @@ def _print_human(r: dict) -> None:
 
     if "counts" in r:                             # three-way comparison report
         _print_compare(r)
+        return
+
+    if "watchdog" in r:                           # variance-flag report
+        _print_flags(r)
         return
 
     mode = "DRY RUN" if r.get("dry_run") else "APPLIED"
@@ -197,6 +207,37 @@ def _print_compare(r: dict) -> None:
     if r["ok"]:
         print("\n  The new system is not wrong anywhere the old one is right.")
         print("  That is the go-live criterion. One clean cycle is the gate.\n")
+    print()
+
+
+def _print_flags(r: dict) -> None:
+    mode = "DRY RUN" if r.get("dry_run") else "APPLIED"
+    print(f"\n=== Budget discrepancy flags — {mode} ===")
+    print(f"  writes enabled        : {r['enabled']}")
+    print(f"  new-system-wrong      : {r['new_wrong_count']}")
+    print(f"  already flagged       : {r['currently_flagged']}")
+    print(f"  flags to set          : {r['would_set']}")
+    print(f"  flags to clear        : {r['would_clear']}")
+
+    if r.get("aborted"):
+        print(f"\n  *** ABORTED — nothing written ***\n  {r['aborted']}\n")
+        return
+
+    for item in r.get("sample_set", []):
+        print(f"      set  {item['account_name'] or item['id']}")
+
+    if r.get("held"):
+        print(f"\n  {len(r['held'])} flags HELD — flagged, but this run had no "
+              f"opinion about them.")
+        print("  Not cleared: clearing on absence of evidence is how a real")
+        print("  variance gets dropped.")
+
+    wd = r.get("watchdog", {})
+    if wd.get("stale_count"):
+        print(f"\n  *** WATCHDOG: {wd['stale_count']} flags with no "
+              f"{wd['watchdog_property']} ***")
+        print("  The HubSpot workflow did not fire for these. Check that")
+        print("  re-enrolment is ON and that the ClickUp step writes back.")
     print()
 
 

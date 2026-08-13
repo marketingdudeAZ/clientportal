@@ -296,10 +296,15 @@ def _company_names(company_ids: list[str]) -> dict[str, str]:
 
 
 def expected_budgets() -> dict[str, dict]:
-    """{uuid: {"account_name", "deal_id", "deal_name", "closedate", "budgets"}}.
+    """{uuid: {"company_id", "account_name", "deal_id", "deal_name",
+    "closedate", "budgets"}}.
 
     `budgets` is {sheet_label: formatted_value} for every channel, using
     NOT_PURCHASED for channels with no line item on the winning deal.
+
+    `company_id` is carried because the sheet is keyed by uuid but HubSpot
+    properties are written by company id, and budget_variance_flags needs to
+    get from one to the other without a second lookup.
     """
     from spend_sheet import (_batch_read_deals, _get_deal_associations,
                              _get_managed_companies)
@@ -340,6 +345,7 @@ def expected_budgets() -> dict[str, dict]:
             continue
         amounts = li.get(str(deal["id"]), {})
         out[uuid] = {
+            "company_id": str(cid),
             "account_name": names.get(cid, ""),
             "deal_id": str(deal["id"]),
             "deal_name": (deal.get("properties", {}).get("dealname") or "").strip(),

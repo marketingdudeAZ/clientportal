@@ -939,19 +939,46 @@ minutes, and it prevents a repeat on its own.
 `budget_compare` writes nothing — to either tab or to HubSpot — and there is a
 test asserting the writer client is never constructed.
 
-Still to build, in dependency order:
+**BUILT 2026-08-13** — the alert path. `webhook-server/budget_variance_flags.py`,
+111 tests green overall:
 
-- **Variance flags** — write `budget_discrepancy` (created in HubSpot
-  2026-08-13, company / single checkbox / true-false) plus the three companion
-  properties, honour `BUDGET_VARIANCE_MAX_FLAGS`, and **clear the flag when the
-  variance resolves**. The clearing is the load-bearing half; a flag-setter
-  without a flag-clearer is worse than nothing. `budget_compare.flagworthy()` is
-  the input and is already public for exactly this.
-- **Task-id watchdog** — count flags older than N hours with no
-  `budget_discrepancy_task_id`. That number is "how many times the workflow
-  silently didn't fire."
-- **The HubSpot workflow itself** — checkbox → ClickUp ticket → write the task id
-  back. Must not clear the checkbox.
+- Sets `budget_discrepancy` / `_detail` / `_flagged_at` on `new_wrong`
+  properties, and **clears the flag** when a later run re-verifies the variance
+  is gone. Clearing also resets `_task_id`, or the next flag on that company
+  inherits the old ticket's id and the watchdog reads it as already-notified.
+- **Clears conservatively.** A flagged company is cleared only if this run
+  evaluated it (`compare()` now returns `evaluated`). A flagged company the run
+  had no opinion about is HELD and reported — clearing on absence of evidence is
+  how a real variance gets silently dropped.
+- **Flood ceiling writes nothing at all** above the limit, not even clears: a
+  comparison wanting hundreds of flags is a broken comparison, so acting on any
+  part of it is unsafe.
+- **Clears are written before sets**, so a run that dies partway leaves
+  "flagged" rather than "silently cleared".
+- **Watchdog** — flags raised on an earlier date with no `_task_id`. Day
+  granularity is deliberate: the workflow fires within seconds, so anything
+  unstamped on a later date certainly did not fire, and a date avoids the
+  timezone trap an hours threshold carries across UTC/Central.
+  `BUDGET_VARIANCE_WATCHDOG_PROPERTY` repoints it if the ClickUp integration
+  cannot write a task id back.
+- Off by default (`BUDGET_VARIANCE_FLAGS_ENABLED`), dry-run by default, writes
+  via `hubspot_client` so R1 refuses `uuid`. CLI: `--flags`.
+
+Known limitation: `hubspot_client.search_companies` does not paginate, so a
+very large flagged set truncates to the first page. Degrades safely — an unseen
+flag is not cleared this run and is picked up later — but the watchdog count is
+a floor, not an exact figure.
+
+Still to build:
+
+- **The HubSpot workflow's remaining wiring.** The workflow *Fluency Budget
+  Discrepancy Alert to Clickup* exists and is ON, and correctly does not clear
+  the checkbox. Three gaps as of 2026-08-13: **re-enrolment is OFF** (so a
+  company flagged, resolved, then flagged again never tickets a second time —
+  §1a exactly); no step writes `budget_discrepancy_task_id` back, leaving the
+  watchdog blind; and it is unconfirmed whether its "Create a task" step is the
+  ClickUp integration action or HubSpot's native one, which create very
+  different things.
 
 Carried over from 8-12:
 

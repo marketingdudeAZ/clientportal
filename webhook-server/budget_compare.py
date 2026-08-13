@@ -142,6 +142,9 @@ def classify(expected: dict[str, dict],
         counts[worst] += 1
         properties[uuid] = {
             "uuid": uuid,
+            # Carried for budget_variance_flags: the sheet is keyed by uuid,
+            # HubSpot properties are written by company id.
+            "company_id": exp.get("company_id", ""),
             "account_name": exp["account_name"],
             "verdict": worst,
             "deal_id": exp["deal_id"],
@@ -231,6 +234,12 @@ def compare(live_tab: str | None = None,
         "properties_live": len(live),
         "properties_shadow": len(shadow),
         "counts": counts,
+        # Every uuid this run formed an opinion about. budget_variance_flags
+        # clears a flag ONLY for a uuid in here: a company that is flagged but
+        # absent from this run (HubSpot returned nothing for it, it left the
+        # portfolio, its deal moved) has not been re-verified, and clearing on
+        # absence of evidence is how a real variance gets silently dropped.
+        "evaluated": sorted(classified["properties"]),
         "new_wrong": flags if not flood else [],
         "new_wrong_count": len(flags),
         "both_wrong": [p for p in classified["properties"].values()
