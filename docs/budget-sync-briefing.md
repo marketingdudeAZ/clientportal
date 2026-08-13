@@ -3,8 +3,12 @@
 ## Making budget updates reach Fluency reliably
 
 **Prepared by:** Kyle Shipp, Managing Director, Digital Products & Services
-**Date:** August 12, 2026
+**Date:** August 12, 2026 — **revised August 13, 2026**
 **For:** review ahead of the September 1 budget cycle
+
+*Revision note: Section 6 now proposes running both systems in parallel and
+switching over on evidence, rather than switching over on a scheduled date.
+Section 7 gains one decision as a result.*
 
 ---
 
@@ -136,26 +140,67 @@ The HubSpot half is **built and validated against production data**:
 Nothing has been written to the live sheet. The system runs in read-only mode by
 default; writing requires an explicit configuration change.
 
+The second tab described in Section 6 was created on August 13 and is empty. The
+code that populates it and runs the hourly comparison is designed but not yet
+built — it is the next piece of work, and it does not touch the live tab.
+
 ---
 
-## 6. Recommended testing before September 1
+## 6. Rollout: the two systems run side by side first
 
-September 1 falls on a **Tuesday**, so the specific weekend condition that
-caused the August failure will not recur. That is good news and not a reason to
-wait — the underlying fragility is unchanged, and the next month-start on a
-weekend arrives soon enough.
+**This section changed on August 13.** The original plan asked for a single
+switchover: turn the old automation off, turn the new one on, and find out
+afterwards whether the new one was right. That is a reasonable amount of faith to
+ask for and an unnecessary amount to spend.
 
-We recommend the following sequence, which produces useful information at every
-step and does not modify the sheet until the final stage.
+Instead, **both systems now run at the same time, writing to two different
+places, and the new one has to prove itself before anything is switched.**
 
-| Stage | Action | Modifies the sheet? | What it tells us |
+- The existing automation keeps writing the live tab, exactly as it does today.
+  Fluency keeps reading that tab. Nothing about the current path changes.
+- The new system writes a second tab in the same file, added August 13 and named
+  so it cannot be mistaken for the real one. **Nothing reads that tab.**
+- Every hour, a check compares each tab against HubSpot and reports which one is
+  right.
+
+That last point is the one that matters. The useful question is not "do the two
+tabs agree?" — we already know they will not, because the live tab is wrong on at
+least the 46 known properties. The question is **which one is wrong**, and
+comparing each against HubSpot answers it.
+
+| Live tab | New tab | What it means |
+|---|---|---|
+| Wrong | Right | The old system missed one. **Expected — this is the evidence we are looking for** |
+| Right | Wrong | The new system has a defect. **The only case that raises an alert** |
+| Wrong | Wrong | Investigate by hand |
+| Right | Right | Agreement, no action |
+
+**The new system goes live when the second row has been empty for a full monthly
+cycle.** That is a measured claim rather than a confident one, and it is the part
+the original plan was missing.
+
+The cost of this is time, not risk: the new system writes nothing anybody reads
+until we have the evidence. If it turns out to be wrong about something, it is
+wrong in a tab with no consumers.
+
+### The sequence
+
+September 1 falls on a **Tuesday**, so the specific weekend condition that caused
+the August failure will not recur. That is good news and not a reason to wait —
+the underlying fragility is unchanged, and the next month-start on a weekend
+arrives soon enough.
+
+| Stage | Action | Touches what Fluency reads? | What it tells us |
 |---|---|---|---|
 | **1** | Rotate the sheet credential | No | Closes a security exposure |
 | **2** | Correct the trigger on the existing automation | No | Stops the recurrence immediately, while the rest is validated |
 | **3** | Run a read-only comparison | **No** | The first complete answer to "is the sheet correct today?", including whether properties beyond the known 46 were affected |
-| **4** | Run a preview | **No** | Exactly which values would change, reviewable line by line |
-| **5** | Enable writing; disable the old automation | Yes | Cutover |
-| **6** | Monitor through one full cycle | — | Confidence before September 1 |
+| **4** | Populate the new tab and start the hourly check | **No** | The two systems are now running in parallel |
+| **5** | Review the comparison for a full cycle | **No** | Whether the new system is ever wrong where the old one is right |
+| **6** | Switch over: point the new system at the live tab, disable the old automation in the same change | Yes — first time | Cutover, on evidence |
+
+Stages 1 through 5 cannot affect Fluency. Only stage 6 does, and it is gated on
+stage 5 coming back clean.
 
 **Stage 2 deserves emphasis.** Correcting the trigger — so it responds to a deal
 being closed rather than to the close date matching today — is a configuration
@@ -167,28 +212,43 @@ its own. It is worth doing this week regardless of the timeline for the rest.
 The replacement goes live when all of the following hold:
 
 1. Stage 3 has run and every difference it reports has been explained.
-2. Stage 4's preview has been reviewed and the proposed changes agreed.
+2. **Stage 5 has run for a full cycle with no case of the new system being wrong
+   where the old one was right.** This is the criterion the parallel run exists
+   to produce.
 3. A deliberately failed run has been shown to raise an alert to a named person.
    *An alert nobody has tested is indistinguishable from one that does not work.*
 4. The old automation is disabled in the same change that enables the new one —
-   two systems writing to the same sheet reintroduces the corruption risk.
+   two systems writing to the same tab reintroduces the corruption risk.
 
 ### Timeline
 
-Stages 1–4 can be completed within a week and none of them modify the sheet.
-That leaves a clear margin before September 1 for stages 5 and 6.
+Stages 1–4 can be completed within a week and none of them touch what Fluency
+reads. Stage 5 is a waiting period, and its length is a judgement call: a full
+month-start cycle is the strongest evidence, which would place the switchover
+after September 1 rather than before it.
+
+**That is the trade this section is really asking about.** The alternative is to
+switch over before September 1 on less evidence. The recommendation is to take
+the extra cycle, because stage 2 alone prevents a repeat of the August failure
+and removes the urgency that would otherwise justify hurrying.
 
 ---
 
 ## 7. Decisions needed
 
-1. **Who owns the alerts, and where do they go?** A Teams channel and a named
-   owner. This is the difference between a system that reports failures and one
-   that reports them to somebody.
+1. **Who owns the alerts, and where do they go?** The mechanism is now settled:
+   a variance sets a flag on the property record in HubSpot, and a HubSpot
+   automation turns that flag into a ticket in a ClickUp space. What is still
+   needed is **which space, and which named person is accountable for the
+   ticket.** This is the difference between a system that reports failures and
+   one that reports them to somebody.
 2. **Should CTV/OTT be included?** It is quoted and sold, but is absent from the
    current automation's channel list, so it has never been synced to Fluency.
    This may be intentional. It is currently disabled pending an answer.
-3. **Approval to proceed** through Stage 4, all of which is read-only.
+3. **Approval to proceed** through Stage 5 — none of which touches the tab
+   Fluency reads.
+4. **Is the extra cycle acceptable?** See the timeline above: taking it moves the
+   switchover to after September 1.
 
 ---
 

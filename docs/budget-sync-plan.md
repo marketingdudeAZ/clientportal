@@ -295,6 +295,10 @@ role for a workflow in this design — and it is strictly optional.
 
 #### Revised phasing
 
+> **Superseded 2026-08-13 by §4e.** The phasing below is kept because its
+> reasoning still holds; the parallel run splits Phase 2 and puts a measured
+> gate in front of Phase 3. Use §4e's table.
+
 | Phase | What | Risk |
 |---|---|---|
 | **0** | Rotate the leaked key (§0). Fix the workflow trigger — drop the "close date is today" clause, trigger on stage change with re-enrollment (§1a). **Buys time and stops the recurrence while the loop is built** | config only |
@@ -575,9 +579,214 @@ sheet** (`1MxyBeRj…`). The portal's existing service account has no establishe
 access to it.
 
 So Phase 1 needs, as a prerequisite: the rotated service account (§0) granted
-read access to the budget sheet, and its id + tab name added to the portal's
-config. Read-only access is sufficient for the reconciler — grant only that
-until the writer actually moves in Phase 2.
+access to the budget sheet, and its id + tab name added to the portal's config.
+
+**Revised 2026-08-13:** read-only is *no longer* sufficient. The parallel run
+(§4e) writes the shadow tab, so the rotated SA needs **Editor** on the
+spreadsheet from Phase 1 onward, not Viewer. Sheets permissions are
+document-scoped, not tab-scoped — there is no way to grant write on the shadow
+tab and withhold it on the live one. The protection against writing the live tab
+is therefore in code (§4e), not in the grant.
+
+## 4e. Parallel run — the shadow tab — ADDED 2026-08-13
+
+The cutover in Phase 3 asks a lot on faith: disable the workflow, enable the
+loop, and find out afterwards whether the loop was right. The parallel run
+removes that leap. Both systems run at once, writing different tabs, and the new
+one has to prove itself against the old before anything is switched.
+
+| | Tab | Written by | Read by |
+|---|---|---|---|
+| **Sheet A** | `DO NOT RENAME - Fluency Budgets` | the HubSpot workflow, as today | **Fluency** |
+| **Sheet B** | `SHADOW - Fluency Budgets (DO NOT USE)` | the desired-state loop | nobody |
+
+Same spreadsheet (`1MxyBeRj…`), created 2026-08-13. One credential grant, one
+place to look. **These are the only two tabs** — a stale `Copy of DO NOT
+RENAME…` was deleted the same day, so no third tab can be mistaken for either.
+Verified safe: `fluency_feed.py` writes a *different* spreadsheet
+(`RPM_PIPELINE_SHEET_ID`) and its `clear()` is worksheet-scoped, so nothing in
+this codebase touches sibling tabs.
+
+Sheet B is inert. Nothing reads it, so nothing it contains can reach Fluency,
+and a bug in the loop costs nothing while it is the only thing the loop writes.
+
+### Compare three ways, not two
+
+The obvious check is A against B. It is the wrong one: it detects that the two
+disagree without saying which is wrong, and on day one A is known-wrong on at
+least 46 properties. Comparing each against **HubSpot** — the thing both are
+supposed to represent — is the same computation and answers the question that
+matters.
+
+| A vs HubSpot | B vs HubSpot | Meaning | Action |
+|---|---|---|---|
+| ✗ | ✓ | The old system missed it — **the expected case, and the whole thesis** | Record it. This is the evidence the loop works |
+| ✓ | ✗ | **The new system has a bug** | The only row that should ever raise a ticket |
+| ✗ | ✗ | Both wrong — HubSpot moved since one of them ran, or a genuine edge case | Investigate by hand |
+| ✓ | ✓ | Agreement | Silence |
+
+This is free. `diff(expected, actual)` is already pure and already tested; run it
+twice, once per parsed tab. No new comparison logic.
+
+Ticketing on raw A≠B would open the alert channel with 46 tickets that are all
+working-as-intended, and the fastest way to kill an alert channel is to teach
+people its first 46 messages were noise.
+
+**Row 2 is the go-live criterion.** When "A right, B wrong" has been empty for a
+full monthly cycle, B has earned the cutover. That is a measured claim rather
+than a hopeful one, and it is what Phase 3 has been missing.
+
+### Seeding Sheet B: build it, do not copy it
+
+The tempting shortcut is to copy the production tab into the shadow tab so the
+first sync only has to write deltas and stays under the 500-cell ceiling. It
+should not be done, for one decisive reason.
+
+**A copied Sheet B inherits Sheet A's errors and converts them into false
+passes.** If `expected_budgets()` has a blind spot — a property it fails to
+compute at all — a from-scratch Sheet B leaves that property visibly empty,
+which is a loud, findable failure. A copied Sheet B silently retains A's
+inherited value for it, and the comparison reports agreement. The parallel run
+would then certify the loop as correct on exactly the properties where it is
+blind. That is the one outcome the exercise exists to prevent.
+
+The apparent advantage — learning how bad Sheet A is — does not require copying
+anything. `reconcile()` against tab A answers that today, read-only, and is
+already the §5 backfill audit. Nothing is gained by seeding from A that is not
+already available without it.
+
+So: **Sheet B is built from HubSpot, from empty, header row included.** Every
+cell in it is something the new system computed and can be held responsible for.
+
+### The write ceiling, and why bootstrap is exempt
+
+A from-scratch seed is ~664 properties × 10 channels ≈ **6,640 appends**, which
+trips both `MAX_CELL_WRITES` (500) and `MAX_DRIFT_RATIO` (0.15). The breakers are
+behaving correctly and should not be loosened globally. They should be *scoped*.
+
+| Breaker | Bootstrap | Steady state | Why |
+|---|---|---|---|
+| `MIN_EXPECTED_PROPERTIES` (500) | **enforced** | enforced | Guards against bad HubSpot data. Nothing to do with which tab is being written — a run that sees 12 properties is wrong no matter where it writes |
+| `MAX_DRIFT_RATIO` (0.15) | exempt | enforced | 100% "drift" is the definition of seeding an empty tab |
+| `MAX_CELL_WRITES` (500) | exempt | enforced | Same |
+
+Bootstrap is a one-time, supervised, operator-invoked write into a tab nothing
+reads. The ceilings exist to stop an unattended loop from mass-corrupting the
+tab Fluency depends on; that justification simply does not reach the shadow tab.
+
+**The hard rule that makes this safe: bootstrap mode refuses to run against the
+live tab.** It asserts the target is the shadow tab and aborts otherwise —
+before computing anything, not as a check on the way out. Exempting the ceilings
+and pointing at the live tab must be unreachable, not merely discouraged.
+
+### Alerting: a flag is state, a ticket is an event
+
+The decision (2026-08-13) is to raise variance through a **HubSpot checkbox on
+the company record**, with a HubSpot workflow turning that into a ClickUp ticket
+— rather than the portal calling the ClickUp API directly.
+
+The reasoning needs restating, because the obvious version of it is backwards.
+It is *not* that workflows are more reliable than API calls: the thing that
+failed silently on 8/1 was a HubSpot workflow, and §2 is the account of it
+showing green while doing nothing. Nothing here rehabilitates workflows.
+
+The real distinction is **event versus state**. A fire-and-forget API call leaves
+no trace when it fails — its failure and its success look identical afterwards,
+which is failure mode #1 in this document wearing a different hat. A checkbox is
+durable, queryable state: "which properties are in variance right now?" has an
+answer you can go and read, from a system of record, without trusting that some
+call happened. That is the same desired-state principle the sync itself is built
+on, applied to the alert path. On that basis the checkbox is right.
+
+**The clearing rule — the part that would otherwise recreate the bug.** The
+workflow must **not** clear the flag when it finishes. If the ClickUp step fails
+and the workflow clears the checkbox anyway, the ticket is gone, the flag is
+gone, and nothing reports a problem: 8/1 exactly, in a new location.
+
+Instead, **the reconciler clears the flag on a later run, when it observes the
+variance is actually gone.** The flag then describes current reality rather than
+recording that somebody was told once. It is self-healing, it survives a lost
+ticket, and it is the same loop the rest of the design runs on.
+
+Proposed properties on the company record (names pending confirmation):
+
+| Property | Type | Written by |
+|---|---|---|
+| `budget_discrepancy` | checkbox | the loop — set on variance, **cleared by the loop** when resolved |
+| `budget_discrepancy_detail` | string | the loop — which channels, both values |
+| `budget_discrepancy_flagged_at` | datetime | the loop |
+| `budget_discrepancy_task_id` | string | **the workflow**, on successful ticket creation |
+
+That last row is the watchdog. A flag set hours ago with no task id means the
+workflow never fired — which is worth catching on its own terms, since a
+workflow failing to *enrol* is §1a, the original defect. The loop counts flags
+without task ids and reports the count. Cheap, and it closes the last place a
+silent failure could hide.
+
+None of these are `uuid`. R1 is untouched.
+
+### Who builds which half
+
+**The portal never calls ClickUp.** It has a working `clickup_client.py` and
+deliberately does not use it here — a direct call is the fire-and-forget event
+this design rejects.
+
+| Half | Owner | Does | Must not |
+|---|---|---|---|
+| **Portal** (code) | this repo | Set `budget_discrepancy` + detail + timestamp on variance. **Clear it** when the variance resolves. Count flags with no task id | Call ClickUp. Clear a flag it has not re-verified |
+| **HubSpot workflow** (config) | Kyle, in HubSpot | Enrol on `budget_discrepancy = true` → create the ClickUp task via the integration → write the task id back | **Clear the checkbox** |
+
+The seam between them is a single boolean on a company record, which is the
+point: either half can fail without the other silently pretending it didn't.
+
+**One thing to verify when building the workflow:** whether HubSpot's ClickUp
+integration exposes task creation as a workflow action *and* can write the
+resulting task id back to a company property. If it cannot write back, fall back
+to having the workflow stamp `budget_discrepancy_flagged_at`'s companion — a
+`budget_discrepancy_notified_at` datetime, which any HubSpot workflow can set
+unaided. That is weaker evidence (it proves the workflow ran, not that a ticket
+exists) but it still catches the enrolment failure, which is the risk that
+actually materialised on 8/1. Do not skip the watchdog for want of the strong
+version.
+
+### Flood control
+
+Mirror the existing breakers: **if a run would flag more than N properties, it
+flags none and raises a single summary instead.** A run wanting to flag 300
+properties is a bug in the checker, not 300 budget problems, and 300 tickets is
+how the channel gets muted. Suggested N = 25, tunable via
+`BUDGET_VARIANCE_MAX_FLAGS`.
+
+### Configuration
+
+| Var | Purpose |
+|---|---|
+| `FLUENCY_BUDGET_TAB` | existing — the live tab. Unchanged |
+| `FLUENCY_BUDGET_SHADOW_TAB` | `SHADOW - Fluency Budgets (DO NOT USE)` |
+| `BUDGET_SYNC_TARGET` | `shadow` \| `live`. Defaults to `shadow` |
+| `BUDGET_SYNC_BOOTSTRAP` | one-time seed. Refuses to run when target is `live` |
+| `BUDGET_VARIANCE_FLAGS_ENABLED` | gate on writing checkboxes. Default off |
+| `BUDGET_VARIANCE_MAX_FLAGS` | flood ceiling. Default 25 |
+
+`BUDGET_TAB_NAME` is currently a module-level global read by both
+`read_sheet_rows()` and `budget_sync._worksheet()`. Running against two tabs in
+one process means threading it through as a parameter — roughly twenty lines,
+and the only structural change the parallel run requires.
+
+### Revised phasing, with the parallel run
+
+| Phase | What | Writes the live tab? |
+|---|---|---|
+| **0** | Rotate the key (§0). Fix the workflow trigger (§1a) | no |
+| **1** | `reconcile()` read-only against tab A. The §5 audit | no |
+| **2** | Bootstrap Sheet B from HubSpot. Loop runs hourly against the shadow tab only | **no** |
+| **2b** | Three-way comparison reporting. Flags still off — read the report by hand first | no |
+| **2c** | Enable variance flags + the ClickUp workflow, once 2b's report is quiet enough to be worth reading | no |
+| **3** | Cut over: point `BUDGET_SYNC_TARGET` at `live`, **disable the workflow's custom-code action in the same change**. Gated on "A right, B wrong" empty for a full cycle | yes — first time |
+| **4** | Optionally reduce the workflow to a nudge | yes |
+
+Phases 0 through 2c never write the tab Fluency reads. The parallel run converts
+Phase 3 from a leap into a switch.
 
 ---
 
@@ -604,12 +813,35 @@ Phase 2's reconciliation job is this check, scheduled.
 - Confirm the one-day offset between the two screenshots is a timezone artefact.
 - Read access to both sheets for whoever implements this.
 
+Opened by the parallel-run decision (§4e), 2026-08-13:
+
+- **ClickUp space / list id** the variance tickets land in.
+- **Confirm the four HubSpot property names**, and create them.
+- **Who owns the ticket once it exists?** §4e guarantees a ticket gets made and
+  that the flag stays set until the variance clears. It does not assign anyone
+  to look. Still the open question from the briefing's §7.1.
+- ~~Is the third tab wanted?~~ **Resolved 2026-08-13** — `Copy of DO NOT RENAME -
+  Fluency Budgets` was deleted. The spreadsheet now holds exactly two tabs, live
+  and shadow, which is the state §4e assumes.
+- **Does HubSpot's ClickUp integration support task creation as a workflow action
+  and a task-id write-back?** Determines whether the watchdog gets the strong or
+  the weak version (§4e).
+
 ---
 
-## 8. State as of 2026-08-12 — resume here
+## 8. State as of 2026-08-13 — resume here
 
 **Briefing sent to leadership. Waiting on approval. Nothing has been written to
 the live sheet, and nothing is scheduled.**
+
+**2026-08-13 — the design changed: the loop now runs in parallel with the
+existing workflow rather than replacing it in one step (§4e).** The shadow tab
+`SHADOW - Fluency Budgets (DO NOT USE)` exists in `1MxyBeRj…` and is empty. The
+new system writes only that tab until "A right, B wrong" has been empty for a
+full cycle. Variance raises a HubSpot checkbox; a workflow turns it into a
+ClickUp ticket; **the loop clears the checkbox, never the workflow.** None of the
+code for any of this is written yet — §4e is the design, and the sections below
+are unchanged from 8-12 except where marked.
 
 ### What is built and green
 
@@ -641,30 +873,48 @@ search, confirming the computation against one of the 46 known failures.
 
 1. **Service-account key rotation** (§0). The old key was exposed in plaintext
    and has NOT been rotated. Everything below waits on this.
-2. **Sheet access** — the rotated SA needs Viewer on `1MxyBeRj…` for reconcile,
-   Editor for sync. `FLUENCY_BUDGET_SHEET_ID` is not set anywhere yet.
-3. **Alert owner + channel** — unassigned. A dead-letter nobody reads is still a
-   silent failure.
+2. **Sheet access** — **revised 2026-08-13: the rotated SA needs Editor on
+   `1MxyBeRj…` from Phase 1, not Viewer**, because the parallel run writes the
+   shadow tab. Sheets grants are document-scoped, so the live tab is protected
+   by `BUDGET_SYNC_TARGET` in code, not by the permission. Viewer is no longer
+   sufficient for anything past §5's audit. `FLUENCY_BUDGET_SHEET_ID` is not set
+   anywhere yet.
+3. **Alert owner + channel** — unassigned. §4e settles the *mechanism* (checkbox
+   → workflow → ClickUp) and still not the *recipient*. A dead-letter nobody
+   reads is still a silent failure; so is a ClickUp list nobody opens. Needs the
+   space/list id and a named human.
 4. **CTV/OTT decision** — in the product catalog, absent from the workflow
    action's list, so sold but never synced. Flag `FLUENCY_BUDGET_INCLUDE_CTV`
    defaults off, because turning it on wrongly reports a false missing channel
    on all 664 properties.
 5. **Approval** to run the read-only stages.
 
-### First three commands when approval lands
+### First commands when approval lands — revised 2026-08-13
 
 ```bash
 export FLUENCY_BUDGET_SHEET_ID=1MxyBeRj1VllsdXFxrVrKEf05CPCJ89121Bmjo6xlWWg
-python3 scripts/budget_sync_run.py --reconcile   # read-only: how bad is it today?
+python3 scripts/budget_sync_run.py --reconcile   # read-only: how bad is tab A today?
 python3 scripts/budget_sync_run.py               # dry run: exactly what would change
 ```
 
 Neither writes. The first is also the §5 backfill audit — it answers whether the
 delete/append race damaged properties beyond the known 46.
 
-Only then: `BUDGET_SYNC_ENABLED=true` + `--apply`, **and disable the HubSpot
-workflow's custom-code action in the same change.** Two writers is the race,
-reintroduced.
+Then the parallel run (§4e), which needs the code below to exist first:
+
+```bash
+python3 scripts/budget_sync_run.py --bootstrap   # seed the SHADOW tab from HubSpot
+python3 scripts/budget_sync_run.py --compare     # three-way: HubSpot vs A vs B
+```
+
+`--bootstrap` writes ~6,640 cells to the shadow tab with the two write ceilings
+exempted, and **aborts if the target is the live tab**. It is the only write in
+the sequence, and nothing reads what it writes.
+
+Only after a full cycle of "A right, B wrong" being empty:
+`BUDGET_SYNC_TARGET=live` + `BUDGET_SYNC_ENABLED=true` + `--apply`, **and disable
+the HubSpot workflow's custom-code action in the same change.** Two writers is
+the race, reintroduced.
 
 ### Do independently of approval
 
@@ -673,6 +923,29 @@ on the stage change into Closed Won with re-enrollment enabled. Config only,
 minutes, and it prevents a repeat on its own.
 
 ### Not yet built
+
+The parallel run (§4e) — **none of it exists yet**, in dependency order:
+
+- **Tab as a parameter.** `BUDGET_TAB_NAME` is a module-level global read by both
+  `budget_reconcile.read_sheet_rows()` and `budget_sync._worksheet()`. Thread it
+  through. ~20 lines, and everything below depends on it.
+- **`--bootstrap`** — seed the shadow tab from HubSpot, header row included, with
+  `MAX_CELL_WRITES` / `MAX_DRIFT_RATIO` exempted and a hard refusal to target the
+  live tab. `MIN_EXPECTED_PROPERTIES` stays enforced.
+- **Three-way comparison** — parse both tabs, run the existing `diff()` against
+  `expected` twice, classify into §4e's four rows. No new comparison logic, just
+  the classifier and a report.
+- **Variance flags** — write the four company properties, honour
+  `BUDGET_VARIANCE_MAX_FLAGS`, and **clear the flag when the variance resolves**.
+  The clearing is the load-bearing half; a flag-setter without a flag-clearer is
+  worse than nothing.
+- **Task-id watchdog** — count flags older than N hours with no
+  `budget_discrepancy_task_id`. That number is "how many times the workflow
+  silently didn't fire."
+- **The HubSpot workflow itself** — checkbox → ClickUp ticket → write the task id
+  back. Must not clear the checkbox.
+
+Carried over from 8-12:
 
 - Delivery of the report (Teams/email) — deliberately left out of `reconcile()`
   so it is safe to run by hand. Needs decision 3 above.
