@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+import os
 import uuid as _uuid
 from typing import Any
 
@@ -302,6 +303,22 @@ class HeyGenProvider(VideoProvider):
         # HeyGen's side, so leaving HEYGEN_WEBHOOK_SECRET unset is the
         # supported configuration. If the secret IS set we validate
         # strictly — that's the upgrade path when signing gets turned on.
+        #
+        # SECURITY: with the secret unset, /api/heygen-webhook is an
+        # unauthenticated write. An attacker who learns a variant_id (a uuid4)
+        # or heygen_video_id can post a "done" event carrying any video_url,
+        # and that URL is what the client reviews and can approve into their
+        # Files library. Set HEYGEN_WEBHOOK_REQUIRE_SIGNATURE=true to refuse
+        # unsigned callbacks outright; it is off by default so turning signing
+        # on stays a config flip rather than a deploy that breaks live renders.
+        if not HEYGEN_WEBHOOK_SECRET and os.getenv(
+            "HEYGEN_WEBHOOK_REQUIRE_SIGNATURE", "false"
+        ).strip().lower() in ("true", "1", "yes", "on"):
+            raise ProviderError(
+                "HEYGEN_WEBHOOK_REQUIRE_SIGNATURE is set but HEYGEN_WEBHOOK_SECRET is not — "
+                "refusing unsigned webhook"
+            )
+
         if HEYGEN_WEBHOOK_SECRET:
             sig = ""
             for key in ("X-Signature", "x-signature",

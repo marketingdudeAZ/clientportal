@@ -7538,6 +7538,46 @@ function _renderVideoCreative(d) {
   }
 }
 
+// Terminal cycle statuses written by video_generator when a run stops early.
+// Keys must match the CYCLE_* constants in webhook-server/video_generator.py.
+var _VIDEO_STOPPED_STATES = {
+  'Needs Photos': {
+    title: 'We need a few more photos',
+    body:  'We couldn’t find enough usable images to build a video from. Add photos or short clips to your Files library — exteriors, interiors, and amenities work best — then try again.',
+    cta:   'Try again',
+    retry: true
+  },
+  'Needs Profile': {
+    title: 'Your Property Profile needs more detail',
+    body:  'We write the script from your Property Profile, and there isn’t enough there yet. Fill in your differentiators, amenities, or neighborhood highlights, then try again.',
+    cta:   'Try again',
+    retry: true
+  },
+  'Blocked - Compliance': {
+    title: 'Held for Fair Housing review',
+    body:  'The draft didn’t pass our Fair Housing review, so we stopped before creating anything. Your marketing team has the details and will follow up.',
+    retry: false
+  },
+  'Failed': {
+    title: 'Something went wrong',
+    body:  'We couldn’t finish generating your videos. The team has been notified — you can try again, or wait for us to reach out.',
+    cta:   'Try again',
+    retry: true
+  }
+};
+
+function _renderVideoStopped(el, state) {
+  if (!el) return;
+  el.innerHTML =
+    '<div style="text-align:center;padding:44px 24px;max-width:520px;margin:0 auto">' +
+      '<div style="font-size:17px;font-weight:800;color:var(--jd);margin-bottom:8px">' + _escHtml(state.title) + '</div>' +
+      '<div style="font-size:13px;color:var(--ts);line-height:1.6;margin-bottom:' + (state.retry ? '22px' : '0') + '">' + _escHtml(state.body) + '</div>' +
+      (state.retry
+        ? '<button id="video-generate-btn" class="btn btn-primary" onclick="startVideoGeneration()" style="font-size:14px;padding:12px 26px">' + _escHtml(state.cta) + '</button>'
+        : '') +
+    '</div>';
+}
+
 function _renderCycleView(d) {
   var el = document.getElementById('video-cycle-content');
   var status = d.cycle_status || '';
@@ -7554,6 +7594,14 @@ function _renderCycleView(d) {
     el.innerHTML = '<div style="text-align:center;padding:60px 0;color:var(--tm);font-size:13px">' +
       '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display:block;margin:0 auto 12px;opacity:.4"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
       'Your videos are being generated. Check back shortly.</div>';
+    return;
+  }
+  // Terminal states the generator writes when a run stops early. Before these
+  // existed the cycle stayed on "Processing" and the client watched a spinner
+  // forever with no idea anything had gone wrong.
+  var stopped = _VIDEO_STOPPED_STATES[status];
+  if (stopped) {
+    _renderVideoStopped(el, stopped);
     return;
   }
 
@@ -8045,6 +8093,13 @@ function approveVariants(ids) {
   .then(function(r){ return r.json(); })
   .then(function(d){
     if (d.error) { alert('Error: ' + d.error); return; }
+    // Approval is only half the promise — the copy says they save to Files.
+    // If that part failed, say so instead of silently implying it worked.
+    if (d.filing_failures && d.filing_failures.length) {
+      alert('Approved, but ' + d.filing_failures.length + ' video' +
+            (d.filing_failures.length === 1 ? '' : 's') +
+            ' could not be saved to your Files library yet. Your marketing team has been notified.');
+    }
     _videoData = null; _selectedApprovals = {};
     loadVideoCreative();
   })
@@ -8129,7 +8184,12 @@ function _loadAssetsOnce() {
   if (_assetCache) return Promise.resolve(_assetCache);
   var cid = _getCid();
   if (!cid) return Promise.resolve({ assets: [] });
-  return fetch(_getApiBase() + '/api/property-assets?company_id=' + encodeURIComponent(cid),
+  // The Files library is keyed by the RPM property uuid. Send it when we have
+  // it; the endpoint resolves company_id → uuid as a fallback.
+  var _auuid = window.__PORTAL_UUID__ || '';
+  var _aq = _auuid ? 'property_uuid=' + encodeURIComponent(_auuid)
+                   : 'company_id=' + encodeURIComponent(cid);
+  return fetch(_getApiBase() + '/api/property-assets?' + _aq,
     { headers: { 'X-Portal-Email': _getEmail() } })
     .then(function(r) { return r.json(); })
     .then(function(d) { _assetCache = d; return d; })
@@ -8584,7 +8644,9 @@ function loadAssets() {
   var uuid = _assetUuid();
   if (!grid || !uuid) return;
   grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--tm);font-size:12px;grid-column:1/-1">Loading assets…</div>';
-  fetch(_assetApiBase() + '/api/property-assets?company_id=' + encodeURIComponent(uuid), {
+  // _assetUuid() is the RPM property uuid — send it in the parameter that
+  // actually means that, not the company_id slot.
+  fetch(_assetApiBase() + '/api/property-assets?property_uuid=' + encodeURIComponent(uuid), {
     headers: { 'X-Portal-Email': _assetEmail() }
   })
   .then(function(r){ return r.json(); })

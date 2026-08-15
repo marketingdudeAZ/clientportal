@@ -15,6 +15,8 @@ Hard rules:
 Run `python fetch_voices.py` to refresh the voice catalog from Creatify's API.
 """
 
+from __future__ import annotations
+
 import re
 
 
