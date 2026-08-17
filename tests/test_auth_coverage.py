@@ -47,6 +47,11 @@ AUTH_MARKERS = (
     "_is_authorized",              # INTERNAL_KEY/PORTAL_EMAIL (loop blueprint helper)
     "_is_internal",                # INTERNAL_KEY (loop blueprint internal-only helper)
     "_gate",                       # PILOT_ROSTER (portal-tickets blueprint)
+    # INTERNAL_KEY (budget-sync blueprint). This test reads the HANDLER's own
+    # source, so a check one call deeper is invisible to it: budget_sync_api's
+    # handlers call _guard(), which calls _is_internal() — already a marker —
+    # and the indirection alone was enough to fail the whole suite on main.
+    "_guard",
     "normalize_webhook",           # PROVIDER_SIG
     "require_portal_auth",         # SIGNED_REQUEST (reserved)
     "verify_request_signature",    # SIGNED_REQUEST (raw helper)
