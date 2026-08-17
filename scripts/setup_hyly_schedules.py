@@ -134,22 +134,32 @@ def sync_schedules(creds, sa_email: str, apply: bool) -> None:
         # the creating identity — same effective result here, since the creator
         # IS the service account.
         for sa_arg in (sa_email, None):
-            kwargs = {"service_account_name": sa_arg} if sa_arg else {}
             try:
                 if job["name"] in existing:
                     cfg.name = existing[job["name"]].name
-                    client.update_transfer_config(
+                    req = bigquery_datatransfer.UpdateTransferConfigRequest(
                         transfer_config=cfg,
                         update_mask={"paths": ["params", "schedule", "disabled"]},
-                        **kwargs)
+                        service_account_name=sa_arg or "",
+                    )
+                    client.update_transfer_config(request=req)
                 else:
-                    client.create_transfer_config(
-                        parent=parent, transfer_config=cfg, **kwargs)
+                    req = bigquery_datatransfer.CreateTransferConfigRequest(
+                        parent=parent,
+                        transfer_config=cfg,
+                        service_account_name=sa_arg or "",
+                    )
+                    client.create_transfer_config(request=req)
                 print(f"           written{'' if sa_arg else ' (inherited identity)'}")
                 break
             except Exception as exc:
-                if sa_arg and "actAs" in str(exc):
-                    continue  # retry without explicit run-as
+                # Running a scheduled query AS a named service account requires
+                # the DTS service agent to hold iam.serviceAccounts.getAccessToken
+                # on it. Without that, fall back to the creating identity.
+                if sa_arg and any(s in str(exc) for s in
+                                  ("actAs", "getAccessToken", "FailedPrecondition")):
+                    print("           (no run-as permission; using creating identity)")
+                    continue
                 raise
 
 
