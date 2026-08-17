@@ -2,22 +2,30 @@
   "_comment": [
     "Declarative registry of Hyly's BigQuery tables (ADR 0022).",
     "Adding a future Hyly table should mean adding an entry here plus a rollup",
-    "SQL file — not editing hyly_client.py and shipping a Flask deploy.",
+    "SQL file \u2014 not editing hyly_client.py and shipping a Flask deploy.",
     "tests/test_hyly_contract.py asserts every entry below still exists with the",
     "declared columns, so vendor drift surfaces as a failing test rather than as",
     "an empty dashboard.",
     "",
     "'access' records what the rpm-portal service account can actually reach as",
-    "of 2026-08-17 — 'granted' or 'blocked'. Blocked entries are skipped by the",
-    "contract test with a warning instead of failing the suite."
+    "of 2026-08-17 \u2014 'granted' or 'blocked'. Blocked entries are skipped by the",
+    "contract test with a warning instead of failing the suite.",
+    "",
+    "PROVENANCE (per Dylan Thompson, Hyly, 2026-08-10/14): the authoritative",
+    "vendor location for ALL FOUR tables is gds-prototype-20190629.rpm_living_nrt.",
+    "The copies in data-and-reporting-483421.hyly were made by RPM on 2026-08-11",
+    "(created == modified, never refreshed) and are a frozen snapshot, NOT a feed.",
+    "Hyly granted IAM to the USER Kyle.Shipp@rpmliving.com, not to the service",
+    "account \u2014 which is why 'vendor_access' below is blocked everywhere.",
+    "Hyly explicitly sanctions copying into our own project: 'Within your GCP,",
+    "you can migrate the shared tables to your specific project for review/",
+    "querying.' That is the landing-zone pattern, vendor-endorsed."
   ],
-
   "landing_zone": {
     "project": "hyly-data",
     "dataset": "GA4_Hyly",
     "location": "US"
   },
-
   "sources": [
     {
       "name": "ga_hyly_mti",
@@ -25,16 +33,30 @@
       "dataset": "hyly",
       "table": "ga_hyly_mti",
       "access": "granted",
+      "vendor_source": "gds-prototype-20190629.rpm_living_nrt.ga_hyly_mti",
+      "vendor_access": "blocked",
+      "snapshot_taken": "2026-08-11",
+      "freshness_warning": "FROZEN SNAPSHOT. Not a feed. Data ends 2026-08-10 because the copy was taken 2026-08-11 and never re-run. Repoint at vendor_source once the service account is granted, or re-run the copy.",
+      "table_meaning": "'mti' = multi-touch interaction (Hyly calls it 'our multi-touch table')",
       "grain": "one row per (contact, event); milestone timestamps denormalised onto every row",
       "property_id_column": "property_id",
       "property_id_type": "INTEGER",
       "timestamp_column": "event_datetime",
       "channel_column": "source_mapped",
       "required_columns": [
-        "org_id", "org_name", "property_id", "property_name", "contact_id",
-        "event_name", "event_datetime", "source_mapped",
-        "h_cc_event_datetime", "h_fts_event_datetime", "h_ft_event_datetime",
-        "h_app_event_datetime", "h_lease_event_datetime"
+        "org_id",
+        "org_name",
+        "property_id",
+        "property_name",
+        "contact_id",
+        "event_name",
+        "event_datetime",
+        "source_mapped",
+        "h_cc_event_datetime",
+        "h_fts_event_datetime",
+        "h_ft_event_datetime",
+        "h_app_event_datetime",
+        "h_lease_event_datetime"
       ],
       "milestones": {
         "h_cc_event_datetime": "lead",
@@ -52,14 +74,25 @@
       "dataset": "hyly",
       "table": "ga4_analytics_events",
       "access": "granted",
+      "vendor_source": "gds-prototype-20190629.rpm_living_nrt.ga4_analytics_events",
+      "vendor_access": "blocked",
+      "snapshot_taken": "2026-08-11",
+      "freshness_warning": "FROZEN SNAPSHOT, same 2026-08-11 copy as ga_hyly_mti.",
       "grain": "standard GA4 export enriched with Hyly org/property ids",
       "property_id_column": "property_id",
       "property_id_type": "INTEGER",
       "timestamp_column": "event_ts",
       "channel_column": "default_channel",
       "required_columns": [
-        "event_date", "event_name", "event_params", "traffic_source",
-        "default_channel", "org_id", "property_id", "property_name", "event_ts"
+        "event_date",
+        "event_name",
+        "event_params",
+        "traffic_source",
+        "default_channel",
+        "org_id",
+        "property_id",
+        "property_name",
+        "event_ts"
       ],
       "rollup_sql": null,
       "lands_as": null,
@@ -78,7 +111,8 @@
       "required_columns": [],
       "rollup_sql": null,
       "lands_as": null,
-      "notes": "Hyly-owned project; Kyle can query interactively but the service account has no grant. Named 'gds-prototype-*' - confirm a supported production location before depending on it."
+      "notes": "Hyly-owned. IAM was granted to the USER Kyle.Shipp@rpmliving.com on 2026-08-14, NOT to the service account \u2014 hence unreadable from code. Hyly's sample query: SELECT * FROM ... WHERE activity_dt BETWEEN DATETIME('2026-08-14') AND DATETIME('2026-08-15'). Project display name in Hyly's console is 'GoogleDataStudio'.",
+      "vendor_access": "granted_to_user_only"
     },
     {
       "name": "t_crstal_events",
@@ -93,7 +127,9 @@
       "required_columns": [],
       "rollup_sql": null,
       "lands_as": null,
-      "notes": "See prospect_journey. 'nrt' suggests near-real-time, which would supersede the stale batch tables if confirmed."
+      "notes": "Hyly-owned, same user-only IAM grant as prospect_journey. Sample query: WHERE TIMESTAMP_TRUNC(event_dt, MONTH) = TIMESTAMP('2026-08-01'). event_dt is a TIMESTAMP; prospect_journey's activity_dt is a DATETIME.",
+      "vendor_access": "granted_to_user_only",
+      "table_meaning": "Hyly calls this 'CrSTAL milestone events'"
     }
   ]
 }

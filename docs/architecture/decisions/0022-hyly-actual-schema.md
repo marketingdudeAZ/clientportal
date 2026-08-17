@@ -16,12 +16,26 @@ three pre-aggregated tables in a dataset inside our own project:
 **None of those tables exist.** They never did. What Hyly actually delivers,
 verified 2026-08-17:
 
-| Project | Dataset | Table | Rows | Access |
-|---|---|---|---|---|
-| `data-and-reporting-483421` | `hyly` | `ga_hyly_mti` | 328,608 | granted |
-| `data-and-reporting-483421` | `hyly` | `ga4_analytics_events` | 10,382,589 | granted |
-| `gds-prototype-20190629` | `rpm_living_nrt` | `prospect_journey` | ? | **blocked** |
-| `gds-prototype-20190629` | `rpm_living_nrt` | `t_crstal_events` | ? | **blocked** |
+Hyly's authoritative location for **all four** tables is
+`gds-prototype-20190629.rpm_living_nrt` (Dylan Thompson, Hyly, 2026-08-10 and
+2026-08-14). What we can read from code is a *copy*:
+
+| Table | Where we read it | Rows | SA access |
+|---|---|---|---|
+| `ga_hyly_mti` | `data-and-reporting-483421.hyly` (RPM copy) | 328,608 | granted |
+| `ga4_analytics_events` | `data-and-reporting-483421.hyly` (RPM copy) | 10,382,589 | granted |
+| `prospect_journey` | `gds-prototype-20190629.rpm_living_nrt` (vendor) | ? | **blocked** |
+| `t_crstal_events` | `gds-prototype-20190629.rpm_living_nrt` (vendor) | ? | **blocked** |
+
+**The copies are frozen.** Both carry `created == modified == 2026-08-11`, so
+they are a one-shot snapshot taken by RPM and never re-run — which is why the
+data ends 2026-08-10. This is an RPM-side gap, not a Hyly feed failure; the
+vendor tables may be entirely current. Nothing refreshes them today.
+
+Hyly granted IAM to the **user** `Kyle.Shipp@rpmliving.com`, not to the service
+account, which is why the vendor tables are unreachable from code. Dylan
+explicitly sanctions the landing-zone pattern: *"Within your GCP, you can
+migrate the shared tables to your specific project for review/querying."*
 
 Three consequences the original ADR did not anticipate:
 
@@ -119,16 +133,41 @@ Beach Club Residences, The Brighton Garden Oaks.
 was built against `contact_submits`, which does not exist. Loop event emission
 for Hyly leads needs rebuilding against `ga_hyly_mti` — see open items.
 
-## Open items (blocked on Hyly)
+## Open items
 
-1. **The feed is stale.** Both tables last wrote 2026-08-11; no data after
-   2026-08-10. Is this a live pipeline that stalled, or a one-time load?
-2. **A supported location.** `gds-prototype-20190629` is a prototype project.
-   Where does the production equivalent live, and can the service account be
-   granted on it?
-3. **Attribution quality.** `source_mapped` is null on 22.9% of rows. Is there
-   a canonical channel mapping Hyly can share?
-4. **Ingesting `ga4_analytics_events`** restores the visitor half of the funnel.
+**Ours to fix — nothing is blocked on Hyly here:**
+
+1. **The snapshot is frozen and nothing refreshes it.** Until this is solved
+   the portal shows a funnel that stops 2026-08-10 and silently gets staler
+   every day. Two ways, either acceptable:
+   a. Ask Dylan to extend the existing IAM grant from Kyle's user to
+      `rpm-portal@rpm-portal-492523.iam.gserviceaccount.com`, then read the
+      vendor tables directly. His team has already run this motion once.
+   b. Kyle schedules the copy as himself into `hyly-data` (vendor-sanctioned).
+      Cheaper to start, but bound to one person's account — an offboarding
+      hazard, so treat it as the interim, not the destination.
+2. **Freshness must be visible, not implicit.** A "data through <date>" stamp
+   on the Convert card, and a contract test that fails when the newest row is
+   older than N days. A stale dashboard that looks live is worse than one that
+   admits it.
+
+**Genuinely blocked on Hyly:**
+
+3. **A supported location.** `gds-prototype-20190629` is a prototype project
+   from 2019 (display name "GoogleDataStudio"). Where does the production
+   equivalent live?
+4. **Attribution quality.** `source_mapped` is null on 22.9% of rows across 314
+   distinct values. Is there a canonical channel mapping they can share?
+
+**Deprioritised, deliberately:**
+
+5. **Ingesting `ga4_analytics_events`** would restore the visitor half of the
+   funnel — but per Kyle to Dylan on 2026-08-06: *"We would like to prioritize
+   the Hyly data over the channel or GA4 data as we already have those in our
+   data."* Leave it registered and unused.
+
+**Context:** the Hyly pilot is expiring (Kyle to Dylan, 2026-08-06), which is
+why 1 and 2 matter more than 3 and 4.
 
 ## References
 
