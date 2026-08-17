@@ -40,6 +40,11 @@ logger = logging.getLogger(__name__)
 
 _cache: dict = {"client": None, "logged_missing": False}
 
+# Hyly's feed is daily. Two days of slack absorbs a weekend hiccup or a single
+# failed run; beyond that the portal says so out loud rather than quietly
+# showing old numbers as if they were current.
+STALE_AFTER_DAYS = 2
+
 # Milestone columns, in funnel order. Keys are the public metric names.
 FUNNEL = [
     ("leads", "leads"),
@@ -120,6 +125,36 @@ def _query(sql: str, params: list) -> list[dict]:
     except Exception as exc:
         # Loud on purpose — see FAILURE POLICY above.
         raise HylyQueryError(f"Hyly query failed: {exc}") from exc
+
+
+def get_data_freshness() -> dict:
+    """How current the Hyly rollup is, for display and for alerting.
+
+    The portal must state what it knows rather than implying it is live. A
+    dashboard frozen at a past date while looking current is worse than one
+    that says so — this is the same failure the 2026-08-11 snapshot produced,
+    where nothing refreshed and nothing complained.
+
+    Returns {data_through, days_behind, is_stale, stale_after_days} — or
+    {data_through: None} when unconfigured.
+    """
+    table = rollup_table()
+    if not table:
+        return {"data_through": None, "days_behind": None,
+                "is_stale": None, "stale_after_days": STALE_AFTER_DAYS}
+    rows = _query(f"SELECT MAX(activity_date) AS newest FROM `{table}`", [])
+    newest = rows[0]["newest"] if rows else None
+    if not newest:
+        return {"data_through": None, "days_behind": None,
+                "is_stale": True, "stale_after_days": STALE_AFTER_DAYS}
+    from datetime import date
+    days = (date.today() - newest).days
+    return {
+        "data_through": newest.isoformat(),
+        "days_behind": days,
+        "is_stale": days > STALE_AFTER_DAYS,
+        "stale_after_days": STALE_AFTER_DAYS,
+    }
 
 
 def get_daily_activity(

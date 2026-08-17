@@ -254,6 +254,21 @@
           $('#channels-empty').style.display = '';
           $('#channels-table').style.display = 'none';
         }
+
+        // State the data's age rather than implying it is current. A frozen
+        // dashboard that looks live is worse than one that admits it.
+        var f = data.freshness || {};
+        var stamp = $('#channels-freshness');
+        if (stamp) {
+          if (f.data_through) {
+            stamp.textContent = 'Data through ' + f.data_through +
+              (f.is_stale ? ' — not updating; ' + f.days_behind + ' days behind' : '');
+            stamp.className = f.is_stale ? 'freshness stale' : 'freshness';
+            stamp.style.display = '';
+          } else {
+            stamp.style.display = 'none';
+          }
+        }
       })
       .catch(function () {
         $('#channels-card').style.display = 'none';

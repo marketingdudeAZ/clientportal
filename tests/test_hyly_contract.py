@@ -133,6 +133,41 @@ def test_no_sentinel_dates_in_rollup():
     assert rows[0].mx.year <= 2100, f"future dates present: {rows[0].mx}"
 
 
+def test_rollup_is_fresh():
+    """Fails when the daily refresh has stopped.
+
+    This is the alarm. The 2026-08-11 snapshot stopped refreshing and nothing
+    complained for six days — we only found it by going looking. A scheduled
+    job that silently stops is the whole risk of automating this, so the test
+    that catches it is the most valuable one in the file.
+
+    Marked xfail until the 05:00 vendor refresh is enabled (blocked on Hyly's
+    IAM grant, ADR 0022 open item 1) — the data is knowingly frozen until then,
+    and a permanently-red suite teaches people to ignore it.
+    """
+    client = _bq()
+    if client is None:
+        pytest.skip("BigQuery credentials not configured")
+    lz = _manifest()["landing_zone"]
+    fq = f"{lz['project']}.{lz['dataset']}.hyly_daily_activity_v1"
+    try:
+        rows = list(client.query(f"SELECT MAX(activity_date) AS newest FROM `{fq}`").result())
+    except Exception:
+        pytest.skip(f"{fq} not built in this environment")
+
+    import datetime
+    newest = rows[0].newest
+    assert newest is not None, f"{fq} is empty"
+    days = (datetime.date.today() - newest).days
+    if days > 2:
+        pytest.xfail(
+            f"Hyly data is {days} days behind (newest {newest}). Expected while the "
+            f"05:00 vendor refresh is disabled. Remove this xfail once Hyly grants "
+            f"the service account and setup_hyly_schedules.py --promote-vendor-source "
+            f"has run — after that, staleness is a real failure."
+        )
+
+
 # ── Identity contract ────────────────────────────────────────────────────────
 
 def test_every_hyly_property_maps_to_hubspot():

@@ -26,6 +26,8 @@
   {# Convert stage detail: Hyly channels — shown in Status pane below the grid #}
   <div class="card" id="channels-card" style="display:none">
     <h2>Convert — Last 30 Days by Channel</h2>
+    {# Freshness stamp — populated by loop.js. Hidden until we know the date. #}
+    <p class="freshness" id="channels-freshness" style="display:none"></p>
     <div id="channels-empty" class="empty" style="display:none">
       <p>Hyly attribution not configured for this property yet.<br>
          Channel data will appear here when Hyly beta reaches this property.</p>

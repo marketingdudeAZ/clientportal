@@ -433,12 +433,19 @@ def loop_channels():
             "hyly_property_id": hyly_id,
             "error":            f"Hyly query failed: {exc}",
         }), 502
+    try:
+        freshness = hyly_client.get_data_freshness()
+    except hyly_client.HylyQueryError:
+        freshness = {"data_through": None, "is_stale": None}
+
     return jsonify({
         "property_uuid":   uuid,
         "company_id":      company_id,
         "hyly_property_id": hyly_id,
         "window_days":     days,
         "channels":        channels,
+        # The portal renders this. Never let the page imply it is live.
+        "freshness":       freshness,
     })
 
 
