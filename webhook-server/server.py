@@ -6325,8 +6325,14 @@ def health():
     try:
         import portal_tickets
         payload["portal_ticket_types"] = len(portal_tickets.configured_types())
+        # `bigquery` true only means the CREDENTIALS resolve. This is the
+        # stronger fact: whether a mapping row has actually failed to write or
+        # read since boot, which is the difference between "a requester can see
+        # what they filed" and "the portal quietly forgets".
+        payload["ticket_tracking_degraded"] = portal_tickets.tracking_degraded()
     except Exception:  # noqa: BLE001
         payload["portal_ticket_types"] = 0
+        payload["ticket_tracking_degraded"] = True
     return jsonify(payload), 200
 
 
