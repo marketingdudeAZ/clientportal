@@ -171,6 +171,38 @@ def _pick_def(entry: dict, candidates: list[dict]) -> dict | None:
     return None
 
 
+def _fit_to_options(field_def: dict, value: Any) -> Any:
+    """The value ClickUp will actually accept for this field, or None.
+
+    Resolving a value is not the same as it FITTING. Both live examples:
+
+      * Account Manager's options are first names ("Katie"); the HubSpot owner
+        is "Katie Cannon". Exact matching drops it.
+      * Market* holds DIGITAL REGIONS (Florida, Mountain, Mid-Atlantic); the
+        HubSpot `market` is a physical market (Miami, Phoenix, Chicago). Some
+        coincide — Atlanta, Austin, Dallas, Houston, San Antonio — and the rest
+        genuinely do not map without a business decision nobody has made.
+
+    So: exact match wins, a leading-token match rescues the person-name case,
+    and anything else returns None so the field renders as an input instead of
+    being silently dropped on the floor. Guessing "Miami → Florida" here would
+    route a ticket to the wrong region and look completely correct doing it.
+    """
+    if value in (None, ""):
+        return None
+    if field_def.get("type") not in ("drop_down", "labels"):
+        return value
+    options = (field_def.get("type_config") or {}).get("options") or []
+    labels = [(o.get("name") or o.get("label") or "") for o in options]
+    needle = str(value).strip().lower()
+    for lab in labels:
+        if lab.strip().lower() == needle:
+            return lab
+    head = needle.split()[0] if needle.split() else ""
+    hits = [lab for lab in labels if lab.strip().lower() == head]
+    return hits[0] if len(hits) == 1 else None
+
+
 def _resolve_manifest_field(entry: dict, by_name: dict, type_key: str,
                             unresolved: set | None = None) -> dict | None:
     """One manifest entry + the list's live field defs → a rendered form field.
@@ -371,7 +403,8 @@ def types_with_schema(include_internal: bool = False, company_id: str = "",
                 prefill = _prefill_values(t["key"], company_id, property_uuid,
                                           submitted_by)
                 built = _manifest_schema(
-                    t["key"], defs, unresolved_known_fields(t["key"], prefill))
+                    t["key"], defs,
+                    unresolved_known_fields(t["key"], prefill, defs))
             except ManifestDrift as e:
                 # Someone renamed or deleted a field in ClickUp that this form
                 # requires. Rendering the rest would collect an incomplete
@@ -525,7 +558,8 @@ def _prefill_values(type_key: str, company_id: str, property_uuid: str = "",
     return out
 
 
-def unresolved_known_fields(type_key: str, prefill: dict) -> set:
+def unresolved_known_fields(type_key: str, prefill: dict,
+                            defs: list | None = None) -> set:
     """`known` fields we promised to fill and could not, lowercased.
 
     These must be RENDERED as inputs. `form_schema` used to strip every
@@ -537,7 +571,18 @@ def unresolved_known_fields(type_key: str, prefill: dict) -> set:
     schema but are populated on no property we sampled), which is exactly why
     this is a behaviour and not a comment.
     """
-    filled = {k.strip().lower() for k, v in (prefill or {}).items() if v}
+    by_name = _defs_by_name(defs or [])
+    filled = set()
+    for k, v in (prefill or {}).items():
+        if not v:
+            continue
+        cands = by_name.get(k.strip().lower()) or []
+        # With no defs to check against, presence is all we can judge. With
+        # them, a value that will not fit the field's options counts as
+        # unfilled — otherwise it is dropped at write time and the field
+        # appears on neither the form nor the task.
+        if not cands or _fit_to_options(cands[0], v) is not None:
+            filled.add(k.strip().lower())
     return {name.lower() for name, _ in _manifest_known(type_key)
             if name.lower() not in filled}
 
@@ -632,6 +677,14 @@ def _coerce(field_def: dict, value: Any, rule: dict | None = None) -> Any:
                     or str(o.get("orderindex")) == str(value)
                     or (o.get("name") or "").strip().lower() == needle):
                 return o.get("id") if o.get("id") is not None else o.get("orderindex")
+        # Same leading-token rescue the form used when it decided not to render
+        # this field — the two must agree, or a field the requester never saw
+        # silently fails to write.
+        fitted = _fit_to_options(field_def, value)
+        if fitted is not None:
+            for o in options:
+                if (o.get("name") or "").strip().lower() == str(fitted).strip().lower():
+                    return o.get("id") if o.get("id") is not None else o.get("orderindex")
         return None
     if ftype == "labels":
         vals = value if isinstance(value, list) else [value]
