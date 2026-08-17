@@ -321,7 +321,7 @@ def create_ticket(
         return {"ok": False, "error": "Couldn't create the ticket. Please try again."}, 502
 
     _record_mapping(task.get("id"), company_id, property_uuid, type_key, submitted_by)
-    return {"ok": True, "ticket": _shape_task(task, type_key)}, 201
+    return {"ok": True, "ticket": _shape_task(task, type_key, submitted_by)}, 201
 
 
 def list_tickets(company_id: str, *, property_uuid: str = "", limit: int = 50) -> list[dict]:
@@ -333,7 +333,9 @@ def list_tickets(company_id: str, *, property_uuid: str = "", limit: int = 50) -
         task = clickup_client.get_task(ref.get("task_id"))
         if not task:
             continue
-        out.append(_shape_task(task, ref.get("ticket_type")))
+        # submitted_by comes from OUR mapping row, not from ClickUp — the
+        # requester is a portal user, who may not exist as a ClickUp member.
+        out.append(_shape_task(task, ref.get("ticket_type"), ref.get("submitted_by")))
     out.sort(key=lambda x: x.get("created_ts") or 0, reverse=True)
     return out
 
@@ -346,7 +348,8 @@ def _age_days(created_ms: Any) -> int | None:
     return max(0, (datetime.now(timezone.utc) - created).days)
 
 
-def _shape_task(task: dict, type_key: str | None = None) -> dict[str, Any]:
+def _shape_task(task: dict, type_key: str | None = None,
+                submitted_by: str | None = None) -> dict[str, Any]:
     status = ((task.get("status") or {}).get("status")) or ""
     created = task.get("date_created")
     t = _type_by_key(type_key) if type_key else None
@@ -355,6 +358,7 @@ def _shape_task(task: dict, type_key: str | None = None) -> dict[str, Any]:
         "type": type_key or "",
         "type_label": (t or {}).get("label", ""),
         "subject": task.get("name"),
+        "submitted_by": submitted_by or "",
         "status": client_status(status),
         "raw_status": status,
         "created_ts": int(created) if created else None,
