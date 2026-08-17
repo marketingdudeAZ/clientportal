@@ -80,6 +80,31 @@ Hyly emits **314 distinct `source_mapped` values** with heavy near-duplication
 14 channels. New vendor values land in a sensible bucket instead of silently
 becoming a new row in a client's chart.
 
+### 3b. A bulk backfill contaminates June 2026 — do not report all-time figures
+
+**21,309 of 80,179 leads (27%) fall on 2026-06-01..05**, against a median of 67
+leads/day. 2026-06-02 alone carries 12,261 leads and 4 leases. This is a
+historical backfill stamped with its load date, not inquiry activity.
+
+Consequences for anyone reading this data:
+
+- **All-time conversion rates are meaningless.** They divide matured leases by
+  contaminated lead counts. The all-time lead-to-lease reads 3.7%; a matured
+  Jan–Mar 2026 cohort reads **9.3%** (5,083 leads → 18.0% toured → 17.1%
+  applied → 9.3% leased). The second is the honest number.
+- **Channel comparisons on all-time data are wrong.** ApartmentList reads 0.4%
+  all-time because nearly all its volume sits inside the spike; in the matured
+  cohort it is 5.4%.
+- **Any conversion window shorter than ~90 days understates.** Median lead to
+  lease is 17 days, p90 is 64 days.
+
+The rollup deliberately does NOT exclude these rows — they are real contacts,
+and silently dropping vendor data would be its own kind of lie. Reporting must
+exclude or annotate the window instead. The portal's 30-day view is unaffected.
+
+Open question for Hyly: is there a true original inquiry date on these records
+that we should use in place of the load date?
+
 ### 4. Sentinel dates are floored at 2015-01-01
 
 Hyly carries `h_cc_event_datetime` values back to **2002-10-26**. Without a
