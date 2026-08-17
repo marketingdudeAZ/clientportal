@@ -163,8 +163,8 @@ def ticket_types():
     ident, denied = _gate(request)
     if denied:
         return denied
-    _, is_internal = ident
-    # Optional: with a company the picker can tell a prefill field it WILL fill
+    email, is_internal = ident
+    # Optional: with a company the picker can tell a `known` field it WILL fill
     # (hide it) from one it cannot (render it, so the requester can). Absent, no
     # field is hidden — the safe direction.
     company_id = (request.args.get("company_id") or "").strip()
@@ -172,7 +172,8 @@ def ticket_types():
     try:
         all_types = portal_tickets.types_with_schema(
             include_internal=is_internal,
-            company_id=company_id, property_uuid=property_uuid)
+            company_id=company_id, property_uuid=property_uuid,
+            submitted_by=email)
     except Exception as e:  # noqa: BLE001
         logger.warning("portal ticket types failed: %s", e)
         all_types = []

@@ -36,6 +36,8 @@ def _fields():
     return [
         {"id": "f_url", "name": "Property URL", "type": "url", "required": False},
         {"id": "f_uuid", "name": "uuid", "type": "short_text", "required": False},
+        {"id": "f_code", "name": "Property Code", "type": "short_text", "required": False},
+        {"id": "f_name", "name": "Property Name", "type": "short_text", "required": False},
         {"id": "f_pri", "name": "Priority", "type": "drop_down", "required": True,
          "type_config": {"options": [
              {"id": "opt-low", "name": "Low", "orderindex": 0},
@@ -178,7 +180,8 @@ class CoerceAndCreate(unittest.TestCase):
             mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()),
             mock.patch.object(clickup_client, "create_task", side_effect=_fake_create_task),
             mock.patch("hubspot_client.get_company",
-                       return_value={"website": "https://maple.example.com", "uuid": "u-1", "name": "Maple"}),
+                       return_value={"website": "https://maple.example.com", "uuid": "u-1",
+                                     "name": "Maple", "property_code": "MPL001"}),
         ]
         for p in self.patchers:
             p.start()
@@ -205,9 +208,12 @@ class CoerceAndCreate(unittest.TestCase):
         self.assertEqual(cf["f_pri"], "opt-high")
         # currency coerced to float
         self.assertEqual(cf["f_budget"], 500.0)
-        # prefill landed on the property fields the requester never saw
-        self.assertEqual(cf["f_url"], "https://maple.example.com")
-        self.assertEqual(cf["f_uuid"], "u-1")
+        # prefill landed on the property fields the requester never saw.
+        # Driven by the MANIFEST: `general` declares Property Code and Property
+        # Name as `known`, so those are what get stamped — not every field that
+        # happens to look like identity.
+        self.assertEqual(cf["f_code"], "MPL001")
+        self.assertEqual(cf["f_name"], "Maple")
         # mapping recorded exactly once with the new task id
         rec.assert_called_once()
         self.assertEqual(rec.call_args[0][0], "task-1")
@@ -657,10 +663,17 @@ class ManifestForm(unittest.TestCase):
                                return_value=_creative_fields() if defs is None else defs):
             return portal_tickets.form_schema("creative_ad_copy", "901-creative")
 
-    def _entry(self):
+    def _entry(self, resolved=True):
+        """`resolved` mirrors a property whose identity fields all come back
+        from HubSpot. Without one, `known` fields render as inputs rather than
+        vanishing — see test_an_unfillable_known_field_becomes_an_input."""
+        prefill = {"Property Code": "42831", "Property URL": "https://x.com",
+                   "Account Manager": "Dane", "Market*": "Dallas",
+                   "z_Requested By": "cm@rpmliving.com"} if resolved else {}
         with mock.patch.object(clickup_client, "get_list_fields",
-                               return_value=_creative_fields()):
-            types = portal_tickets.types_with_schema()
+                               return_value=_creative_fields()), \
+             mock.patch.object(portal_tickets, "_prefill_values", return_value=prefill):
+            types = portal_tickets.types_with_schema(company_id="c1")
         return next(t for t in types if t["key"] == "creative_ad_copy")
 
     def test_it_renders_exactly_the_five_ask_fields_in_manifest_order(self):
@@ -717,6 +730,28 @@ class ManifestForm(unittest.TestCase):
     def test_a_section_of_only_known_fields_is_not_an_empty_heading(self):
         titles = [s["title"] for s in self._entry()["sections"]]
         self.assertNotIn("Property Information", titles)
+
+    def test_the_identity_we_attach_is_returned_for_the_summary_card(self):
+        """Shown as a read-only card, not as disabled inputs — a disabled input
+        still reads as "a field to deal with"."""
+        ident = self._entry()["identity"]
+        self.assertEqual(ident["Property Code"], "42831")
+        self.assertEqual(ident["Account Manager"], "Dane")
+        # uuid and the requester are plumbing, not something to show a client.
+        self.assertNotIn("z_Requested By", ident)
+
+    def test_an_unfillable_known_field_becomes_an_input(self):
+        """The Account Manager bug, generically: a `known` field whose source
+        breaks used to vanish from the form AND the task, so it was blank on
+        every ticket forever. Two are live today — regional_manager_email and
+        marketing_rvp_email exist on the schema but are populated on nothing."""
+        entry = self._entry(resolved=False)
+        names = [f["name"] for f in entry["fields"]]
+        self.assertIn("Property Code", names)
+        degraded = next(f for f in entry["fields"] if f["name"] == "Property Code")
+        self.assertTrue(degraded["degraded_known"])
+        self.assertFalse(degraded["required"])   # never block on our own gap
+        self.assertIn("couldn\'t find", degraded["help"])
 
     def test_flat_fields_still_ship_for_the_cached_frontend(self):
         """The HubSpot CDN serves the portal template for up to 10 hours while
@@ -1061,3 +1096,99 @@ class DomainGate(unittest.TestCase):
         with mock.patch.dict(os.environ,
                              {"PORTAL_TICKETS_PILOT_EMAILS": "manager@someclient.com"}):
             self.assertEqual(self._get("manager@someclient.com"), 403)
+
+
+class KnownTierResolution(unittest.TestCase):
+    """Phase 2 — identity comes from the property record, not the requester.
+
+    The previous mapping was a single global {ClickUp field name: HubSpot
+    property} table keyed "Market" and "uuid". No live field has either name,
+    so those values silently never landed on any ticket — the same class of
+    bug as Account Manager pointing at a HubSpot property that does not exist.
+    Sources now live on the manifest entry, next to the field they fill.
+    """
+
+    COMPANY = {"name": "10x Riverwalk", "property_code": "42831",
+               "website": "10xriverwalkapts.com", "market": "Miami",
+               "hubspot_owner_id": "1284471", "uuid": "u-1"}
+
+    def _prefill(self, type_key="creative_ad_copy", company=None, owner="Dane",
+                 submitted_by="cm@rpmliving.com"):
+        with mock.patch("hubspot_client.get_company",
+                        return_value=self.COMPANY if company is None else company), \
+             mock.patch.object(portal_tickets, "_owner_name", return_value=owner):
+            return portal_tickets._prefill_values(type_key, "c1", "u-1", submitted_by)
+
+    def test_it_fills_the_exact_live_field_names(self):
+        p = self._prefill()
+        self.assertEqual(p["Property Code"], "42831")
+        self.assertEqual(p["Property URL"], "10xriverwalkapts.com")
+        # "Market*", with the asterisk — the name the field actually has. The
+        # old table said "Market", which matches nothing on this list.
+        self.assertEqual(p["Market*"], "Miami")
+
+    def test_the_account_manager_is_a_name_not_an_owner_id(self):
+        self.assertEqual(self._prefill()["Account Manager"], "Dane")
+
+    def test_the_region_table_is_only_a_fallback_for_an_ownerless_property(self):
+        """The owners lookup is the real answer — it stays right when someone
+        changes desks. The screenshot-of-a-spreadsheet table does not."""
+        company = dict(self.COMPANY, hubspot_owner_id="", market="Dallas")
+        p = self._prefill(company=company, owner="")
+        self.assertEqual(p["Account Manager"], "Dane")      # from the table
+        company = dict(self.COMPANY, hubspot_owner_id="", market="Nowhere")
+        self.assertNotIn("Account Manager", self._prefill(company=company, owner=""))
+
+    def test_the_requester_email_fills_the_requested_by_field(self):
+        self.assertEqual(self._prefill()["z_Requested By"], "cm@rpmliving.com")
+
+    def test_a_users_field_is_never_written_to_clickup(self):
+        """`users` takes ClickUp member ids. A portal requester may have no
+        ClickUp account, so an email is rejected or silently dropped —
+        attribution lives in the description, where it always resolves."""
+        self.assertIsNone(portal_tickets._coerce(
+            {"name": "z_Requested By", "type": "users"}, "cm@rpmliving.com"))
+
+    def test_a_hubspot_outage_yields_a_partial_map_not_an_error(self):
+        with mock.patch("hubspot_client.get_company", side_effect=RuntimeError("502")):
+            p = portal_tickets._prefill_values("creative_ad_copy", "c1", "u-1",
+                                               "cm@rpmliving.com")
+        self.assertEqual(p, {"z_Requested By": "cm@rpmliving.com"})
+
+    def test_unresolved_known_fields_names_what_we_could_not_fill(self):
+        p = {"Property Code": "42831", "Property URL": ""}
+        missing = portal_tickets.unresolved_known_fields("creative_ad_copy", p)
+        self.assertIn("property url", missing)     # present but empty
+        self.assertIn("market*", missing)          # absent entirely
+        self.assertNotIn("property code", missing)
+
+
+class KnownSourcesExistInHubSpot(unittest.TestCase):
+    """Every manifest `source` must be a real company property.
+
+    This is the check nobody ran on `account_manager`, `rm_email`, `rvp_email`,
+    `portfolio_name` and `email` — five sources that named nothing. A mapping
+    that points at a property which does not exist fails silently, forever, on
+    every ticket.
+    """
+
+    def setUp(self):
+        if not os.getenv("HUBSPOT_API_KEY") or os.getenv("HUBSPOT_API_KEY") == "test-key":
+            self.skipTest("no live HubSpot key")
+
+    def test_every_source_names_a_real_company_property(self):
+        import hubspot_client
+        from config import PORTAL_TICKET_FORMS
+        r = hubspot_client._request(
+            "GET", f"{hubspot_client.API_BASE}/crm/v3/properties/companies")
+        live = {p["name"] for p in r.json().get("results", [])}
+        # Not HubSpot properties: resolved from the session / the URL instead.
+        synthetic = {"submitted_by", "uuid"}
+        bad = sorted({
+            (key, e["source"])
+            for key, man in PORTAL_TICKET_FORMS.items()
+            for sec in man["sections"] for e in sec["fields"]
+            if e.get("tier") == "known" and e.get("source")
+            and e["source"] not in synthetic and e["source"] not in live
+        })
+        self.assertEqual(bad, [], f"sources that name no HubSpot property: {bad}")
