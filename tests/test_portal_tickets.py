@@ -1197,3 +1197,52 @@ class KnownSourcesExistInHubSpot(unittest.TestCase):
             and e["source"] not in synthetic and e["source"] not in live
         })
         self.assertEqual(bad, [], f"sources that name no HubSpot property: {bad}")
+
+
+class PrefillMustFitTheField(unittest.TestCase):
+    """Resolving a value is not the same as it fitting the field.
+
+    Both of these are live. Account Manager's options are first names while
+    HubSpot's owner is a full name, and Market* holds DIGITAL REGIONS while
+    HubSpot's `market` is a physical market. A resolved-but-unfittable value
+    used to hide the field (because prefill "worked") and then get dropped at
+    write time (because the option didn't match) — invisible on both ends.
+    """
+
+    AM = {"id": "am", "name": "Account Manager", "type": "drop_down",
+          "type_config": {"options": [{"id": "o1", "name": "Katie"},
+                                      {"id": "o2", "name": "Dane"}]}}
+    MARKET = {"id": "mk", "name": "Market*", "type": "drop_down",
+              "type_config": {"options": [{"id": "m1", "name": "Florida"},
+                                          {"id": "m2", "name": "Atlanta"}]}}
+
+    def test_a_full_name_fits_a_first_name_option(self):
+        self.assertEqual(portal_tickets._fit_to_options(self.AM, "Katie Cannon"), "Katie")
+        self.assertEqual(portal_tickets._coerce(self.AM, "Katie Cannon"), "o1")
+
+    def test_an_exact_match_still_wins(self):
+        self.assertEqual(portal_tickets._fit_to_options(self.MARKET, "Atlanta"), "Atlanta")
+
+    def test_a_physical_market_does_NOT_get_guessed_into_a_region(self):
+        """Miami is in Florida, and a human knows that. Encoding the guess here
+        would route tickets to the wrong region and look correct doing it."""
+        self.assertIsNone(portal_tickets._fit_to_options(self.MARKET, "Miami"))
+        self.assertIsNone(portal_tickets._coerce(self.MARKET, "Miami"))
+
+    def test_an_ambiguous_first_name_is_refused(self):
+        field = dict(self.AM, type_config={"options": [{"id": "a", "name": "Katie"},
+                                                       {"id": "b", "name": "Katie"}]})
+        self.assertIsNone(portal_tickets._fit_to_options(field, "Katie Cannon"))
+
+    def test_an_unfittable_value_counts_as_unresolved_so_the_field_renders(self):
+        defs = [self.AM, self.MARKET]
+        missing = portal_tickets.unresolved_known_fields(
+            "creative_ad_copy",
+            {"Account Manager": "Katie Cannon", "Market*": "Miami"}, defs)
+        self.assertIn("market*", missing)            # will not fit → render it
+        self.assertNotIn("account manager", missing)  # fits → stays hidden
+
+    def test_free_text_fields_are_never_option_checked(self):
+        self.assertEqual(
+            portal_tickets._fit_to_options({"name": "Property Code", "type": "short_text"},
+                                           "42831"), "42831")
