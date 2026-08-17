@@ -4081,9 +4081,18 @@ function loadTickets() {
       '— by email, or on the ClickUp forms — aren\'t shown here.</div>';
 
     if (!tickets.length) {
+      // "No open requests" and "we can't read your requests" look identical
+      // from here, and the second one reads as "the thing I filed never
+      // happened". Never show the reassuring one when we don't know.
+      var emptyHead = (data && data.tracking_degraded)
+        ? '<div style="font-weight:600;color:var(--ts);margin-bottom:6px">' +
+          'We can\'t show your requests right now</div>' +
+          '<div style="font-size:12.5px">' +
+          _escHtml(data.tracking_message || '') + '</div>'
+        : '<div style="font-weight:600;color:var(--ts);margin-bottom:6px">No open requests</div>';
       list.innerHTML =
         '<div style="padding:24px 24px 4px;text-align:center;color:var(--tm);font-size:13px">' +
-          '<div style="font-weight:600;color:var(--ts);margin-bottom:6px">No open requests</div>' +
+          emptyHead +
         '</div>' + SCOPE_NOTE + '<div id="submitted-ticket-placeholder"></div>';
       return;
     }
@@ -4092,7 +4101,11 @@ function loadTickets() {
     // surface — a requester concludes their request was never filed. Say how
     // many we couldn't check.
     var banner = '';
-    if (data && data.degraded) {
+    if (data && data.tracking_degraded) {
+      banner = '<div style="padding:10px 16px;margin-bottom:8px;border-radius:6px;' +
+        'background:rgba(180,120,20,.10);color:var(--ts);font-size:12.5px">' +
+        _escHtml(data.tracking_message || '') + '</div>';
+    } else if (data && data.degraded) {
       var n = data.unresolved_count || 0;
       banner = '<div style="padding:10px 16px;margin-bottom:8px;border-radius:6px;' +
         'background:rgba(180,120,20,.10);color:var(--ts);font-size:12.5px">' +

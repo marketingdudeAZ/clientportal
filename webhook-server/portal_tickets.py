@@ -892,23 +892,102 @@ def _shape_task(task: dict, type_key: str | None = None,
 
 # ── mapping store (BigQuery, append-only) ────────────────────────────────────
 
+# Mirrors migrations/0012_portal_tickets_table.py. Kept here as well because a
+# migration that was never run is indistinguishable, at runtime, from a table
+# that never existed — and that is exactly what happened: tickets filed into
+# ClickUp correctly for weeks while every mapping write was swallowed, so the
+# portal showed "No open requests" forever and no recap ever matched. A schema
+# this small should not depend on someone remembering to run a script.
+# tests/test_portal_tickets.py asserts the two definitions stay identical.
+_MAPPING_DDL = """
+CREATE TABLE IF NOT EXISTS `{project}.{dataset}.portal_tickets` (
+  task_id        STRING NOT NULL,
+  company_id     STRING,
+  property_uuid  STRING,
+  ticket_type    STRING,
+  submitted_by   STRING,
+  created_at     TIMESTAMP
+)
+"""
+
+# Set when the mapping store is unusable, so "we can't show your requests right
+# now" can be said out loud instead of rendering an empty list that reads as
+# "your request was never filed".
+_TRACKING_DEGRADED = False
+_TABLE_ENSURED = False
+
+
+def tracking_degraded() -> bool:
+    """True when tickets are filing but we cannot record or read the mapping."""
+    return _TRACKING_DEGRADED
+
+
+def _ensure_mapping_table() -> bool:
+    """CREATE TABLE IF NOT EXISTS for the mapping table. Once per process.
+
+    Returns True if the statement ran. Idempotent by construction, and cheap:
+    it fires at most once, and only after a write has already failed.
+    """
+    global _TABLE_ENSURED
+    if _TABLE_ENSURED:
+        return False
+    _TABLE_ENSURED = True
+    try:
+        import bigquery_client
+        from config import BIGQUERY_PROJECT_ID
+        bigquery_client.query(_MAPPING_DDL.format(
+            project=BIGQUERY_PROJECT_ID, dataset=bigquery_client._dataset()))
+        logger.warning("portal_tickets mapping table was missing — created it")
+        return True
+    except Exception as e:  # noqa: BLE001 — the app may lack DDL rights
+        logger.error("portal ticket mapping table could not be created: %s. "
+                     "Run migrations/0012_portal_tickets_table.py against the "
+                     "prod dataset.", e)
+        return False
+
+
 def _record_mapping(task_id, company_id, property_uuid, type_key, submitted_by) -> None:
+    """Record task_id ↔ company_id. Best-effort, but never SILENTLY best-effort.
+
+    A failure here does not fail the ticket — the work is already filed in
+    ClickUp and losing it would be worse. But it does flip `_TRACKING_DEGRADED`,
+    because the alternative is what shipped before: the requester sees an empty
+    "what's open" list and concludes their request vanished.
+    """
+    global _TRACKING_DEGRADED
     if not task_id:
         return
+    row = {
+        "task_id": str(task_id),
+        "company_id": str(company_id or ""),
+        "property_uuid": str(property_uuid or ""),
+        "ticket_type": type_key or "",
+        "submitted_by": submitted_by or "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
     try:
         import bigquery_client
         if not bigquery_client.is_bigquery_configured():
+            _TRACKING_DEGRADED = True
+            logger.error("portal ticket %s filed but BigQuery is not configured "
+                         "— it will not appear in the requester's list", task_id)
             return
-        bigquery_client.insert_rows(_MAPPING_TABLE, [{
-            "task_id": str(task_id),
-            "company_id": str(company_id or ""),
-            "property_uuid": str(property_uuid or ""),
-            "ticket_type": type_key or "",
-            "submitted_by": submitted_by or "",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }])
+        try:
+            bigquery_client.insert_rows(_MAPPING_TABLE, [row])
+        except Exception as first:  # noqa: BLE001
+            # Most likely the table does not exist. Create it and retry once —
+            # any other cause simply fails again and is reported below.
+            logger.warning("portal ticket mapping write failed for %s (%s); "
+                           "ensuring the table exists and retrying", task_id, first)
+            if not _ensure_mapping_table():
+                raise
+            bigquery_client.insert_rows(_MAPPING_TABLE, [row])
+        _TRACKING_DEGRADED = False
     except Exception as e:  # noqa: BLE001 — a mapping-write failure must not fail the ticket
-        logger.warning("portal ticket mapping write failed for %s: %s", task_id, e)
+        _TRACKING_DEGRADED = True
+        logger.error("portal ticket %s filed but its mapping row was NOT "
+                     "recorded: %s. The requester will not see it in their "
+                     "list, and no recap will match it.", task_id, e)
 
 
 def _emit_filed(task_id, company_id, property_uuid, type_key, submitted_by) -> None:
@@ -961,9 +1040,11 @@ def mapping_for_task(task_id: str) -> dict | None:
 
 
 def _read_mappings(company_id: str, property_uuid: str, limit: int) -> list[dict]:
+    global _TRACKING_DEGRADED
     try:
         import bigquery_client
         if not bigquery_client.is_bigquery_configured():
+            _TRACKING_DEGRADED = True
             return []
         from google.cloud import bigquery
         from config import BIGQUERY_PROJECT_ID
@@ -980,9 +1061,14 @@ def _read_mappings(company_id: str, property_uuid: str, limit: int) -> list[dict
             bigquery.ScalarQueryParameter("uuid", "STRING", str(property_uuid or "")),
             bigquery.ScalarQueryParameter("lim", "INT64", int(limit)),
         ]
-        return bigquery_client.query(sql, params)
+        rows = bigquery_client.query(sql, params)
+        _TRACKING_DEGRADED = False
+        return rows
     except Exception as e:  # noqa: BLE001 — tracking is best-effort
-        logger.warning("portal ticket mapping read failed for %s: %s", company_id, e)
+        # An empty list and a failed read look identical to the requester, and
+        # one of them means "your request is gone". Say which.
+        _TRACKING_DEGRADED = True
+        logger.error("portal ticket mapping read failed for %s: %s", company_id, e)
         return []
 
 

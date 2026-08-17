@@ -937,3 +937,127 @@ class EveryTypeHasAManifest(unittest.TestCase):
         for key, man in PORTAL_TICKET_FORMS.items():
             self.assertTrue(man.get("sla"), key)
             self.assertTrue(man.get("name_pattern"), key)
+
+
+class MappingTableSelfHeal(unittest.TestCase):
+    """The mapping row is what makes a filed ticket visible to the person who
+    filed it — and what the recap matches on. A migration nobody ran is
+    indistinguishable at runtime from a table that never existed, and the
+    failure was silent: ticket files fine, "what's open" stays empty forever.
+    """
+
+    def setUp(self):
+        portal_tickets._TABLE_ENSURED = False
+        portal_tickets._TRACKING_DEGRADED = False
+        self.addCleanup(setattr, portal_tickets, "_TABLE_ENSURED", False)
+        self.addCleanup(setattr, portal_tickets, "_TRACKING_DEGRADED", False)
+
+    def _bq(self, insert_side_effect=None, query_ok=True):
+        bq = mock.MagicMock()
+        bq.is_bigquery_configured.return_value = True
+        bq._dataset.return_value = "rpm_portal"
+        bq.insert_rows.side_effect = insert_side_effect
+        if not query_ok:
+            bq.query.side_effect = RuntimeError("no DDL permission")
+        return mock.patch.dict("sys.modules", {"bigquery_client": bq}), bq
+
+    def test_a_missing_table_is_created_and_the_row_retried(self):
+        calls = []
+
+        def insert(table, rows):
+            calls.append(rows)
+            if len(calls) == 1:
+                raise RuntimeError("404 Not found: Table portal_tickets")
+
+        patcher, bq = self._bq(insert_side_effect=insert)
+        with patcher:
+            portal_tickets._record_mapping("t1", "c1", "u1", "general", "cm@rpmliving.com")
+        self.assertEqual(len(calls), 2)                 # failed, then retried
+        self.assertIn("CREATE TABLE IF NOT EXISTS", bq.query.call_args[0][0])
+        self.assertFalse(portal_tickets.tracking_degraded())
+
+    def test_the_table_is_only_ensured_once_per_process(self):
+        patcher, bq = self._bq(insert_side_effect=RuntimeError("still broken"))
+        with patcher:
+            portal_tickets._record_mapping("t1", "c1", "u1", "general", "a@rpmliving.com")
+            portal_tickets._record_mapping("t2", "c1", "u1", "general", "a@rpmliving.com")
+        self.assertEqual(bq.query.call_count, 1)
+
+    def test_an_unfixable_write_flips_tracking_to_degraded(self):
+        patcher, _ = self._bq(insert_side_effect=RuntimeError("boom"), query_ok=False)
+        with patcher:
+            portal_tickets._record_mapping("t1", "c1", "u1", "general", "a@rpmliving.com")
+        self.assertTrue(portal_tickets.tracking_degraded())
+
+    def test_unconfigured_bigquery_is_degraded_not_silent(self):
+        bq = mock.MagicMock()
+        bq.is_bigquery_configured.return_value = False
+        with mock.patch.dict("sys.modules", {"bigquery_client": bq}):
+            portal_tickets._record_mapping("t1", "c1", "u1", "general", "a@rpmliving.com")
+        self.assertTrue(portal_tickets.tracking_degraded())
+        bq.insert_rows.assert_not_called()
+
+    def test_the_runtime_ddl_matches_migration_0012(self):
+        """Two definitions of one table drift. Pin them together."""
+        import os as _os
+        import re as _re
+        path = _os.path.join(_os.path.dirname(__file__), "..", "migrations",
+                             "0012_portal_tickets_table.py")
+        ns = {}
+        exec(compile(open(path).read(), path, "exec"), ns)   # noqa: S102 — a constant
+        cols = lambda ddl: sorted(_re.findall(r"^\s+(\w+)\s+(?:STRING|TIMESTAMP)",
+                                              ddl, _re.M))
+        self.assertEqual(cols(ns["DDL"]), cols(portal_tickets._MAPPING_DDL))
+        self.assertTrue(cols(ns["DDL"]), "column regex matched nothing")
+
+
+class DomainGate(unittest.TestCase):
+    """Ticketing writes into live ClickUp queues, so its floor must not move
+    when a HubDB row does. The domain check is deliberately independent of
+    feature_access's internal/client inference."""
+
+    def setUp(self):
+        from flask import Flask
+        from routes.portal_tickets import portal_tickets_bp
+        app = Flask(__name__)
+        app.register_blueprint(portal_tickets_bp)
+        self.c = app.test_client()
+        p = mock.patch("routes.portal_tickets.require_access", return_value=None)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _get(self, email):
+        with mock.patch.object(portal_tickets, "types_with_schema", return_value=[]):
+            return self.c.get("/api/portal-tickets/types",
+                              headers={"X-Portal-Email": email}).status_code
+
+    def test_an_rpm_address_gets_in(self):
+        self.assertEqual(self._get("cm@rpmliving.com"), 200)
+
+    def test_a_client_address_is_refused(self):
+        self.assertEqual(self._get("manager@someclient.com"), 403)
+
+    def test_the_domain_is_matched_exactly_not_by_suffix(self):
+        """`evil-rpmliving.com` and `rpmliving.com.attacker.net` must not pass."""
+        self.assertEqual(self._get("x@evil-rpmliving.com"), 403)
+        self.assertEqual(self._get("x@rpmliving.com.attacker.net"), 403)
+
+    def test_case_and_subdomain_handling(self):
+        self.assertEqual(self._get("CM@RPMLIVING.COM"), 200)
+        self.assertEqual(self._get("x@mail.rpmliving.com"), 403)
+
+    def test_the_allowed_domains_are_configurable(self):
+        with mock.patch.dict(os.environ,
+                             {"PORTAL_TICKETS_ALLOWED_DOMAINS": "rpmliving.com,partner.io"}):
+            self.assertEqual(self._get("x@partner.io"), 200)
+
+    def test_star_opens_it_to_any_domain(self):
+        with mock.patch.dict(os.environ, {"PORTAL_TICKETS_ALLOWED_DOMAINS": "*"}):
+            self.assertEqual(self._get("anyone@anywhere.net"), 200)
+
+    def test_the_domain_gate_runs_before_the_roster(self):
+        """So a client address is refused even if someone pastes it into the
+        pilot roster by mistake."""
+        with mock.patch.dict(os.environ,
+                             {"PORTAL_TICKETS_PILOT_EMAILS": "manager@someclient.com"}):
+            self.assertEqual(self._get("manager@someclient.com"), 403)

@@ -55,13 +55,36 @@ def _is_internal(req) -> bool:
 def _pilot_allowlist() -> set:
     """Emails permitted to use ticketing, from PORTAL_TICKETS_PILOT_EMAILS.
 
-    Empty (the default) means "no extra restriction — the feature gate decides".
-    Set it to the pilot's addresses and ticketing is closed to everyone else,
-    including other RPM staff, who would otherwise pass the Beta gate on the
-    strength of their email domain alone.
+    Empty (the default) means "no extra restriction — the domain gate and the
+    feature gate decide". Set it to the pilot's addresses and ticketing is
+    closed to everyone else, including other RPM staff.
     """
     raw = os.environ.get("PORTAL_TICKETS_PILOT_EMAILS", "")
     return {p.strip().lower() for p in raw.split(",") if p.strip()}
+
+
+def _allowed_domains() -> set:
+    """Email domains permitted to file tickets. Defaults to RPM staff only.
+
+    This duplicates, deliberately, what feature_access already infers from the
+    address: there, "is this person internal?" is answered partly from HubDB
+    rows, so an unprovisioned or misedited table changes who gets in. Ticketing
+    writes into live ClickUp queues, so its floor should not move when a HubSpot
+    table does. Checked BEFORE the feature gate for that reason.
+
+    Override with PORTAL_TICKETS_ALLOWED_DOMAINS (comma-separated) to widen it,
+    or set it to `*` to allow any domain — which only makes sense once the
+    address is PROVEN rather than asserted (see _identity).
+    """
+    raw = os.environ.get("PORTAL_TICKETS_ALLOWED_DOMAINS", "rpmliving.com")
+    return {d.strip().lower().lstrip("@") for d in raw.split(",") if d.strip()}
+
+
+def _domain_ok(email: str) -> bool:
+    domains = _allowed_domains()
+    if "*" in domains:
+        return True
+    return email.rsplit("@", 1)[-1].strip().lower() in domains
 
 
 def _identity(req):
@@ -75,9 +98,16 @@ def _identity(req):
     one property's data to another property's people.
 
     What actually bounds exposure, in order:
-      * PORTAL_TICKETS_PILOT_EMAILS — the pilot roster, exact-match
+      * PORTAL_TICKETS_ALLOWED_DOMAINS — RPM staff only, by default
+      * PORTAL_TICKETS_PILOT_EMAILS — the pilot roster, exact-match, optional
       * require_access("portal_tickets") — the Beta feature gate
-      * the ticket surface itself, which is dark until CLICKUP_LIST_* is set
+
+    Note what is NOT on that list any more: "the surface is dark until
+    CLICKUP_LIST_* is set". Those env vars are set, so that bound is spent.
+    The domain gate keeps client-portal users and the open internet out of the
+    services team's ClickUp queues; it cannot tell one RPM address from
+    another, because nothing here proves the address. Only a verified session
+    can do that.
 
     The address must be well-formed and must not be the shared sentinel, so
     `submitted_by` is a real person from the first row onward.
@@ -102,6 +132,14 @@ def _gate(req):
     email, is_internal = ident
     if is_internal:
         return ident, None
+    if not _domain_ok(email):
+        logger.info("portal ticket: %r is outside the allowed domains", email)
+        return None, (jsonify({
+            "error": "Portal ticketing is open to RPM Living staff. Use your "
+                     "@rpmliving.com address, or send your request to your "
+                     "Account Manager.",
+            "feature": FEATURE_KEY,
+        }), 403)
     roster = _pilot_allowlist()
     if roster and email.lower() not in roster:
         logger.info("portal ticket: %r is not on the pilot roster", email)
@@ -229,10 +267,20 @@ def ticket_list():
     # Additive: the count lets the UI say "2 of your requests couldn't be
     # checked" instead of quietly rendering a short list as if it were complete.
     unresolved = sum(1 for t in tickets if t.get("unresolved"))
+    # An empty list has two very different meanings — "you have no open
+    # requests" and "we cannot read your requests right now" — and the second
+    # one reads to a requester as "the thing I filed never happened". They must
+    # not render the same way.
+    tracking_down = portal_tickets.tracking_degraded()
     return jsonify({
         "tickets": tickets,
         "unresolved_count": unresolved,
-        "degraded": bool(unresolved),
+        "degraded": bool(unresolved) or tracking_down,
+        "tracking_degraded": tracking_down,
+        "tracking_message": (
+            "Your request was filed. We can't show your request history right "
+            "now — this is a display problem on our side, not a problem with "
+            "your request." if tracking_down else ""),
     })
 
 
