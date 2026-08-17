@@ -133,21 +133,61 @@ def _manifest_for(type_key: str) -> dict | None:
     return PORTAL_TICKET_FORMS.get(type_key)
 
 
+def _defs_by_name(defs: list[dict]) -> dict[str, list[dict]]:
+    """{lowercased field name: [every def with that name]}.
+
+    A LIST, not a single def, because duplicate names are the normal case here:
+    each of the 8 paid channels exists twice on the same list — a `currency`
+    variant for new-build budgets and a `drop_down` variant for add/remove/change
+    — and `general` carries FOUR fields called "Market" with different regional
+    option sets. A dict keyed by name silently keeps whichever came last, which
+    is a wrong-field-id write that nothing downstream can detect.
+    """
+    out: dict[str, list[dict]] = {}
+    for d in defs:
+        out.setdefault((d.get("name") or "").strip().lower(), []).append(d)
+    return out
+
+
+def _pick_def(entry: dict, candidates: list[dict]) -> dict | None:
+    """Choose the one field def a manifest entry means, or None if ambiguous.
+
+    `field_id` pins an exact field for the case where duplicates are
+    indistinguishable by anything else; `clickup_type` separates the
+    currency/drop_down channel twins. Both are last resorts — a unique name is
+    always better, and "Market*" exists precisely because someone needed one.
+    """
+    if len(candidates) == 1:
+        return candidates[0]
+    fid = entry.get("field_id")
+    if fid:
+        return next((d for d in candidates if str(d.get("id")) == str(fid)), None)
+    want = entry.get("clickup_type")
+    if want:
+        narrowed = [d for d in candidates if d.get("type") == want]
+        if len(narrowed) == 1:
+            return narrowed[0]
+    return None
+
+
 def _resolve_manifest_field(entry: dict, by_name: dict, type_key: str) -> dict | None:
     """One manifest entry + the list's live field defs → a rendered form field.
 
     The manifest owns what is asked and how it reads; ClickUp owns the field id,
     its type and its dropdown options. Returns None when the entry resolves but
     is not an input (tier known/file), and raises ManifestDrift when a required
-    entry names a field this list does not have.
+    entry cannot be resolved to exactly one live field.
     """
     name = (entry.get("name") or "").strip()
-    d = by_name.get(name.lower())
+    candidates = by_name.get(name.lower()) or []
+    d = _pick_def(entry, candidates)
     if d is None:
+        why = (f"{len(candidates)} fields share that name and the manifest does "
+               f"not say which" if len(candidates) > 1 else "not on this list")
         if entry.get("required"):
-            raise ManifestDrift(f"{type_key}: required field {name!r} is not on this list")
-        logger.warning("portal ticket manifest drift: %s names %r, which this "
-                       "list does not have — skipped", type_key, name)
+            raise ManifestDrift(f"{type_key}: required field {name!r} — {why}")
+        logger.warning("portal ticket manifest drift: %s names %r — %s; skipped",
+                       type_key, name, why)
         return None
     if entry.get("tier", "ask") != "ask":
         return None
@@ -165,7 +205,7 @@ def _resolve_manifest_field(entry: dict, by_name: dict, type_key: str) -> dict |
 def _manifest_schema(type_key: str, defs: list[dict]) -> dict[str, Any]:
     """Build {fields, sections} for a manifest-backed type, in manifest order."""
     manifest = PORTAL_TICKET_FORMS[type_key]
-    by_name = {(d.get("name") or "").strip().lower(): d for d in defs}
+    by_name = _defs_by_name(defs)
     fields: list[dict[str, Any]] = []
     sections: list[dict[str, Any]] = []
     for sec in manifest.get("sections") or []:
@@ -557,7 +597,13 @@ def _build_custom_fields(
     if defs is None:
         return None
     by_id = {d.get("id"): d for d in defs}
-    by_name = {(d.get("name") or "").strip().lower(): d for d in defs}
+    # Ambiguous names resolve to NOTHING rather than to whichever def happened
+    # to come last. The form posts ids so it is unaffected; prefill posts names,
+    # and "Market" matches four different fields on the General list with
+    # different regional option sets. Writing to a coin-flip field is worse than
+    # leaving it blank, because nothing downstream can tell it happened.
+    _named = _defs_by_name(defs)
+    by_name = {n: ds[0] for n, ds in _named.items() if len(ds) == 1}
     merged: dict[str, Any] = {}      # field_id -> coerced value
     applied_keys: set = set()        # {field id, lowercased field name}
     label_by_key: dict[str, str] = {}

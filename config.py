@@ -325,6 +325,512 @@ PORTAL_TICKET_FORMS = {
             },
         ],
     },
+
+    "general": {
+        "sla": "Please allow 5–7 business days for this request.",
+        "notes": [
+            "Disposing or cancelling a property? Submit a Dispo / Cancellation "
+            "request instead.",
+            "Rebranding a property? Submit a Rebrand request instead.",
+        ],
+        "prereqs": [],
+        "name_pattern": "[Property Name] - General Ticket - [Issue / Inquiry]",
+        "sections": [
+            {
+                "title": "Property Information",
+                "help": "",
+                "fields": [
+                    {"name": "Property Name", "tier": "known", "source": "name"},
+                    {"name": "Property Code", "tier": "known", "source": "property_code"},
+                    {"name": "Account Manager", "tier": "known", "source": "hubspot_owner_id"},
+                    # NOT "Market": this list carries FOUR fields with that exact
+                    # name, each holding a different regional option set. "Market*"
+                    # is the one with the 12 digital regions the forms use.
+                    {"name": "Market*", "tier": "known", "source": "market"},
+                    {"name": "z_Requested By", "tier": "known", "source": "submitted_by"},
+                ],
+            },
+            {
+                "title": "About your request",
+                "help": "",
+                "fields": [
+                    {"name": "Category", "tier": "ask", "required": True,
+                     "help": "What area of digital marketing does this concern?"},
+                    {"name": "Is there any other information you think we should know?",
+                     "tier": "ask", "required": True,
+                     "help": "Describe the issue or question in as much detail as "
+                             "you can — what you expected, what you are seeing, and "
+                             "since when."},
+                ],
+            },
+        ],
+        # NOT in this manifest, deliberately:
+        #   "What is the priority of this project?" — the form's priority control
+        #     is ClickUp's NATIVE task priority, not a custom field, so there is
+        #     nothing on the list to resolve it to.
+        #   "If there are any files related to your request…" — an `attachment`
+        #     field. The portal has no upload control for tickets yet, and
+        #     rendering an attachment as a text box (what the old code did) just
+        #     collects a path nobody can open.
+    },
+
+    "rebrand": {
+        "sla": "Please allow 5–7 business days for this request.",
+        "notes": [
+            "Rebrands are completed as close to the requested launch date as "
+            "possible. Outside constraints mean that is not always achievable.",
+        ],
+        "prereqs": [],
+        "name_pattern": "[Property Name] - Rebrand",
+        "sections": [
+            {
+                "title": "Current Property Information",
+                "help": "",
+                "fields": [
+                    {"name": "Property Name", "tier": "known", "source": "name"},
+                    {"name": "Property Code", "tier": "known", "source": "property_code"},
+                    {"name": "Property URL", "tier": "known", "source": "website"},
+                    {"name": "Account Manager", "tier": "known", "source": "hubspot_owner_id"},
+                    {"name": "Market*", "tier": "known", "source": "market"},
+                    {"name": "z_Requested By", "tier": "known", "source": "submitted_by"},
+                ],
+            },
+            {
+                "title": "Rebrand Information",
+                "help": "Everything below describes the property AFTER the rebrand.",
+                "fields": [
+                    {"name": "Date of Rebrand Launch", "tier": "ask", "required": True},
+                    {"name": "Rebranded Property Name", "tier": "ask", "required": True},
+                    # The form asks for "New Website URL"; the live field is
+                    # "Rebrand URL".
+                    {"name": "Rebrand URL", "tier": "ask", "required": True,
+                     "help": "The website address once the rebrand takes place."},
+                    {"name": "New Property Email", "tier": "ask", "required": True},
+                    {"name": "Website Platform", "tier": "ask", "required": True,
+                     "help": "Is the platform changing? Ex: switching from Jonah "
+                             "to RentCafe."},
+                    {"name": "Link to Rebrand Creative", "tier": "ask", "required": True},
+                    {"name": "Is there any other information we need to know?",
+                     "tier": "ask"},
+                ],
+            },
+        ],
+    },
+
+    "campaign_review": {
+        "sla": "Please allow 5–7 business days for this request.",
+        "notes": [
+            "This request is for investigating a DEFINED performance concern. It "
+            "is not a recurring account audit, and not a request to make "
+            "unspecified campaign changes.",
+            "Requests such as \"refresh ad copy\", \"audit all keywords\" or "
+            "\"identify any possible optimizations\" may be returned for more "
+            "detail.",
+            "For budget recommendations, campaign launches, creative updates or "
+            "special/concession changes, submit the applicable request type "
+            "instead.",
+        ],
+        "prereqs": [],
+        "name_pattern": "[Property Name] - Campaign Performance Review",
+        # RE-TRANSCRIBED FROM THE LIVE LIST (901114166834), not from the brief's
+        # field table: that table was taken from form 8cjaf2c-2771, whose list is
+        # the ARCHIVED "[OLD] - Campaign Performance Review". The two schemas are
+        # almost entirely different — the archived one has 13 fields, this has 40.
+        "sections": [
+            {
+                "title": "Property Information",
+                "help": "",
+                "fields": [
+                    {"name": "Property Code", "tier": "known", "source": "property_code"},
+                    {"name": "Account Manager", "tier": "known", "source": "hubspot_owner_id"},
+                    {"name": "Market*", "tier": "known", "source": "market"},
+                    {"name": "z_Requested By", "tier": "known", "source": "submitted_by"},
+                ],
+            },
+            {
+                "title": "What prompted this review",
+                "help": "",
+                "fields": [
+                    {"name": "What is the primary reason for review?", "tier": "ask",
+                     "required": True},
+                    {"name": "Change and Timeframe for Change", "tier": "ask",
+                     "required": True,
+                     "help": "What specifically changed, when you first noticed it, "
+                             "which metrics are affected, and what you are comparing "
+                             "against."},
+                ],
+            },
+            {
+                "title": "Current performance",
+                # Phase 4 replaces these four with a timestamped snapshot from the
+                # portal's own occupancy / ATR / budget data — the sidebar is
+                # already showing those numbers on the same screen. Until that
+                # ships they stay as inputs: asking is worse than auto-attaching,
+                # but far better than dropping the data entirely.
+                "help": "",
+                "fields": [
+                    {"name": "Occupancy", "tier": "ask", "required": True,
+                     "help": "Current occupancy %."},
+                    {"name": "Occupancy Trend", "tier": "ask", "required": True},
+                    {"name": "Current ATR %", "tier": "ask", "required": True},
+                    {"name": "Has the budget recently changed?", "tier": "ask",
+                     "required": True},
+                    {"name": "Target Occupancy %", "tier": "ask", "required": True},
+                    {"name": "Target Date/Timeline", "tier": "ask", "required": True,
+                     "help": "Ex: August 1st, or 2 months."},
+                    {"name": "Property Status", "tier": "ask", "required": True,
+                     "help": "Select everything that applies."},
+                ],
+            },
+            {
+                "title": "Context for the review",
+                "help": "",
+                "fields": [
+                    {"name": "Lead-Quality Concerns", "tier": "ask", "required": True},
+                    {"name": "Are there any active concessions or specials that may "
+                             "be relevant to this review?", "tier": "ask", "required": True},
+                    {"name": "Are there particular units, price points, or renter "
+                             "needs relevant to this review?", "tier": "ask", "required": True,
+                     "help": "Priority floor plans, unit types, price or income "
+                             "requirements, immediate move-in needs."},
+                    {"name": "Additional Channels/Services", "tier": "ask", "required": True,
+                     "help": "What is running outside Digital Marketing's products?"},
+                    {"name": "Which parties are concerned with campaign performance?",
+                     "tier": "ask", "required": True},
+                    {"name": "Which sources have you reviewed?", "tier": "ask",
+                     "required": True},
+                    {"name": "Pricing vs. Competitor(s)", "tier": "ask", "required": True,
+                     "help": "Based on the most recent comp review."},
+                ],
+            },
+        ],
+    },
+
+    "new_account_build": {
+        "sla": "Please allow 5–7 business days for this request.",
+        "notes": [
+            "This form is for new properties coming online, NOT for budget "
+            "changes. If you need budget recommendations, submit a General "
+            "request.",
+            "Management fee is 20% or $250, whichever is greater.",
+        ],
+        "prereqs": [
+            "Property website is live.",
+            "Property images received (2–3 minimum).",
+            "Property logo received.",
+            "Property code received (in SalesForce).",
+            "P-Code received in RentCafe (paid products ONLY).",
+            "Tracking and UTM codes received.",
+            "IO has been signed.",
+        ],
+        "name_pattern": "[Property Name] - New Account Build",
+        "sections": [
+            {
+                "title": "Property Information",
+                "help": "",
+                "fields": [
+                    {"name": "Property Name", "tier": "known", "source": "name"},
+                    {"name": "Property Address", "tier": "known", "source": "address"},
+                    {"name": "Property URL", "tier": "known", "source": "website"},
+                    {"name": "Property Type", "tier": "known", "source": "property_type"},
+                    {"name": "Property Email Address", "tier": "known", "source": "email"},
+                    {"name": "Property Code", "tier": "known", "source": "property_code"},
+                    {"name": "Property Status", "tier": "known",
+                     "source": "fluency_lifecycle_state"},
+                    {"name": "z_Client Name", "tier": "known", "source": "portfolio_name"},
+                    {"name": "Account Manager", "tier": "known", "source": "hubspot_owner_id"},
+                    {"name": "Market*", "tier": "known", "source": "market"},
+                    {"name": "RM's Email", "tier": "known", "source": "rm_email"},
+                    {"name": "RVP's Email", "tier": "known", "source": "rvp_email"},
+                    {"name": "z_Requested By", "tier": "known", "source": "submitted_by"},
+                ],
+            },
+            {
+                "title": "Launch",
+                "help": "",
+                "fields": [
+                    {"name": "Earliest Launch Date", "tier": "ask", "required": True,
+                     "help": "Choose 'Future Date' if this is more than 7 days out."},
+                    {"name": "Property Website Platform", "tier": "ask", "required": True,
+                     "help": "Ex: RentCafe, Jonah, Perq, Knock, RealPage, Fervor."},
+                    {"name": "Property Website Bot", "tier": "ask", "required": True,
+                     "help": "Ex: CRMIQ, Knock, Funnel, Client Hosted, None."},
+                ],
+            },
+            {
+                "title": "Property Details",
+                "help": "",
+                "fields": [
+                    {"name": "Top Amenities", "tier": "file",
+                     "source": "fluency_amenities_override"},
+                    {"name": "Local Hotspots / Attractions", "tier": "file",
+                     "source": "fluency_landmarks_override"},
+                    {"name": "z_Top Competitors", "tier": "file",
+                     "source": "fluency_competitors_override"},
+                    {"name": "Local / Colloquial Terms", "tier": "file",
+                     "source": "fluency_neighborhood_override"},
+                    {"name": "Voice & Tone", "tier": "file",
+                     "source": "fluency_voice_tier_override"},
+                    {"name": "Target Audience", "tier": "file",
+                     "source": "fluency_motivations_considerations_override"},
+                    {"name": "Property Floor Plan Type", "tier": "file",
+                     "source": "fluency_floor_plans_override"},
+                    {"name": "Campaign Focus", "tier": "ask", "required": True,
+                     "help": "The main goal, and any specific floor plans or "
+                             "layouts to push."},
+                    {"name": "Keywords", "tier": "ask", "required": True,
+                     "help": "Terms you want this property to be found for."},
+                    {"name": "SharePoint URL", "tier": "ask"},
+                ],
+            },
+            {
+                "title": "Account Budget — Paid",
+                "help": "Monthly budget per channel. Leave blank for anything you "
+                        "are not launching.",
+                # The `currency` twins. Each of these names ALSO exists on this
+                # same list as a drop_down (add/remove/change) used by
+                # budget_update, so clickup_type is what keeps them apart.
+                "fields": [
+                    {"name": "Paid Search", "tier": "ask", "clickup_type": "currency"},
+                    {"name": "Google Display", "tier": "ask", "clickup_type": "currency",
+                     "help": "Creative required. If you do not have it, submit a CSR."},
+                    {"name": "PMax", "tier": "ask", "clickup_type": "currency"},
+                    {"name": "Paid Social", "tier": "ask", "clickup_type": "currency"},
+                    {"name": "Geofence", "tier": "ask", "clickup_type": "currency",
+                     "help": "$250 one-time setup fee."},
+                    {"name": "Retargeting", "tier": "ask", "clickup_type": "currency"},
+                    {"name": "TikTok", "tier": "ask", "clickup_type": "currency"},
+                    {"name": "Programmatic", "tier": "ask", "clickup_type": "currency"},
+                ],
+            },
+            {
+                "title": "SEO, Email & Social",
+                "help": "",
+                "fields": [
+                    {"name": "SEO - Onboard", "tier": "ask"},
+                    {"name": "Email Drip Campaign - New Build", "tier": "ask",
+                     "help": "$125/mo plus a $225 one-time setup fee."},
+                    {"name": "eBlast", "tier": "ask", "help": "$700 one-time fee."},
+                    {"name": "Organic Social", "tier": "ask"},
+                ],
+            },
+            {
+                "title": "Tracking",
+                "help": "",
+                "fields": [
+                    {"name": "Property Tracking Information", "tier": "ask",
+                     "required": True,
+                     "help": "Tracking and UTM codes for this property."},
+                    {"name": "Is there any other information you think we should know?",
+                     "tier": "ask"},
+                ],
+            },
+        ],
+    },
+
+    "budget_update": {
+        "sla": "Please allow 5–7 business days for this request.",
+        "notes": [
+            "This form is for properties already online.",
+            "SLAs do not supersede best practice — product cancellations are done "
+            "at end of month.",
+            "If this budget update adds a NEW channel build for a paid product, "
+            "the new-build prerequisites apply too.",
+            "Disposing or cancelling? Submit a Dispo / Cancellation request. Need "
+            "budget recommendations? Submit a General request.",
+        ],
+        "prereqs": [],
+        "name_pattern": "[Property Name] - Budget Update",
+        "sections": [
+            {
+                "title": "Property Information",
+                "help": "",
+                "fields": [
+                    {"name": "Property Name", "tier": "known", "source": "name"},
+                    {"name": "Property URL", "tier": "known", "source": "website"},
+                    {"name": "Property Code", "tier": "known", "source": "property_code"},
+                    {"name": "Account Manager", "tier": "known", "source": "hubspot_owner_id"},
+                    {"name": "Market*", "tier": "known", "source": "market"},
+                    {"name": "RM's Email", "tier": "known", "source": "rm_email"},
+                    {"name": "RVP's Email", "tier": "known", "source": "rvp_email"},
+                    {"name": "z_Requested By", "tier": "known", "source": "submitted_by"},
+                ],
+            },
+            {
+                "title": "Timing",
+                "help": "",
+                "fields": [
+                    {"name": "Earliest Launch Date", "tier": "ask", "required": True,
+                     "help": "'ASAP' defaults to the SLA turn time above."},
+                    {"name": "SharePoint URL", "tier": "ask", "required": True},
+                ],
+            },
+            {
+                "title": "Has anything about the property changed?",
+                "help": "Only fill in what has actually changed since the last "
+                        "update. Anything you leave blank stays as it is.",
+                "fields": [
+                    {"name": "Top Amenities", "tier": "file",
+                     "source": "fluency_amenities_override"},
+                    {"name": "Local Hotspots / Attractions", "tier": "file",
+                     "source": "fluency_landmarks_override"},
+                    {"name": "z_Top Competitors", "tier": "file",
+                     "source": "fluency_competitors_override"},
+                    {"name": "Local / Colloquial Terms", "tier": "file",
+                     "source": "fluency_neighborhood_override"},
+                    {"name": "Target Audience", "tier": "file",
+                     "source": "fluency_motivations_considerations_override"},
+                    {"name": "Campaign Focus", "tier": "ask"},
+                    {"name": "Keywords", "tier": "ask"},
+                ],
+            },
+            {
+                "title": "Account Budget — Paid",
+                "help": "Add, remove or change a channel.",
+                # The drop_down twins of the same eight names. clickup_type is
+                # load-bearing: without it these resolve to the currency variants
+                # new_account_build uses, and the value lands on the wrong field.
+                "fields": [
+                    {"name": "Paid Search", "tier": "ask", "clickup_type": "drop_down"},
+                    {"name": "Google Display", "tier": "ask", "clickup_type": "drop_down",
+                     "help": "Creative required. If you do not have it, submit a CSR."},
+                    {"name": "P Max", "tier": "ask",
+                     "help": "Images and a logo are needed to launch a new PMax campaign."},
+                    {"name": "Paid Social", "tier": "ask", "clickup_type": "drop_down"},
+                    {"name": "Geofence", "tier": "ask", "clickup_type": "drop_down",
+                     "help": "Creative required."},
+                    {"name": "Retargeting", "tier": "ask", "clickup_type": "drop_down"},
+                    {"name": "TikTok", "tier": "ask", "clickup_type": "drop_down"},
+                    {"name": "Programmatic", "tier": "ask", "clickup_type": "drop_down"},
+                ],
+            },
+            {
+                "title": "SEO, Email & Social",
+                "help": "",
+                "fields": [
+                    {"name": "SEO - Budget Update", "tier": "ask"},
+                    {"name": "Email Drip Campaign - Budget Update", "tier": "ask"},
+                    {"name": "eBlast", "tier": "ask", "help": "$700 one-time fee."},
+                    {"name": "Organic Social - Budget Update", "tier": "ask",
+                     "help": "$500 one-time setup fee."},
+                ],
+            },
+            {
+                "title": "Tracking",
+                "help": "",
+                "fields": [
+                    {"name": "Property Tracking Information", "tier": "ask",
+                     "required": True},
+                    {"name": "Is there any other information you think we should know?",
+                     "tier": "ask"},
+                ],
+            },
+        ],
+    },
+
+    "dispo_cancel": {
+        "sla": "Please allow 5–7 business days once a signed IO is received.",
+        "notes": [
+            "This form is exclusively for properties disposing, or cancelling ALL "
+            "in-house digital services. To cancel only certain channels, submit a "
+            "Budget Update request instead.",
+            "Dispositions are completed ON the disposition date given below.",
+            "Cancellations require a 30-day opt-out notice.",
+            "If the date changes, tell the team as soon as possible.",
+        ],
+        "prereqs": [],
+        "name_pattern": "[Property Name] - Dispo OR Cancellation",
+        "sections": [
+            {
+                "title": "Property Information",
+                "help": "",
+                "fields": [
+                    {"name": "Property Name", "tier": "known", "source": "name"},
+                    {"name": "Property Code", "tier": "known", "source": "property_code"},
+                    {"name": "Account Manager", "tier": "known", "source": "hubspot_owner_id"},
+                    {"name": "Market*", "tier": "known", "source": "market"},
+                    {"name": "RM's Email", "tier": "known", "source": "rm_email"},
+                    {"name": "RVP's Email", "tier": "known", "source": "rvp_email"},
+                    {"name": "z_Requested By", "tier": "known", "source": "submitted_by"},
+                ],
+            },
+            {
+                "title": "Dispo / Cancellation",
+                "help": "",
+                "fields": [
+                    {"name": "Dispo/Cancellation Date", "tier": "ask", "required": True,
+                     "help": "Cancellations need a 30-day opt-out window from today."},
+                    {"name": "Is this a cancellation or a dispo?", "tier": "ask",
+                     "required": True,
+                     "help": "Cancellation: still under RPM management, running "
+                             "digital with another agency. Disposition: no longer "
+                             "with RPM management."},
+                    {"name": "Is there any other information we need to know?",
+                     "tier": "ask"},
+                ],
+            },
+        ],
+    },
+
+    "new_business": {
+        "sla": "Please allow 5–7 business days for this request.",
+        "notes": [
+            "Only submit this if you are pitching NEW business.",
+            "If the SLA window is too tight, contact the Account Manager directly.",
+        ],
+        "prereqs": [],
+        "name_pattern": "[Property Name / Ownership Group] - New Business Request",
+        # The one type where the property may not exist in HubSpot yet, so the
+        # KNOWN tier mostly does not apply: identity is ASKED, not resolved.
+        "sections": [
+            {
+                "title": "Requester",
+                "help": "",
+                "fields": [
+                    {"name": "z_Requested By", "tier": "known", "source": "submitted_by"},
+                ],
+            },
+            {
+                "title": "The pitch",
+                "help": "",
+                "fields": [
+                    {"name": "Requested Due Date", "tier": "ask", "required": True,
+                     "help": "Anything less than 3 days out defaults to the SLA above."},
+                    {"name": "Pitch Date", "tier": "ask", "required": True},
+                    {"name": "Account Manager", "tier": "ask", "required": True},
+                    {"name": "Market*", "tier": "ask", "required": True},
+                ],
+            },
+            {
+                "title": "Property Information",
+                "help": "This property is prospective, so nothing here can be "
+                        "filled in from our records yet.",
+                "fields": [
+                    {"name": "Property Name", "tier": "ask", "required": True},
+                    {"name": "Property URL", "tier": "ask", "required": True},
+                    {"name": "Property Address", "tier": "ask", "required": True},
+                    {"name": "Property Status", "tier": "ask", "required": True},
+                    {"name": "Property Type", "tier": "ask", "required": True},
+                    {"name": "Unit Count", "tier": "ask", "required": True},
+                    {"name": "What digital tactics are they currently running?",
+                     "tier": "ask", "required": True},
+                    {"name": "Metrics that Matter", "tier": "ask", "required": True,
+                     "help": "What matters to this ownership group."},
+                ],
+            },
+            {
+                "title": "Competitors",
+                "help": "",
+                "fields": [
+                    {"name": "Competitor Website #1", "tier": "ask"},
+                    {"name": "Competitor Website #2", "tier": "ask"},
+                    {"name": "Competitor Website #3", "tier": "ask"},
+                    {"name": "Is there any other information you think we should know?",
+                     "tier": "ask"},
+                ],
+            },
+        ],
+    },
 }
 
 # ClickUp task statuses → client-safe portal labels (scope doc §4). Matched
