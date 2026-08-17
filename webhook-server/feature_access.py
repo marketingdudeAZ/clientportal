@@ -107,6 +107,11 @@ FEATURES: dict[str, Feature] = {
         # moment they ship, without touching this file again.
         Feature("budgeting_forecasting", "Budgeting & Forecasting"),
         Feature("call_prep", "Call Prep"),
+        # Ticket intake through the portal. Beta by default: the pilot is a
+        # handful of named requesters in the HubDB access table, NOT everyone
+        # with a portal login. Setting the CLICKUP_LIST_* env vars without this
+        # gate would turn ticketing on portfolio-wide in one step.
+        Feature("portal_tickets", "Portal Ticketing"),
     )
 }
 

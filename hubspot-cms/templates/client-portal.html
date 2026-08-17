@@ -399,6 +399,12 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 .ticket-status.open{background:#FEF9C3;color:#854D0E}
 .ticket-status.in-progress{background:#DBEAFE;color:#1D4ED8}
 .ticket-status.resolved{background:#DCFCE7;color:#166534}
+/* Done shared in-progress's blue, so the two states a requester most needs to
+   tell apart looked identical. needs-you is the only status they can act on,
+   so it gets the strongest treatment. unresolved reads as absent-not-closed. */
+.ticket-status.done{background:#DCFCE7;color:#166534}
+.ticket-status.needs-you{background:#FFEDD5;color:#9A3412}
+.ticket-status.unresolved{background:#F1F5F9;color:#64748B}
 .ticket-status.escalated{background:#EDE9FE;color:#5B21B6}
 .ticket-chevron{color:var(--tm);transition:transform .25s}
 .ticket-card.expanded .ticket-chevron{transform:rotate(180deg)}
@@ -3708,18 +3714,44 @@ function _loadTicketTypes(force) {
   if (!sel) return;
   if (__TICKET_TYPES__ && !force) return;
   var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
-  fetch(API_BASE + '/api/portal-tickets/types', {
+  // company_id lets the API tell a prefill field it WILL fill (hide it) from
+  // one it cannot (render it, so the requester can). Read off window here —
+  // COMPANY_ID/UUID are function-local in loadTickets et al, not globals.
+  var CID  = window.__PORTAL_COMPANY_ID__ || '';
+  var PUID = window.__PORTAL_UUID__ || '';
+  fetch(API_BASE + '/api/portal-tickets/types?company_id=' + encodeURIComponent(CID)
+        + '&uuid=' + encodeURIComponent(PUID), {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     __TICKET_TYPES__ = {};
     var types = (data && data.types) || [];
-    if (!types.length) { sel.innerHTML = '<option value="">No request types available</option>'; return; }
+    var unavailable = (data && data.unavailable) || [];
+
+    // Nothing online at all: don't open a form the requester can't submit.
+    // Point them at the fallback instead of a dropdown containing a sentence.
+    if (!types.length) {
+      _renderNoTicketTypes(unavailable, (data && data.fallback_email) || '');
+      return;
+    }
+
+    // Available and unavailable, merged back into registry order. An
+    // unavailable type renders DISABLED with the reason attached rather than
+    // being omitted — with 3 of 6 silently missing, a requester can't tell
+    // "my type isn't on yet" from "I'm misreading these labels", so they pick
+    // the nearest wrong one. That misroute is what this prevents.
+    var merged = types.concat(unavailable).sort(function(a, b){
+      return (a.order || 0) - (b.order || 0);
+    });
     sel.innerHTML = '<option value="">Select a request type…</option>' +
-      types.map(function(t){
-        __TICKET_TYPES__[t.key] = t;
-        return '<option value="' + _escAttr(t.key) + '">' + _escHtml(t.label) + '</option>';
+      merged.map(function(t){
+        if (t.available) {
+          __TICKET_TYPES__[t.key] = t;
+          return '<option value="' + _escAttr(t.key) + '">' + _escHtml(t.label) + '</option>';
+        }
+        return '<option value="" disabled>' + _escHtml(t.label) +
+               ' — not online yet</option>';
       }).join('');
     // Say what we attach for them, so the fields they DON'T see aren't a mystery.
     var note = document.getElementById('ct-prefill-note');
@@ -3730,7 +3762,92 @@ function _loadTicketTypes(force) {
         pf.map(function(n){ return '<b>' + _escHtml(n) + '</b>'; }).join(' · ');
     }
   })
-  .catch(function(){ sel.innerHTML = '<option value="">Could not load request types</option>'; });
+  .catch(function(){
+    sel.innerHTML = '<option value="">Could not load request types — refresh, ' +
+                    'or email your Account Manager</option>';
+  });
+}
+
+// Zero types online. Replace the form with the fallback route rather than
+// leaving a dropdown that reads as broken.
+function _renderNoTicketTypes(unavailable, fallbackEmail) {
+  var form = document.getElementById('create-ticket-form');
+  if (!form) return;
+  // form_url is null unless CLICKUP_FORM_BASE_URL is configured — a dead
+  // "use the form instead" link strands the requester twice, so only render
+  // links we know resolve.
+  var links = (unavailable || []).filter(function(t){ return t.form_url; })
+    .map(function(t){
+      return '<li><a href="' + _escAttr(t.form_url) + '" target="_blank" rel="noopener">' +
+             _escHtml(t.label) + '</a></li>';
+    }).join('');
+  var mail = fallbackEmail
+    ? '<a href="mailto:' + _escAttr(fallbackEmail) + '">' + _escHtml(fallbackEmail) + '</a>'
+    : 'your Account Manager';
+  form.innerHTML =
+    '<div style="padding:24px;font-size:13px;color:var(--tm)">' +
+      '<div style="font-weight:600;color:var(--ts);margin-bottom:8px">' +
+        'Requests aren\'t open in the portal yet</div>' +
+      (links ? '<p>Use the request forms for now:</p><ul>' + links + '</ul>'
+             : '<p>Send your request to ' + mail + ' and we\'ll take it from there.</p>') +
+    '</div>';
+}
+
+// One field → its markup. Shared by the sectioned and flat renderers so the
+// two can never drift in what they support.
+function _ticketFieldHtml(f) {
+  var req  = f.required ? ' <span style="color:#c0392b">*</span>' : '';
+  var attr = 'data-fid="' + _escAttr(f.id) + '" data-req="' + (f.required ? '1' : '') + '"';
+  if (f.validate)  attr += ' data-validate="' + _escAttr(f.validate) + '"';
+  if (f.maxlength) attr += ' maxlength="' + _escAttr(f.maxlength) + '"';
+  var opts = (f.options || []).map(function(o){
+    return '<option value="' + _escAttr(o.label) + '">' + _escHtml(o.label) + '</option>';
+  }).join('');
+  var ctl;
+  switch (f.input) {
+    case 'textarea':    ctl = '<textarea class="form-textarea ct-f" ' + attr + '></textarea>'; break;
+    case 'select':      ctl = '<select class="form-select ct-f" ' + attr + '><option value="">Select…</option>' + opts + '</select>'; break;
+    case 'multiselect': ctl = '<select class="form-select ct-f" multiple ' + attr + '>' + opts + '</select>'; break;
+    case 'checkbox':    ctl = '<input type="checkbox" class="ct-f" ' + attr + '/>'; break;
+    case 'number':
+    case 'currency':    ctl = '<input type="number" step="any" class="form-input ct-f" ' + attr + '/>'; break;
+    case 'date':        ctl = '<input type="date" class="form-input ct-f" ' + attr + '/>'; break;
+    case 'email':       ctl = '<input type="email" class="form-input ct-f" ' + attr + '/>'; break;
+    case 'url':         ctl = '<input type="url" class="form-input ct-f" ' + attr + '/>'; break;
+    default:            ctl = '<input type="text" class="form-input ct-f" ' + attr + '/>';
+  }
+  // Help sits ABOVE the control: it is instruction for filling the field in,
+  // not a footnote about what you already typed.
+  var help = f.help
+    ? '<div class="ct-help" style="font-size:12px;color:var(--tm);margin:2px 0 6px">' +
+      _escHtml(f.help) + '</div>' : '';
+  var counter = f.maxlength
+    ? '<div class="ct-count" style="font-size:11px;color:var(--tm);text-align:right"></div>' : '';
+  return '<div class="form-row"><label class="form-label">' +
+         _escHtml(f.name || '') + req + '</label>' + help + ctl + counter + '</div>';
+}
+
+// The SLA / prerequisite / note framing that lives on the ClickUp form and has
+// never made it into the portal. Rendered before the fields, because every one
+// of these changes whether the requester should be filling this form at all.
+function _ticketFormBanner(t) {
+  var bits = '';
+  if (t.sla) {
+    bits += '<div style="font-weight:600;color:var(--ts);margin-bottom:4px">' +
+            _escHtml(t.sla) + '</div>';
+  }
+  (t.notes || []).forEach(function(n){
+    bits += '<div style="margin-bottom:4px">' + _escHtml(n) + '</div>';
+  });
+  if ((t.prereqs || []).length) {
+    bits += '<div style="margin-top:6px">Before you submit, confirm:</div><ul style="margin:4px 0 0 18px">' +
+            t.prereqs.map(function(p){ return '<li>' + _escHtml(p) + '</li>'; }).join('') +
+            '</ul>';
+  }
+  if (!bits) return '';
+  return '<div class="ct-banner" style="padding:10px 12px;margin-bottom:12px;' +
+         'border-left:3px solid var(--accent,#2d7ff9);background:var(--bg2,#f7f9fc);' +
+         'font-size:12px;color:var(--tm);border-radius:4px">' + bits + '</div>';
 }
 
 // Render the selected type's fields into the form.
@@ -3740,27 +3857,66 @@ function renderTicketFields(typeKey) {
   box.innerHTML = '';
   var t = __TICKET_TYPES__ && __TICKET_TYPES__[typeKey];
   if (!t || !t.fields) return;
-  box.innerHTML = t.fields.map(function(f){
-    var req  = f.required ? ' <span style="color:#c0392b">*</span>' : '';
-    var attr = 'data-fid="' + _escAttr(f.id) + '" data-req="' + (f.required ? '1' : '') + '"';
-    var opts = (f.options || []).map(function(o){
-      return '<option value="' + _escAttr(o.label) + '">' + _escHtml(o.label) + '</option>';
+
+  var html = _ticketFormBanner(t);
+  if (t.sections && t.sections.length) {
+    html += t.sections.map(function(s){
+      var head = s.title
+        ? '<div class="ct-section" style="font-weight:600;color:var(--ts);' +
+          'margin:14px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--bd,#e4e8ee)">' +
+          _escHtml(s.title) + '</div>' : '';
+      var shelp = s.help
+        ? '<div style="font-size:12px;color:var(--tm);margin-bottom:8px">' +
+          _escHtml(s.help) + '</div>' : '';
+      return head + shelp + (s.fields || []).map(_ticketFieldHtml).join('');
     }).join('');
-    var ctl;
-    switch (f.input) {
-      case 'textarea':    ctl = '<textarea class="form-textarea ct-f" ' + attr + '></textarea>'; break;
-      case 'select':      ctl = '<select class="form-select ct-f" ' + attr + '><option value="">Select…</option>' + opts + '</select>'; break;
-      case 'multiselect': ctl = '<select class="form-select ct-f" multiple ' + attr + '>' + opts + '</select>'; break;
-      case 'checkbox':    ctl = '<input type="checkbox" class="ct-f" ' + attr + '/>'; break;
-      case 'number':
-      case 'currency':    ctl = '<input type="number" step="any" class="form-input ct-f" ' + attr + '/>'; break;
-      case 'date':        ctl = '<input type="date" class="form-input ct-f" ' + attr + '/>'; break;
-      case 'email':       ctl = '<input type="email" class="form-input ct-f" ' + attr + '/>'; break;
-      case 'url':         ctl = '<input type="url" class="form-input ct-f" ' + attr + '/>'; break;
-      default:            ctl = '<input type="text" class="form-input ct-f" ' + attr + '/>';
-    }
-    return '<div class="form-row"><label class="form-label">' + _escHtml(f.name || '') + req + '</label>' + ctl + '</div>';
-  }).join('');
+  } else {
+    // A type with no manifest yet, or an older API response.
+    html += t.fields.map(_ticketFieldHtml).join('');
+  }
+  box.innerHTML = html;
+  _wireTicketFieldRules(box);
+}
+
+// Live character count + the special-copy rule, as you type. Advice only —
+// the same rule is enforced server-side in portal_tickets._coerce, because
+// the API is reachable without this page.
+function _wireTicketFieldRules(box) {
+  box.querySelectorAll('.ct-f').forEach(function(el){
+    var row  = el.closest('.form-row');
+    var max  = parseInt(el.getAttribute('maxlength') || '', 10);
+    var rule = el.getAttribute('data-validate');
+    if (!max && !rule) return;
+    var count = row.querySelector('.ct-count');
+    var warn  = document.createElement('div');
+    warn.className = 'ct-warn';
+    warn.style.cssText = 'font-size:12px;color:#c0392b;margin-top:4px;display:none';
+    row.appendChild(warn);
+    var check = function(){
+      var v = el.value || '';
+      if (count) count.textContent = v.length + ' / ' + max;
+      var msg = rule ? _ticketRuleComplaint(rule, v) : '';
+      warn.textContent = msg;
+      warn.style.display = msg ? '' : 'none';
+    };
+    el.addEventListener('input', check);
+    check();
+  });
+}
+
+// Mirrors portal_tickets._no_caps_no_punct_except_period. Kept deliberately
+// literal rather than clever so the two stay comparable by eye.
+function _ticketRuleComplaint(rule, value) {
+  if (rule !== 'no_caps_no_punct_except_period' || !value) return '';
+  if (/[A-Z]/.test(value)) {
+    return 'Please use no capital letters — write it the way it should appear in the ad.';
+  }
+  var bad = value.replace(/[a-z0-9\s.$]/g, '');
+  if (bad) {
+    var uniq = bad.split('').filter(function(c, i, a){ return a.indexOf(c) === i; });
+    return 'Please remove ' + uniq.join(' ') + ' — periods are the only punctuation allowed.';
+  }
+  return '';
 }
 
 function submitTicket() {
@@ -3782,6 +3938,23 @@ function submitTicket() {
     }
   });
   if (missing.length) { alert('Please fill in: ' + missing.join(', ')); return; }
+
+  // Manifest rules (length, the special-copy rule). The server rejects these
+  // too; catching them here saves a round trip and keeps the complaint next to
+  // the field that caused it.
+  var broken = [];
+  form.querySelectorAll('#ct-fields .ct-f').forEach(function(el){
+    var rule = el.getAttribute('data-validate');
+    var max  = parseInt(el.getAttribute('maxlength') || '', 10);
+    var v    = (el.value || '').trim();
+    if (!v) return;
+    var lbl  = el.closest('.form-row').querySelector('.form-label');
+    var name = lbl ? lbl.textContent.replace(' *', '').trim() : 'a field';
+    if (max && v.length > max) { broken.push(name + ': shorten to ' + max + ' characters'); return; }
+    var msg = rule ? _ticketRuleComplaint(rule, v) : '';
+    if (msg) broken.push(name + ': ' + msg);
+  });
+  if (broken.length) { alert(broken.join('\n')); return; }
 
   var existingPanel = form.querySelector('.kb-deflect-panel');
   if (existingPanel) existingPanel.remove();
@@ -3900,12 +4073,35 @@ function loadTickets() {
     var list = document.getElementById('tickets-list');
     if (!list) return;
     var tickets = (data && data.tickets) || [];
+    // True on day 1 and every day after: _read_mappings only returns rows the
+    // portal itself wrote, so this list is structurally incomplete whether it
+    // holds 0 rows or 6. Say so rather than imply completeness.
+    var SCOPE_NOTE = '<div style="padding:10px 16px;color:var(--tm);font-size:12px">' +
+      'This shows requests filed through the portal. Requests filed outside it ' +
+      '— by email, or on the ClickUp forms — aren\'t shown here.</div>';
+
     if (!tickets.length) {
-      list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tm);font-size:13px">No open requests</div><div id="submitted-ticket-placeholder"></div>';
+      list.innerHTML =
+        '<div style="padding:24px 24px 4px;text-align:center;color:var(--tm);font-size:13px">' +
+          '<div style="font-weight:600;color:var(--ts);margin-bottom:6px">No open requests</div>' +
+        '</div>' + SCOPE_NOTE + '<div id="submitted-ticket-placeholder"></div>';
       return;
     }
-    list.innerHTML = tickets.map(_renderClickupTicketCard).join('') +
-      '<div id="submitted-ticket-placeholder"></div>';
+
+    // Partial rendered as complete is the worst failure available on a status
+    // surface — a requester concludes their request was never filed. Say how
+    // many we couldn't check.
+    var banner = '';
+    if (data && data.degraded) {
+      var n = data.unresolved_count || 0;
+      banner = '<div style="padding:10px 16px;margin-bottom:8px;border-radius:6px;' +
+        'background:rgba(180,120,20,.10);color:var(--ts);font-size:12.5px">' +
+        n + (n === 1 ? ' request couldn\'t' : ' requests couldn\'t') +
+        ' be checked just now — they\'re still open. Refresh to retry.</div>';
+    }
+    list.innerHTML = banner + tickets.map(_renderClickupTicketCard).join('') +
+      SCOPE_NOTE + '<div id="submitted-ticket-placeholder"></div>';
+    // Placeholders count as open — they are.
     var open = tickets.filter(function(t){ return t.status !== 'Done'; }).length;
     var badge = document.getElementById('tickets-badge');
     if (badge) badge.textContent = open;
@@ -3922,7 +4118,14 @@ function loadTickets() {
 // A ClickUp-backed ticket card: subject, type, client-safe status, age, and a
 // deep-link. No inline thread \u2014 the client-facing record is the on-Done recap.
 function _renderClickupTicketCard(t) {
-  var statusClass = (t.status === 'In progress' || t.status === 'Done') ? 'in-progress' : 'open';
+  // 'Done' and 'In progress' shared one class, so the two states a requester
+  // most needs to tell apart looked identical. 'Needs your approval' is the
+  // one that wants to stand out — it's the only status they can act on.
+  var statusClass = 'open';
+  if (t.status === 'Done') statusClass = 'done';
+  else if (t.status === 'In progress') statusClass = 'in-progress';
+  else if (t.status === 'Needs your approval') statusClass = 'needs-you';
+  else if (t.unresolved) statusClass = 'unresolved';
   var dateStr = '';
   if (t.created_ts) { try { dateStr = new Date(t.created_ts).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}); } catch(e){} }
   var age = (typeof t.age_days === 'number') ? (t.age_days === 0 ? 'today' : t.age_days + 'd ago') : '';
@@ -3938,6 +4141,12 @@ function _renderClickupTicketCard(t) {
       '<svg class="ticket-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>' +
     '</div>' +
     '<div class="ticket-body">' +
+      (t.unresolved
+        ? '<div style="padding:8px 0;color:var(--tm);font-size:12.5px">' +
+            'We couldn\'t reach ClickUp for this request just now. It was filed' +
+            (dateStr ? ' on ' + _escHtml(dateStr) : '') +
+            ' and is still open \u2014 refresh in a minute.</div>'
+        : '') +
       '<div class="ticket-foot">' +
         '<div class="ticket-date">Opened ' + dateStr + (age ? ' \u00b7 ' + age : '') + by + '</div>' +
         '<div style="display:flex;gap:8px;">' + link + '</div>' +

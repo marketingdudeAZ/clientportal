@@ -6305,7 +6305,29 @@ def get_performance_swot():
 
 @app.route("/health", methods=["GET"])
 def health():
-    return '{"status":"ok"}', 200, {"Content-Type": "application/json"}
+    """Liveness plus the two config facts that fail silently when wrong.
+
+    `bigquery` false means the ticket mapping table cannot be written or read,
+    which renders as "No open requests" forever with no error — the same symptom
+    as an unconfigured ticket type. `portal_ticket_types` is 0 until the
+    CLICKUP_LIST_* vars are set, so the pair distinguishes "not switched on yet"
+    from "switched on and broken" without shell access to the host.
+
+    Deliberately no secrets, no counts of real data, no auth: this is a probe a
+    load balancer and an on-call human both hit.
+    """
+    payload = {"status": "ok"}
+    try:
+        import bigquery_client
+        payload["bigquery"] = bigquery_client.is_bigquery_configured()
+    except Exception:  # noqa: BLE001 — health must never 500
+        payload["bigquery"] = False
+    try:
+        import portal_tickets
+        payload["portal_ticket_types"] = len(portal_tickets.configured_types())
+    except Exception:  # noqa: BLE001
+        payload["portal_ticket_types"] = 0
+    return jsonify(payload), 200
 
 
 # ═══════════════════════════════════════════════════════════════════════════

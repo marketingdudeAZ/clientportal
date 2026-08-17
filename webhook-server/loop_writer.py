@@ -90,6 +90,9 @@ LOOP_EVENT_TYPES = {
     "aptiq_token_warning", "aptiq_token_critical", "aptiq_token_checked",
     "aptiq_history_backfill", "seo_refresh", "hyly_pull",
     "r1_violation",
+    # ops — portal ticketing funnel (see loop_ticket_events.py)
+    "portal_ticket_filed", "portal_ticket_recap_matched",
+    "portal_ticket_unmatched",
     # operational job tracking
     "job",
 }
