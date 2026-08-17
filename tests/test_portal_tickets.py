@@ -150,9 +150,43 @@ class CoerceAndCreate(unittest.TestCase):
     def test_shaped_ticket_has_client_status(self):
         with mock.patch.object(portal_tickets, "_record_mapping"):
             body, _ = portal_tickets.create_ticket(
-                "cid-42", "general", subject="x", fields={}, property_uuid="u-1")
+                "cid-42", "general", subject="x", fields={}, property_uuid="u-1",
+                submitted_by="user@rpmliving.com")
         self.assertEqual(body["ticket"]["status"], "Open")   # "to do" → Open
         self.assertEqual(body["ticket"]["type_label"], "General Ticket")
+        # Scope doc §4 lists submitted-by among the columns the tracker shows.
+        self.assertEqual(body["ticket"]["submitted_by"], "user@rpmliving.com")
+
+
+class Tracking(unittest.TestCase):
+    """Stage 4 — "what's open for this property", from the stored mapping."""
+
+    def _task(self, tid, status="in progress"):
+        return {"id": tid, "name": "Update our hours",
+                "url": f"https://app.clickup.com/t/{tid}",
+                "status": {"status": status}, "date_created": "1720000000000"}
+
+    def test_list_reads_the_mapping_and_maps_status_client_safe(self):
+        refs = [{"task_id": "task-1", "ticket_type": "general",
+                 "submitted_by": "pm@rpmliving.com", "created_at": "2026-07-01"}]
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=refs), \
+             mock.patch.object(clickup_client, "get_task",
+                               side_effect=lambda tid: self._task(tid)):
+            out = portal_tickets.list_tickets("cid-42", property_uuid="u-1")
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["status"], "In progress")
+        self.assertEqual(out[0]["type_label"], "General Ticket")
+        # submitted_by comes from OUR mapping row, not from ClickUp.
+        self.assertEqual(out[0]["submitted_by"], "pm@rpmliving.com")
+
+    def test_a_task_clickup_cannot_return_is_skipped_not_fatal(self):
+        refs = [{"task_id": "gone", "ticket_type": "general", "submitted_by": ""},
+                {"task_id": "task-2", "ticket_type": "general", "submitted_by": ""}]
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=refs), \
+             mock.patch.object(clickup_client, "get_task",
+                               side_effect=lambda tid: None if tid == "gone" else self._task(tid)):
+            out = portal_tickets.list_tickets("cid-42")
+        self.assertEqual([t["id"] for t in out], ["task-2"])
 
 
 class CreateGuards(unittest.TestCase):
@@ -182,6 +216,32 @@ class Discovery(unittest.TestCase):
         # alias: registry label is "Digital Marketing Review" (campaign_review)
         self.assertEqual(matched["campaign_review"], "L1")
         self.assertIn("CLICKUP_LIST_GENERAL=L2", out["env_block"])
+
+
+class TypesRoute(unittest.TestCase):
+    """The picker payload also tells the form what we pre-fill for the requester."""
+
+    def _client(self):
+        from flask import Flask
+        from routes.portal_tickets import portal_tickets_bp
+        app = Flask(__name__)
+        app.register_blueprint(portal_tickets_bp)
+        return app.test_client()
+
+    def test_types_payload_names_the_prefilled_property_fields(self):
+        with mock.patch.object(portal_tickets, "types_with_schema", return_value=[]):
+            resp = self._client().get("/api/portal-tickets/types",
+                                      headers={"X-Portal-Email": "pm@rpmliving.com"})
+        self.assertEqual(resp.status_code, 200)
+        prefill = resp.get_json()["prefill_fields"]
+        self.assertIn("Property URL", prefill)
+        self.assertIn("Account Manager", prefill)
+        # uuid is internal plumbing — never shown to a client.
+        self.assertNotIn("uuid", [p.lower() for p in prefill])
+
+    def test_types_requires_auth(self):
+        resp = self._client().get("/api/portal-tickets/types")
+        self.assertEqual(resp.status_code, 401)
 
 
 if __name__ == "__main__":

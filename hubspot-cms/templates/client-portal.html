@@ -2721,6 +2721,11 @@ body{line-height:1.55}
   <!-- AI diff review (populated when draft is ready) -->
   <div id="brief-ai-diff" style="display:none;margin:12px 0"></div>
 
+  <!-- Ticket → profile loop. Both panels stay hidden unless the API returns
+       something, so this is invisible until TICKET_PROFILE_LOOP_ENABLED=true. -->
+  <div id="profile-proposals" style="display:none;margin:12px 0"></div>
+  <div id="profile-ticket-history" style="display:none;margin:12px 0"></div>
+
   <div class="brief-grid">
 
     <!-- Property Setup -->
@@ -3093,6 +3098,7 @@ body{line-height:1.55}
     <!-- Fields for the selected type render here, read live from ClickUp. Property
          fields we already know (Property URL, Market, code, AM) are pre-filled server-side. -->
     <div id="ct-fields"></div>
+    <div id="ct-prefill-note" style="display:none;margin-top:12px;font-size:11.5px;color:var(--tm)"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary btn-sm" onclick="submitTicket()">Next</button>
       <button class="btn btn-ghost btn-sm" onclick="toggleCreateTicket()">Cancel</button>
@@ -3723,6 +3729,14 @@ function _loadTicketTypes(force) {
         __TICKET_TYPES__[t.key] = t;
         return '<option value="' + _escAttr(t.key) + '">' + _escHtml(t.label) + '</option>';
       }).join('');
+    // Say what we attach for them, so the fields they DON'T see aren't a mystery.
+    var note = document.getElementById('ct-prefill-note');
+    var pf = (data && data.prefill_fields) || [];
+    if (note && pf.length) {
+      note.style.display = '';
+      note.innerHTML = 'We\'ll attach your property details automatically: ' +
+        pf.map(function(n){ return '<b>' + _escHtml(n) + '</b>'; }).join(' · ');
+    }
   })
   .catch(function(){ sel.innerHTML = '<option value="">Could not load request types</option>'; });
 }
@@ -3920,6 +3934,7 @@ function _renderClickupTicketCard(t) {
   var dateStr = '';
   if (t.created_ts) { try { dateStr = new Date(t.created_ts).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}); } catch(e){} }
   var age = (typeof t.age_days === 'number') ? (t.age_days === 0 ? 'today' : t.age_days + 'd ago') : '';
+  var by  = t.submitted_by ? ' · by ' + _escHtml(t.submitted_by) : '';
   var id = 'ticket-cu-' + (t.id || Date.now());
   var link = t.url ? '<a href="' + _escAttr(t.url) + '" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Open in ClickUp</a>' : '';
   return '<div class="ticket-card" id="' + id + '">' +
@@ -3932,7 +3947,7 @@ function _renderClickupTicketCard(t) {
     '</div>' +
     '<div class="ticket-body">' +
       '<div class="ticket-foot">' +
-        '<div class="ticket-date">Opened ' + dateStr + (age ? ' \u00b7 ' + age : '') + '</div>' +
+        '<div class="ticket-date">Opened ' + dateStr + (age ? ' \u00b7 ' + age : '') + by + '</div>' +
         '<div style="display:flex;gap:8px;">' + link + '</div>' +
       '</div>' +
     '</div>' +
@@ -4330,6 +4345,11 @@ function loadClientBrief() {
   var grid = document.querySelector('#section-brief .brief-grid');
   if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:28px;text-align:center;color:var(--tm)">Loading the Community Brief…</div>';
 
+  // Ticket → profile loop: what completed requests want to change here, and
+  // which requests shaped this profile. Silent no-op while the flag is off.
+  loadProfileProposals();
+  loadProfileTicketHistory();
+
   fetch(API_BASE + '/api/accounts/property/brief?company_id=' + COMPANY_ID, {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
@@ -4465,6 +4485,157 @@ function briefSaveRow(si, ri, btn) {
     _briefLoaded = false; loadClientBrief();
   })
   .catch(function(e){ alert('Save failed — check your connection.'); briefCancelRow(si, ri); });
+}
+
+// ── Ticket → profile loop ──
+// A completed request can imply a change to this profile (a rebrand's new
+// name, a budget update's new figure). Those arrive here as PROPOSALS — the
+// profile is only written when someone accepts one, and accepting goes through
+// the same override-wins save path as the inline editor above. See
+// docs/ticket-to-profile-loop.md. Both panels stay hidden unless the API
+// answers with rows, so this is inert while the feature flag is off.
+
+function _tpApi() { return window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com'; }
+function _tpHeaders() { return { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }; }
+function _tpQuery() {
+  return '?company_id=' + encodeURIComponent(window.__PORTAL_COMPANY_ID__ || '') +
+         '&uuid=' + encodeURIComponent(window.__PORTAL_UUID__ || '');
+}
+
+function _tpTruncate(v, n) {
+  var s = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+function loadProfileProposals() {
+  var box = document.getElementById('profile-proposals');
+  if (!box) return;
+  fetch(_tpApi() + '/api/ticket-profile/proposals' + _tpQuery(), { headers: _tpHeaders() })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d) {
+      var rows = (d && d.proposals) || [];
+      if (!rows.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+      window.__PROFILE_PROPOSALS__ = rows;
+      box.style.display = '';
+      box.innerHTML =
+        '<div style="border:1px solid var(--cu);border-radius:10px;background:linear-gradient(135deg,var(--bdl),#fff);padding:16px 18px">' +
+          '<div style="font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--jd);margin-bottom:4px">' +
+            'Updates proposed from your completed requests' +
+          '</div>' +
+          '<div style="font-size:12px;color:var(--tm);margin-bottom:12px">' +
+            'Nothing below is live yet. Accept an update to save it to this profile.' +
+          '</div>' +
+          rows.map(_renderProfileProposal).join('') +
+        '</div>';
+    })
+    .catch(function(){ box.style.display = 'none'; });
+}
+
+function _renderProfileProposal(p) {
+  var warn = p.conflicts_with_override
+    ? '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#FFF6E5;border:1px solid #F0D08A;font-size:11.5px;color:#7A5A12">' +
+        '⚠ This field was set by hand. Accepting replaces that edit.' +
+      '</div>'
+    : '';
+  var current = (p.current_value || '').trim()
+    ? '<div style="font-size:12px;color:var(--tm);margin-top:2px">Now: ' + _briefEsc(_tpTruncate(p.current_value, 140)) + '</div>'
+    : '<div style="font-size:12px;color:var(--tm);margin-top:2px">Now: not set</div>';
+  var pid = _briefEsc(p.proposal_id);
+  return '<div class="tp-proposal" data-pid="' + pid + '" style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:12px 14px;margin-bottom:8px">' +
+    '<div style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--ts)">' + _briefEsc(p.field_label || p.field_key) + '</div>' +
+    '<div style="font-size:13px;color:var(--tp);line-height:1.5;margin-top:4px">' + _briefEsc(_tpTruncate(p.proposed_value, 400)) + '</div>' +
+    current + warn +
+    '<div class="tp-actions" style="display:flex;gap:8px;margin-top:10px;align-items:center">' +
+      '<button class="btn btn-primary btn-sm" onclick="actionProfileProposal(\'' + pid + '\',\'accept\',this)">Accept</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="actionProfileProposal(\'' + pid + '\',\'reject\',this)">Dismiss</button>' +
+      '<span class="tp-msg" style="font-size:11.5px;color:var(--tm)"></span>' +
+    '</div>' +
+  '</div>';
+}
+
+function actionProfileProposal(pid, action, btn) {
+  var card = btn.closest('.tp-proposal');
+  var msg  = card ? card.querySelector('.tp-msg') : null;
+  card.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
+  btn.textContent = action === 'accept' ? 'Saving…' : 'Dismissing…';
+
+  fetch(_tpApi() + '/api/ticket-profile/proposals/' + action, {
+    method: 'POST',
+    headers: Object.assign({ 'Content-Type': 'application/json' }, _tpHeaders()),
+    body: JSON.stringify({ proposal_id: pid })
+  })
+  .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+  .then(function(res) {
+    if (!res.ok) {
+      if (msg) msg.textContent = res.j.error || 'Could not save — please try again.';
+      card.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
+      btn.textContent = action === 'accept' ? 'Accept' : 'Dismiss';
+      return;
+    }
+    card.remove();
+    var box = document.getElementById('profile-proposals');
+    if (box && !box.querySelectorAll('.tp-proposal').length) { box.style.display = 'none'; box.innerHTML = ''; }
+    if (action === 'accept') {
+      // The value is now live on the profile — re-render the brief so the
+      // row shows it with an EDITED badge.
+      _briefLoaded = false;
+      loadClientBrief();
+    } else {
+      loadProfileTicketHistory();
+    }
+  })
+  .catch(function() {
+    if (msg) msg.textContent = 'Could not save — check your connection.';
+    card.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
+    btn.textContent = action === 'accept' ? 'Accept' : 'Dismiss';
+  });
+}
+
+function loadProfileTicketHistory() {
+  var box = document.getElementById('profile-ticket-history');
+  if (!box) return;
+  fetch(_tpApi() + '/api/ticket-profile/history' + _tpQuery(), { headers: _tpHeaders() })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d) {
+      var rows = (d && d.tickets) || [];
+      if (!rows.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+      box.style.display = '';
+      box.innerHTML =
+        '<div style="border:1px solid var(--bd);border-radius:10px;background:#fff;padding:16px 18px">' +
+          '<div style="font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--jd);margin-bottom:4px">' +
+            'Requests that shaped this profile' +
+          '</div>' +
+          '<div style="font-size:12px;color:var(--tm);margin-bottom:12px">' +
+            'Work requests opened for this property, and what each one changed here.' +
+          '</div>' +
+          rows.map(_renderProfileHistoryRow).join('') +
+        '</div>';
+    })
+    .catch(function(){ box.style.display = 'none'; });
+}
+
+function _renderProfileHistoryRow(t) {
+  var changes = (t.profile_changes || []);
+  var changed = changes.length
+    ? '<div style="margin-top:6px">' + changes.map(function(c) {
+        return '<div style="font-size:12px;color:var(--tp);padding:1px 0">· <b>' + _briefEsc(c.field_label || c.field_key) + '</b> → ' +
+               _briefEsc(_tpTruncate(c.value, 120)) + '</div>';
+      }).join('') + '</div>'
+    : '<div style="font-size:12px;color:var(--tm);margin-top:4px">No profile changes from this request.</div>';
+  var pending = t.pending_proposals
+    ? '<span style="font-size:9px;font-weight:800;letter-spacing:.05em;color:#fff;background:var(--cu);border-radius:8px;padding:1px 7px;margin-left:8px">' +
+        t.pending_proposals + ' AWAITING REVIEW</span>'
+    : '';
+  var age = (typeof t.age_days === 'number') ? (t.age_days === 0 ? 'today' : t.age_days + 'd ago') : '';
+  return '<div style="padding:10px 0;border-bottom:1px solid var(--bd)">' +
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+      '<span style="font-size:13px;font-weight:700;color:var(--tp)">' + _briefEsc(t.subject || '') + '</span>' +
+      '<span style="font-size:11px;color:var(--tm)">' + _briefEsc(t.type_label || '') + '</span>' +
+      '<span class="ticket-status ' + (t.status === 'Done' ? 'in-progress' : 'open') + '">' + _briefEsc(t.status || 'Open') + '</span>' +
+      (age ? '<span style="font-size:11px;color:var(--tm)">' + _briefEsc(age) + '</span>' : '') +
+      pending +
+    '</div>' + changed +
+  '</div>';
 }
 
 // ── Budget & SKUs ──

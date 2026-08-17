@@ -5,6 +5,9 @@ calls `register_all(app)` once at startup.
 """
 
 from .assets import assets_bp
+from .ils import ils_bp
+from .budget_sync_api import budget_sync_api_bp
+from .clickup import clickup_bp
 from .loop import loop_bp
 from .onboarding import onboarding_bp
 from .paid import paid_bp
@@ -15,6 +18,7 @@ from .property_brief import property_brief_bp
 from .redlight import redlight_lite_bp
 from .self_checkout import self_checkout_bp
 from .seo import seo_bp
+from .ticket_profile import ticket_profile_bp
 from .webhooks import register_webhook_blueprints
 
 
@@ -29,6 +33,9 @@ def register_all(app):
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(property_brief_bp)
     app.register_blueprint(loop_bp)
+    app.register_blueprint(ils_bp)
+    app.register_blueprint(clickup_bp)
+    app.register_blueprint(budget_sync_api_bp)
     # Loop 1 self-checkout — every endpoint 404s until SELF_CHECKOUT_ENABLED=true,
     # so registering here is inert until you flip the flag.
     app.register_blueprint(self_checkout_bp)
@@ -36,4 +43,7 @@ def register_all(app):
     # ASSETS_DRIVE_ENABLED=true, so this is inert next to the existing
     # HubSpot-Files + HubDB asset path, which keeps running unchanged.
     app.register_blueprint(assets_bp)
+    # Ticket → property-profile loop — every endpoint 404s until
+    # TICKET_PROFILE_LOOP_ENABLED=true, so this is inert until the flag flips.
+    app.register_blueprint(ticket_profile_bp)
     register_webhook_blueprints(app)
