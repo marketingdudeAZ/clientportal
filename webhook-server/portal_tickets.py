@@ -24,6 +24,7 @@ from typing import Any
 import clickup_client
 from config import (
     CLICKUP_WORKSPACE_ID,
+    MARKET_TO_ACCOUNT_MANAGER,
     PORTAL_TICKET_FORMS,
     PORTAL_TICKET_PREFILL_FIELDS,
     PORTAL_TICKET_PREFILL_SOURCES,
@@ -170,7 +171,8 @@ def _pick_def(entry: dict, candidates: list[dict]) -> dict | None:
     return None
 
 
-def _resolve_manifest_field(entry: dict, by_name: dict, type_key: str) -> dict | None:
+def _resolve_manifest_field(entry: dict, by_name: dict, type_key: str,
+                            unresolved: set | None = None) -> dict | None:
     """One manifest entry + the list's live field defs → a rendered form field.
 
     The manifest owns what is asked and how it reads; ClickUp owns the field id,
@@ -189,9 +191,19 @@ def _resolve_manifest_field(entry: dict, by_name: dict, type_key: str) -> dict |
         logger.warning("portal ticket manifest drift: %s names %r — %s; skipped",
                        type_key, name, why)
         return None
-    if entry.get("tier", "ask") != "ask":
+    tier = entry.get("tier", "ask")
+    if tier != "ask" and name.lower() not in (unresolved or set()):
         return None
     field = _shape_field(d)
+    if tier != "ask":
+        # A `known` field we could not fill. Render it rather than let it vanish
+        # from BOTH the form and the task — that is the Account Manager bug, and
+        # it is generic: it fires for any mapping that breaks later.
+        field["required"] = False
+        field["help"] = ("We couldn't find this on the property record — "
+                         "please fill it in.")
+        field["degraded_known"] = True
+        return field
     # The manifest, not ClickUp, decides requiredness: ClickUp's list-level
     # field defs report required=False for every field, because requiredness
     # lives on the form view the API will not show us.
@@ -202,8 +214,13 @@ def _resolve_manifest_field(entry: dict, by_name: dict, type_key: str) -> dict |
     return field
 
 
-def _manifest_schema(type_key: str, defs: list[dict]) -> dict[str, Any]:
-    """Build {fields, sections} for a manifest-backed type, in manifest order."""
+def _manifest_schema(type_key: str, defs: list[dict],
+                     unresolved: set | None = None) -> dict[str, Any]:
+    """Build {fields, sections} for a manifest-backed type, in manifest order.
+
+    `unresolved` names the `known` fields prefill could not fill; those render
+    as inputs instead of disappearing (see unresolved_known_fields).
+    """
     manifest = PORTAL_TICKET_FORMS[type_key]
     by_name = _defs_by_name(defs)
     fields: list[dict[str, Any]] = []
@@ -211,7 +228,7 @@ def _manifest_schema(type_key: str, defs: list[dict]) -> dict[str, Any]:
     for sec in manifest.get("sections") or []:
         rendered = []
         for entry in sec.get("fields") or []:
-            f = _resolve_manifest_field(entry, by_name, type_key)
+            f = _resolve_manifest_field(entry, by_name, type_key, unresolved)
             if f is not None:
                 rendered.append(f)
         fields.extend(rendered)
@@ -297,7 +314,8 @@ def _form_url(t: dict) -> str | None:
 
 
 def types_with_schema(include_internal: bool = False, company_id: str = "",
-                      property_uuid: str = "") -> list[dict[str, Any]]:
+                      property_uuid: str = "",
+                      submitted_by: str = "") -> list[dict[str, Any]]:
     """EVERY audience-appropriate registry type, each marked available or not.
 
     `configured_types()` omits unconfigured types, which made the endorsed
@@ -315,7 +333,9 @@ def types_with_schema(include_internal: bool = False, company_id: str = "",
     # Resolved ONCE for the whole picker, not per type: prefill depends on the
     # property, not the ticket type, and this is what lets an unresolvable field
     # render on the form instead of vanishing from it (see form_schema).
-    prefill = _prefill_values(company_id, property_uuid) if company_id else {}
+    # Per TYPE now, not once for the picker: the manifest names the exact
+    # ClickUp field per type ("Market*" here, "z_Client Name" there), so one
+    # shared map cannot describe them all.
 
     out: list[dict[str, Any]] = []
     for idx, t in enumerate(PORTAL_TICKET_TYPES):
@@ -348,7 +368,10 @@ def types_with_schema(include_internal: bool = False, company_id: str = "",
             continue
         if manifest:
             try:
-                built = _manifest_schema(t["key"], defs)
+                prefill = _prefill_values(t["key"], company_id, property_uuid,
+                                          submitted_by)
+                built = _manifest_schema(
+                    t["key"], defs, unresolved_known_fields(t["key"], prefill))
             except ManifestDrift as e:
                 # Someone renamed or deleted a field in ClickUp that this form
                 # requires. Rendering the rest would collect an incomplete
@@ -362,8 +385,13 @@ def types_with_schema(include_internal: bool = False, company_id: str = "",
                 continue
             entry["fields"] = built["fields"]
             entry["sections"] = built["sections"]
+            # What we will attach without asking. Rendered as a read-only
+            # summary card, NOT as disabled inputs — a disabled input still
+            # reads as "a field to deal with".
+            entry["identity"] = {k: v for k, v in prefill.items()
+                                 if k.lower() not in ("uuid", "z_requested by")}
         else:
-            entry["fields"] = form_schema(t["key"], list_id, prefill) or []
+            entry["fields"] = form_schema(t["key"], list_id) or []
         entry["available"] = True
         out.append(entry)
     return out
@@ -421,37 +449,97 @@ def _owner_name(owner_id: str) -> str:
     return hit[1].get(str(owner_id), "")
 
 
-def _prefill_values(company_id: str, property_uuid: str = "") -> dict[str, str]:
-    """{ClickUp field name: value} for the prefilled fields, from HubSpot.
+# Sources that are NOT a plain HubSpot company property.
+_SRC_UUID = "uuid"
+_SRC_OWNER = "hubspot_owner_id"
+_SRC_SUBMITTER = "submitted_by"
 
-    Best-effort — a HubSpot fetch failure or a missing property just yields an
-    empty/partial map; the requester fills whatever's blank.
+
+def _manifest_known(type_key: str) -> "list[tuple[str, str]]":
+    """[(ClickUp field name, source)] for every `known` field on a type."""
+    manifest = _manifest_for(type_key) or {}
+    return [((e.get("name") or "").strip(), (e.get("source") or "").strip())
+            for sec in manifest.get("sections") or []
+            for e in sec.get("fields") or []
+            if e.get("tier") == "known" and e.get("source")]
+
+
+def _prefill_values(type_key: str, company_id: str, property_uuid: str = "",
+                    submitted_by: str = "") -> dict[str, str]:
+    """{ClickUp field name: value} for a type's `known` fields, from HubSpot.
+
+    Driven by the MANIFEST, not by a global {field name: property} table. That
+    table was keyed "Market" and "uuid" — names no live field has — so those
+    values silently never landed on any ticket, which is the same class of bug
+    as Account Manager pointing at a HubSpot property that does not exist. The
+    manifest already names the exact live field per type ("Market*", "z_Client
+    Name"), so there is one place to be wrong instead of two.
+
+    Best-effort by design: a HubSpot failure or an empty property yields a
+    partial map. What must NOT happen is a field disappearing from both the
+    form and the task — see `unresolved_known_fields`.
     """
-    want = {
-        cu_name: PORTAL_TICKET_PREFILL_SOURCES[cu_name]
-        for cu_name in PORTAL_TICKET_PREFILL_FIELDS
-        if cu_name in PORTAL_TICKET_PREFILL_SOURCES
-    }
-    if not company_id or not want:
-        return {name: property_uuid for name, src in want.items() if src == "uuid" and property_uuid}
-    props = sorted(set(want.values()) | {"name", "uuid"})
-    data: dict[str, Any] = {}
-    try:
-        import hubspot_client
-        data = hubspot_client.get_company(company_id, props) or {}
-    except Exception as e:  # noqa: BLE001 — prefill is never load-bearing
-        logger.warning("portal ticket prefill fetch failed for %s: %s", company_id, e)
+    want = _manifest_known(type_key)
+    if not want:
+        return {}
+    sources = {src for _, src in want}
     out: dict[str, str] = {}
-    for cu_name, src in want.items():
+
+    if _SRC_SUBMITTER in sources and submitted_by:
+        for cu_name, src in want:
+            if src == _SRC_SUBMITTER:
+                out[cu_name] = submitted_by
+
+    hs_props = sorted(sources - {_SRC_UUID, _SRC_SUBMITTER})
+    data: dict[str, Any] = {}
+    if company_id and hs_props:
+        try:
+            import hubspot_client
+            data = hubspot_client.get_company(
+                company_id, sorted(set(hs_props) | {"name", "uuid"})) or {}
+        except Exception as e:  # noqa: BLE001 — prefill is never load-bearing
+            logger.warning("portal ticket prefill fetch failed for %s: %s", company_id, e)
+
+    for cu_name, src in want:
+        if src == _SRC_SUBMITTER:
+            continue
         val = data.get(src)
-        if not val and src == "uuid":
-            val = property_uuid
-        # An owner id is a number; nobody wants "1284471" on their ticket.
-        if val and src == "hubspot_owner_id":
+        if src == _SRC_UUID:
+            val = val or property_uuid
+        elif src == _SRC_OWNER and val:
+            # An owner id is a number; nobody wants "1284471" on their ticket.
             val = _owner_name(str(val)) or ""
         if val:
             out[cu_name] = str(val)
+
+    # The Account Manager fallback. The owners lookup is the real answer —
+    # it names the person who actually owns the record — and this only covers
+    # a property with no owner set, using the region→AM table the ClickUp forms
+    # embed as a SCREENSHOT for requesters to read off themselves.
+    for cu_name, src in want:
+        if src == _SRC_OWNER and not out.get(cu_name):
+            am = MARKET_TO_ACCOUNT_MANAGER.get(
+                str(data.get("market") or data.get("rpmmarket") or "").strip().lower())
+            if am:
+                out[cu_name] = am
     return out
+
+
+def unresolved_known_fields(type_key: str, prefill: dict) -> set:
+    """`known` fields we promised to fill and could not, lowercased.
+
+    These must be RENDERED as inputs. `form_schema` used to strip every
+    prefill-named field unconditionally, before knowing whether prefill would
+    resolve anything — so a mapping that broke left the field on neither the
+    form nor the task: permanently blank on every ticket, silently, and
+    strictly worse than the ClickUp form it replaced. Two of these are live
+    today (`regional_manager_email` and `marketing_rvp_email` exist on the
+    schema but are populated on no property we sampled), which is exactly why
+    this is a behaviour and not a comment.
+    """
+    filled = {k.strip().lower() for k, v in (prefill or {}).items() if v}
+    return {name.lower() for name, _ in _manifest_known(type_key)
+            if name.lower() not in filled}
 
 
 # ── field-level validation (manifest rules) ──────────────────────────────────
@@ -561,6 +649,12 @@ def _coerce(field_def: dict, value: Any, rule: dict | None = None) -> Any:
             return float(value)
         except (TypeError, ValueError):
             return None
+    if ftype == "users":
+        # A ClickUp `users` field takes ClickUp member ids. The requester is a
+        # portal user who may have no ClickUp account at all, so an email here
+        # is either rejected or silently dropped. Attribution lives in the task
+        # description instead, where it always resolves.
+        return None
     if ftype == "checkbox":
         if isinstance(value, str):
             return value.strip().lower() in ("1", "true", "yes", "on", "checked")
@@ -704,7 +798,7 @@ def create_ticket(
         return {"ok": False, "error": "Ticketing is temporarily unavailable."}, 503
 
     subject = (subject or "").strip() or t["label"]
-    prefill = _prefill_values(company_id, property_uuid)
+    prefill = _prefill_values(type_key, company_id, property_uuid, submitted_by)
     try:
         built = _build_custom_fields(list_id, fields, prefill,
                                      _manifest_rules(type_key))

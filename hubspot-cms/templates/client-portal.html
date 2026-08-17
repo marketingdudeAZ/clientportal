@@ -3819,12 +3819,29 @@ function _ticketFieldHtml(f) {
   // Help sits ABOVE the control: it is instruction for filling the field in,
   // not a footnote about what you already typed.
   var help = f.help
-    ? '<div class="ct-help" style="font-size:12px;color:var(--tm);margin:2px 0 6px">' +
+    ? '<div class="ct-help" style="font-size:12px;color:' +
+      (f.degraded_known ? '#b4780f' : 'var(--tm)') + ';margin:2px 0 6px">' +
       _escHtml(f.help) + '</div>' : '';
   var counter = f.maxlength
     ? '<div class="ct-count" style="font-size:11px;color:var(--tm);text-align:right"></div>' : '';
   return '<div class="form-row"><label class="form-label">' +
          _escHtml(f.name || '') + req + '</label>' + help + ctl + counter + '</div>';
+}
+
+// What we attach without asking. A read-only line, NOT disabled inputs — a
+// disabled input still reads as "a field to deal with", which is the thing
+// this whole tier exists to remove.
+function _ticketIdentityCard(t) {
+  var ident = t.identity || {};
+  var vals = Object.keys(ident).map(function(k){ return ident[k]; })
+    .filter(function(v){ return v; });
+  if (!vals.length) return '';
+  return '<div style="padding:10px 12px;margin-bottom:12px;border-radius:4px;' +
+    'background:var(--bg2,#f7f9fc);font-size:12.5px;color:var(--tm)">' +
+    'Submitting for <b style="color:var(--ts)">' +
+    vals.map(_escHtml).join('</b> · <b style="color:var(--ts)">') + '</b>' +
+    '<div style="margin-top:4px">We\'ll attach these automatically — ' +
+    'you don\'t need to re-enter them.</div></div>';
 }
 
 // The SLA / prerequisite / note framing that lives on the ClickUp form and has
@@ -3858,7 +3875,7 @@ function renderTicketFields(typeKey) {
   var t = __TICKET_TYPES__ && __TICKET_TYPES__[typeKey];
   if (!t || !t.fields) return;
 
-  var html = _ticketFormBanner(t);
+  var html = _ticketFormBanner(t) + _ticketIdentityCard(t);
   if (t.sections && t.sections.length) {
     html += t.sections.map(function(s){
       var head = s.title

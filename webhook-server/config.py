@@ -212,6 +212,26 @@ PORTAL_TICKET_PREFILL_SOURCES = {
     "UUID": "uuid",
 }
 
+# Digital region → Account Manager. All 8 ClickUp forms embed this as a
+# SCREENSHOT of a spreadsheet and ask the requester to look themselves up.
+#
+# This is the FALLBACK, not the answer. The Account Manager is the owner of the
+# HubSpot company record, resolved through the owners API
+# (portal_tickets._owner_name), which is right even when someone changes desks.
+# This table only covers a property with no owner set, and it goes stale the
+# moment anyone moves — keep it in that role.
+#
+# Per the forms' own caveat: an RPMI property selects RPMI rather than its
+# physical region, and "National" is no longer a digital region.
+MARKET_TO_ACCOUNT_MANAGER = {
+    "dallas": "Dane",
+    "atlanta": "Dustin", "rpmi": "Dustin", "southeast (tn)": "Dustin", "southeast": "Dustin",
+    "houston": "Juliana", "midwest": "Juliana",
+    "florida": "Katie", "mid-atlantic": "Katie", "west": "Katie",
+    "mountain": "Lauren",
+    "austin": "Logan", "san antonio": "Logan",
+}
+
 # --- Per-type form manifests (docs: ticket intake redesign §3) ---------------
 #
 # The scope doc chose to read forms live from ClickUp so they could never
@@ -507,15 +527,15 @@ PORTAL_TICKET_FORMS = {
                     {"name": "Property Address", "tier": "known", "source": "address"},
                     {"name": "Property URL", "tier": "known", "source": "website"},
                     {"name": "Property Type", "tier": "known", "source": "property_type"},
-                    {"name": "Property Email Address", "tier": "known", "source": "email"},
+                    {"name": "Property Email Address", "tier": "known", "source": "company_email"},
                     {"name": "Property Code", "tier": "known", "source": "property_code"},
                     {"name": "Property Status", "tier": "known",
                      "source": "fluency_lifecycle_state"},
-                    {"name": "z_Client Name", "tier": "known", "source": "portfolio_name"},
+                    {"name": "z_Client Name", "tier": "known", "source": "client"},
                     {"name": "Account Manager", "tier": "known", "source": "hubspot_owner_id"},
                     {"name": "Market*", "tier": "known", "source": "market"},
-                    {"name": "RM's Email", "tier": "known", "source": "rm_email"},
-                    {"name": "RVP's Email", "tier": "known", "source": "rvp_email"},
+                    {"name": "RM's Email", "tier": "known", "source": "regional_manager_email"},
+                    {"name": "RVP's Email", "tier": "known", "source": "marketing_rvp_email"},
                     {"name": "z_Requested By", "tier": "known", "source": "submitted_by"},
                 ],
             },
@@ -625,8 +645,8 @@ PORTAL_TICKET_FORMS = {
                     {"name": "Property Code", "tier": "known", "source": "property_code"},
                     {"name": "Account Manager", "tier": "known", "source": "hubspot_owner_id"},
                     {"name": "Market*", "tier": "known", "source": "market"},
-                    {"name": "RM's Email", "tier": "known", "source": "rm_email"},
-                    {"name": "RVP's Email", "tier": "known", "source": "rvp_email"},
+                    {"name": "RM's Email", "tier": "known", "source": "regional_manager_email"},
+                    {"name": "RVP's Email", "tier": "known", "source": "marketing_rvp_email"},
                     {"name": "z_Requested By", "tier": "known", "source": "submitted_by"},
                 ],
             },
@@ -723,8 +743,8 @@ PORTAL_TICKET_FORMS = {
                     {"name": "Property Code", "tier": "known", "source": "property_code"},
                     {"name": "Account Manager", "tier": "known", "source": "hubspot_owner_id"},
                     {"name": "Market*", "tier": "known", "source": "market"},
-                    {"name": "RM's Email", "tier": "known", "source": "rm_email"},
-                    {"name": "RVP's Email", "tier": "known", "source": "rvp_email"},
+                    {"name": "RM's Email", "tier": "known", "source": "regional_manager_email"},
+                    {"name": "RVP's Email", "tier": "known", "source": "marketing_rvp_email"},
                     {"name": "z_Requested By", "tier": "known", "source": "submitted_by"},
                 ],
             },
