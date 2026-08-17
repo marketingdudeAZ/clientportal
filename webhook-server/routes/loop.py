@@ -418,11 +418,21 @@ def loop_channels():
     end = datetime.utcnow().date()
     start = end - timedelta(days=days)
     import hyly_client
-    channels = hyly_client.get_channel_summary(
-        hyly_id,
-        start_date=start.isoformat(),
-        end_date=end.isoformat(),
-    )
+    try:
+        channels = hyly_client.get_channel_summary(
+            hyly_id,
+            start_date=start.isoformat(),
+            end_date=end.isoformat(),
+        )
+    except hyly_client.HylyQueryError as exc:
+        # A broken query must not render as "no channel data" — that is the
+        # silent-failure shape ADR 0022 exists to prevent.
+        return jsonify({
+            "property_uuid":    uuid,
+            "company_id":       company_id,
+            "hyly_property_id": hyly_id,
+            "error":            f"Hyly query failed: {exc}",
+        }), 502
     return jsonify({
         "property_uuid":   uuid,
         "company_id":      company_id,

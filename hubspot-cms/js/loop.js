@@ -225,19 +225,24 @@
       .then(function (data) {
         $('#channels-card').style.display = '';
         var channels = data.channels || {};
+        // Hyly's funnel table carries no visitor counts (those live in
+        // ga4_analytics_events, not yet ingested), so the funnel starts at
+        // leads. Filtering/sorting on `visitors` here would hide every row.
+        // ADR 0022.
         var rows = Object.keys(channels)
-          .filter(function (c) { return c !== '_total' && (channels[c].visitors || 0) > 0; })
-          .sort(function (a, b) { return (channels[b].visitors || 0) - (channels[a].visitors || 0); })
+          .filter(function (c) { return c !== '_total' && (channels[c].leads || 0) > 0; })
+          .sort(function (a, b) { return (channels[b].leads || 0) - (channels[a].leads || 0); })
           .map(function (c) {
             var x = channels[c];
-            var conv = x.conv_rate != null ? (x.conv_rate * 100).toFixed(1) + '%' : '—';
+            var l2l = x.lead_to_lease != null ? (x.lead_to_lease * 100).toFixed(1) + '%' : '—';
             return (
               '<tr>' +
                 '<td class="chan-cell-name">' + c + '</td>' +
-                '<td class="chan-cell-num">' + (x.visitors || 0).toLocaleString() + '</td>' +
-                '<td class="chan-cell-num">' + (x.known_visitors || 0).toLocaleString() + '</td>' +
-                '<td class="chan-cell-num">' + (x.contacts || 0).toLocaleString() + '</td>' +
-                '<td class="chan-cell-num">' + conv + '</td>' +
+                '<td class="chan-cell-num">' + (x.leads || 0).toLocaleString() + '</td>' +
+                '<td class="chan-cell-num">' + (x.tours_completed || 0).toLocaleString() + '</td>' +
+                '<td class="chan-cell-num">' + (x.applications || 0).toLocaleString() + '</td>' +
+                '<td class="chan-cell-num">' + (x.leases || 0).toLocaleString() + '</td>' +
+                '<td class="chan-cell-num">' + l2l + '</td>' +
               '</tr>'
             );
           });

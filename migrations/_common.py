@@ -41,6 +41,15 @@ class MigrationContext:
     dataset: str = field(default_factory=lambda: os.environ.get("BIGQUERY_DATASET_PROD", ""))
     dataset_dev: str = field(default_factory=lambda: os.environ.get("BIGQUERY_DATASET_DEV", ""))
     hyly_dataset: str = field(default_factory=lambda: os.environ.get("BIGQUERY_HYLY_DATASET", ""))
+    # ADR 0015 assumed Hyly's data sat in our own project. It does not — the
+    # vendor tables live in projects we don't own, so the Hyly project is
+    # configured separately and falls back to BIGQUERY_PROJECT_ID (ADR 0022).
+    hyly_project: str = field(default_factory=lambda: (
+        os.environ.get("BIGQUERY_HYLY_PROJECT")
+        or os.environ.get("BIGQUERY_PROJECT_ID", "")))
+    # Fully-qualified vendor source table, e.g.
+    # data-and-reporting-483421.hyly.ga_hyly_mti
+    hyly_source_table: str = field(default_factory=lambda: os.environ.get("BIGQUERY_HYLY_SOURCE_TABLE", ""))
     dry_run: bool = False
 
     _bq_client: Any = None
@@ -105,4 +114,6 @@ class MigrationContext:
             dataset=self.dataset,
             dataset_dev=self.dataset_dev,
             hyly_dataset=self.hyly_dataset,
+            hyly_project=self.hyly_project,
+            hyly_source_table=self.hyly_source_table,
         )

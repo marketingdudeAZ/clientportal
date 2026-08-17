@@ -48,7 +48,7 @@ live on that record.
 | GA4 | Traffic + conversions | Daily snapshot cache |
 | Google Ads | Paid spend / clicks / conversions | Daily snapshot cache |
 | Apt IQ | Property snapshot + historical (bulk_api/jobs) | Property ID on HubSpot company `aptiq_property_id`; market on `aptiq_market_id`. JWT rotates every 30 days (ADR 0012 + `aptiq_token_monitor.py`) |
-| Hyly | Convert-stage attribution (visitors, leads, journey) | Beta rolls out June 2026. Property ID on HubSpot company `hyly_property_id`. Three BQ tables: `daily_activity_summary`, `contact_submits`, `website_visits`. Joins via `loop_convert_v1` view. ADR 0015 |
+| Hyly | Convert-stage funnel (lead → tour → application → lease) | **15-property beta, live.** Property ID on HubSpot company `hyly_property_id`. Hyly ships ONE usable table — `ga_hyly_mti` (per-contact funnel milestones + `source_mapped`) — in `data-and-reporting-483421.hyly`, a project we don't own. The three tables ADR 0015 assumed do NOT exist. We build our own rollup `hyly_daily_activity_v1` into `hyly-data.GA4_Hyly`; `loop_convert_v1` reads that. Sources declared in `connectors/hyly/sources.json`. **ADR 0022 supersedes ADR 0015** |
 | Fluency | Paid media execution layer | Reads from "RPM Property Tag Source" Google Sheet keyed by uuid |
 | Yardi / CRM IQ | Lease pipeline (post-migration) | API TBD |
 | NinjaCat | Aggregated paid + SEO reports | **Deprecating Feb 2026** — replaced by direct API connectors + portal Loop view (ADR 0016) |
