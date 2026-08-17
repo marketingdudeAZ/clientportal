@@ -26,6 +26,8 @@
   {# Convert stage detail: Hyly channels — shown in Status pane below the grid #}
   <div class="card" id="channels-card" style="display:none">
     <h2>Convert — Last 30 Days by Channel</h2>
+    {# Freshness stamp — populated by loop.js. Hidden until we know the date. #}
+    <p class="freshness" id="channels-freshness" style="display:none"></p>
     <div id="channels-empty" class="empty" style="display:none">
       <p>Hyly attribution not configured for this property yet.<br>
          Channel data will appear here when Hyly beta reaches this property.</p>
@@ -34,10 +36,11 @@
       <thead>
         <tr>
           <th>Channel</th>
-          <th class="chan-cell-num">Visitors</th>
-          <th class="chan-cell-num">Known</th>
-          <th class="chan-cell-num">Contacts</th>
-          <th class="chan-cell-num">Conv %</th>
+          <th class="chan-cell-num">Leads</th>
+          <th class="chan-cell-num">Toured</th>
+          <th class="chan-cell-num">Applied</th>
+          <th class="chan-cell-num">Leased</th>
+          <th class="chan-cell-num">Lead&nbsp;&rarr;&nbsp;Lease</th>
         </tr>
       </thead>
       <tbody id="channels-tbody"></tbody>
