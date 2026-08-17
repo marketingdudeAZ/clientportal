@@ -24,6 +24,7 @@ from typing import Any
 import clickup_client
 from config import (
     CLICKUP_WORKSPACE_ID,
+    PORTAL_TICKET_FORMS,
     PORTAL_TICKET_PREFILL_FIELDS,
     PORTAL_TICKET_PREFILL_SOURCES,
     PORTAL_TICKET_STATUS_MAP,
@@ -118,13 +119,90 @@ def _shape_field(f: dict) -> dict[str, Any]:
     }
 
 
-def form_schema(list_id: str, prefill: dict | None = None) -> "list[dict[str, Any]] | None":
-    """Client-facing form fields for a list — ClickUp fields minus the ones we
-    can actually pre-fill from the property record.
+class ManifestDrift(Exception):
+    """A manifest field does not resolve against the list's live ClickUp fields.
+
+    Raised only for a REQUIRED field. Rendering the form without it would let a
+    requester submit a task missing something the services team needs, which is
+    the failure this whole manifest exists to end — so the type goes unavailable
+    instead, with the same "use the form" fallback as a ClickUp outage.
+    """
+
+
+def _manifest_for(type_key: str) -> dict | None:
+    return PORTAL_TICKET_FORMS.get(type_key)
+
+
+def _resolve_manifest_field(entry: dict, by_name: dict, type_key: str) -> dict | None:
+    """One manifest entry + the list's live field defs → a rendered form field.
+
+    The manifest owns what is asked and how it reads; ClickUp owns the field id,
+    its type and its dropdown options. Returns None when the entry resolves but
+    is not an input (tier known/file), and raises ManifestDrift when a required
+    entry names a field this list does not have.
+    """
+    name = (entry.get("name") or "").strip()
+    d = by_name.get(name.lower())
+    if d is None:
+        if entry.get("required"):
+            raise ManifestDrift(f"{type_key}: required field {name!r} is not on this list")
+        logger.warning("portal ticket manifest drift: %s names %r, which this "
+                       "list does not have — skipped", type_key, name)
+        return None
+    if entry.get("tier", "ask") != "ask":
+        return None
+    field = _shape_field(d)
+    # The manifest, not ClickUp, decides requiredness: ClickUp's list-level
+    # field defs report required=False for every field, because requiredness
+    # lives on the form view the API will not show us.
+    field["required"] = bool(entry.get("required"))
+    for k in ("help", "maxlength", "validate"):
+        if entry.get(k):
+            field[k] = entry[k]
+    return field
+
+
+def _manifest_schema(type_key: str, defs: list[dict]) -> dict[str, Any]:
+    """Build {fields, sections} for a manifest-backed type, in manifest order."""
+    manifest = PORTAL_TICKET_FORMS[type_key]
+    by_name = {(d.get("name") or "").strip().lower(): d for d in defs}
+    fields: list[dict[str, Any]] = []
+    sections: list[dict[str, Any]] = []
+    for sec in manifest.get("sections") or []:
+        rendered = []
+        for entry in sec.get("fields") or []:
+            f = _resolve_manifest_field(entry, by_name, type_key)
+            if f is not None:
+                rendered.append(f)
+        fields.extend(rendered)
+        # A section whose fields are all `known`/`file` renders nothing today,
+        # so it is dropped rather than shown as an empty heading.
+        if rendered:
+            sections.append({"title": sec.get("title") or "",
+                             "help": sec.get("help") or "",
+                             "fields": rendered})
+    return {"fields": fields, "sections": sections}
+
+
+def form_schema(type_key: str, list_id: str,
+                prefill: dict | None = None) -> "list[dict[str, Any]] | None":
+    """Client-facing form fields for a ticket type, in the order they're asked.
+
+    With a manifest (`PORTAL_TICKET_FORMS`), this repo decides which fields
+    appear and ClickUp is consulted only to resolve each name to its id, type
+    and options — per list, never globally: several channel fields share a
+    display name across lists with different types, so a space-wide lookup
+    returns the wrong field id.
+
+    Without one, the previous behaviour stands: every field ClickUp says is
+    available to the list, minus the ones we can actually pre-fill. That path is
+    what renders ~105 fields on a type, and it is kept only so the five types
+    that have no manifest yet do not regress.
 
     `prefill` is optional: with none supplied, no field is hidden, which is the
     safe direction (the requester sees a field we would have filled, rather than
-    a field nobody fills).
+    a field nobody fills). It does not apply to manifest types — there, the
+    `known` tier already decides what is never asked.
 
     None means ClickUp would not tell us the schema. That must propagate all the
     way to `available: false`; collapsing it into an empty form lets a requester
@@ -133,6 +211,8 @@ def form_schema(list_id: str, prefill: dict | None = None) -> "list[dict[str, An
     defs = clickup_client.get_list_fields(list_id)
     if defs is None:
         return None
+    if _manifest_for(type_key):
+        return _manifest_schema(type_key, defs)["fields"]
     # `resolved` is the prefill map we WILL actually stamp on the task. A
     # prefill field is hidden only when we can genuinely fill it.
     #
@@ -202,10 +282,17 @@ def types_with_schema(include_internal: bool = False, company_id: str = "",
         audience = t.get("audience", "client")
         if audience != "client" and not include_internal:
             continue
+        manifest = _manifest_for(t["key"]) or {}
         entry = {
             "key": t["key"], "label": t["label"], "audience": audience,
             "order": idx, "available": False, "reason": None,
             "reason_code": None, "form_url": _form_url(t), "fields": [],
+            # The framing around the form. Empty for a type with no manifest,
+            # so the renderer's checks are uniform rather than per-type.
+            "sections": [], "sla": manifest.get("sla") or "",
+            "prereqs": list(manifest.get("prereqs") or []),
+            "notes": list(manifest.get("notes") or []),
+            "name_pattern": manifest.get("name_pattern") or "",
         }
         list_id = _list_id_for(t)
         if not list_id:
@@ -213,14 +300,31 @@ def types_with_schema(include_internal: bool = False, company_id: str = "",
             entry["reason"] = _REASON_NOT_CONFIGURED
             out.append(entry)
             continue
-        schema = form_schema(list_id, prefill)
-        if schema is None:
+        defs = clickup_client.get_list_fields(list_id)
+        if defs is None:
             entry["reason_code"] = "schema_unavailable"
             entry["reason"] = _REASON_SCHEMA_DOWN
             out.append(entry)
             continue
+        if manifest:
+            try:
+                built = _manifest_schema(t["key"], defs)
+            except ManifestDrift as e:
+                # Someone renamed or deleted a field in ClickUp that this form
+                # requires. Rendering the rest would collect an incomplete
+                # request that looks complete to the requester, so the type goes
+                # offline with the same fallback as an outage — and loudly,
+                # because only a deploy fixes it.
+                logger.error("portal ticket manifest drift on %s: %s", t["key"], e)
+                entry["reason_code"] = "manifest_drift"
+                entry["reason"] = _REASON_SCHEMA_DOWN
+                out.append(entry)
+                continue
+            entry["fields"] = built["fields"]
+            entry["sections"] = built["sections"]
+        else:
+            entry["fields"] = form_schema(t["key"], list_id, prefill) or []
         entry["available"] = True
-        entry["fields"] = schema
         out.append(entry)
     return out
 
@@ -310,16 +414,87 @@ def _prefill_values(company_id: str, property_uuid: str = "") -> dict[str, str]:
     return out
 
 
+# ── field-level validation (manifest rules) ──────────────────────────────────
+
+class TicketValidation(Exception):
+    """A submitted value breaks a manifest rule. Carries requester-facing text."""
+
+    def __init__(self, field: str, message: str):
+        super().__init__(f"{field}: {message}")
+        self.field = field
+        self.message = message
+
+
+# Punctuation the ad platforms accept in this copy. Periods only — the brief's
+# rule verbatim, and the reason the field exists in this shape at all.
+_ALLOWED_PUNCT = set(".$ ")
+
+
+def _no_caps_no_punct_except_period(value: str) -> str | None:
+    """The special-copy rule. Returns a requester-facing complaint, or None.
+
+    Enforced here as well as in the browser because the browser is advice: the
+    API is reachable directly, and a rejected special is cheaper than an ad
+    account rejecting the copy days later.
+    """
+    if any(c.isupper() for c in value):
+        return ("Please use no capital letters — write it the way it should "
+                "appear in the ad.")
+    bad = sorted({c for c in value
+                  if not c.isalnum() and not c.isspace() and c not in _ALLOWED_PUNCT})
+    if bad:
+        return ("Please remove " + " ".join(bad) +
+                " — periods are the only punctuation allowed.")
+    return None
+
+
+_VALIDATORS = {"no_caps_no_punct_except_period": _no_caps_no_punct_except_period}
+
+
+def _manifest_rules(type_key: str) -> dict[str, dict]:
+    """{lowercased ClickUp field name: {maxlength, validate}} for a type."""
+    manifest = _manifest_for(type_key) or {}
+    rules: dict[str, dict] = {}
+    for sec in manifest.get("sections") or []:
+        for entry in sec.get("fields") or []:
+            rule = {k: entry[k] for k in ("maxlength", "validate") if entry.get(k)}
+            if rule:
+                rules[(entry.get("name") or "").strip().lower()] = rule
+    return rules
+
+
+def _check_rule(field_name: str, value: Any, rule: dict | None) -> None:
+    """Raise TicketValidation if `value` breaks the manifest rule for a field."""
+    if not rule or value in (None, ""):
+        return
+    text = str(value)
+    maxlength = rule.get("maxlength")
+    if maxlength and len(text) > int(maxlength):
+        raise TicketValidation(
+            field_name,
+            f"Please shorten this to {int(maxlength)} characters "
+            f"(currently {len(text)}).")
+    check = _VALIDATORS.get(rule.get("validate") or "")
+    if check:
+        complaint = check(text)
+        if complaint:
+            raise TicketValidation(field_name, complaint)
+
+
 # ── custom-field payload building ────────────────────────────────────────────
 
-def _coerce(field_def: dict, value: Any) -> Any:
+def _coerce(field_def: dict, value: Any, rule: dict | None = None) -> Any:
     """Coerce a form value into the shape ClickUp's API expects for the field.
 
     drop_down/labels resolve option *labels* back to option ids; number/currency
     become floats; checkbox becomes bool. Returns None to skip the field.
+
+    `rule` is the manifest's constraint for this field, checked BEFORE coercion
+    so the complaint quotes what the requester actually typed.
     """
     if value in (None, ""):
         return None
+    _check_rule((field_def.get("name") or "").strip(), value, rule)
     ftype = field_def.get("type")
     options = (field_def.get("type_config") or {}).get("options") or []
     if ftype == "drop_down":
@@ -354,7 +529,8 @@ def _coerce(field_def: dict, value: Any) -> Any:
 
 
 def _build_custom_fields(
-    list_id: str, inputs: dict | None, prefill: dict | None
+    list_id: str, inputs: dict | None, prefill: dict | None,
+    rules: dict | None = None,
 ) -> "tuple[list[dict], set, dict] | None":
     """Build ClickUp's `[{id, value}]` custom-fields payload.
 
@@ -397,7 +573,9 @@ def _build_custom_fields(
         d = by_id.get(key) or by_name.get(str(key).strip().lower())
         if not d:
             return
-        cu_val = _coerce(d, value)
+        # Rules are keyed by field NAME, but the form posts field IDS — so the
+        # lookup happens after `d` resolves, or every rule would silently miss.
+        cu_val = _coerce(d, value, (rules or {}).get((d.get("name") or "").strip().lower()))
         if cu_val is None:
             return
         merged[d.get("id")] = cu_val
@@ -481,7 +659,14 @@ def create_ticket(
 
     subject = (subject or "").strip() or t["label"]
     prefill = _prefill_values(company_id, property_uuid)
-    built = _build_custom_fields(list_id, fields, prefill)
+    try:
+        built = _build_custom_fields(list_id, fields, prefill,
+                                     _manifest_rules(type_key))
+    except TicketValidation as e:
+        # 400, not 422: the browser enforces the same rule, so reaching here
+        # means either a stale form or a direct API call. Name the field so the
+        # response is usable without the form's own error handling.
+        return {"ok": False, "error": e.message, "field": e.field}, 400
     if built is None:
         # Fail closed. After the field cache landed this branch fires only when
         # the schema was never obtainable — the /types call that rendered this

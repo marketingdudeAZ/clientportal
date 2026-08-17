@@ -238,6 +238,95 @@ PORTAL_TICKET_PREFILL_SOURCES = {
     "UUID": "uuid",
 }
 
+# --- Per-type form manifests (docs: ticket intake redesign §3) ---------------
+#
+# The scope doc chose to read forms live from ClickUp so they could never
+# drift. The instinct is right; the endpoint it picked has no concept of a
+# form. In ClickUp, custom fields are defined at the SPACE level, so
+# `GET /list/{id}/field` returns every field AVAILABLE TO the list — the union
+# of every ticket type in the space — while the thing that decides which
+# fields a form shows, in what order, with what help text, is the form view,
+# which the public API does not expose. Hence: this repo owns which fields
+# appear and how they read; ClickUp still owns field ids, types and dropdown
+# options, resolved live BY NAME at render and submit time. A team member
+# editing a dropdown's options still flows through with no redeploy; adding or
+# removing a field becomes a manifest change, and the drift test says so
+# instead of the field silently vanishing.
+#
+# `name` MUST match the live ClickUp custom-field name EXACTLY — it is the
+# join key. Resolution is per list, never globally by name across the space:
+# several channel fields exist twice under one display name (currency on
+# new_account_build, select on budget_update), so a global lookup returns the
+# wrong field id.
+#
+# `tier` is one of:
+#   "known" — resolved from the property record; submitted, never rendered
+#   "file"  — owned by the Community Brief; confirm-or-update (phase 3)
+#   "ask"   — a real input, the only tier that renders today
+# `source` names the HubSpot property (known) or fluency_* override (file).
+#
+# Scoped to `creative_ad_copy` on purpose: it renders ZERO of its five real
+# fields today, so every special submitted through the portal arrives
+# unactionable. Highest value, smallest surface, and it proves the
+# manifest+drift pattern before the other five types adopt it. A type with no
+# entry here keeps the previous whole-list behaviour, so nothing regresses.
+PORTAL_TICKET_FORMS = {
+    "creative_ad_copy": {
+        "sla": "Please allow 5–7 business days for this request.",
+        "notes": [
+            "This form is only for live campaigns that already have both the "
+            "creative and the copy to be updated.",
+        ],
+        "prereqs": [],
+        "name_pattern": "[Property Name] - Creative / Ad Copy Update",
+        "sections": [
+            {
+                # Every field here is tier `known` — none of them render. The
+                # section exists so the drift test still sees them and so the
+                # phase-2 identity summary card has somewhere to live.
+                "title": "Property Information",
+                "help": "",
+                "fields": [
+                    {"name": "Property Code", "tier": "known", "source": "property_code"},
+                    {"name": "Property URL", "tier": "known", "source": "website"},
+                    # Live name is "Account Manager", NOT the form's question
+                    # wording ("Who is your Account Manager?"). Resolved from
+                    # hubspot_owner_id — there is no account_manager company
+                    # property (verified against the live 838-property schema).
+                    {"name": "Account Manager", "tier": "known", "source": "hubspot_owner_id"},
+                    # Live name carries a trailing asterisk. It is the join key,
+                    # so it is reproduced verbatim, typo and all.
+                    {"name": "Market*", "tier": "known", "source": "market"},
+                    # Lowercase `z_`, not `Z_`. A case-SENSITIVE "hide Z_*"
+                    # filter would miss this field entirely.
+                    {"name": "z_Requested By", "tier": "known", "source": "submitted_by"},
+                ],
+            },
+            {
+                "title": "Creative + Ad Copy Information",
+                "help": "",
+                "fields": [
+                    {"name": "What is the new/updated special?", "tier": "ask",
+                     "required": True, "maxlength": 90,
+                     "help": "Max 90 characters, no capitalization, and no "
+                             "punctuation other than periods — ad platforms "
+                             "reject copy that breaks these rules. "
+                             "Ex: 2 bedrooms starting at $1500 through july 15th.",
+                     "validate": "no_caps_no_punct_except_period"},
+                    {"name": "Channels / Ads Impacted", "tier": "ask", "required": True,
+                     "help": "Select every channel this update should reach."},
+                    {"name": "Special / Promotion End Date", "tier": "ask", "required": True,
+                     "help": "When the special stops running."},
+                    {"name": "SharePoint Path to New Image / Photo", "tier": "ask",
+                     "help": "Leave blank if there is no new image."},
+                    {"name": "Is there any other information we need to know?",
+                     "tier": "ask"},
+                ],
+            },
+        ],
+    },
+}
+
 # ClickUp task statuses → client-safe portal labels (scope doc §4). Matched
 # case-insensitively; anything unmapped falls through to a title-cased version
 # of the raw ClickUp status rather than leaking an internal slug verbatim.

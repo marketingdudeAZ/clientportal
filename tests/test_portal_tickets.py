@@ -47,6 +47,35 @@ def _fields():
     ]
 
 
+def _creative_fields():
+    """The Creative + Ad Copy Updates list, as ClickUp actually returns it.
+
+    Names are verbatim from list 901111120522 on 2026-08-17, including the
+    trailing asterisk on "Market*" and the LOWERCASE `z_` prefix — a
+    case-sensitive "hide Z_*" filter would miss that field entirely.
+    """
+    return [
+        {"id": "cu_market", "name": "Market*", "type": "drop_down",
+         "type_config": {"options": [{"id": "m-dal", "name": "Dallas"}]}},
+        {"id": "cu_channels", "name": "Channels / Ads Impacted", "type": "labels",
+         "type_config": {"options": [{"id": "ch-ps", "name": "Paid Search Ads"},
+                                     {"id": "ch-disp", "name": "Display"}]}},
+        {"id": "cu_am", "name": "Account Manager", "type": "drop_down",
+         "type_config": {"options": [{"id": "am-dane", "name": "Dane"}]}},
+        {"id": "cu_due", "name": "Requested Due Date", "type": "date"},
+        {"id": "cu_code", "name": "Property Code", "type": "short_text"},
+        {"id": "cu_special", "name": "What is the new/updated special?", "type": "text"},
+        {"id": "cu_other", "name": "Is there any other information we need to know?",
+         "type": "text"},
+        {"id": "cu_qa", "name": "QA Status", "type": "drop_down", "type_config": {}},
+        {"id": "cu_url", "name": "Property URL", "type": "url"},
+        {"id": "cu_by", "name": "z_Requested By", "type": "users"},
+        {"id": "cu_end", "name": "Special / Promotion End Date", "type": "date"},
+        {"id": "cu_sp", "name": "SharePoint Path to New Image / Photo", "type": "url"},
+        {"id": "cu_prog", "name": "Task Progress", "type": "automatic_progress"},
+    ]
+
+
 class StatusMapping(unittest.TestCase):
     def test_known_statuses_map_to_client_labels(self):
         self.assertEqual(portal_tickets.client_status("TO DO"), "Open")
@@ -74,7 +103,7 @@ class FormSchema(unittest.TestCase):
     def test_prefill_fields_are_filtered_out_when_we_can_fill_them(self):
         prefill = {"Property URL": "https://x.com", "uuid": "u-1"}
         with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
-            schema = portal_tickets.form_schema("901-general", prefill)
+            schema = portal_tickets.form_schema("general", "901-general", prefill)
         names = [f["name"] for f in schema]
         self.assertNotIn("Property URL", names)   # resolved → hidden
         self.assertNotIn("uuid", names)           # resolved → hidden
@@ -88,7 +117,7 @@ class FormSchema(unittest.TestCase):
         on every ticket, silently. Strictly worse than the ClickUp form."""
         prefill = {"uuid": "u-1"}                  # Property URL did NOT resolve
         with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
-            schema = portal_tickets.form_schema("901-general", prefill)
+            schema = portal_tickets.form_schema("general", "901-general", prefill)
         names = [f["name"] for f in schema]
         self.assertIn("Property URL", names)
         self.assertNotIn("uuid", names)
@@ -97,20 +126,20 @@ class FormSchema(unittest.TestCase):
         """Safe direction: show a field we would have filled, rather than hide
         one nobody fills."""
         with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
-            schema = portal_tickets.form_schema("901-general")
+            schema = portal_tickets.form_schema("general", "901-general")
         self.assertIn("Property URL", [f["name"] for f in schema])
 
     def test_form_schema_returns_none_when_clickup_will_not_say(self):
         with mock.patch.object(clickup_client, "get_list_fields", return_value=None):
-            self.assertIsNone(portal_tickets.form_schema("901-general"))
+            self.assertIsNone(portal_tickets.form_schema("general", "901-general"))
 
     def test_a_genuinely_fieldless_list_is_empty_not_none(self):
         with mock.patch.object(clickup_client, "get_list_fields", return_value=[]):
-            self.assertEqual(portal_tickets.form_schema("901-general"), [])
+            self.assertEqual(portal_tickets.form_schema("general", "901-general"), [])
 
     def test_dropdown_options_and_input_kind_shaped(self):
         with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
-            schema = portal_tickets.form_schema("901-general")
+            schema = portal_tickets.form_schema("general", "901-general")
         pri = next(f for f in schema if f["name"] == "Priority")
         self.assertEqual(pri["input"], "select")
         self.assertEqual([o["label"] for o in pri["options"]], ["Low", "High"])
@@ -601,3 +630,215 @@ class RegistryTypes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ManifestForm(unittest.TestCase):
+    """Phase 1 — the manifest decides what is asked; ClickUp resolves the ids.
+
+    `creative_ad_copy` rendered ZERO of its five real fields, so every special
+    submitted through the portal arrived with no special, no channels and no
+    end date. These pin the fix and the two ways it could quietly rot: the
+    space-wide field pool leaking back in, and the manifest drifting from the
+    list it names.
+    """
+
+    def setUp(self):
+        os.environ["CLICKUP_LIST_CREATIVE_AD_COPY"] = "901-creative"
+        self.addCleanup(os.environ.pop, "CLICKUP_LIST_CREATIVE_AD_COPY", None)
+
+    def _schema(self, defs=None):
+        with mock.patch.object(clickup_client, "get_list_fields",
+                               return_value=_creative_fields() if defs is None else defs):
+            return portal_tickets.form_schema("creative_ad_copy", "901-creative")
+
+    def _entry(self):
+        with mock.patch.object(clickup_client, "get_list_fields",
+                               return_value=_creative_fields()):
+            types = portal_tickets.types_with_schema()
+        return next(t for t in types if t["key"] == "creative_ad_copy")
+
+    def test_it_renders_exactly_the_five_ask_fields_in_manifest_order(self):
+        self.assertEqual([f["name"] for f in self._schema()], [
+            "What is the new/updated special?",
+            "Channels / Ads Impacted",
+            "Special / Promotion End Date",
+            "SharePoint Path to New Image / Photo",
+            "Is there any other information we need to know?",
+        ])
+
+    def test_internal_and_identity_fields_are_not_renderable(self):
+        """The union dump leaked ops fields to clients. `known` never renders,
+        and z_Requested By is lowercase — a `Z_` prefix filter would miss it."""
+        names = [f["name"] for f in self._schema()]
+        for hidden in ("QA Status", "Task Progress", "z_Requested By",
+                       "Property Code", "Property URL", "Account Manager",
+                       "Market*", "Requested Due Date"):
+            self.assertNotIn(hidden, names)
+
+    def test_field_ids_and_options_still_come_from_clickup(self):
+        """The anti-drift goal survives: editing a dropdown's options in
+        ClickUp must still reach the portal with no redeploy."""
+        channels = next(f for f in self._schema() if f["name"] == "Channels / Ads Impacted")
+        self.assertEqual(channels["id"], "cu_channels")
+        self.assertEqual(channels["input"], "multiselect")
+        self.assertEqual([o["label"] for o in channels["options"]],
+                         ["Paid Search Ads", "Display"])
+
+    def test_requiredness_comes_from_the_manifest_not_clickup(self):
+        """ClickUp reports required=False for every list field — requiredness
+        lives on the form view, which the API will not show us."""
+        by_name = {f["name"]: f for f in self._schema()}
+        self.assertTrue(by_name["What is the new/updated special?"]["required"])
+        self.assertFalse(by_name["SharePoint Path to New Image / Photo"]["required"])
+
+    def test_the_special_field_carries_its_rule_to_the_browser(self):
+        special = next(f for f in self._schema()
+                       if f["name"] == "What is the new/updated special?")
+        self.assertEqual(special["maxlength"], 90)
+        self.assertEqual(special["validate"], "no_caps_no_punct_except_period")
+        self.assertTrue(special["help"])
+
+    def test_sections_sla_and_notes_reach_the_picker_payload(self):
+        entry = self._entry()
+        self.assertTrue(entry["available"])
+        self.assertEqual([s["title"] for s in entry["sections"]],
+                         ["Creative + Ad Copy Information"])
+        self.assertTrue(entry["sla"])
+        self.assertTrue(entry["notes"])
+        self.assertEqual(entry["name_pattern"],
+                         "[Property Name] - Creative / Ad Copy Update")
+
+    def test_a_section_of_only_known_fields_is_not_an_empty_heading(self):
+        titles = [s["title"] for s in self._entry()["sections"]]
+        self.assertNotIn("Property Information", titles)
+
+    def test_flat_fields_still_ship_for_the_cached_frontend(self):
+        """The HubSpot CDN serves the portal template for up to 10 hours while
+        the API deploys in minutes, so the old renderer — which reads the flat
+        `fields` list and knows nothing of sections — must keep working."""
+        entry = self._entry()
+        self.assertEqual([f["name"] for f in entry["fields"]],
+                         [f["name"] for s in entry["sections"] for f in s["fields"]])
+
+    def test_drift_on_a_REQUIRED_field_takes_the_type_offline(self):
+        """Half a form is worse than no form: the requester submits something
+        that looks complete and isn't."""
+        defs = [f for f in _creative_fields() if f["name"] != "Channels / Ads Impacted"]
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=defs):
+            types = portal_tickets.types_with_schema()
+        entry = next(t for t in types if t["key"] == "creative_ad_copy")
+        self.assertFalse(entry["available"])
+        self.assertEqual(entry["reason_code"], "manifest_drift")
+
+    def test_drift_on_an_optional_field_only_drops_that_field(self):
+        defs = [f for f in _creative_fields()
+                if f["name"] != "SharePoint Path to New Image / Photo"]
+        names = [f["name"] for f in self._schema(defs)]
+        self.assertNotIn("SharePoint Path to New Image / Photo", names)
+        self.assertIn("Channels / Ads Impacted", names)
+
+    def test_a_type_with_no_manifest_is_untouched(self):
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
+            schema = portal_tickets.form_schema("general", "901-general")
+        self.assertIn("Priority", [f["name"] for f in schema])
+
+
+class SpecialCopyRule(unittest.TestCase):
+    """90 characters, no capitals, periods only. Enforced server-side because
+    the browser is advice — the API is reachable without the page."""
+
+    RULE = {"maxlength": 90, "validate": "no_caps_no_punct_except_period"}
+    FIELD = {"id": "cu_special", "name": "What is the new/updated special?",
+             "type": "text"}
+
+    def _coerce(self, value):
+        return portal_tickets._coerce(self.FIELD, value, self.RULE)
+
+    def test_a_conforming_special_passes_through(self):
+        self.assertEqual(self._coerce("2 bedrooms starting at $1500 through july 15th."),
+                         "2 bedrooms starting at $1500 through july 15th.")
+
+    def test_capitals_are_rejected(self):
+        with self.assertRaises(portal_tickets.TicketValidation) as ctx:
+            self._coerce("2 Bedrooms starting at $1500")
+        self.assertIn("capital", ctx.exception.message.lower())
+        self.assertEqual(ctx.exception.field, "What is the new/updated special?")
+
+    def test_punctuation_other_than_periods_is_rejected(self):
+        with self.assertRaises(portal_tickets.TicketValidation):
+            self._coerce("2 bedrooms free, half off!")
+
+    def test_over_90_characters_is_rejected(self):
+        with self.assertRaises(portal_tickets.TicketValidation) as ctx:
+            self._coerce("a" * 91)
+        self.assertIn("90", ctx.exception.message)
+
+    def test_the_rule_does_not_apply_to_fields_without_it(self):
+        self.assertEqual(portal_tickets._coerce(self.FIELD, "SHOUTING, loudly!"),
+                         "SHOUTING, loudly!")
+
+    def test_create_rejects_a_bad_special_with_400_and_names_the_field(self):
+        os.environ["CLICKUP_LIST_CREATIVE_AD_COPY"] = "901-creative"
+        self.addCleanup(os.environ.pop, "CLICKUP_LIST_CREATIVE_AD_COPY", None)
+        with mock.patch.object(clickup_client, "CLICKUP_API_KEY", "test-key"), \
+             mock.patch.object(clickup_client, "get_list_fields",
+                               return_value=_creative_fields()), \
+             mock.patch.object(clickup_client, "create_task") as create, \
+             mock.patch("hubspot_client.get_company", return_value={}):
+            body, status = portal_tickets.create_ticket(
+                "cid-42", "creative_ad_copy", subject="x",
+                fields={"cu_special": "Half Off, Now!"}, property_uuid="u-1")
+        self.assertEqual(status, 400)
+        self.assertEqual(body["field"], "What is the new/updated special?")
+        create.assert_not_called()
+
+
+class ManifestMatchesLiveClickUp(unittest.TestCase):
+    """The drift test. Runs against LIVE ClickUp when a key is available, and
+    skips otherwise — a manifest that names a field the list does not have is
+    exactly the failure this pattern trades for the old whole-list dump, so it
+    has to be checked against the real thing, not a fixture."""
+
+    def setUp(self):
+        if not os.getenv("CLICKUP_API_KEY") or os.getenv("CLICKUP_API_KEY") == "test-key":
+            self.skipTest("no live ClickUp key")
+
+    def test_every_manifest_name_resolves_on_that_types_own_list(self):
+        from config import PORTAL_TICKET_FORMS
+        clickup_client.clear_field_cache()
+        problems = []
+        for type_key, manifest in PORTAL_TICKET_FORMS.items():
+            t = portal_tickets._type_by_key(type_key)
+            list_id = portal_tickets._list_id_for(t) if t else ""
+            if not list_id:
+                # Resolve through the same path go-live uses, so the drift test
+                # works before the env vars are set on the host.
+                found, _ = portal_tickets._list_by_form(t.get("form_slug", "") if t else "")
+                list_id = found or ""
+            if not list_id:
+                problems.append(f"{type_key}: no list id and no resolvable form")
+                continue
+            defs = clickup_client.get_list_fields(list_id)
+            if defs is None:
+                self.skipTest(f"ClickUp would not return fields for {list_id}")
+            live = {(d.get("name") or "").strip().lower(): d for d in defs}
+            for sec in manifest.get("sections") or []:
+                for entry in sec.get("fields") or []:
+                    name = (entry.get("name") or "").strip()
+                    if name.lower() not in live:
+                        problems.append(f"{type_key}: {name!r} is not on list {list_id}")
+            # Informational: a live REQUIRED field nobody asks for. ClickUp
+            # reports requiredness at the list level as False for everything
+            # (it lives on the form view), so this is near-always empty today —
+            # it exists to catch the day that changes.
+            missing_required = [
+                (d.get("name") or "") for d in defs
+                if d.get("required") and (d.get("name") or "").strip().lower() not in {
+                    (e.get("name") or "").strip().lower()
+                    for s in manifest.get("sections") or [] for e in s.get("fields") or []
+                }
+            ]
+            if missing_required:
+                print(f"\n[drift] {type_key}: live REQUIRED fields absent from the "
+                      f"manifest: {missing_required}")
+        self.assertEqual(problems, [], "\n".join(problems))
