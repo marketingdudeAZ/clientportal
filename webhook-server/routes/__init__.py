@@ -4,6 +4,7 @@ Add new blueprints here as they're extracted from server.py. server.py
 calls `register_all(app)` once at startup.
 """
 
+from .assets import assets_bp
 from .ils import ils_bp
 from .budget_sync_api import budget_sync_api_bp
 from .clickup import clickup_bp
@@ -38,6 +39,10 @@ def register_all(app):
     # Loop 1 self-checkout — every endpoint 404s until SELF_CHECKOUT_ENABLED=true,
     # so registering here is inert until you flip the flag.
     app.register_blueprint(self_checkout_bp)
+    # ADR 0020 Drive asset pipeline — every endpoint 404s until
+    # ASSETS_DRIVE_ENABLED=true, so this is inert next to the existing
+    # HubSpot-Files + HubDB asset path, which keeps running unchanged.
+    app.register_blueprint(assets_bp)
     # Ticket → property-profile loop — every endpoint 404s until
     # TICKET_PROFILE_LOOP_ENABLED=true, so this is inert until the flag flips.
     app.register_blueprint(ticket_profile_bp)
