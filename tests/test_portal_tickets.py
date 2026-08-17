@@ -331,6 +331,75 @@ class Discovery(unittest.TestCase):
         self.assertIn("CLICKUP_LIST_NEW_BUSINESS=L8", out["env_block_internal"])
 
 
+class DiscoveryByForm(unittest.TestCase):
+    """Name matching picked the wrong list against the real workspace.
+
+    `creative_ad_copy` (label "Ad Updates: Photos & New Specials") resolved by
+    loose contains-match to a list named "Creative" in another space's docs
+    folder, while its form actually files into "Creative + Ad Copy Updates".
+    Every ad-update ticket in the pilot would have landed somewhere nobody
+    triages, and the portal would have looked like it worked.
+    """
+
+    @staticmethod
+    def _form_view(list_id, name="Some Form"):
+        return {"id": "v1", "name": name, "type": "form",
+                "parent": {"id": list_id, "type": 6}}
+
+    def test_form_parent_beats_the_name_match_and_the_disagreement_is_reported(self):
+        # Only the decoy is in the workspace walk, so the name match can only
+        # land on it — the shape the live workspace had before the alias fix.
+        lists = [{"id": "WRONG", "name": "Creative", "space": "Paid Media", "folder": "Docs"}]
+        views = {"8cjaf2c-2751": self._form_view("RIGHT")}
+        with mock.patch.object(clickup_client, "discover_workspace_lists", return_value=lists), \
+             mock.patch.object(clickup_client, "get_view", side_effect=lambda v: views.get(v)), \
+             mock.patch.object(clickup_client, "get_list",
+                               return_value={"name": "Creative + Ad Copy Updates",
+                                             "archived": False}):
+            out = portal_tickets.discover_list_ids()
+        matched = {m["key"]: m for m in out["matched"]}
+        self.assertEqual(matched["creative_ad_copy"]["list_id"], "RIGHT")
+        self.assertEqual(matched["creative_ad_copy"]["source"], "form")
+        self.assertIn("CLICKUP_LIST_CREATIVE_AD_COPY=RIGHT", out["env_block"])
+        self.assertNotIn("WRONG", out["env_block"])
+        conflict = [c for c in out["conflicts"] if c["key"] == "creative_ad_copy"]
+        self.assertEqual(len(conflict), 1)
+        self.assertEqual(conflict[0]["name_list_id"], "WRONG")
+
+    def test_archived_list_never_reaches_the_env_block(self):
+        """An archived list still accepts tasks — into a list nobody opens.
+        campaign_review's registered form pointed at exactly that."""
+        views = {"8cjaf2c-68111": self._form_view("ARCH")}
+        with mock.patch.object(clickup_client, "discover_workspace_lists", return_value=[]), \
+             mock.patch.object(clickup_client, "get_view", side_effect=lambda v: views.get(v)), \
+             mock.patch.object(clickup_client, "get_list",
+                               return_value={"name": "[OLD] - Campaign Performance Review",
+                                             "archived": True}):
+            out = portal_tickets.discover_list_ids()
+        matched = {m["key"]: m for m in out["matched"]}
+        self.assertTrue(matched["campaign_review"]["archived"])
+        self.assertNotIn("CAMPAIGN_REVIEW", out["env_block"])
+        self.assertTrue(any("campaign_review" in w for w in out["warnings"]))
+
+    def test_unreachable_form_falls_back_to_the_name_match(self):
+        """ClickUp being down must not silently blank the discovery output."""
+        lists = [{"id": "L2", "name": "General Ticket", "space": "S", "folder": None}]
+        with mock.patch.object(clickup_client, "discover_workspace_lists", return_value=lists), \
+             mock.patch.object(clickup_client, "get_view", return_value=None):
+            out = portal_tickets.discover_list_ids()
+        matched = {m["key"]: m for m in out["matched"]}
+        self.assertEqual(matched["general"]["list_id"], "L2")
+        self.assertEqual(matched["general"]["source"], "name")
+        self.assertIn("CLICKUP_LIST_GENERAL=L2", out["env_block"])
+
+    def test_a_type_resolvable_by_neither_reports_why(self):
+        with mock.patch.object(clickup_client, "discover_workspace_lists", return_value=[]), \
+             mock.patch.object(clickup_client, "get_view", return_value=None):
+            out = portal_tickets.discover_list_ids()
+        self.assertEqual(out["env_block"], "")
+        self.assertTrue(all(u.get("reason") for u in out["unmatched_types"]))
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -748,47 +748,136 @@ def _read_mappings(company_id: str, property_uuid: str, limit: int) -> list[dict
         return []
 
 
-# ── admin: discover the ClickUp list ids by name ─────────────────────────────
+# ── admin: discover the ClickUp list ids ─────────────────────────────────────
+
+_LIST_PARENT_TYPE = 6  # ClickUp view.parent.type for "list"
+
+
+def _list_by_form(form_slug: str) -> tuple[str, str] | tuple[None, str]:
+    """Resolve `form_slug` → (list_id, reason) via the form view's parent.
+
+    Authoritative: the id in a public ClickUp form URL is a view id, and that
+    view names the list it files into. Returns (None, reason) when the form is
+    gone, unreachable, or parented to something other than a list.
+    """
+    if not form_slug:
+        return None, "no form_slug in the registry"
+    view = clickup_client.get_view(form_slug)
+    if not view:
+        return None, f"form {form_slug} not reachable (deleted, or ClickUp failed)"
+    if (view.get("type") or "") != "form":
+        return None, f"view {form_slug} is a {view.get('type')!r} view, not a form"
+    parent = view.get("parent") or {}
+    pid = str(parent.get("id") or "")
+    if not pid or parent.get("type") != _LIST_PARENT_TYPE:
+        return None, f"form {form_slug} is not parented to a list (parent={parent!r})"
+    return pid, f"form {form_slug} ({view.get('name')})"
+
+
+def _list_by_name(t: dict, by_name: dict) -> dict | None:
+    """The legacy name/alias match, kept only to corroborate the form match."""
+    candidates = [t["label"], *(t.get("aliases") or [])]
+    for c in candidates:
+        hit = by_name.get(c.strip().lower())
+        if hit:
+            return hit
+    for name, lst in by_name.items():  # loose contains-match
+        if any(c.strip().lower() in name or name in c.strip().lower() for c in candidates):
+            return lst
+    return None
+
 
 def discover_list_ids() -> dict[str, Any]:
-    """Walk the workspace and match ClickUp lists to ticket types by name/alias.
+    """Resolve each ticket type's ClickUp list id, form first, name second.
 
     Returns a paste-ready `env_block` plus per-type match detail, so the real
-    numeric list ids can be pulled without hand-decoding ClickUp form URLs.
+    numeric list ids can be pulled without hand-decoding ClickUp URLs (which
+    carry *view* ids, not list ids).
+
+    Name matching alone is not safe here and was demonstrably wrong: the loose
+    contains-match resolved `creative_ad_copy` — whose label is "Ad Updates:
+    Photos & New Specials", alias "Creative" — to a list literally named
+    "Creative" in a *different space's* documentation folder, while the real
+    intake list is "Creative + Ad Copy Updates". Every ad-update ticket in the
+    pilot would have filed into a guidance folder nobody triages, and the
+    portal would have looked like it worked. So the form view's `parent` is the
+    resolver and the name match is only a second opinion; where the two
+    disagree, `conflicts` says so rather than silently picking one.
+
+    Archived lists never make it into an env block. `campaign_review`'s
+    registered form_slug still points at "[OLD] - Campaign Performance Review",
+    which is archived — an archived list accepts tasks that nobody sees.
     """
     lists = clickup_client.discover_workspace_lists(CLICKUP_WORKSPACE_ID)
     by_name = {(l.get("name") or "").strip().lower(): l for l in lists if l.get("id")}
+    by_id = {str(l["id"]): l for l in lists if l.get("id")}
 
-    matched, unmatched, env_lines, internal_env_lines = [], [], [], []
+    matched: list[dict[str, Any]] = []
+    unmatched: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    env_lines: list[str] = []
+    internal_env_lines: list[str] = []
+
     for t in PORTAL_TICKET_TYPES:
-        candidates = [t["label"], *(t.get("aliases") or [])]
-        found = None
-        for c in candidates:
-            key = c.strip().lower()
-            if key in by_name:
-                found = by_name[key]
-                break
-        if not found:  # loose contains-match as a fallback
-            for name, lst in by_name.items():
-                if any(c.strip().lower() in name or name in c.strip().lower() for c in candidates):
-                    found = lst
-                    break
         audience = t.get("audience", "client")
-        if found:
-            matched.append({"key": t["key"], "label": t["label"],
-                            "list_id": found["id"], "list_name": found["name"],
-                            "env": t["list_env"], "audience": audience})
-            line = f'{t["list_env"]}={found["id"]}'
-            (env_lines if audience == "client" else internal_env_lines).append(line)
-        else:
+        form_id, form_reason = _list_by_form(t.get("form_slug", ""))
+        named = _list_by_name(t, by_name)
+        named_id = str(named["id"]) if named else None
+
+        list_id = form_id or named_id
+        source = "form" if form_id else ("name" if named_id else None)
+
+        if form_id and named_id and form_id != named_id:
+            conflicts.append({
+                "key": t["key"],
+                "form_list_id": form_id, "form_list_name": _name_of(form_id, by_id),
+                "name_list_id": named_id, "name_list_name": named.get("name"),
+                "using": form_id,
+                "note": "form view wins; the name match points somewhere else",
+            })
+
+        if not list_id:
             unmatched.append({"key": t["key"], "label": t["label"],
-                              "env": t["list_env"], "audience": audience})
+                              "env": t["list_env"], "audience": audience,
+                              "reason": form_reason})
+            continue
+
+        meta = by_id.get(list_id) or {}
+        # Archived lists are absent from the workspace walk, so a form-resolved
+        # id that isn't in `by_id` has to be fetched before it can be trusted.
+        if not meta:
+            fetched = clickup_client.get_list(list_id) or {}
+            meta = {"name": fetched.get("name"), "archived": fetched.get("archived"),
+                    "space": (fetched.get("space") or {}).get("name"),
+                    "folder": (fetched.get("folder") or {}).get("name")}
+        archived = bool(meta.get("archived"))
+
+        entry = {"key": t["key"], "label": t["label"],
+                 "list_id": list_id, "list_name": meta.get("name"),
+                 "space": meta.get("space"), "folder": meta.get("folder"),
+                 "env": t["list_env"], "audience": audience,
+                 "source": source, "resolved_via": form_reason if form_id else "name/alias match",
+                 "archived": archived}
+        matched.append(entry)
+
+        if archived:
+            warnings.append(
+                f'{t["key"]}: {t["list_env"]} NOT emitted — list {list_id} '
+                f'("{meta.get("name")}") is archived. Point form_slug at the live '
+                f'list before switching this type on.')
+            continue
+
+        line = f'{t["list_env"]}={list_id}'
+        (env_lines if audience == "client" else internal_env_lines).append(line)
 
     return {
         "workspace_id": CLICKUP_WORKSPACE_ID,
         "lists_found": len(lists),
         "matched": matched,
         "unmatched_types": unmatched,
+        "conflicts": conflicts,
+        "warnings": warnings,
         # Client-facing types ONLY. `discover` used to emit all 8 types in one
         # block, so the natural "paste this into Render" step silently turned on
         # dispo_cancel and new_business — the lists that govern cancelling a
@@ -797,3 +886,11 @@ def discover_list_ids() -> dict[str, Any]:
         "env_block": "\n".join(env_lines),
         "env_block_internal": "\n".join(internal_env_lines),
     }
+
+
+def _name_of(list_id: str, by_id: dict) -> str | None:
+    hit = by_id.get(str(list_id))
+    if hit:
+        return hit.get("name")
+    fetched = clickup_client.get_list(list_id) or {}
+    return fetched.get("name")

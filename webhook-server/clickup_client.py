@@ -196,6 +196,21 @@ def get_list(list_id: str) -> dict[str, Any] | None:
     return r.json() if r is not None else None
 
 
+def get_view(view_id: str) -> dict[str, Any] | None:
+    """Fetch one view (form, list, board…) by its id.
+
+    The id segment in a public ClickUp form URL *is* the view id, and the view
+    carries `parent` — the list the form files into. That makes it the only
+    authoritative way to answer "which list does this form feed?", which name
+    matching can only ever guess at. Returns None on failure, which callers
+    must not confuse with "the form has no parent".
+    """
+    if not CLICKUP_API_KEY or not view_id:
+        return None
+    r = _request("GET", f"view/{view_id}")
+    return (r.json().get("view") or None) if r is not None else None
+
+
 def get_tasks(list_id: str, *, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Fetch tasks in a list (single page). Best-effort — empty on failure."""
     if not CLICKUP_API_KEY or not list_id:

@@ -165,7 +165,18 @@ CLICKUP_BRIEF_ATTEST_FIELD = os.getenv(
     "CLICKUP_BRIEF_ATTEST_FIELD", "Community Brief is up to date & accurate")
 
 # --- Portal Ticket Page (per-type forms → ClickUp) ---
-# Kept in sync with webhook-server/config.py. See docs/ticket-page-scope.md.
+# DUPLICATED, BY HAND, from webhook-server/config.py — and it had already
+# drifted: this copy carried the pre-fix `form_slug`s, the bare "Creative"
+# alias that resolves to the wrong list, `account_manager` (a HubSpot property
+# that does not exist), and "pending pm approval" → "In progress". Re-synced
+# 2026-08-17.
+#
+# Which file wins is decided by sys.path, not by intent: `start.py` puts
+# webhook-server/ first, so PRODUCTION reads webhook-server/config.py, while
+# `python3 scripts/<name>.py` from the repo root and a full pytest run read
+# THIS one. A script that ran ticket discovery from the repo root would emit
+# the wrong ClickUp list ids and look entirely correct doing it.
+# See docs/ticket-page-scope.md.
 # The portal renders one form per ticket type, reads each list's field
 # definitions LIVE from ClickUp, and creates the task in that type's list.
 # List IDs come from env — the ClickUp URLs carry *view* IDs, not list IDs, so
@@ -183,8 +194,15 @@ PORTAL_TICKET_TYPES = [
     {"key": "new_account_build", "label": "New Account Onboarding",             "list_env": "CLICKUP_LIST_NEW_ACCOUNT_BUILD", "audience": "client",   "form_slug": "8cjaf2c-19771", "aliases": ["New Account Build", "New Account", "Onboarding"]},
     {"key": "budget_update",     "label": "Budget Changes",                     "list_env": "CLICKUP_LIST_BUDGET_UPDATE",      "audience": "client",   "form_slug": "8cjaf2c-20971", "aliases": ["Budget Update", "Budget"]},
     {"key": "general",           "label": "General Ticket",                     "list_env": "CLICKUP_LIST_GENERAL",            "audience": "client",   "form_slug": "8cjaf2c-24611", "aliases": ["General"]},
-    {"key": "creative_ad_copy",  "label": "Ad Updates: Photos & New Specials",  "list_env": "CLICKUP_LIST_CREATIVE_AD_COPY",   "audience": "client",   "form_slug": "8cjaf2c-2751",  "aliases": ["Ad Updates", "Creative & Ad Copy Updates", "Creative", "Photos & New Specials Review"]},
-    {"key": "campaign_review",   "label": "Digital Marketing Review",           "list_env": "CLICKUP_LIST_CAMPAIGN_REVIEW",    "audience": "client",   "form_slug": "8cjaf2c-2771",  "aliases": ["Campaign Performance Review", "Marketing Review", "Performance Review"]},
+    # NOT aliased to bare "Creative": discovery's loose contains-match resolved
+    # that to a list named "Creative" in the Paid Media space's documentation
+    # folder, 901112821771, instead of the real intake list "Creative + Ad Copy
+    # Updates". Verified 2026-08-17 — form 8cjaf2c-2751 is parented to 901111120522.
+    {"key": "creative_ad_copy",  "label": "Ad Updates: Photos & New Specials",  "list_env": "CLICKUP_LIST_CREATIVE_AD_COPY",   "audience": "client",   "form_slug": "8cjaf2c-2751",  "aliases": ["Ad Updates", "Creative & Ad Copy Updates", "Creative + Ad Copy Updates", "Photos & New Specials Review"]},
+    # form_slug was 8cjaf2c-2771, whose list is "[OLD] - Campaign Performance
+    # Review" — ARCHIVED. The form was rebuilt on the [NEW] list (901114166834)
+    # as 8cjaf2c-68111. Verified 2026-08-17.
+    {"key": "campaign_review",   "label": "Digital Marketing Review",           "list_env": "CLICKUP_LIST_CAMPAIGN_REVIEW",    "audience": "client",   "form_slug": "8cjaf2c-68111", "aliases": ["Campaign Performance Review", "Marketing Review", "Performance Review"]},
     {"key": "rebrand",           "label": "Rebrands",                           "list_env": "CLICKUP_LIST_REBRAND",            "audience": "client",   "form_slug": "8cjaf2c-2811",  "aliases": ["Rebrand"]},
     # Dispos/Cancellations defaults to internal-only — flip via CLICKUP_DISPO_AUDIENCE
     # if property marketing should open one directly (scope doc §Decisions #3).
@@ -211,7 +229,10 @@ PORTAL_TICKET_PREFILL_SOURCES = {
     "Property URL":    os.getenv("CLICKUP_PREFILL_PROP_URL_FIELD",  "website"),
     "Property Code":   os.getenv("CLICKUP_PREFILL_PROP_CODE_FIELD", "property_code"),
     "Market":          os.getenv("CLICKUP_PREFILL_MARKET_FIELD",    "market"),
-    "Account Manager": os.getenv("CLICKUP_PREFILL_AM_FIELD",        "account_manager"),
+    # There is no `account_manager` company property (verified against the live
+    # schema, 838 properties). The AM is the record owner, so resolve it from
+    # hubspot_owner_id via the owners API — see portal_tickets._prefill_values.
+    "Account Manager": os.getenv("CLICKUP_PREFILL_AM_FIELD",        "hubspot_owner_id"),
     "uuid": "uuid",
     "UUID": "uuid",
 }
@@ -221,7 +242,11 @@ PORTAL_TICKET_PREFILL_SOURCES = {
 # of the raw ClickUp status rather than leaking an internal slug verbatim.
 PORTAL_TICKET_STATUS_MAP = {
     "to do": "Open", "open": "Open", "new": "Open", "backlog": "Open",
-    "in progress": "In progress", "pending pm approval": "In progress",
+    "in progress": "In progress",
+    # NOT "In progress". This is the one status where the requester can act, and
+    # showing it as in-progress makes them wait on us while we wait on them.
+    "pending pm approval": "Needs your approval",
+    "pending approval": "Needs your approval",
     "in review": "In progress", "review": "In progress", "awaiting review": "In progress",
     "complete": "Done", "completed": "Done", "closed": "Done", "done": "Done",
 }

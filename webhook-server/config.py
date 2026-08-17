@@ -168,8 +168,15 @@ PORTAL_TICKET_TYPES = [
     {"key": "new_account_build", "label": "New Account Onboarding",             "list_env": "CLICKUP_LIST_NEW_ACCOUNT_BUILD", "audience": "client",   "form_slug": "8cjaf2c-19771", "aliases": ["New Account Build", "New Account", "Onboarding"]},
     {"key": "budget_update",     "label": "Budget Changes",                     "list_env": "CLICKUP_LIST_BUDGET_UPDATE",      "audience": "client",   "form_slug": "8cjaf2c-20971", "aliases": ["Budget Update", "Budget"]},
     {"key": "general",           "label": "General Ticket",                     "list_env": "CLICKUP_LIST_GENERAL",            "audience": "client",   "form_slug": "8cjaf2c-24611", "aliases": ["General"]},
-    {"key": "creative_ad_copy",  "label": "Ad Updates: Photos & New Specials",  "list_env": "CLICKUP_LIST_CREATIVE_AD_COPY",   "audience": "client",   "form_slug": "8cjaf2c-2751",  "aliases": ["Ad Updates", "Creative & Ad Copy Updates", "Creative", "Photos & New Specials Review"]},
-    {"key": "campaign_review",   "label": "Digital Marketing Review",           "list_env": "CLICKUP_LIST_CAMPAIGN_REVIEW",    "audience": "client",   "form_slug": "8cjaf2c-2771",  "aliases": ["Campaign Performance Review", "Marketing Review", "Performance Review"]},
+    # NOT aliased to bare "Creative": discovery's loose contains-match resolved
+    # that to a list named "Creative" in the Paid Media space's documentation
+    # folder, 901112821771, instead of the real intake list "Creative + Ad Copy
+    # Updates". Verified 2026-08-17 — form 8cjaf2c-2751 is parented to 901111120522.
+    {"key": "creative_ad_copy",  "label": "Ad Updates: Photos & New Specials",  "list_env": "CLICKUP_LIST_CREATIVE_AD_COPY",   "audience": "client",   "form_slug": "8cjaf2c-2751",  "aliases": ["Ad Updates", "Creative & Ad Copy Updates", "Creative + Ad Copy Updates", "Photos & New Specials Review"]},
+    # form_slug was 8cjaf2c-2771, whose list is "[OLD] - Campaign Performance
+    # Review" — ARCHIVED. The form was rebuilt on the [NEW] list (901114166834)
+    # as 8cjaf2c-68111. Verified 2026-08-17.
+    {"key": "campaign_review",   "label": "Digital Marketing Review",           "list_env": "CLICKUP_LIST_CAMPAIGN_REVIEW",    "audience": "client",   "form_slug": "8cjaf2c-68111", "aliases": ["Campaign Performance Review", "Marketing Review", "Performance Review"]},
     {"key": "rebrand",           "label": "Rebrands",                           "list_env": "CLICKUP_LIST_REBRAND",            "audience": "client",   "form_slug": "8cjaf2c-2811",  "aliases": ["Rebrand"]},
     # Dispos/Cancellations defaults to internal-only — flip via CLICKUP_DISPO_AUDIENCE
     # if property marketing should open one directly (scope doc §Decisions #3).
