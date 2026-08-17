@@ -139,6 +139,17 @@ def ticket_types():
         logger.warning("portal ticket types failed: %s", e)
         all_types = []
 
+    # The property fields we attach server-side. Returned so the form can SAY
+    # what it's pre-filling instead of the requester wondering where the
+    # property info went (scope doc §2 — "the big UX win").
+    from config import PORTAL_TICKET_PREFILL_FIELDS
+    seen, prefill = {"uuid"}, []   # uuid is plumbing; don't show it to a client
+    for name in PORTAL_TICKET_PREFILL_FIELDS:
+        key = name.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            prefill.append(name.strip())
+
     # `types` KEEPS ITS EXACT CONTRACT — available types only. The unavailable
     # ones ship in a sibling key instead.
     #
@@ -154,6 +165,7 @@ def ticket_types():
         "types": available,
         "unavailable": [t for t in all_types if not t.get("available")],
         "any_available": bool(available),
+        "prefill_fields": prefill,
         "fallback_email": os.environ.get("PORTAL_TICKETS_FALLBACK_EMAIL",
                                          "portal@rpmliving.com"),
     })

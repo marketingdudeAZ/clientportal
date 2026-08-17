@@ -509,7 +509,7 @@ def create_ticket(
 
     _record_mapping(task.get("id"), company_id, property_uuid, type_key, submitted_by)
     _emit_filed(task.get("id"), company_id, property_uuid, type_key, submitted_by)
-    return {"ok": True, "ticket": _shape_task(task, type_key)}, 201
+    return {"ok": True, "ticket": _shape_task(task, type_key, submitted_by)}, 201
 
 
 _FETCH_WORKERS = int(os.getenv("PORTAL_TICKETS_FETCH_WORKERS", "4"))
@@ -580,8 +580,12 @@ def list_tickets(company_id: str, *, property_uuid: str = "", limit: int = 50) -
         refs.append(ref)
 
     tasks = _fetch_tasks([str(r["task_id"]) for r in refs])
+    # submitted_by comes from OUR mapping row, not from ClickUp — the requester
+    # is a portal user, who may not exist as a ClickUp member. The placeholder
+    # carries it too: an unresolvable task is exactly when "who filed this" is
+    # the only thing we can still tell the requester.
     out = [
-        _shape_task(tasks[str(r["task_id"])], r.get("ticket_type"))
+        _shape_task(tasks[str(r["task_id"])], r.get("ticket_type"), r.get("submitted_by"))
         if str(r["task_id"]) in tasks else _placeholder_task(r)
         for r in refs
     ]
@@ -617,6 +621,7 @@ def _placeholder_task(ref: dict) -> dict[str, Any]:
         "type": ref.get("ticket_type") or "",
         "type_label": t.get("label", ""),
         "subject": f"{t.get('label') or 'Request'} · {tid[-6:]}" if tid else "Request",
+        "submitted_by": ref.get("submitted_by") or "",
         "status": "Status unavailable",
         "raw_status": "",
         "created_ts": created,
@@ -634,7 +639,8 @@ def _age_days(created_ms: Any) -> int | None:
     return max(0, (datetime.now(timezone.utc) - created).days)
 
 
-def _shape_task(task: dict, type_key: str | None = None) -> dict[str, Any]:
+def _shape_task(task: dict, type_key: str | None = None,
+                submitted_by: str | None = None) -> dict[str, Any]:
     status = ((task.get("status") or {}).get("status")) or ""
     created = task.get("date_created")
     t = _type_by_key(type_key) if type_key else None
@@ -643,6 +649,7 @@ def _shape_task(task: dict, type_key: str | None = None) -> dict[str, Any]:
         "type": type_key or "",
         "type_label": (t or {}).get("label", ""),
         "subject": task.get("name"),
+        "submitted_by": submitted_by or "",
         "status": client_status(status),
         "raw_status": status,
         "created_ts": int(created) if created else None,

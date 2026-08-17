@@ -7,6 +7,11 @@ owner + an AM close-out task (ticket_recap_writer). Dispo/Cancel is skipped.
 
 Posting to the WRONG client record is the only unacceptable failure, so matching
 never returns a fuzzy or ambiguous result — zero or >1 uuid matches → skip.
+
+The same completion also closes the loop back into the property profile
+(ticket_profile_sync, flag-gated OFF): a ticket that changed a property fact
+PROPOSES that change on the profile for a human to accept. See
+docs/ticket-to-profile-loop.md.
 """
 from __future__ import annotations
 
@@ -222,17 +227,39 @@ def process_completed_task(task_id, dry_run=False):
     company_id = company.get("id")
     if not dry_run:
         _emit_matched(task_id, company, method)
-    name = (company.get("properties") or {}).get("name") or task.get("name") or "this property"
+    company_props = company.get("properties") or {}
+    name = company_props.get("name") or task.get("name") or "this property"
+    property_uuid = (company_props.get("uuid") or "").strip()
 
     comments = clickup_client.get_comments(task_id)
+
+    # Close the loop back into the property profile: a completed ticket that
+    # changed a property fact PROPOSES that change (docs/ticket-to-profile-loop.md).
+    # Never writes — a human accepts in the portal, and accepting goes through
+    # community_brief.write_field so override-wins holds. Flag-gated OFF, and
+    # wrapped so a failure here can never cost us the recap.
+    profile_proposals = []
+    try:
+        import ticket_profile_sync
+        profile_proposals = ticket_profile_sync.propose_from_task(
+            task, company_id, property_uuid, ttype,
+            comments=comments, persist=not dry_run,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("clickup_recap: profile proposals failed for %s: %s", task_id, e)
+
     recap = ticket_recap.generate_recap(task, comments, ttype)
     if not (recap.get("note") or "").strip():
-        return {"skipped": "empty recap", "reason": recap.get("review_reason"), "type": ttype}
+        # The profile proposals above stand on their own — a ticket can change
+        # the property record even when it produces no client-facing recap.
+        return {"skipped": "empty recap", "reason": recap.get("review_reason"),
+                "type": ttype, "profile_proposals": len(profile_proposals)}
 
     if dry_run:
         return {"dry_run": True, "type": ttype, "match": method, "company_id": company_id,
                 "company": name, "note": recap["note"], "needs_review": recap.get("needs_review"),
-                "attribution": recap.get("attribution"), "flags": recap.get("flags")}
+                "attribution": recap.get("attribution"), "flags": recap.get("flags"),
+                "profile_proposals": profile_proposals}
 
     # Detailed recap PDF (ticket link + who/what/when) — attached to the note.
     ticket_url = "https://app.clickup.com/t/" + str(task_id)
@@ -251,4 +278,5 @@ def process_completed_task(task_id, dry_run=False):
     clickup_client.add_tag(task_id, PROCESSED_TAG)
     logger.info("clickup_recap: posted recap for task %s → company %s (%s)", task_id, company_id, method)
     return {"posted": res, "type": ttype, "match": method, "company_id": company_id,
-            "company": name, "needs_review": recap.get("needs_review")}
+            "company": name, "needs_review": recap.get("needs_review"),
+            "profile_proposals": len(profile_proposals)}

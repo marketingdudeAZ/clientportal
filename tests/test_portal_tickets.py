@@ -186,9 +186,13 @@ class CoerceAndCreate(unittest.TestCase):
     def test_shaped_ticket_has_client_status(self):
         with mock.patch.object(portal_tickets, "_record_mapping"):
             body, _ = portal_tickets.create_ticket(
-                "cid-42", "general", subject="x", fields={}, property_uuid="u-1")
+                "cid-42", "general", subject="x", fields={}, property_uuid="u-1",
+                submitted_by="user@rpmliving.com")
         self.assertEqual(body["ticket"]["status"], "Open")   # "to do" → Open
         self.assertEqual(body["ticket"]["type_label"], "General Ticket")
+        # Scope doc §4 lists submitted-by among the columns the tracker shows.
+        self.assertEqual(body["ticket"]["submitted_by"], "user@rpmliving.com")
+
 
     def test_mapped_values_are_not_duplicated_into_the_description(self):
         """Regression: `extra` is keyed by field IDs and the applied set used to
@@ -400,8 +404,35 @@ class DiscoveryByForm(unittest.TestCase):
         self.assertTrue(all(u.get("reason") for u in out["unmatched_types"]))
 
 
-if __name__ == "__main__":
-    unittest.main()
+class TypesRoute(unittest.TestCase):
+    """The picker payload also tells the form what we pre-fill for the requester."""
+
+    def _client(self):
+        from flask import Flask
+        from routes.portal_tickets import portal_tickets_bp
+        app = Flask(__name__)
+        app.register_blueprint(portal_tickets_bp)
+        return app.test_client()
+
+    def test_types_payload_names_the_prefilled_property_fields(self):
+        # The route now sits behind require_access (the pilot mechanism), so
+        # patch the gate at the seam the blueprint imports it through — same
+        # reason as test_portal_ticket_auth._access: reaching the real gate
+        # pulls in hubdb_helpers and turns this into an integration test.
+        with mock.patch("routes.portal_tickets.require_access", return_value=None), \
+             mock.patch.object(portal_tickets, "types_with_schema", return_value=[]):
+            resp = self._client().get("/api/portal-tickets/types",
+                                      headers={"X-Portal-Email": "pm@rpmliving.com"})
+        self.assertEqual(resp.status_code, 200)
+        prefill = resp.get_json()["prefill_fields"]
+        self.assertIn("Property URL", prefill)
+        self.assertIn("Account Manager", prefill)
+        # uuid is internal plumbing — never shown to a client.
+        self.assertNotIn("uuid", [p.lower() for p in prefill])
+
+    def test_types_requires_auth(self):
+        resp = self._client().get("/api/portal-tickets/types")
+        self.assertEqual(resp.status_code, 401)
 
 
 class ListTickets(unittest.TestCase):
@@ -425,6 +456,28 @@ class ListTickets(unittest.TestCase):
             out = portal_tickets.list_tickets("c1")
         self.assertEqual(len(out), 3)
         self.assertEqual(sum(1 for t in out if t.get("unresolved")), 1)
+
+    def test_the_row_reports_status_and_who_filed_it(self):
+        """`submitted_by` comes from OUR mapping row, not from ClickUp — the
+        requester is a portal user, who may not exist as a ClickUp member."""
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=self._refs(1)), \
+             mock.patch.object(clickup_client, "get_task",
+                               side_effect=lambda t: {**self._task(t),
+                                                      "status": {"status": "in progress"}}):
+            out = portal_tickets.list_tickets("c1", property_uuid="u-1")
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["status"], "In progress")
+        self.assertEqual(out[0]["type_label"], "General Ticket")
+        self.assertEqual(out[0]["submitted_by"], "cm@rpmliving.com")
+
+    def test_a_placeholder_still_names_who_filed_it(self):
+        """An unresolvable task is exactly when "who filed this" is the only
+        thing we can still tell the requester."""
+        with mock.patch.object(portal_tickets, "_read_mappings", return_value=self._refs(1)), \
+             mock.patch.object(clickup_client, "get_task", return_value=None):
+            out = portal_tickets.list_tickets("c1")
+        self.assertTrue(out[0]["unresolved"])
+        self.assertEqual(out[0]["submitted_by"], "cm@rpmliving.com")
 
     def test_a_resolvable_task_is_shaped_normally(self):
         with mock.patch.object(portal_tickets, "_read_mappings", return_value=self._refs(1)), \
@@ -544,3 +597,7 @@ class RegistryTypes(unittest.TestCase):
         with mock.patch.object(clickup_client, "get_list_fields", return_value=[]):
             types = portal_tickets.types_with_schema()
         self.assertTrue(all(t["form_url"] is None for t in types))
+
+
+if __name__ == "__main__":
+    unittest.main()

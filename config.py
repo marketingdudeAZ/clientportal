@@ -1,5 +1,6 @@
 """RPM Client Portal configuration constants."""
 
+import json
 import os
 from dotenv import load_dotenv
 
@@ -249,6 +250,99 @@ PORTAL_TICKET_STATUS_MAP = {
     "pending approval": "Needs your approval",
     "in review": "In progress", "review": "In progress", "awaiting review": "In progress",
     "complete": "Done", "completed": "Done", "closed": "Done", "done": "Done",
+}
+
+# --- Ticket → property-profile loop (docs/ticket-to-profile-loop.md) ---------
+# A completed ticket PROPOSES profile changes; a human accepts them. Nothing
+# here ever writes on its own — see ticket_profile_sync.py.
+
+# Master flag. Off → /api/ticket-profile/* 404s and ticket completion generates
+# no proposals (process_completed_task behaves exactly as it did before).
+TICKET_PROFILE_LOOP_ENABLED = (
+    os.getenv("TICKET_PROFILE_LOOP_ENABLED", "").strip().lower() == "true"
+)
+
+# Optional LLM extractor. Off → only the deterministic field-name map below
+# produces proposals. On → the ticket thread is also read by the model, which
+# may only propose fields already allow-listed for that ticket type.
+TICKET_PROFILE_AI_EXTRACT = (
+    os.getenv("TICKET_PROFILE_AI_EXTRACT", "").strip().lower() == "true"
+)
+
+# ClickUp custom-field NAME (matched case-insensitively) → community_brief
+# field key. This is the deterministic extractor: a completed ticket carrying
+# "New Property Name" proposes that value for the profile's Advertised Name.
+# Override or extend without a deploy via TICKET_PROFILE_FIELD_MAP_JSON
+# ({"clickup field name": "brief_field_key"}) — supplied entries win.
+TICKET_PROFILE_FIELD_MAP = {
+    # Rebrands
+    "new property name":       "advertised_name",
+    "new advertised name":     "advertised_name",
+    "new short name":          "short_name",
+    "former property name":    "former_property_name",
+    "previous property name":  "former_property_name",
+    "old property name":       "former_property_name",
+    # Creative & ad copy
+    "taglines":                "taglines",
+    "tagline":                 "taglines",
+    "must include":            "must_include",
+    "things not to say":       "forbidden_phrases",
+    "forbidden phrases":       "forbidden_phrases",
+    # Budget updates
+    "new budget":              "marketing_budget",
+    "new monthly budget":      "marketing_budget",
+    "total monthly budget":    "marketing_budget",
+    "marketing budget":        "marketing_budget",
+    # New account build / onboarding
+    "property amenities":      "property_amenities",
+    "in-unit features":        "unit_features",
+    "unit features":           "unit_features",
+    "competitors":             "competitors",
+    "neighborhood":            "neighborhood",
+    "nearby employers":        "nearby_employers",
+    "unit level details":      "unit_level_details",
+    "unit-level details":      "unit_level_details",
+}
+try:
+    _tpfm_extra = json.loads(os.getenv("TICKET_PROFILE_FIELD_MAP_JSON", "") or "{}")
+    if isinstance(_tpfm_extra, dict):
+        TICKET_PROFILE_FIELD_MAP.update(
+            {str(k).strip().lower(): str(v).strip() for k, v in _tpfm_extra.items()}
+        )
+except (ValueError, TypeError):
+    pass
+
+# Which profile fields each ticket type may propose. A ticket type absent here
+# proposes nothing — new types opt IN. dispo_cancel is deliberately absent and
+# is additionally hard-excluded in ticket_profile_sync (it is already excluded
+# from client-facing writes via ticket_recap.EXCLUDED_TYPES).
+#
+# NOTE on keys: two ticket-type vocabularies exist in this repo. The portal
+# registry above uses `creative_ad_copy` / `campaign_review`; the completion
+# path classifies by ClickUp LIST NAME via ticket_recap.infer_ticket_type(),
+# which yields `creative_update` / `performance_review`. Proposals arrive on
+# the infer_ticket_type() spelling, so both are listed and kept identical
+# rather than silently proposing nothing for a renamed list.
+_TICKET_PROFILE_CREATIVE_FIELDS = (
+    "taglines", "must_include", "forbidden_phrases",
+    "differentiators", "residents_love",
+)
+TICKET_PROFILE_TYPE_FIELDS = {
+    "rebrand": (
+        "advertised_name", "short_name", "former_property_name",
+        "taglines", "brand_adjectives", "must_include", "forbidden_phrases",
+    ),
+    "creative_update": _TICKET_PROFILE_CREATIVE_FIELDS,
+    "creative_ad_copy": _TICKET_PROFILE_CREATIVE_FIELDS,
+    "budget_update": (
+        "marketing_budget",
+    ),
+    "new_account_build": (
+        "advertised_name", "short_name", "property_amenities", "unit_features",
+        "unit_level_details", "competitors", "neighborhood", "nearby_employers",
+        "landmarks", "differentiators", "must_include", "forbidden_phrases",
+        "marketing_budget",
+    ),
 }
 
 # --- Creatify Video Pipeline ---
