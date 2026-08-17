@@ -103,7 +103,7 @@ class FormSchema(unittest.TestCase):
     def test_prefill_fields_are_filtered_out_when_we_can_fill_them(self):
         prefill = {"Property URL": "https://x.com", "uuid": "u-1"}
         with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
-            schema = portal_tickets.form_schema("general", "901-general", prefill)
+            schema = portal_tickets.form_schema("_no_manifest", "901-general", prefill)
         names = [f["name"] for f in schema]
         self.assertNotIn("Property URL", names)   # resolved → hidden
         self.assertNotIn("uuid", names)           # resolved → hidden
@@ -117,7 +117,7 @@ class FormSchema(unittest.TestCase):
         on every ticket, silently. Strictly worse than the ClickUp form."""
         prefill = {"uuid": "u-1"}                  # Property URL did NOT resolve
         with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
-            schema = portal_tickets.form_schema("general", "901-general", prefill)
+            schema = portal_tickets.form_schema("_no_manifest", "901-general", prefill)
         names = [f["name"] for f in schema]
         self.assertIn("Property URL", names)
         self.assertNotIn("uuid", names)
@@ -126,20 +126,20 @@ class FormSchema(unittest.TestCase):
         """Safe direction: show a field we would have filled, rather than hide
         one nobody fills."""
         with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
-            schema = portal_tickets.form_schema("general", "901-general")
+            schema = portal_tickets.form_schema("_no_manifest", "901-general")
         self.assertIn("Property URL", [f["name"] for f in schema])
 
     def test_form_schema_returns_none_when_clickup_will_not_say(self):
         with mock.patch.object(clickup_client, "get_list_fields", return_value=None):
-            self.assertIsNone(portal_tickets.form_schema("general", "901-general"))
+            self.assertIsNone(portal_tickets.form_schema("_no_manifest", "901-general"))
 
     def test_a_genuinely_fieldless_list_is_empty_not_none(self):
         with mock.patch.object(clickup_client, "get_list_fields", return_value=[]):
-            self.assertEqual(portal_tickets.form_schema("general", "901-general"), [])
+            self.assertEqual(portal_tickets.form_schema("_no_manifest", "901-general"), [])
 
     def test_dropdown_options_and_input_kind_shaped(self):
         with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
-            schema = portal_tickets.form_schema("general", "901-general")
+            schema = portal_tickets.form_schema("_no_manifest", "901-general")
         pri = next(f for f in schema if f["name"] == "Priority")
         self.assertEqual(pri["input"], "select")
         self.assertEqual([o["label"] for o in pri["options"]], ["Low", "High"])
@@ -594,11 +594,17 @@ class RegistryTypes(unittest.TestCase):
         self.assertEqual(general["reason_code"], "schema_unavailable")
         self.assertEqual(general["fields"], [])
 
-    def test_a_genuinely_fieldless_list_is_still_available(self):
+    def test_a_fieldless_list_is_now_DRIFT_for_a_manifest_type(self):
+        """This used to assert "available with no fields", which was right when
+        the form was whatever ClickUp happened to return. Now that every type
+        declares the fields it needs, a list with none of them is a list the
+        manifest does not describe — and offering the form anyway collects a
+        request with nothing on it."""
         with mock.patch.object(clickup_client, "get_list_fields", return_value=[]):
             types = portal_tickets.types_with_schema()
         general = next(t for t in types if t["key"] == "general")
-        self.assertTrue(general["available"])
+        self.assertFalse(general["available"])
+        self.assertEqual(general["reason_code"], "manifest_drift")
         self.assertEqual(general["fields"], [])
 
     def test_internal_types_are_OMITTED_not_marked_unavailable(self):
@@ -739,7 +745,7 @@ class ManifestForm(unittest.TestCase):
 
     def test_a_type_with_no_manifest_is_untouched(self):
         with mock.patch.object(clickup_client, "get_list_fields", return_value=_fields()):
-            schema = portal_tickets.form_schema("general", "901-general")
+            schema = portal_tickets.form_schema("_no_manifest", "901-general")
         self.assertIn("Priority", [f["name"] for f in schema])
 
 
@@ -808,15 +814,16 @@ class ManifestMatchesLiveClickUp(unittest.TestCase):
         clickup_client.clear_field_cache()
         problems = []
         for type_key, manifest in PORTAL_TICKET_FORMS.items():
+            # Resolve through the form view, NOT through CLICKUP_LIST_* env.
+            # This module pins fake list ids at import so the picker has
+            # something to show, and the whole point of this test is to check
+            # the manifest against the list that type's form actually files
+            # into — which is also what makes it work on CI, where none of the
+            # real env vars are set.
             t = portal_tickets._type_by_key(type_key)
-            list_id = portal_tickets._list_id_for(t) if t else ""
+            list_id, why = portal_tickets._list_by_form(t.get("form_slug", "") if t else "")
             if not list_id:
-                # Resolve through the same path go-live uses, so the drift test
-                # works before the env vars are set on the host.
-                found, _ = portal_tickets._list_by_form(t.get("form_slug", "") if t else "")
-                list_id = found or ""
-            if not list_id:
-                problems.append(f"{type_key}: no list id and no resolvable form")
+                problems.append(f"{type_key}: form did not resolve to a list — {why}")
                 continue
             defs = clickup_client.get_list_fields(list_id)
             if defs is None:
@@ -842,3 +849,91 @@ class ManifestMatchesLiveClickUp(unittest.TestCase):
                 print(f"\n[drift] {type_key}: live REQUIRED fields absent from the "
                       f"manifest: {missing_required}")
         self.assertEqual(problems, [], "\n".join(problems))
+
+
+class DuplicateFieldNames(unittest.TestCase):
+    """Duplicate names are the NORMAL case on these lists, not an edge case.
+
+    Every paid channel exists twice on the same list — a `currency` variant for
+    new-build budgets and a `drop_down` variant for add/remove/change — and the
+    General list carries FOUR fields called "Market" with different regional
+    option sets. A name→def dict silently keeps whichever came last, which is a
+    wrong-field-id write that nothing downstream can detect.
+    """
+
+    DEFS = [
+        {"id": "cur", "name": "Paid Search", "type": "currency"},
+        {"id": "sel", "name": "Paid Search", "type": "drop_down", "type_config": {}},
+        {"id": "m1", "name": "Market", "type": "drop_down", "type_config": {}},
+        {"id": "m2", "name": "Market", "type": "drop_down", "type_config": {}},
+        {"id": "solo", "name": "Campaign Focus", "type": "text"},
+    ]
+
+    def _pick(self, entry):
+        by = portal_tickets._defs_by_name(self.DEFS)
+        return portal_tickets._pick_def(entry, by.get(entry["name"].lower()) or [])
+
+    def test_clickup_type_separates_the_channel_twins(self):
+        self.assertEqual(self._pick({"name": "Paid Search",
+                                     "clickup_type": "currency"})["id"], "cur")
+        self.assertEqual(self._pick({"name": "Paid Search",
+                                     "clickup_type": "drop_down"})["id"], "sel")
+
+    def test_an_unqualified_duplicate_resolves_to_nothing(self):
+        """Not to whichever came last. Half the channel budgets would land on
+        the wrong field and the task would look correctly filled in."""
+        self.assertIsNone(self._pick({"name": "Paid Search"}))
+
+    def test_duplicates_identical_in_type_need_an_explicit_id(self):
+        """The four "Market" fields differ only by id and option set."""
+        self.assertIsNone(self._pick({"name": "Market", "clickup_type": "drop_down"}))
+        self.assertEqual(self._pick({"name": "Market", "field_id": "m2"})["id"], "m2")
+
+    def test_a_unique_name_needs_no_qualifier(self):
+        self.assertEqual(self._pick({"name": "Campaign Focus"})["id"], "solo")
+
+    def test_an_ambiguous_REQUIRED_field_is_drift_not_a_coin_flip(self):
+        by = portal_tickets._defs_by_name(self.DEFS)
+        with self.assertRaises(portal_tickets.ManifestDrift):
+            portal_tickets._resolve_manifest_field(
+                {"name": "Paid Search", "tier": "ask", "required": True}, by, "t")
+
+    def test_prefill_never_writes_to_an_ambiguous_name(self):
+        """The form posts field IDS so it is unaffected; prefill posts NAMES,
+        and writing to a coin-flip field is worse than leaving it blank."""
+        with mock.patch.object(clickup_client, "get_list_fields", return_value=self.DEFS):
+            built = portal_tickets._build_custom_fields(
+                "L", {}, {"Paid Search": "500", "Campaign Focus": "lease-ups"})
+        self.assertIsNotNone(built)
+        payload = {c["id"] for c in built[0]}
+        self.assertIn("solo", payload)
+        self.assertNotIn("cur", payload)
+        self.assertNotIn("sel", payload)
+
+
+class EveryTypeHasAManifest(unittest.TestCase):
+    def test_all_eight_registry_types_are_covered(self):
+        """A type without a manifest falls back to rendering the whole space
+        field pool — 91 to 110 fields, internal ops fields included."""
+        from config import PORTAL_TICKET_FORMS, PORTAL_TICKET_TYPES
+        self.assertEqual({t["key"] for t in PORTAL_TICKET_TYPES},
+                         set(PORTAL_TICKET_FORMS))
+
+    def test_no_manifest_asks_for_an_internal_ops_field(self):
+        from config import PORTAL_TICKET_FORMS
+        banned = ("qa status", "task progress", "final deliverable",
+                  "type of template", "resources", "due diligence done")
+        for key, man in PORTAL_TICKET_FORMS.items():
+            for sec in man["sections"]:
+                for f in sec["fields"]:
+                    n = f["name"].strip().lower()
+                    if f.get("tier", "ask") != "ask":
+                        continue
+                    self.assertFalse(n.startswith("z_"), f"{key}: {f['name']}")
+                    self.assertFalse(any(b in n for b in banned), f"{key}: {f['name']}")
+
+    def test_every_manifest_declares_its_sla(self):
+        from config import PORTAL_TICKET_FORMS
+        for key, man in PORTAL_TICKET_FORMS.items():
+            self.assertTrue(man.get("sla"), key)
+            self.assertTrue(man.get("name_pattern"), key)
