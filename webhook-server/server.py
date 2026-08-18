@@ -1395,6 +1395,12 @@ def sync_properties_to_bq():
                 "unit_count":         units,
                 "occupancy_status":   props.get("occupancy_status", ""),
                 "plestatus":          props.get("plestatus", ""),
+                # Platform join keys. Without these, loop_convert_v1 resolves
+                # to zero rows — the view filters on hyly_property_id being
+                # present (ADR 0022).
+                "hyly_property_id":   (props.get("hyly_property_id") or "").strip(),
+                "aptiq_property_id":  (props.get("aptiq_property_id") or "").strip(),
+                "aptiq_market_id":    (props.get("aptiq_market_id") or "").strip(),
                 "updated_at":         now_iso,
             })
 
