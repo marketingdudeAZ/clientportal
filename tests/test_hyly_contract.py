@@ -141,9 +141,9 @@ def test_rollup_is_fresh():
     job that silently stops is the whole risk of automating this, so the test
     that catches it is the most valuable one in the file.
 
-    Marked xfail until the 05:00 vendor refresh is enabled (blocked on Hyly's
-    IAM grant, ADR 0022 open item 1) — the data is knowingly frozen until then,
-    and a permanently-red suite teaches people to ignore it.
+    Live since 2026-08-18: Hyly granted the service account, the 05:00 vendor
+    refresh is enabled, and the feed runs daily. Staleness is now a real
+    failure, not an expected one.
     """
     client = _bq()
     if client is None:
@@ -159,13 +159,11 @@ def test_rollup_is_fresh():
     newest = rows[0].newest
     assert newest is not None, f"{fq} is empty"
     days = (datetime.date.today() - newest).days
-    if days > 2:
-        pytest.xfail(
-            f"Hyly data is {days} days behind (newest {newest}). Expected while the "
-            f"05:00 vendor refresh is disabled. Remove this xfail once Hyly grants "
-            f"the service account and setup_hyly_schedules.py --promote-vendor-source "
-            f"has run — after that, staleness is a real failure."
-        )
+    assert days <= 2, (
+        f"Hyly data is {days} days behind (newest {newest}). The 05:00 vendor "
+        f"refresh or the 06:00 rollup has stopped — check the scheduled queries "
+        f"in project hyly-data before this reaches a client."
+    )
 
 
 # ── Identity contract ────────────────────────────────────────────────────────
