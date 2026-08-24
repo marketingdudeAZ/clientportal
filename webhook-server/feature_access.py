@@ -112,6 +112,10 @@ FEATURES: dict[str, Feature] = {
         # with a portal login. Setting the CLICKUP_LIST_* env vars without this
         # gate would turn ticketing on portfolio-wide in one step.
         Feature("portal_tickets", "Portal Ticketing"),
+        # The preset-question Ask surface. Beta by default: it puts an
+        # LLM-written narrative in front of a client, so it opens to
+        # internal staff and named pilot accounts first.
+        Feature("ask", "Ask — preset questions"),
     )
 }
 
