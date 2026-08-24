@@ -216,7 +216,7 @@ a 404, so the template and the env var don't have to ship in lockstep.
 
 | Stage | State | Where |
 |---|---|---|
-| 1 — Drive client + resize on new uploads | built | `webhook-server/drive_client.py`, `asset_resizer.py`, `asset_index.py`, `migrations/0013_assets_table.py`, `POST /api/assets/upload` |
+| 1 — Drive client + resize on new uploads | built | `webhook-server/drive_client.py`, `asset_resizer.py`, `asset_index.py`, `migrations/0016_assets_table.py`, `POST /api/assets/upload` |
 | 2 — Portal CRUD | built | `webhook-server/routes/assets.py`, Files section of `hubspot-cms/templates/client-portal.html` |
 | 3 — Fluency wiring | **not started** — blocked on action item #2 | — |
 | 4 — Backfill + retire the HubDB asset table | **not started** — depends on Stage 3 | — |
