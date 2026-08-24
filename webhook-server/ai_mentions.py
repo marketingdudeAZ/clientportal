@@ -15,6 +15,8 @@ table so the dashboard reads are cheap.
 Composite index = % of prompts cited, averaged across engines, 0–100.
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from datetime import datetime, timezone

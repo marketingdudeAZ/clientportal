@@ -107,6 +107,73 @@ class Result:
         }
 
 
+# How stale the rpm_properties dimension table may be before every rollup
+# built on it is suspect. The sync is a TRUNCATE + INSERT, so a healthy table
+# has one timestamp shared by every row and that timestamp is from last night.
+MAX_DIMENSION_AGE_HOURS = 36
+
+
+def check_dimension_freshness(max_age_hours: float = MAX_DIMENSION_AGE_HOURS,
+                              _now: Any = None) -> Exception_ | None:
+    """Is rpm_properties fresh enough to slice a rollup by? None if yes.
+
+    Every market-level number in the portal joins ninjacat_metrics to
+    rpm_properties for name, market and unit_count. If the dimension table
+    stops refreshing, nothing errors — properties onboarded since the last run
+    are simply absent from the rollups, and renamed or re-marketed ones are
+    quietly reported under their old values. A silently short answer is the
+    failure mode this whole module exists to prevent, and it is live right
+    now: as of this writing every row carries 2026-08-18T18:09:19Z, six days
+    old, while the docstring on the endpoint and RUNBOOK.md both describe it
+    as nightly.
+
+    Returns an Exception_ so callers can put it in the same caveat line as
+    every other data-quality finding, rather than inventing a second channel
+    for "the data is old".
+    """
+    from datetime import datetime, timedelta, timezone
+
+    try:
+        import bigquery_client as bq
+        table = f"{bq.BIGQUERY_PROJECT_ID}.{bq._dataset()}.rpm_properties"
+        rows = bq.query(
+            f"SELECT MAX(updated_at) AS freshest, COUNT(*) AS n FROM `{table}`")
+    except Exception as exc:                                     # noqa: BLE001
+        return Exception_(
+            key="rpm_properties",
+            reason="freshness_unknown",
+            detail=f"could not read the dimension table: {exc}",
+        )
+
+    if not rows or rows[0].get("n") in (0, None):
+        return Exception_(key="rpm_properties", reason="dimension_empty",
+                          detail="rpm_properties has no rows; no rollup can "
+                                 "resolve a market or a unit count")
+
+    freshest = rows[0].get("freshest")
+    if freshest is None:
+        return Exception_(key="rpm_properties", reason="freshness_unknown",
+                          detail="updated_at is null for every row")
+
+    now = _now or datetime.now(timezone.utc)
+    if getattr(freshest, "tzinfo", None) is None:
+        freshest = freshest.replace(tzinfo=timezone.utc)
+    age = now - freshest
+    if age <= timedelta(hours=max_age_hours):
+        return None
+
+    hours = age.total_seconds() / 3600
+    return Exception_(
+        key="rpm_properties",
+        reason="dimension_stale",
+        detail=(f"last refreshed {hours:.0f}h ago "
+                f"({freshest.isoformat()}); sync-properties-to-bq is supposed "
+                f"to run nightly. Properties onboarded since then are missing "
+                f"from every market rollup."),
+        value=hours,
+    )
+
+
 def dedupe(rows: Sequence[dict], key_fields: Sequence[str]) -> tuple[list[dict], int]:
     """Collapse rows sharing a key, keeping the first.
 

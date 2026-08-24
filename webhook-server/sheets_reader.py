@@ -11,6 +11,8 @@ Environment / config.py:
     GOOGLE_SERVICE_ACCOUNT_JSON — JSON string of service account credentials
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import time

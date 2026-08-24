@@ -13,6 +13,8 @@ API reference: https://docs.creatify.ai
 Auth: X-API-ID + X-API-KEY headers (from config.py)
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from typing import Any
