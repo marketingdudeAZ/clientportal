@@ -88,8 +88,31 @@ def _identity(company_id=CID, uuid=UUID, name="Atwood", market="Phoenix"):
     return mock.Mock(company_id=company_id, uuid=uuid, name=name, market=market)
 
 
+# The list ids each test expects. Set at import above so collection-time code
+# sees them, and re-pinned per test below — because they are process-wide env
+# vars and another test module sets the SAME names to different values at ITS
+# import. pytest imports every test module before running any test, so whoever
+# imports last wins and this file's expectations quietly stop holding.
+# tests/test_portal_tickets.py sets CLICKUP_LIST_CAMPAIGN_REVIEW to
+# "901-review"; this file needs "901-digital". Running this file alone passed
+# and the full suite failed, which is the worst way to find out.
+_LIST_ENV = {
+    "CLICKUP_LIST_CREATIVE_AD_COPY": "901-creative",
+    "CLICKUP_LIST_REBRAND": "901-brand",
+    "CLICKUP_LIST_CAMPAIGN_REVIEW": "901-digital",
+}
+
+
 class _Base(unittest.TestCase):
     def setUp(self):
+        env = mock.patch.dict(os.environ, _LIST_ENV)
+        env.start()
+        self.addCleanup(env.stop)
+        # The unset ones exercise "omit a source with no list id"; patch.dict
+        # restores whatever they were on exit.
+        for _k in ("CLICKUP_LIST_SEO", "CLICKUP_LIST_PAID_MEDIA",
+                   "CLICKUP_LIST_SOCIAL", "CLICKUP_LIST_REPUTATION"):
+            os.environ.pop(_k, None)
         attention.invalidate_cache()
         self.addCleanup(attention.invalidate_cache)
 

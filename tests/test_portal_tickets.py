@@ -149,7 +149,33 @@ class FormSchema(unittest.TestCase):
         self.assertEqual(details["input"], "textarea")
 
 
-class ConfiguredTypes(unittest.TestCase):
+# These list ids are process-wide env vars, and another test module sets some
+# of the SAME names at ITS import — tests/test_attention.py sets
+# CLICKUP_LIST_REBRAND, which the two classes below assert is UNSET so they can
+# exercise the "not configured" path. pytest imports every test module before
+# running any test, so import-time env writes race and whoever imports last
+# wins. Pinning per test makes each class independent of collection order.
+_LIST_ENV = {
+    "CLICKUP_LIST_GENERAL": "901-general",
+    "CLICKUP_LIST_CAMPAIGN_REVIEW": "901-review",
+    "CLICKUP_LIST_DISPO_CANCEL": "901-dispo",
+}
+_LIST_UNSET = ("CLICKUP_LIST_REBRAND",)
+
+
+class _EnvPinned(unittest.TestCase):
+    """Owns its ClickUp list env rather than inheriting whatever was set last."""
+
+    def setUp(self):
+        super().setUp()
+        env = mock.patch.dict(os.environ, _LIST_ENV)
+        env.start()
+        self.addCleanup(env.stop)
+        for _k in _LIST_UNSET:
+            os.environ.pop(_k, None)
+
+
+class ConfiguredTypes(_EnvPinned):
     def test_only_configured_client_types_show(self):
         types = portal_tickets.configured_types(include_internal=False)
         keys = {t["key"] for t in types}
@@ -582,7 +608,7 @@ class ListTickets(unittest.TestCase):
         g.assert_not_called()
 
 
-class RegistryTypes(unittest.TestCase):
+class RegistryTypes(_EnvPinned):
     def test_every_client_type_appears_even_unconfigured(self):
         types = portal_tickets.types_with_schema()
         keys = {t["key"] for t in types}
