@@ -58,14 +58,52 @@ def _file_checksum(path: Path) -> str:
     return hashlib.sha1(path.read_bytes()).hexdigest()
 
 
+class DuplicateVersion(RuntimeError):
+    """Two migration files claim the same version number.
+
+    This must be fatal. `schema_migrations` is keyed by version, not by
+    filename, so the first file to apply records the version and every later
+    file sharing it is reported "applied" forever and never runs. The failure
+    is silent: the table the second migration was supposed to create simply
+    does not exist, and whatever writes to it drops rows.
+
+    Not hypothetical here. `0013_apartmentscom_ils_daily.py` and
+    `0013_ticket_profile_proposals.py` both resolved to "0013", and a third
+    `0013_assets_table.py` is waiting on feature/assets-google-drive. Failing
+    loudly at discovery time is the point — a branch that merges a colliding
+    version now breaks on the next `status`, before it can apply anything.
+    """
+
+
+def _version_of(path: Path) -> str:
+    """The version a filename claims. `0013_thing.py` -> `0013`."""
+    return path.stem.split("_", 1)[0]
+
+
 def _discover_migrations() -> list[Path]:
-    """List migration files in order. Filenames look like 0001_thing.py."""
+    """List migration files in order, refusing to proceed on a collision.
+
+    Filenames look like 0001_thing.py.
+    """
     # IMPORTANT: parenthesize the glob pattern. `HERE / "[0-9]" * 4` evaluates
     # left-to-right at same precedence, which calls __truediv__ first then
     # tries to multiply a PosixPath by an int. The fix is to build the glob
     # string completely before the path-join.
     pattern = str(HERE / ("[0-9]" * 4 + "_*.py"))
     files = sorted(Path(p) for p in glob.glob(pattern))
+
+    seen: dict[str, Path] = {}
+    collisions: list[str] = []
+    for fp in files:
+        v = _version_of(fp)
+        if v in seen:
+            collisions.append(f"  {v}: {seen[v].name} and {fp.name}")
+        else:
+            seen[v] = fp
+    if collisions:
+        raise DuplicateVersion(
+            "Duplicate migration version(s) — renumber before running:\n"
+            + "\n".join(collisions))
     return files
 
 
@@ -132,7 +170,7 @@ def cmd_status(args, ctx: MigrationContext) -> int:
     files = _discover_migrations()
     print(f"{'STATUS':10s}  {'VERSION':10s}  FILE")
     for fp in files:
-        version = fp.stem.split("_", 1)[0]
+        version = _version_of(fp)
         marker = "applied" if version in applied else "pending"
         print(f"{marker:10s}  {version:10s}  {fp.name}")
     if not files:
@@ -148,7 +186,7 @@ def cmd_up(args, ctx: MigrationContext) -> int:
 
     pending = []
     for fp in files:
-        v = fp.stem.split("_", 1)[0]
+        v = _version_of(fp)
         if v in applied:
             continue
         if target and v > target:
@@ -205,7 +243,7 @@ def cmd_down(args, ctx: MigrationContext) -> int:
         return 1
     files = sorted(_discover_migrations(), reverse=True)
     for fp in files:
-        v = fp.stem.split("_", 1)[0]
+        v = _version_of(fp)
         if v not in applied:
             continue
         if v <= target:
@@ -238,7 +276,7 @@ def cmd_verify(args, ctx: MigrationContext) -> int:
     applied = _applied_versions(ctx)
     drift = 0
     for fp in _discover_migrations():
-        v = fp.stem.split("_", 1)[0]
+        v = _version_of(fp)
         if v not in applied:
             continue
         recorded = applied[v].get("checksum") or ""

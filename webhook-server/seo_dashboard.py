@@ -5,6 +5,8 @@ BigQuery, and cached on-page + backlinks summaries from HubDB. Never hits
 DataForSEO in the request path — that work lives in seo_refresh_cron.py.
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from typing import Any

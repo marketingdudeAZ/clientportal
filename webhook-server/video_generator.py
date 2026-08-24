@@ -7,6 +7,8 @@ Orchestrates the full video creation flow:
 4. Store variant data on the HubSpot company record
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
