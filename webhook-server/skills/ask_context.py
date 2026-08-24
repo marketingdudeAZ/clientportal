@@ -48,6 +48,36 @@ logger = logging.getLogger(__name__)
 # The live ninjacat_metrics conversion column. See SCHEMA NOTE above.
 CONVERSION_COLUMN = os.environ.get("ASK_CONVERSION_COLUMN", "LEADS")
 
+# GRAIN NOTE — the single most important fact about this table.
+#
+# CHANNEL_BUCKET is NOT a partition. `Website / Traffic` is the PROPERTY TOTAL
+# and every other bucket that carries sessions is a SUBSET of it, so
+# `SUM(SESSIONS) ... GROUP BY month` double-counts. Verified against the whole
+# warehouse, not against one property: of 14,441 account-months that have
+# exactly one total row, the other buckets' sessions exceed it in ZERO cases.
+# For Atwood at Rivulon, July 2026, the difference is 7,719 vs the true 6,148 —
+# every conversion rate this surface prints would sit on an inflated
+# denominator.
+#
+# Which buckets carry what, portfolio-wide:
+#   Website / Traffic        GA4               sessions + leads   (the total)
+#   Organic Search (SEO)     GA4               sessions + leads   (a subset)
+#   Organic Search (SEO)     Search Console    impressions/clicks only
+#   Paid Search              Google Ads        leads + spend, NO sessions
+#   Paid Social              Meta / Facebook   spend only, NO sessions/leads
+#   Display/Geofence/CTV     Simpli.fi         leads + spend, NO sessions
+#
+# LEADS ARE NOT THE SAME QUESTION. GA4 site leads and Google Ads conversions
+# are different measurement systems, and Ads conversions EXCEED the whole GA4
+# site total in 3,017 of 14,414 account-months (21%) — so they are not a subset
+# and must never be summed into it or divided by it. Organic GA4 leads exceed
+# the GA4 total in only 141 of 14,273 (1%), which is subset behaviour plus
+# attribution noise. Hence: the total comes from `Website / Traffic`, paid
+# conversions are carried BESIDE it as their own named number, and the two are
+# never added together.
+TOTAL_CHANNEL = "Website / Traffic"
+PAID_SEARCH_CHANNEL = "Paid Search"
+
 # How much history the trend pull asks for. 13 gives a full year plus the
 # same month last year for a YoY read.
 TREND_MONTHS = int(os.environ.get("ASK_TREND_MONTHS", "13"))
@@ -258,10 +288,16 @@ def pull_performance_trend(identity, months: int = TREND_MONTHS) -> Pull:
     """Month-by-month sessions / leads / spend for one property.
 
     This is the pull that has to see a collapse. Atwood at Rivulon's June 2026
-    drop (leads 170 → 107 while sessions rose 4,085 → 5,626) is invisible in a
+    drop (leads 170 → 107 while sessions rose 4,138 → 5,698) is invisible in a
     latest-month-only read, which is what `get_ninjacat_current_perf` gives —
     so this reads the window and compares the latest month to the window's
     best month, not only to the month before it.
+
+    `sessions` and `leads` are the property's own totals, read from the
+    `Website / Traffic` bucket alone. `paid_conversions` rides alongside as a
+    separate number because it is measured by a different system. See the
+    GRAIN NOTE at the top of this module — this is not a query detail, it is
+    the difference between 6,148 and 7,719.
     """
     name, src = "performance_trend", NC_SOURCE
     ncid = getattr(identity, "ninjacat_id", None)
@@ -273,13 +309,18 @@ def pull_performance_trend(identity, months: int = TREND_MONTHS) -> Pull:
     if reason:
         return _missing(name, src, reason)
 
+    # Conditional aggregation, not SUM-over-everything. See GRAIN NOTE above:
+    # the buckets are nested, so a flat GROUP BY double-counts sessions and
+    # welds two lead-measurement systems into one number.
     sql = """
         SELECT CAST(REPORT_MONTH AS STRING) AS month,
-               SUM(SESSIONS)     AS sessions,
-               SUM(IMPRESSIONS)  AS impressions,
-               SUM(CLICKS)       AS clicks,
-               SUM({conv})       AS leads,
-               SUM(SPEND)        AS spend
+               SUM(IF(CHANNEL_BUCKET = @total_ch, SESSIONS, NULL))   AS sessions,
+               SUM(IF(CHANNEL_BUCKET = @total_ch, {conv}, NULL))     AS leads,
+               COUNTIF(CHANNEL_BUCKET = @total_ch)                   AS total_rows,
+               SUM(IF(CHANNEL_BUCKET = @paid_ch,  {conv}, NULL))     AS paid_conversions,
+               SUM(SPEND)                                           AS spend,
+               SUM(IF(CHANNEL_BUCKET = @total_ch, NULL, IMPRESSIONS)) AS paid_impressions,
+               SUM(IF(CHANNEL_BUCKET = @total_ch, NULL, CLICKS))      AS paid_clicks
         FROM {table}
         WHERE CAST(NINJACAT_ACCOUNT_ID AS STRING) = @ncid
         GROUP BY month
@@ -289,7 +330,10 @@ def pull_performance_trend(identity, months: int = TREND_MONTHS) -> Pull:
 
     try:
         import bigquery_client as bq
-        rows = bq.query(sql, [_string_param("ncid", ncid), _int_param("lim", months)])
+        rows = bq.query(sql, [_string_param("ncid", ncid),
+                              _string_param("total_ch", TOTAL_CHANNEL),
+                              _string_param("paid_ch", PAID_SEARCH_CHANNEL),
+                              _int_param("lim", months)])
     except Exception as exc:                                    # noqa: BLE001
         logger.error("ask: performance_trend query failed for %s: %s", ncid, exc)
         return _missing(name, src, "The performance warehouse query failed (%s)." % exc)
@@ -299,18 +343,35 @@ def pull_performance_trend(identity, months: int = TREND_MONTHS) -> Pull:
             "ninjacat_metrics holds no rows for NinjaCat account %s, so this "
             "property's performance history is empty." % ncid))
 
-    normalized = []
+    normalized, no_total = [], []
     for r in rows:
+        mk = month_key(r.get("month"))
+        has_total = bool(_as_num(r.get("total_rows")) or 0)
+        if not has_total:
+            # No site-total row for this month. That is NOT zero traffic, and
+            # it must not be allowed to read as zero: leave the fields None so
+            # data_quality quarantines the month with a stated reason.
+            no_total.append(mk)
         normalized.append({
             "nid": str(ncid),
-            "month": month_key(r.get("month")),
-            "sessions": _as_num(r.get("sessions")),
-            "impressions": _as_num(r.get("impressions")),
-            "clicks": _as_num(r.get("clicks")),
-            "leads": _as_num(r.get("leads")),
+            "month": mk,
+            "sessions": _as_num(r.get("sessions")) if has_total else None,
+            "leads": _as_num(r.get("leads")) if has_total else None,
+            "paid_conversions": _as_num(r.get("paid_conversions")),
+            "paid_impressions": _as_num(r.get("paid_impressions")),
+            "paid_clicks": _as_num(r.get("paid_clicks")),
             "spend": _as_num(r.get("spend")),
         })
     normalized.sort(key=lambda x: x["month"])
+
+    if len(no_total) == len(normalized):
+        return _missing(name, src, (
+            "ninjacat_metrics has rows for NinjaCat account %s but not one "
+            "'%s' row in the last %d months, and that bucket is the only place "
+            "the property's own session and lead totals live. Reporting the "
+            "other buckets as a total would double-count them, so this answer "
+            "has no traffic figures at all rather than wrong ones."
+            % (ncid, TOTAL_CHANNEL, months)))
 
     from skills import data_quality
     result = data_quality.clean(
@@ -320,13 +381,24 @@ def pull_performance_trend(identity, months: int = TREND_MONTHS) -> Pull:
     )
     clean_rows = sorted(result.rows, key=lambda x: x["month"])
 
+    caveat = result.caveat()
+    if no_total:
+        # Name the real cause. "sessions is None" is true but useless to a
+        # reader trying to decide whether to trust the window.
+        caveat = ("%d month(s) (%s) have no '%s' row, so the property's own "
+                  "session and lead totals are unknown for them and they are "
+                  "left out of this trend entirely — they are not zero."
+                  % (len(no_total), ", ".join(month_label(m) for m in sorted(no_total)),
+                     TOTAL_CHANNEL)) + (" " + caveat if caveat else "")
+
     signals = analyze_trend(clean_rows, source=src)
     return Pull(
         name=name, source=src, available=bool(clean_rows),
-        data={"months": clean_rows, "window": _window_label(clean_rows)},
+        data={"months": clean_rows, "window": _window_label(clean_rows),
+              "months_without_total_row": sorted(no_total)},
         evidence=[s["evidence"] for s in signals],
         signals=signals,
-        caveat=result.caveat(),
+        caveat=caveat,
         quality=result.summary(),
         missing_reason=None if clean_rows else (
             "Every month of performance data for this property was quarantined "
@@ -462,7 +534,16 @@ def _sentiment(sig: Dict[str, Any]) -> str:
 
 
 def pull_lead_sources(identity) -> Pull:
-    """Latest two months of leads / sessions / spend by channel and data source."""
+    """Latest two months of leads / sessions / spend by channel and data source.
+
+    The `Website / Traffic` bucket is pulled out as the DENOMINATOR rather than
+    ranked as a source — it is the property total and contains every other
+    bucket, so left in the ranking it wins "top lead source" on every property
+    in the portfolio by construction. A source is only stated as a share of the
+    total when it is measured the same way the total is; Google Ads conversions
+    are not, and get a raw count with both systems named instead. See the GRAIN
+    NOTE at the top of this module.
+    """
     name, src = "lead_sources", NC_SOURCE
     ncid = getattr(identity, "ninjacat_id", None)
     if not ncid:
@@ -521,33 +602,85 @@ def pull_lead_sources(identity) -> Pull:
     months_desc = sorted(by_month, reverse=True)
     latest_month = months_desc[0]
     prior_month = months_desc[1] if len(months_desc) > 1 else None
-    latest = sorted(by_month[latest_month], key=lambda x: -(x["leads"] or 0))
 
-    total_leads = sum(x["leads"] or 0 for x in latest)
+    # `Website / Traffic` is the property total, not a source. It is the
+    # DENOMINATOR for every share below and must never appear in the ranking —
+    # left in, it wins "top lead source" on every property in the portfolio by
+    # definition, because it contains all the others. See the GRAIN NOTE.
+    def _totals(month):
+        rows_ = by_month.get(month) or []
+        tot = [x for x in rows_ if x["channel"] == TOTAL_CHANNEL]
+        if not tot:
+            return None, None, None
+        # 118 account-months carry more than one total row, so sum rather than
+        # picking the first.
+        sess = sum(x["sessions"] or 0 for x in tot) or None
+        lds = sum(x["leads"] or 0 for x in tot) or None
+        return sess, lds, tot[0]["source"]
+
+    total_sessions, total_leads, total_source = _totals(latest_month)
+    latest = sorted([x for x in by_month[latest_month] if x["channel"] != TOTAL_CHANNEL],
+                    key=lambda x: -(x["leads"] or 0))
     total_spend = sum(x["spend"] or 0 for x in latest)
-    total_sessions = sum(x["sessions"] or 0 for x in latest)
-    evidence = [
-        share_evidence("%s / %s" % (x["channel"], x["source"]), x["leads"],
-                       total_leads, "leads", latest_month, src)
-        for x in latest if (x["leads"] or 0) > 0
-    ]
+
+    def _same_system(row):
+        """Is this row measured the way the site total is measured?
+
+        Only then can its leads be stated as a share of the total. Google Ads
+        conversions exceed the entire GA4 site total in 21% of account-months
+        portfolio-wide, so treating them as a slice of it manufactures shares
+        that can exceed 100% and are meaningless below it.
+        """
+        return bool(total_source) and row["source"] == total_source
+
+    evidence = []
+    for x in latest:
+        if (x["leads"] or 0) <= 0:
+            continue
+        label = "%s / %s" % (x["channel"], x["source"])
+        if total_leads and _same_system(x):
+            evidence.append(share_evidence(label, x["leads"], total_leads,
+                                           "leads", latest_month, src))
+        elif total_leads:
+            evidence.append(
+                "%s: %s leads in %s, measured as %s conversions — a different "
+                "system from the %s site-wide leads %s recorded, so no share of "
+                "the total can be stated [%s]" % (
+                    label, fmt_num(x["leads"]), month_label(latest_month),
+                    x["source"], fmt_num(total_leads), total_source, src))
+        else:
+            evidence.append(
+                "%s: %s leads in %s, measured as %s conversions. No '%s' row "
+                "exists for this month, so there is no site total to state a "
+                "share against [%s]" % (
+                    label, fmt_num(x["leads"]), month_label(latest_month),
+                    x["source"], TOTAL_CHANNEL, src))
 
     # A channel's share of TRAFFIC beside its share of LEADS, and its own
     # conversion rate. Without these the worst finding a source-attribution
-    # answer can make is unreachable: Atwood's June paid-social launch is not
-    # "Meta sent 4% of leads", it is "Meta sent the largest block of sessions
-    # on the property and converted almost none of them". That claim needs the
-    # session denominator on the same line, and the model is forbidden from
-    # computing it — so it has to be formatted here or it cannot be said.
+    # answer can make is unreachable: a channel is not damned by "4% of leads",
+    # it is damned by "the largest block of sessions on the property, converting
+    # almost none of them". That claim needs the session denominator on the same
+    # line, and the model is forbidden from computing it — so it has to be
+    # formatted here or it cannot be said. Note that in this warehouse only GA4
+    # buckets carry sessions at all; Paid Search, Paid Social and Simpli.fi
+    # rows have none, so they get no conversion rate rather than a zero one.
     for x in latest:
         if not x.get("sessions"):
             continue
         label = "%s / %s" % (x["channel"], x["source"])
-        evidence.append(share_evidence(label, x["sessions"], total_sessions,
-                                       "sessions", latest_month, src))
+        if total_sessions and _same_system(x):
+            evidence.append(share_evidence(label, x["sessions"], total_sessions,
+                                           "sessions", latest_month, src))
         evidence.append(rate_evidence(label + " conversion rate", x["leads"] or 0,
                                       x["sessions"], "leads", "sessions",
                                       latest_month, src))
+
+    # The site-wide rate, on the total's own numerator and denominator.
+    if total_sessions and total_leads is not None:
+        evidence.append(rate_evidence(
+            "site-wide conversion rate (%s)" % (total_source or "site total"),
+            total_leads, total_sessions, "leads", "sessions", latest_month, src))
 
     for x in latest:
         if (x["leads"] or 0) > 0 and x.get("spend"):
@@ -564,6 +697,8 @@ def pull_lead_sources(identity) -> Pull:
         for x in latest:
             before = prior_index.get((x["channel"], x["source"]))
             if before and before.get("leads"):
+                # Same channel, same source, two months — one system, so a
+                # change between them is a real comparison.
                 evidence.append(change_evidence(
                     "%s / %s leads" % (x["channel"], x["source"]),
                     before["leads"], x["leads"], prior_month, latest_month, src))
@@ -579,9 +714,28 @@ def pull_lead_sources(identity) -> Pull:
                         month_label(prior_month), fmt_num(x["sessions"]),
                         fmt_num(x["leads"]), month_label(latest_month), src))
 
-    if not total_leads:
+    caveats = []
+    if total_leads is None:
+        caveats.append(
+            "No '%s' row exists for %s, so the property's own site-wide lead "
+            "and session totals are unknown for that month. The sources below "
+            "are raw counts; they cannot be expressed as shares, and they must "
+            "not be added together to stand in for a total."
+            % (TOTAL_CHANNEL, month_label(latest_month)))
+    paid = next((x for x in latest if x["channel"] == PAID_SEARCH_CHANNEL), None)
+    if paid and total_leads and (paid["leads"] or 0) > total_leads:
+        caveats.append(
+            "%s recorded %s conversions in %s while %s recorded %s leads "
+            "site-wide across all channels. The two measurement systems "
+            "disagree and the paid number is the larger, so paid performance "
+            "cannot be read as a slice of the site total here."
+            % (paid["source"], fmt_num(paid["leads"]), month_label(latest_month),
+               total_source, fmt_num(total_leads)))
+
+    if not any((x["leads"] or 0) > 0 for x in latest):
         return Pull(name=name, source=src, available=False,
                     data={"month": latest_month, "rows": latest},
+                    caveat=" ".join(caveats) or None,
                     missing_reason=("No source recorded a single lead in %s, so "
                                     "lead attribution cannot be ranked."
                                     % month_label(latest_month)))
@@ -589,10 +743,12 @@ def pull_lead_sources(identity) -> Pull:
     return Pull(
         name=name, source=src, available=True,
         data={"month": latest_month, "prior_month": prior_month,
-              "rows": latest, "prior_rows": by_month.get(prior_month) if prior_month else None,
+              "rows": latest,
+              "prior_rows": [x for x in (by_month.get(prior_month) or [])
+                             if x["channel"] != TOTAL_CHANNEL] if prior_month else None,
               "total_leads": total_leads, "total_spend": round(total_spend, 2),
-              "total_sessions": total_sessions},
-        evidence=evidence,
+              "total_sessions": total_sessions, "total_source": total_source},
+        evidence=evidence, caveat=" ".join(caveats) or None,
     )
 
 

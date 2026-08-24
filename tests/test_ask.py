@@ -77,18 +77,47 @@ def _identity(**over):
     return PropertyIdentity(**base)
 
 
-# Atwood at Rivulon, as investigated by hand 2026-08-19..24. These are the
-# numbers the trend analyzer has to make legible.
+# Atwood at Rivulon (NinjaCat 10320682), read from ninjacat_metrics on
+# 2026-08-24. `sessions` and `leads` are the `Website / Traffic` bucket — the
+# property's own totals — NOT a sum across buckets. Summing gives 7,719 / 221
+# for July against the true 6,148 / 114, which is the bug these fixtures exist
+# to keep out.
 ATWOOD_MONTHS = [
-    {"nid": "99001", "month": "2026-04", "sessions": 3810, "leads": 158,
-     "spend": 4200.0, "clicks": 1100, "impressions": 44000},
-    {"nid": "99001", "month": "2026-05", "sessions": 4085, "leads": 170,
-     "spend": 4300.0, "clicks": 1180, "impressions": 46000},
-    {"nid": "99001", "month": "2026-06", "sessions": 5626, "leads": 107,
-     "spend": 4800.0, "clicks": 1520, "impressions": 61000},
-    {"nid": "99001", "month": "2026-07", "sessions": 6285, "leads": 114,
-     "spend": 4850.0, "clicks": 1610, "impressions": 63000},
+    {"nid": "99001", "month": "2026-04", "sessions": 3904, "leads": 136,
+     "spend": 6785.91, "paid_conversions": 66},
+    {"nid": "99001", "month": "2026-05", "sessions": 4138, "leads": 170,
+     "spend": 6933.67, "paid_conversions": 56},
+    {"nid": "99001", "month": "2026-06", "sessions": 5698, "leads": 107,
+     "spend": 6856.32, "paid_conversions": 57},
+    {"nid": "99001", "month": "2026-07", "sessions": 6148, "leads": 114,
+     "spend": 7519.33, "paid_conversions": 66},
 ]
+
+# The un-pivoted rows exactly as ninjacat_metrics holds them for July 2026.
+# Note what does and does not carry sessions: only the two GA4 buckets do.
+ATWOOD_JULY_RAW = [
+    ("Website / Traffic",     "Google Analytics 4",    6148, 114, None),
+    ("Organic Search (SEO)",  "Google Analytics 4",    1571,  41, None),
+    ("Organic Search (SEO)",  "Google Search Console", None, None, None),
+    ("Paid Search",           "Google Ads",            None,  66, 7519.3321),
+]
+ATWOOD_JUNE_RAW = [
+    ("Website / Traffic",     "Google Analytics 4",    5698, 107, None),
+    ("Organic Search (SEO)",  "Google Analytics 4",    1548,  43, None),
+    ("Organic Search (SEO)",  "Google Search Console", None, None, None),
+    ("Paid Search",           "Google Ads",            None,  57, 6856.3205),
+]
+
+
+def _channel_rows(*months):
+    """[(month, [(channel, source, sessions, leads, spend), ...]), ...] → BQ rows."""
+    out = []
+    for month, raw in months:
+        for ch, srcname, sess, leads, spend in raw:
+            out.append({"month": month, "channel": ch, "source": srcname,
+                        "sessions": sess, "clicks": None,
+                        "leads": leads, "spend": spend})
+    return out
 
 
 def _trend_pull(rows=None):
@@ -195,9 +224,9 @@ def test_signed_pct_uses_a_real_minus_sign():
 
 
 def test_rate_and_share_evidence_state_the_fraction():
-    r = ask_context.rate_evidence("conversion rate", 114, 6285, "leads",
+    r = ask_context.rate_evidence("conversion rate", 114, 6148, "leads",
                                   "sessions", "2026-07", NC)
-    assert "114 leads / 6,285 sessions = 1.81%" in r and NC in r
+    assert "114 leads / 6,148 sessions = 1.85%" in r and NC in r
     s = ask_context.share_evidence("Google Ads", 62, 114, "leads", "2026-07", NC)
     assert "62 of 114 leads (54.4%)" in s and "Jul 2026" in s
 
@@ -223,7 +252,7 @@ def test_peak_decline_finds_the_collapse_the_latest_month_hides():
     assert peak["sentiment"] == "negative"
     # Both halves ship in one string: "more visitors, fewer inquiries".
     assert "leads 170 → 114" in peak["evidence"]
-    assert "while sessions 4,085 → 6,285 (+53.9%)" in peak["evidence"]
+    assert "while sessions 4,138 → 6,148 (+48.6%)" in peak["evidence"]
 
 
 def test_largest_month_over_month_drop_is_may_to_june():
@@ -242,8 +271,7 @@ def test_every_signal_carries_its_source_and_conversion_rate_shows_its_fraction(
         assert s["sentiment"] in ("positive", "negative", "neutral")
     rates = [s for s in sigs if s["key"].startswith("conversion_rate_")]
     assert len(rates) == 2
-    assert "114 leads / 6,285 sessions" in rates[-1]["evidence"] or \
-           any("114 leads / 6,285 sessions" in r["evidence"] for r in rates)
+    assert any("114 leads / 6,148 sessions" in r["evidence"] for r in rates)
 
 
 def test_rising_spend_is_never_scored_as_a_win():
@@ -370,130 +398,218 @@ def test_performance_trend_without_a_ninjacat_id_names_the_missing_join_key():
     assert "ninjacat_system_id" in pull.missing_reason
 
 
-def test_lead_sources_ranks_by_leads_and_states_cost_per_lead_only_where_spend_exists():
-    rows = [
-        {"month": "2026-07", "channel": "Paid Search", "source": "Google Ads",
-         "sessions": 2100, "clicks": 900, "leads": 62, "spend": 4200.0},
-        {"month": "2026-07", "channel": "Paid Social", "source": "Meta",
-         "sessions": 3922, "clicks": 480, "leads": 5, "spend": 500.0},
-        {"month": "2026-07", "channel": "Organic", "source": "GA4",
-         "sessions": 1800, "clicks": None, "leads": 47, "spend": None},
-        {"month": "2026-06", "channel": "Paid Search", "source": "Google Ads",
-         "sessions": 2000, "clicks": 880, "leads": 55, "spend": 4100.0},
-    ]
-    with mock.patch.object(ask_context, "_bq_ready", return_value=None), \
-         mock.patch.dict(sys.modules, {"bigquery_client": mock.Mock(query=lambda *a, **k: rows)}):
-        pull = ask_context.pull_lead_sources(_identity())
+def _bq(rows):
+    """Patch the warehouse to return `rows`, capturing the SQL and params."""
+    seen = {}
 
-    assert pull.available is True
-    assert pull.data["month"] == "2026-07"
-    assert [r["channel"] for r in pull.data["rows"]] == ["Paid Search", "Organic", "Paid Social"]
-    joined = " || ".join(pull.evidence)
-    assert "Paid Search / Google Ads: 62 of 114 leads (54.4%)" in joined
-    assert "Paid Social / Meta: 5 of 114 leads (4.4%)" in joined
-    assert "Paid Social / Meta cost per lead: $500 spend / 5 leads = $100" in joined
-    # Organic has no spend, so it gets no cost-per-lead line at all rather than $0.
-    assert "Organic / GA4 cost per lead" not in joined
-    assert "Paid Search / Google Ads leads 55 → 62" in joined
+    def q(sql, params=None):
+        seen["sql"] = sql
+        seen["params"] = params or []
+        return rows
+
+    return mock.patch.object(ask_context, "_bq_ready", return_value=None), \
+        mock.patch.dict(sys.modules, {"bigquery_client": mock.Mock(query=q)}), seen
 
 
-def test_lead_sources_states_each_channel_share_of_traffic_and_its_own_conversion():
-    """The Atwood paid-social finding, expressed as evidence.
+def _lead_sources(rows):
+    a, b, seen = _bq(rows)
+    with a, b:
+        return ask_context.pull_lead_sources(_identity()), seen
 
-    The published finding is not "Meta sent 4% of leads". It is "Meta sent the
-    single largest block of traffic on the property and converted almost none
-    of it". Making that claim needs the SESSION denominator on the same line as
-    the lead count — and the system prompt forbids the model from computing it,
-    so if it is not formatted here it cannot be said at all.
+
+def _trend_rows(months):
+    """Rows shaped like the pivoted trend SQL's output."""
+    return [{"month": m["month"], "sessions": m.get("sessions"),
+             "leads": m.get("leads"), "total_rows": m.get("total_rows", 1),
+             "paid_conversions": m.get("paid_conversions"),
+             "spend": m.get("spend"), "paid_impressions": m.get("paid_impressions"),
+             "paid_clicks": m.get("paid_clicks")}
+            for m in reversed(months)]
+
+
+def _trend(months):
+    a, b, seen = _bq(_trend_rows(months))
+    with a, b:
+        return ask_context.pull_performance_trend(_identity()), seen
+
+
+# — the grain rule: `Website / Traffic` is the total, not a peer —
+
+def test_the_trend_query_reads_the_site_total_bucket_and_never_sums_the_buckets():
+    """The bug this replaced: `SUM(SESSIONS) ... GROUP BY month`.
+
+    CHANNEL_BUCKET is not a partition. `Website / Traffic` is the property
+    total and the other session-carrying bucket is a subset of it, so a flat
+    sum double-counts — 7,719 against Atwood's true 6,148 for July 2026, on
+    every conversion-rate denominator this surface prints.
     """
-    rows = [
-        {"month": "2026-07", "channel": "Paid Search", "source": "Google Ads",
-         "sessions": 1300, "clicks": 920, "leads": 66, "spend": 3800.0},
-        {"month": "2026-07", "channel": "Paid Social", "source": "Meta",
-         "sessions": 3922, "clicks": 3922, "leads": 5, "spend": 500.0},
-        {"month": "2026-07", "channel": "Organic Search", "source": "GA4",
-         "sessions": 620, "clicks": None, "leads": 31, "spend": None},
-        {"month": "2026-07", "channel": "ILS", "source": "Apartments.com",
-         "sessions": 443, "clicks": None, "leads": 12, "spend": 550.0},
-        {"month": "2026-06", "channel": "Paid Search", "source": "Google Ads",
-         "sessions": 1250, "clicks": 900, "leads": 62, "spend": 3800.0},
-        {"month": "2026-06", "channel": "Organic Search", "source": "GA4",
-         "sessions": 900, "clicks": None, "leads": 28, "spend": None},
-    ]
-    with mock.patch.object(ask_context, "_bq_ready", return_value=None), \
-         mock.patch.dict(sys.modules,
-                         {"bigquery_client": mock.Mock(query=lambda *a, **k: rows)}):
-        pull = ask_context.pull_lead_sources(_identity())
+    _, seen = _trend(ATWOOD_MONTHS)
+    sql = seen["sql"]
+    assert "SUM(SESSIONS)" not in sql, "a bare sum over buckets double-counts"
+    assert "SUM(IF(CHANNEL_BUCKET = @total_ch, SESSIONS, NULL))" in sql
+    assert "SUM(IF(CHANNEL_BUCKET = @total_ch, LEADS, NULL))" in sql
+    assert "COUNTIF(CHANNEL_BUCKET = @total_ch)" in sql
+    # Paid conversions come back beside the total, never folded into it.
+    assert "SUM(IF(CHANNEL_BUCKET = @paid_ch,  LEADS, NULL))" in sql
+    bound = {p[0]: p[2] for p in seen["params"] if isinstance(p, tuple)}
+    assert bound["total_ch"] == ask_context.TOTAL_CHANNEL == "Website / Traffic"
+    assert bound["paid_ch"] == ask_context.PAID_SEARCH_CHANNEL == "Paid Search"
+
+
+def test_the_trend_reports_atwood_july_as_6148_sessions_and_114_leads():
+    """The reconciliation target, as a unit test."""
+    pull, _ = _trend(ATWOOD_MONTHS)
+    assert pull.available is True
+    july = pull.data["months"][-1]
+    assert (july["month"], july["sessions"], july["leads"]) == ("2026-07", 6148, 114)
+    assert july["paid_conversions"] == 66      # carried, never added to 114
     joined = " || ".join(pull.evidence)
-
-    # Share of traffic, beside share of leads.
-    assert "Paid Social / Meta: 3,922 of 6,285 sessions (62.4%) in Jul 2026" in joined
-    assert "Paid Social / Meta: 5 of 114 leads (4.4%) in Jul 2026" in joined
-    # Its own conversion rate, as a count over a count.
-    assert "Paid Social / Meta conversion rate: 5 leads / 3,922 sessions = 0.13%" in joined
-    # And a channel to compare it against, so 0.13% means something.
-    assert "Paid Search / Google Ads conversion rate: 66 leads / 1,300 sessions = 5.08%" in joined
-    assert pull.data["total_sessions"] == 6285
+    assert "conversion rate: 114 leads / 6,148 sessions = 1.85%" in joined
+    assert "7,719" not in joined and "221" not in joined
 
 
-def test_a_channel_with_no_prior_month_row_is_reported_as_a_launch():
-    """'Spend appeared and leads did not follow' is not 'a channel got worse'."""
-    rows = [
-        {"month": "2026-07", "channel": "Paid Social", "source": "Meta",
-         "sessions": 3922, "clicks": 3922, "leads": 5, "spend": 500.0},
-        {"month": "2026-07", "channel": "Paid Search", "source": "Google Ads",
-         "sessions": 1300, "clicks": 920, "leads": 66, "spend": 3800.0},
-        {"month": "2026-06", "channel": "Paid Search", "source": "Google Ads",
-         "sessions": 1250, "clicks": 900, "leads": 62, "spend": 3800.0},
-    ]
-    with mock.patch.object(ask_context, "_bq_ready", return_value=None), \
-         mock.patch.dict(sys.modules,
-                         {"bigquery_client": mock.Mock(query=lambda *a, **k: rows)}):
-        pull = ask_context.pull_lead_sources(_identity())
+def test_a_month_with_no_site_total_row_is_quarantined_not_read_as_zero():
+    """1,020 account-months portfolio-wide have no total row.
+
+    Zero sessions and "we do not know" are different facts. Reading the first
+    as the second invents a traffic collapse.
+    """
+    months = [dict(m) for m in ATWOOD_MONTHS]
+    months[2].update({"total_rows": 0, "sessions": None, "leads": None})  # June
+    pull, _ = _trend(months)
+    assert pull.available is True
+    assert [m["month"] for m in pull.data["months"]] == ["2026-04", "2026-05", "2026-07"]
+    assert pull.data["months_without_total_row"] == ["2026-06"]
+    assert "Jun 2026" in pull.caveat
+    assert "Website / Traffic" in pull.caveat
+    assert "they are not zero" in pull.caveat
+    # And no signal may claim June measured zero.
     joined = " || ".join(pull.evidence)
-    assert ("Paid Social / Meta is new in Jul 2026: no rows at all in Jun 2026, "
-            "then 3,922 sessions and 5 leads in Jul 2026") in joined
-    # An existing channel gets a change line, not a launch line.
-    assert "Paid Search / Google Ads is new in" not in joined
-    assert "Paid Search / Google Ads leads 62 → 66" in joined
+    assert "Jun 2026" not in joined
 
 
-def test_a_channel_with_no_sessions_gets_no_conversion_rate_rather_than_zero():
-    rows = [{"month": "2026-07", "channel": "Referral", "source": "Direct",
-             "sessions": None, "clicks": None, "leads": 9, "spend": None}]
-    with mock.patch.object(ask_context, "_bq_ready", return_value=None), \
-         mock.patch.dict(sys.modules,
-                         {"bigquery_client": mock.Mock(query=lambda *a, **k: rows)}):
-        pull = ask_context.pull_lead_sources(_identity())
+def test_every_month_missing_the_total_row_refuses_rather_than_reporting_subsets():
+    months = [dict(m, total_rows=0, sessions=None, leads=None) for m in ATWOOD_MONTHS]
+    pull, _ = _trend(months)
+    assert pull.available is False
+    assert "Website / Traffic" in pull.missing_reason
+    assert "double-count" in pull.missing_reason
+    assert pull.evidence == []
+
+
+def test_lead_sources_never_ranks_the_site_total_as_a_source():
+    """Left in the ranking it wins on every property in the portfolio, by
+    construction — it contains all the others."""
+    pull, _ = _lead_sources(_channel_rows(("2026-07", ATWOOD_JULY_RAW),
+                                          ("2026-06", ATWOOD_JUNE_RAW)))
+    assert pull.available is True
+    assert [r["channel"] for r in pull.data["rows"]] == \
+        ["Paid Search", "Organic Search (SEO)", "Organic Search (SEO)"]
+    assert "Website / Traffic" not in [r["channel"] for r in pull.data["rows"]]
+    # It is the denominator instead.
+    assert pull.data["total_leads"] == 114
+    assert pull.data["total_sessions"] == 6148
+    assert pull.data["total_source"] == "Google Analytics 4"
+
+
+def test_lead_sources_states_a_share_only_within_one_measurement_system():
+    """Google Ads conversions exceed the whole GA4 site total in 21% of
+    account-months portfolio-wide, so they are not a slice of it."""
+    pull, _ = _lead_sources(_channel_rows(("2026-07", ATWOOD_JULY_RAW),
+                                          ("2026-06", ATWOOD_JUNE_RAW)))
     joined = " || ".join(pull.evidence)
-    assert "Referral / Direct conversion rate" not in joined
-    assert "Referral / Direct: 9 of 9 leads (100.0%)" in joined
+    # Same system as the total → a real share.
+    assert "Organic Search (SEO) / Google Analytics 4: 41 of 114 leads (36.0%) in Jul 2026" in joined
+    # Different system → a raw count, both systems named, no share.
+    assert ("Paid Search / Google Ads: 66 leads in Jul 2026, measured as Google "
+            "Ads conversions — a different system from the 114 site-wide leads "
+            "Google Analytics 4 recorded, so no share of the total can be "
+            "stated") in joined
+    assert "Paid Search / Google Ads: 66 of 114 leads" not in joined
+    assert "(57.9%)" not in joined
 
 
-def test_lead_sources_with_zero_total_leads_refuses_to_rank_nothing():
-    rows = [{"month": "2026-07", "channel": "Paid Search", "source": "Google Ads",
-             "sessions": 2100, "clicks": 900, "leads": 0, "spend": 4200.0}]
-    with mock.patch.object(ask_context, "_bq_ready", return_value=None), \
-         mock.patch.dict(sys.modules, {"bigquery_client": mock.Mock(query=lambda *a, **k: rows)}):
-        pull = ask_context.pull_lead_sources(_identity())
+def test_lead_sources_states_traffic_share_and_conversion_rate_where_sessions_exist():
+    pull, _ = _lead_sources(_channel_rows(("2026-07", ATWOOD_JULY_RAW),
+                                          ("2026-06", ATWOOD_JUNE_RAW)))
+    joined = " || ".join(pull.evidence)
+    assert "Organic Search (SEO) / Google Analytics 4: 1,571 of 6,148 sessions (25.6%) in Jul 2026" in joined
+    assert ("Organic Search (SEO) / Google Analytics 4 conversion rate: "
+            "41 leads / 1,571 sessions = 2.61% in Jul 2026") in joined
+    assert ("site-wide conversion rate (Google Analytics 4): "
+            "114 leads / 6,148 sessions = 1.85% in Jul 2026") in joined
+    # Paid Search carries no sessions in this warehouse at all — it gets no
+    # conversion rate rather than a 0% one.
+    assert "Paid Search / Google Ads conversion rate" not in joined
+    assert "Paid Search / Google Ads" not in \
+        " || ".join(e for e in pull.evidence if "sessions" in e)
+
+
+def test_lead_sources_still_states_cost_per_lead_and_month_over_month():
+    pull, _ = _lead_sources(_channel_rows(("2026-07", ATWOOD_JULY_RAW),
+                                          ("2026-06", ATWOOD_JUNE_RAW)))
+    joined = " || ".join(pull.evidence)
+    assert "Paid Search / Google Ads cost per lead: $7,519 spend / 66 leads = $114 in Jul 2026" in joined
+    assert "Paid Search / Google Ads leads 57 → 66 (+15.8%)" in joined
+    assert "Organic Search (SEO) / Google Analytics 4 leads 43 → 41 (−4.7%)" in joined
+    # No spend on the GA4 rows, so no cost per lead invented for them.
+    assert "Organic Search (SEO) / Google Analytics 4 cost per lead" not in joined
+
+
+def test_lead_sources_caveats_when_paid_conversions_exceed_the_site_total():
+    july = [("Website / Traffic", "Google Analytics 4", 6148, 40, None),
+            ("Paid Search", "Google Ads", None, 66, 7519.3321)]
+    pull, _ = _lead_sources(_channel_rows(("2026-07", july)))
+    assert pull.available is True
+    assert pull.caveat
+    assert "Google Ads recorded 66 conversions" in pull.caveat
+    assert "Google Analytics 4 recorded 40 leads" in pull.caveat
+    assert "cannot be read as a slice of the site total" in pull.caveat
+
+
+def test_lead_sources_without_a_total_row_gives_counts_and_says_why_no_shares():
+    july = [("Paid Search", "Google Ads", None, 66, 7519.3321),
+            ("Organic Search (SEO)", "Google Analytics 4", 1571, 41, None)]
+    pull, _ = _lead_sources(_channel_rows(("2026-07", july)))
+    assert pull.available is True
+    assert pull.data["total_leads"] is None and pull.data["total_sessions"] is None
+    joined = " || ".join(pull.evidence)
+    assert "No 'Website / Traffic' row exists for this month" in joined
+    assert "of 107 leads" not in joined and "of 114 leads" not in joined
+    # The subsets must not be summed into a stand-in total.
+    assert "107 leads" not in joined
+    assert pull.caveat and "must not be added together" in pull.caveat
+    # A channel's own rate needs no site total, so it still ships.
+    assert "Organic Search (SEO) / Google Analytics 4 conversion rate: 41 leads / 1,571 sessions" in joined
+
+
+def test_lead_sources_with_zero_leads_anywhere_refuses_to_rank_nothing():
+    july = [("Website / Traffic", "Google Analytics 4", 6148, 0, None),
+            ("Paid Search", "Google Ads", None, 0, 7519.3321)]
+    pull, _ = _lead_sources(_channel_rows(("2026-07", july)))
     assert pull.available is False
     assert "No source recorded a single lead" in pull.missing_reason
 
 
+def test_a_channel_that_is_new_since_the_prior_month_is_reported_as_a_launch():
+    july = ATWOOD_JULY_RAW + [("Paid Social", "Meta / Facebook", 3922, 5, 500.0)]
+    pull, _ = _lead_sources(_channel_rows(("2026-07", july),
+                                          ("2026-06", ATWOOD_JUNE_RAW)))
+    joined = " || ".join(pull.evidence)
+    assert ("Paid Social / Meta / Facebook is new in Jul 2026: no rows at all in "
+            "Jun 2026, then 3,922 sessions and 5 leads in Jul 2026") in joined
+    assert "Paid Search / Google Ads is new in" not in joined
+
+
 def test_data_quality_caveat_rides_along_on_the_trend_pull():
     """A caveat the reader can see beats a clean number they cannot check."""
-    dirty = copy.deepcopy(ATWOOD_MONTHS) + [dict(ATWOOD_MONTHS[-1])]   # duplicate row
-    bq = mock.Mock()
-    bq.query.return_value = [
-        {"month": r["month"], "sessions": r["sessions"], "impressions": r["impressions"],
-         "clicks": r["clicks"], "leads": r["leads"], "spend": r["spend"]} for r in dirty]
-    with mock.patch.object(ask_context, "_bq_ready", return_value=None), \
-         mock.patch.dict(sys.modules, {"bigquery_client": bq}):
-        pull = ask_context.pull_performance_trend(_identity())
+    months = [dict(m) for m in ATWOOD_MONTHS]
+    months[1] = dict(months[1], leads=99999)      # implausible: leads > sessions
+    pull, _ = _trend(months)
     assert pull.available is True
-    assert pull.caveat and "duplicate row(s) collapsed" in pull.caveat
-    assert pull.quality["duplicates_removed"] == 1
-    assert len(pull.data["months"]) == 4
+    assert pull.caveat and "impossible conversion rate" in pull.caveat
+    assert pull.quality["excluded"] >= 1
+    assert "2026-05" not in [m["month"] for m in pull.data["months"]]
 
 
 # ══ 5. engine — the prompt, and what survives it ═══════════════════════════
@@ -1017,3 +1133,40 @@ def test_the_citation_guard_checks_that_an_index_exists_not_that_the_numbers_mat
     assert len(kept) == 1
     assert "1,920" in kept[0]["detail"]
     assert "1,920" not in kept[0]["evidence"][0]
+
+
+# ══ 9. the durable cache must fail loudly ═════════════════════════════════
+
+def test_a_broken_durable_cache_is_reported_on_the_answer_not_just_logged():
+    """`portal_ask_cache` does not exist on the HubSpot company object yet, so
+    the PATCH 400s and the cache silently degrades to process-local. That is
+    invisible until a redeploy, and then every question re-bills a model call.
+    """
+    hs = mock.Mock()
+    hs.get_company.return_value = {}
+    hs.patch_company.side_effect = RuntimeError(
+        "400 PROPERTY_DOESNT_EXIST: portal_ask_cache")
+    ctx = _ctx_with({"performance_trend": _trend_pull()})
+    body = json.dumps({"headline": "h", "summary": "s",
+                       "findings": [{"title": "t", "detail": "d", "evidence": [0]}]})
+    with mock.patch.object(ask_engine, "CACHE_TO_HUBSPOT", True), \
+         mock.patch.dict(sys.modules, {"hubspot_client": hs}), \
+         mock.patch("skills.property_resolver.resolve", return_value=_identity()), \
+         mock.patch.object(ask_engine.ask_context, "assemble", return_value=ctx), \
+         mock.patch.object(ask_engine, "_llm_available", return_value=True), \
+         mock.patch.object(ask_engine, "_complete", return_value=body):
+        first = ask_engine.answer("12345", "whats_not_working")
+        second = ask_engine.answer("12345", "whats_working")
+
+    assert first["cache"]["durable"] is True, "not known broken until it fails"
+    assert second["cache"]["durable"] is False
+    assert "PROPERTY_DOESNT_EXIST" in second["cache"]["reason"]
+    assert second["cache"]["property"] == "portal_ask_cache"
+    # And it stops retrying a PATCH it knows will fail.
+    assert hs.patch_company.call_count == 1
+
+
+def test_cache_status_is_clean_when_durable_caching_is_switched_off():
+    with mock.patch.object(ask_engine, "CACHE_TO_HUBSPOT", False):
+        st = ask_engine.cache_status()
+    assert st["durable"] is False and st["reason"] is None

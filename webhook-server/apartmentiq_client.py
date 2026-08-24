@@ -10,6 +10,13 @@ Key endpoints used:
 - /markets/narratives         → market narrative summary
 """
 
+# PEP 604 (`dict | None`) is used in signatures below; deployment is 3.11 but
+# the dev interpreter is 3.9, where those annotations are evaluated at import
+# and raise TypeError. Without this the whole module fails to import and the
+# Ask surface reports occupancy to a client as a legitimately missing input
+# when it is nothing of the kind. Zero runtime change.
+from __future__ import annotations
+
 import logging
 import os
 import sys

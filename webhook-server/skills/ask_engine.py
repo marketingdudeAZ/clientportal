@@ -49,6 +49,7 @@ _INFLIGHT = set()                       # (company_id, question_key) generating 
 _INFLIGHT_LOCK = threading.Lock()
 _MEMO: Dict[str, Dict[str, Any]] = {}   # company_id -> {question_key: entry}
 _HUBSPOT_CACHE_BROKEN = False           # stop retrying a PATCH that 400s
+_HUBSPOT_CACHE_ERROR = None             # why, so it reaches the response
 
 SYSTEM_PROMPT = (
     "You are a senior multifamily digital-marketing analyst answering ONE preset "
@@ -284,7 +285,10 @@ def _cache_read(company_id: str) -> Dict[str, Any]:
         if not isinstance(data, dict):
             data = {}
     except Exception as exc:                                    # noqa: BLE001
-        logger.debug("ask: cache read failed for %s: %s", company_id, exc)
+        # Not debug. A cache that is quietly off means every question re-bills
+        # a model call and nobody finds out until the invoice.
+        logger.warning("ask: cache read failed for %s (%s) — answers will be "
+                       "regenerated on every request", company_id, exc)
         data = {}
     _MEMO[str(company_id)] = data
     return data
@@ -300,7 +304,7 @@ def _cache_get(company_id: str, key: str) -> Optional[Dict[str, Any]]:
 
 
 def _cache_put(company_id: str, key: str, answer: Dict[str, Any]) -> None:
-    global _HUBSPOT_CACHE_BROKEN
+    global _HUBSPOT_CACHE_BROKEN, _HUBSPOT_CACHE_ERROR
     store = _cache_read(company_id)
     store[key] = {"answer": answer, "cached_at": time.time()}
     _MEMO[str(company_id)] = store
@@ -313,17 +317,38 @@ def _cache_put(company_id: str, key: str, answer: Dict[str, Any]) -> None:
         hubspot_client.patch_company(str(company_id), {CACHE_PROP: json.dumps(store)})
     except Exception as exc:                                    # noqa: BLE001
         _HUBSPOT_CACHE_BROKEN = True
-        logger.warning("ask: durable cache disabled for this process — "
-                       "PATCH %s failed (%s)", CACHE_PROP, exc)
+        _HUBSPOT_CACHE_ERROR = str(exc)
+        logger.error(
+            "ask: DURABLE CACHE IS OFF for this process. PATCH of company "
+            "property %r failed (%s). Answers are still cached in memory, so "
+            "this is invisible until a redeploy — every question then re-bills "
+            "a model call. Fix: create the %r property (single-line text, "
+            "multi-line) on the HubSpot company object.",
+            CACHE_PROP, exc, CACHE_PROP)
 
 
 def clear_cache() -> None:
     """Drop the process-local cache. For tests and for `force=True` callers."""
-    global _HUBSPOT_CACHE_BROKEN
+    global _HUBSPOT_CACHE_BROKEN, _HUBSPOT_CACHE_ERROR
     _MEMO.clear()
     _HUBSPOT_CACHE_BROKEN = False
+    _HUBSPOT_CACHE_ERROR = None
     with _INFLIGHT_LOCK:
         _INFLIGHT.clear()
+
+
+def cache_status() -> Dict[str, Any]:
+    """Whether answers survive a redeploy, and why not when they do not.
+
+    Carried on every answer rather than left in the logs: a silently disabled
+    cache costs a model call per question and looks exactly like a working one
+    until someone reads the bill.
+    """
+    return {
+        "durable": bool(CACHE_TO_HUBSPOT) and not _HUBSPOT_CACHE_BROKEN,
+        "property": CACHE_PROP,
+        "reason": _HUBSPOT_CACHE_ERROR,
+    }
 
 
 # ── the public entry point ─────────────────────────────────────────────────
@@ -390,6 +415,7 @@ def _generate(question, identity) -> Dict[str, Any]:
                    for k, p in ctx.pulls.items()},
         "generated_at": time.time(),
         "cached": False,
+        "cache": cache_status(),
     }
 
     unmet = [r for r in question.required if not ctx.pulls.get(r) or not ctx.pulls[r].available]
