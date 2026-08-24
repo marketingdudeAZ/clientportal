@@ -10,6 +10,8 @@ Key endpoints used:
 - /markets/narratives         → market narrative summary
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import sys

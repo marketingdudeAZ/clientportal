@@ -32,6 +32,8 @@ When extracting a section into a blueprint, follow the pattern in
 `routes/paid.py`. Add the new blueprint to `routes/__init__.register_all`.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import sys
@@ -81,6 +83,10 @@ def _clerk_identity():
         if ident:
             request.environ["HTTP_X_PORTAL_EMAIL"] = ident["email"]
             request.environ["HTTP_X_PORTAL_USER_ID"] = ident["user_id"]
+            # Proof-of-identity marker for _route_utils.identity_is_verified().
+            # NOT a header: anything HTTP_* can be sent by the caller, so
+            # X-Portal-User-Id above proves nothing on its own.
+            request.environ["portal.identity_verified"] = True
         elif os.environ.get("CLERK_SECRET_KEY"):
             # A Bearer token was presented but failed verification — do not
             # let a stale spoofable header ride along beside a bad token.

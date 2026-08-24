@@ -29,7 +29,8 @@ import re
 from flask import Blueprint, jsonify, request
 
 import portal_tickets
-from _route_utils import current_portal_email, preflight_response, require_access
+from _route_utils import (current_portal_email, preflight_response,
+                          require_access, require_company_access)
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,27 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # cannot be reconstructed — so the sentinel is rejected at the door rather than
 # cleaned up later.
 _SENTINEL_EMAILS = {"portal@rpmliving.com", "portal@rpmliving.com".upper()}
+
+
+
+def _company_scope(company_id: str, property_uuid: str) -> str:
+    """The company id to authorize against, given either identifier.
+
+    A uuid-only request is the same leak by a different key, so it has to be
+    resolved to a company before anything is returned. If resolution fails we
+    hand back the uuid unchanged: no client allowlist contains a uuid, so the
+    check fails closed, while internal callers are already past the gate.
+    """
+    if company_id:
+        return company_id
+    if not property_uuid:
+        return ""
+    try:
+        from skills import property_resolver
+        return property_resolver.resolve(property_uuid, kind="uuid").company_id
+    except Exception as e:  # noqa: BLE001
+        logger.warning("ticket scope: cannot resolve uuid %s: %s", property_uuid, e)
+        return property_uuid
 
 
 def _is_internal(req) -> bool:
@@ -230,6 +252,12 @@ def ticket_create():
 
     if not company_id:
         return jsonify({"ok": False, "error": "company_id required"}), 400
+    # Filing INTO another property's ClickUp queue is the write-side of the
+    # same hole, and it is the worse half: a read leaks, a write lands real
+    # work on a team that did not ask for it.
+    gate = require_company_access(company_id)
+    if gate:
+        return gate
     if not type_key:
         return jsonify({"ok": False, "error": "ticket_type required"}), 400
     if not isinstance(fields, dict):
@@ -260,6 +288,11 @@ def ticket_list():
     property_uuid = (request.args.get("uuid") or "").strip()
     if not company_id and not property_uuid:
         return jsonify({"error": "company_id or uuid required"}), 400
+    # Until this landed, changing the company_id in the query string returned
+    # another property's tickets to anyone signed in.
+    gate = require_company_access(_company_scope(company_id, property_uuid))
+    if gate:
+        return gate
     try:
         tickets = portal_tickets.list_tickets(company_id, property_uuid=property_uuid)
     except Exception as e:  # noqa: BLE001

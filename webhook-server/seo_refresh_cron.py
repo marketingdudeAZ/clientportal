@@ -9,6 +9,8 @@ Invoked by Render cron (or ad-hoc by POST /api/admin/seo-refresh) to:
 Kept here rather than in server.py so the request path stays slim.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from datetime import datetime, timezone

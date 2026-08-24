@@ -91,3 +91,88 @@ def require_access(feature_key, email=None):
             "stage": stage_for(feature_key),
         }), 403
     return None
+
+
+def identity_is_verified():
+    """True if this request's portal email was proven, not merely asserted.
+
+    server.py's `_clerk_identity` before_request sets this after it verifies a
+    Clerk Bearer JWT. The flag lives in `request.environ` under a lowercase
+    dotted key rather than a header, because anything shaped like `HTTP_*` can
+    be injected by the caller — including `X-Portal-User-Id`, which is why
+    presence of that header is not proof of anything.
+    """
+    return bool(request.environ.get("portal.identity_verified"))
+
+
+def is_internal_caller():
+    """True for a server-to-server call carrying the shared internal key."""
+    import hmac
+    expected = os.environ.get("INTERNAL_API_KEY", "")
+    provided = request.headers.get("X-Internal-Key", "")
+    return bool(expected and provided and hmac.compare_digest(expected, provided))
+
+
+def require_company_access(company_id):
+    """Reject unless the caller may act on `company_id`. 400/401/403 or None.
+
+        gate = require_company_access(company_id)
+        if gate:
+            return gate
+
+    What this fixes: every property-scoped endpoint used to take company_id
+    straight from the query string and answer for it. `GET /api/portal-tickets
+    ?company_id=<anything>` returned another property's tickets to anyone who
+    changed the number. Unlike `require_access`, which asks "may this person
+    see this FEATURE", this asks "may this person see THIS PROPERTY".
+
+    The rules:
+      - internal key            -> allowed (cron, webhooks, internal jobs)
+      - no email                -> 401
+      - no company_id           -> 400, never a silent portfolio-wide answer
+      - internal role           -> allowed, portfolio-wide by design
+      - client role             -> allowed only for ids in feature_access
+                                   .companies_for(email); otherwise 403
+
+    What this does NOT fix, and must not be described as fixing: with no Bearer
+    token, X-Portal-Email is asserted by the caller. Anyone who sends
+    `X-Portal-Email: someone@rpmliving.com` is internal as far as this function
+    can tell, so this narrows the hole to "you must know an internal address"
+    rather than closing it. Closing it needs the identity proven — Clerk covers
+    part of the userbase today. Set PORTAL_STRICT_IDENTITY=true to require a
+    verified identity here and make the gate real; it is off by default because
+    turning it on locks out every user Clerk does not yet cover.
+    """
+    from feature_access import ROLE_INTERNAL, companies_for, role_for
+
+    if is_internal_caller():
+        return None
+
+    email = current_portal_email()
+    if not email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    if os.environ.get("PORTAL_STRICT_IDENTITY", "").lower() in ("1", "true", "yes"):
+        if not identity_is_verified():
+            return jsonify({
+                "error": "Verified sign-in required",
+                "detail": "This endpoint requires a verified session, not an "
+                          "asserted email header.",
+            }), 401
+
+    company_id = (str(company_id) if company_id is not None else "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+
+    if role_for(email) == ROLE_INTERNAL:
+        return None
+
+    if company_id in companies_for(email):
+        return None
+
+    # Deliberately does not say whether the company exists. A 403 that
+    # distinguishes "not yours" from "no such property" is a directory.
+    return jsonify({
+        "error": "Not authorized for this property",
+        "company_id": company_id,
+    }), 403

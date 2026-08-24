@@ -1,5 +1,7 @@
 """Phase 4: Asset upload to HubSpot Files API + HubDB row creation."""
 
+from __future__ import annotations
+
 import io
 import logging
 import time
