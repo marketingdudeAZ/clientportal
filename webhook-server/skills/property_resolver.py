@@ -218,6 +218,49 @@ def _search_one(prop: str, value: str) -> PropertyIdentity:
     return _from_hubspot(results[0])
 
 
+def _search_by_name(value: str) -> PropertyIdentity:
+    """Resolve a property by name. EQ first, then a token search.
+
+    Names are how people actually refer to properties — "Atwood at Rivulon" is
+    what someone types, not 30912193455 — but they are not identifiers: they
+    are not unique, not stable, and not always typed the way HubSpot stores
+    them ("The Atwood at Rivulon"). So this tries exact first, falls back to a
+    token match, and refuses rather than guessing when more than one survives.
+    """
+    import hubspot_client
+
+    value = value.strip()
+    results = hubspot_client.search_companies(
+        [{"propertyName": "name", "operator": "EQ", "value": value}],
+        list(IDENTITY_PROPERTIES),
+    )
+    if not results:
+        results = hubspot_client.search_companies(
+            [{"propertyName": "name", "operator": "CONTAINS_TOKEN", "value": value}],
+            list(IDENTITY_PROPERTIES),
+        )
+
+    if not results:
+        raise PropertyNotFound(f"no company named {value!r}")
+
+    if len(results) > 1:
+        # One exact case-insensitive hit among several token matches is not
+        # ambiguous — "Atwood" matching both "The Atwood" and "Atwood Park"
+        # is, but an exact name is the answer.
+        exact = [r for r in results
+                 if ((r.get("properties") or {}).get("name") or "").strip().lower()
+                 == value.lower()]
+        if len(exact) == 1:
+            return _from_hubspot(exact[0])
+        names = ", ".join((r.get("properties") or {}).get("name", "?")
+                          for r in results[:5])
+        raise AmbiguousProperty(
+            f"{len(results)} companies match name {value!r}: {names}. "
+            f"Pass a company_id or uuid instead.")
+
+    return _from_hubspot(results[0])
+
+
 def resolve(identifier: str | int, *, kind: str | None = None,
             use_cache: bool = True) -> PropertyIdentity:
     """Resolve any known identifier to the full identity.
@@ -225,7 +268,8 @@ def resolve(identifier: str | int, *, kind: str | None = None,
     `kind` forces interpretation; otherwise it is inferred. Inference order
     matters: a HubSpot company_id and a uuid are both long digit strings and are
     usually equal, so company_id is tried first and uuid second — cheapest exact
-    read before a search.
+    read before a search. Anything that is neither digits nor domain-shaped is
+    treated as a property name, which is the only identifier a person types.
 
     Raises PropertyNotFound / AmbiguousProperty rather than returning None.
     """
@@ -259,6 +303,8 @@ def resolve(identifier: str | int, *, kind: str | None = None,
         return _finish(_search_one("ga4_property_id", ident))
     if kind == "domain":
         return _finish(_search_one("domain", _normalize_domain(ident)))
+    if kind == "name":
+        return _finish(_search_by_name(ident))
 
     # Inference path for a bare numeric id.
     if ident.isdigit():
@@ -275,7 +321,10 @@ def resolve(identifier: str | int, *, kind: str | None = None,
     if "." in ident or "/" in ident:
         return _finish(_search_one("domain", _normalize_domain(ident)))
 
-    raise PropertyNotFound(f"cannot infer identifier kind for {ident!r}; pass kind=")
+    # Anything left is prose — treat it as a name. Before this, a caller who
+    # passed "Atwood at Rivulon" got "cannot infer identifier kind", which
+    # reads as "no such property" to whoever typed it.
+    return _finish(_search_by_name(ident))
 
 
 def _normalize_domain(value: str) -> str:
