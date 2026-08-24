@@ -525,11 +525,30 @@ def pull_lead_sources(identity) -> Pull:
 
     total_leads = sum(x["leads"] or 0 for x in latest)
     total_spend = sum(x["spend"] or 0 for x in latest)
+    total_sessions = sum(x["sessions"] or 0 for x in latest)
     evidence = [
         share_evidence("%s / %s" % (x["channel"], x["source"]), x["leads"],
                        total_leads, "leads", latest_month, src)
         for x in latest if (x["leads"] or 0) > 0
     ]
+
+    # A channel's share of TRAFFIC beside its share of LEADS, and its own
+    # conversion rate. Without these the worst finding a source-attribution
+    # answer can make is unreachable: Atwood's June paid-social launch is not
+    # "Meta sent 4% of leads", it is "Meta sent the largest block of sessions
+    # on the property and converted almost none of them". That claim needs the
+    # session denominator on the same line, and the model is forbidden from
+    # computing it — so it has to be formatted here or it cannot be said.
+    for x in latest:
+        if not x.get("sessions"):
+            continue
+        label = "%s / %s" % (x["channel"], x["source"])
+        evidence.append(share_evidence(label, x["sessions"], total_sessions,
+                                       "sessions", latest_month, src))
+        evidence.append(rate_evidence(label + " conversion rate", x["leads"] or 0,
+                                      x["sessions"], "leads", "sessions",
+                                      latest_month, src))
+
     for x in latest:
         if (x["leads"] or 0) > 0 and x.get("spend"):
             evidence.append(
@@ -548,6 +567,17 @@ def pull_lead_sources(identity) -> Pull:
                 evidence.append(change_evidence(
                     "%s / %s leads" % (x["channel"], x["source"]),
                     before["leads"], x["leads"], prior_month, latest_month, src))
+            elif before is None and (x["sessions"] or x["leads"]):
+                # A channel with no row in the prior month is a launch. Say so:
+                # "spend appeared and leads did not follow" is a different
+                # finding from "an existing channel got worse", and the two
+                # must not be reported as the same thing.
+                evidence.append(
+                    "%s / %s is new in %s: no rows at all in %s, then %s "
+                    "sessions and %s leads in %s [%s]" % (
+                        x["channel"], x["source"], month_label(latest_month),
+                        month_label(prior_month), fmt_num(x["sessions"]),
+                        fmt_num(x["leads"]), month_label(latest_month), src))
 
     if not total_leads:
         return Pull(name=name, source=src, available=False,
@@ -560,7 +590,8 @@ def pull_lead_sources(identity) -> Pull:
         name=name, source=src, available=True,
         data={"month": latest_month, "prior_month": prior_month,
               "rows": latest, "prior_rows": by_month.get(prior_month) if prior_month else None,
-              "total_leads": total_leads, "total_spend": round(total_spend, 2)},
+              "total_leads": total_leads, "total_spend": round(total_spend, 2),
+              "total_sessions": total_sessions},
         evidence=evidence,
     )
 
@@ -734,7 +765,8 @@ def pull_impression_share_lost(identity) -> Pull:
             "Google Ads returned no impression-share rows for this property."))
     evidence = []
     for channel, pct in sorted(data.items(), key=lambda kv: -(kv[1] or 0)):
-        evidence.append("%s impression share lost: %.1f%% of available impressions [%s]"
+        evidence.append("%s impression share lost TO BUDGET: %.1f%% of available "
+                        "impressions (share lost to rank is not fetched) [%s]"
                         % (channel, float(pct or 0) * 100.0
                            if float(pct or 0) <= 1 else float(pct), src))
     return Pull(name=name, source=src, available=True,

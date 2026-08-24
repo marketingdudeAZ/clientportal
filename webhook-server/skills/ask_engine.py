@@ -227,7 +227,14 @@ def _fallback(question, ctx: ask_context.AskContext,
             "detail": s["evidence"],
             "evidence": [evidence[idx]],
         })
-    if not findings and evidence:
+    # Only an unfocused question may fall back to "here is the biggest thing we
+    # measured". A focused one must not: the largest signal on a property where
+    # everything is down is a decline, and printing it under "What's working
+    # well at this property?" states the exact opposite of the truth. When the
+    # focus finds nothing, "nothing did" is the answer.
+    focused = question.focus in (question_registry.FOCUS_POSITIVE,
+                                 question_registry.FOCUS_NEGATIVE)
+    if not findings and evidence and not focused:
         findings = [{"title": "What the data shows", "detail": evidence[0],
                      "evidence": [evidence[0]]}]
 
@@ -237,6 +244,17 @@ def _fallback(question, ctx: ask_context.AskContext,
         summary = ("Answered from the property's own figures without a written "
                    "narrative. %d measured change(s) are listed below, each with "
                    "its own numbers." % len(findings))
+    elif evidence and focused:
+        # Measured, and nothing matched. Say that, and say it is not a data gap.
+        headline = ("Nothing in this property's measured data moved in the right "
+                    "direction this period."
+                    if question.focus == question_registry.FOCUS_POSITIVE else
+                    "Nothing in this property's measured data got materially "
+                    "worse this period.")
+        summary = ("%d measured figure(s) were read for this property and none "
+                   "of them met the bar for this question. That is the answer, "
+                   "not a missing input — every figure that was read is listed "
+                   "under evidence." % len(evidence))
     else:
         headline = "There is not enough data on file to answer this question."
         summary = ("None of the inputs this question needs returned usable data, "
