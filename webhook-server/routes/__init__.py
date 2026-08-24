@@ -4,6 +4,7 @@ Add new blueprints here as they're extracted from server.py. server.py
 calls `register_all(app)` once at startup.
 """
 
+from .attention import attention_bp
 from .ils import ils_bp
 from .budget_sync_api import budget_sync_api_bp
 from .clickup import clickup_bp
@@ -23,6 +24,9 @@ from .webhooks import register_webhook_blueprints
 
 def register_all(app):
     """Register every blueprint in this package on the given Flask app."""
+    # Attention queue. Owns /api/needs-you, which moved here out of
+    # server.py — same URL, same response keys, one implementation.
+    app.register_blueprint(attention_bp)
     app.register_blueprint(paid_bp)
     app.register_blueprint(portal_bp)
     app.register_blueprint(portal_tickets_bp)

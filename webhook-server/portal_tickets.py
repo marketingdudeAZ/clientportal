@@ -1186,6 +1186,46 @@ def mapping_for_task(task_id: str) -> dict | None:
         return None
 
 
+def mappings_for_tasks(task_ids: "list[str]") -> dict:
+    """{task_id: {company_id, property_uuid, ticket_type, submitted_by}} in ONE read.
+
+    The bulk counterpart to `mapping_for_task`. The attention queue scans whole
+    ClickUp lists and then asks "which property does each of these belong to?" —
+    per-task lookups would be one BigQuery job per row, which is how a page that
+    should cost one query costs two hundred.
+
+    Same append-only caveat as `mapping_for_task`: duplicate task_id rows exist,
+    so the newest row per task wins. Unknown tasks are simply absent from the
+    result — a task filed straight into ClickUp has no mapping row and that is
+    not an error.
+    """
+    ids = [str(t).strip() for t in (task_ids or []) if str(t or "").strip()]
+    if not ids:
+        return {}
+    try:
+        import bigquery_client
+        if not bigquery_client.is_bigquery_configured():
+            return {}
+        from google.cloud import bigquery
+        from config import BIGQUERY_PROJECT_ID
+        dataset = bigquery_client._dataset()
+        sql = f"""
+            SELECT task_id, company_id, property_uuid, ticket_type, submitted_by
+            FROM (
+                SELECT task_id, company_id, property_uuid, ticket_type, submitted_by,
+                       ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY created_at DESC) AS rn
+                FROM `{BIGQUERY_PROJECT_ID}.{dataset}.{_MAPPING_TABLE}`
+                WHERE task_id IN UNNEST(@tids)
+            )
+            WHERE rn = 1
+        """
+        params = [bigquery.ArrayQueryParameter("tids", "STRING", ids)]
+        return {str(r["task_id"]): dict(r) for r in bigquery_client.query(sql, params)}
+    except Exception as e:  # noqa: BLE001 — attribution is best-effort
+        logger.warning("portal ticket bulk mapping lookup failed (%d ids): %s", len(ids), e)
+        return {}
+
+
 def _read_mappings(company_id: str, property_uuid: str, limit: int) -> list[dict]:
     global _TRACKING_DEGRADED
     try:

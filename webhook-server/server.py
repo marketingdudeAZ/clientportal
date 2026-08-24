@@ -6252,37 +6252,17 @@ def disposition_retain():
                     "retained": retained}), (200 if ok else 502)
 
 
-@app.route("/api/needs-you", methods=["GET", "OPTIONS"])
-def needs_you():
-    """The 'What needs you' action inbox: onboarding + dispositions + open tickets.
-
-    Onboarding = properties coming online + completeness flags. Dispositions =
-    retain/turn-off review. Attention = aging/open tickets (the non-health
-    triage signals). Health-score rows are intentionally dropped — Properties
-    and Portfolio Dashboard already show those.
-    """
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    if not request.headers.get("X-Portal-Email", "").strip():
-        return jsonify({"error": "Authentication required"}), 401
-    onb = dispo = attn = []
-    try:
-        import onboarding
-        onb = onboarding.list_onboarding()
-    except Exception as e:
-        logger.warning("needs-you onboarding failed: %s", e)
-    try:
-        import disposition
-        dispo = disposition.list_dispositioning()
-    except Exception as e:
-        logger.warning("needs-you dispositions failed: %s", e)
-    try:
-        import triage as _tri
-        rows = (_tri.get_portfolio_triage() or {}).get("rows", [])
-        attn = [r for r in rows if r.get("reason_kind") in ("ticket_aging", "ticket_open")]
-    except Exception as e:
-        logger.warning("needs-you attention failed: %s", e)
-    return jsonify({"onboarding": onb, "dispositions": dispo, "attention": attn})
+# /api/needs-you MOVED to routes/attention.py (registered by register_all).
+#
+# Same URL, same response keys — the 'What needs you' action inbox still
+# returns onboarding + dispositions + attention, with health-score triage rows
+# still excluded because Properties and the Portfolio Dashboard already show
+# them. It now also carries `work`: open creative / branding / digital tickets
+# from ClickUp and HubSpot Service Hub, so the queue is complete.
+#
+# Not left here delegating: two rules on one URL is a routing coin-flip, and
+# the whole reason for the move is that there is exactly one implementation.
+# `attention.build()` is the entry point if you need the payload in-process.
 
 
 # ─── AI SWOT (Performance page) ─────────────────────────────────────────────
