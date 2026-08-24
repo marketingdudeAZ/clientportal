@@ -1142,6 +1142,10 @@ body{line-height:1.55}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Performance
       </div>
+      <div class="nav-item" onclick="nav('ask',this)" title="Preset questions answered from this property's data">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Ask
+      </div>
       <div class="nav-item" onclick="nav('services',this)" title="Plan, spend, recommendations, paid media">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
         Plan &amp; Spend
@@ -1533,6 +1537,55 @@ body{line-height:1.55}
 </section>
 
 <!-- ── SEO & AI INSIGHTS ── -->
+<section id="section-ask" class="section">
+  <div class="sec-topbar">
+    <div>
+      <div class="sec-title">Ask</div>
+      <div class="sec-sub">Pick a question. Every number comes back with what it was divided by and where it came from.</div>
+    </div>
+  </div>
+
+  <!-- Chips are rendered from the registry manifest, not hard-coded here.
+       Adding a question in skills/question_registry.py makes it appear on this
+       page with no template change and no redeploy of this file. -->
+  <div id="ask-chips" class="ask-chips">
+    <div class="ask-chips-loading">Loading questions…</div>
+  </div>
+
+  <!-- Nothing is answered until someone asks. The whole point of this surface
+       is that it does not bombard a page with data nobody requested. -->
+  <div id="ask-idle" class="card card-p ask-idle">
+    <div class="ask-idle-title">No question asked yet</div>
+    <div class="ask-idle-sub">Choose one above. Answers take a few seconds because they are assembled from the warehouse and written fresh, not pulled from a cached dashboard.</div>
+  </div>
+
+  <div id="ask-pending" class="card card-p ask-pending" style="display:none">
+    <div class="ask-spinner"></div>
+    <div>
+      <div class="ask-pending-title" id="ask-pending-title">Working on it…</div>
+      <div class="ask-pending-sub">Reading performance, spend, occupancy and ticket history for this property, then writing the answer. Usually 20–40 seconds.</div>
+    </div>
+  </div>
+
+  <div id="ask-error" class="card card-p ask-error" style="display:none"></div>
+
+  <div id="ask-answer" style="display:none">
+    <div class="card card-p ask-answer-card">
+      <div class="ask-answer-head">
+        <div class="ask-answer-q" id="ask-answer-q"></div>
+        <button class="btn btn-secondary btn-sm" id="ask-refresh" onclick="askRefresh()" title="Ignore the cached answer and ask again">Re-run</button>
+      </div>
+      <div class="ask-headline" id="ask-headline"></div>
+      <div class="ask-summary" id="ask-summary"></div>
+      <div id="ask-findings"></div>
+      <div id="ask-nextstep"></div>
+      <div id="ask-gaps"></div>
+      <div id="ask-notevidenced"></div>
+      <div class="ask-provenance" id="ask-provenance"></div>
+    </div>
+  </div>
+</section>
+
 <section id="section-seo" class="section">
   <div class="sec-topbar">
     <div>
@@ -3511,6 +3564,7 @@ function nav(id, el) {
   if (id === 'video')            { loadVideoCreative(); }
   // Forecast page retired 2026-07 — funnel forecast now lives on Plan & Spend
   if (id === 'performance')      { loadPerformance(); loadSwot(); }
+  if (id === 'ask')              { loadAsk(); }
   if (id === 'activity')         { loadActivity(); }
   if (id === 'recommendations')  { loadCallPrep(); }
   if (id === 'seo')              { if (typeof loadSeoInsights === 'function') loadSeoInsights(); }
@@ -11022,6 +11076,276 @@ setTimeout(loadPropertySwitcher, 1500);
   }
 </script>
 
+<style>
+/* Ask surface. Uses the template's inline tokens (--j, --cu, --tp, --ts, --tm,
+   --bd, --bg) rather than portal.css — the two have drifted and the inline
+   copy is what actually renders. */
+.ask-chips{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:22px}
+.ask-chips-loading{font-size:12.5px;color:var(--tm);padding:6px 0}
+.ask-chip{border:1px solid var(--bd);background:var(--white);color:var(--tp);
+  border-radius:999px;padding:9px 16px;font-size:13px;font-weight:600;
+  cursor:pointer;transition:border-color .12s,background .12s,color .12s}
+.ask-chip:hover{border-color:var(--j);background:var(--bg)}
+.ask-chip.active{background:var(--j);border-color:var(--j);color:#fff}
+.ask-chip[disabled]{opacity:.5;cursor:default}
+.ask-idle,.ask-pending,.ask-error{margin-top:2px}
+.ask-idle-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:4px}
+.ask-idle-sub,.ask-pending-sub{font-size:12.5px;color:var(--ts);line-height:1.55;max-width:62ch}
+.ask-pending{display:flex;gap:16px;align-items:flex-start}
+.ask-pending-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:4px}
+.ask-spinner{width:17px;height:17px;border:2px solid var(--bd);border-top-color:var(--j);
+  border-radius:50%;animation:ask-spin .8s linear infinite;flex-shrink:0;margin-top:2px}
+@keyframes ask-spin{to{transform:rotate(360deg)}}
+.ask-error{border-left:3px solid #B4443A;font-size:13px;color:var(--tp);line-height:1.6}
+.ask-answer-head{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:16px;margin-bottom:14px}
+.ask-answer-q{font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--tm)}
+.ask-headline{font-size:17px;font-weight:700;color:var(--tp);line-height:1.45;
+  margin-bottom:10px}
+.ask-summary{font-size:13.5px;color:var(--ts);line-height:1.65;max-width:74ch;
+  margin-bottom:26px}
+.ask-finding{border-top:1px solid var(--bd);padding:20px 0}
+.ask-finding-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:6px}
+.ask-finding-detail{font-size:13px;color:var(--ts);line-height:1.65;max-width:74ch}
+/* Evidence is the point of this product: a claim a client can check. It is
+   deliberately not collapsed behind a disclosure. */
+.ask-evidence{margin-top:12px;padding:11px 14px;background:var(--bg);
+  border-radius:8px;font-size:11.5px;color:var(--ts);line-height:1.7}
+.ask-evidence-item{display:block}
+.ask-evidence-item + .ask-evidence-item{margin-top:3px}
+.ask-block{margin-top:24px;padding:16px 18px;border-radius:10px;
+  background:var(--bg);border:1px solid var(--bd)}
+.ask-block-title{font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--ts);margin-bottom:9px}
+.ask-gap{font-size:12.5px;color:var(--ts);line-height:1.6}
+.ask-gap + .ask-gap{margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)}
+.ask-gap b{color:var(--tp);font-weight:700}
+.ask-nextstep{border-left:3px solid var(--cu)}
+.ask-provenance{margin-top:24px;padding-top:14px;border-top:1px solid var(--bd);
+  font-size:11px;color:var(--tm);line-height:1.6}
+</style>
+<script>
+/* ── Ask ────────────────────────────────────────────────────────────────────
+   Preset questions only. There is no free-text box, and its absence is a
+   product decision rather than an unfinished feature — the manifest says so
+   explicitly with free_text:false.
+
+   Nothing runs on section open except loading the question list. An answer
+   costs a model call, so it happens when somebody asks for it.
+   ───────────────────────────────────────────────────────────────────────── */
+(function(){
+  var _askQuestions = null;
+  var _askLoaded    = false;
+  var _askBusy      = false;
+  var _askCurrent   = null;
+  var _askPoll      = null;
+
+  function _askApi()    { return window.__WEBHOOK_URL__ || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com'; }
+  function _askCid()    { return window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || ''; }
+  function _askEmail()  { return window.__PORTAL_EMAIL__ || ''; }
+  function _askHead()   { return { 'Content-Type':'application/json', 'X-Portal-Email': _askEmail() }; }
+  function _e(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function _show(id, on){ var el=document.getElementById(id); if(el) el.style.display = on ? '' : 'none'; }
+
+  function _panels(which){
+    _show('ask-idle',    which === 'idle');
+    _show('ask-pending', which === 'pending');
+    _show('ask-error',   which === 'error');
+    _show('ask-answer',  which === 'answer');
+  }
+
+  function _fail(msg){
+    var el = document.getElementById('ask-error');
+    if (el) el.innerHTML = _e(msg);
+    _panels('error');
+  }
+
+  window.loadAsk = function(){
+    if (_askLoaded) return;
+    _askLoaded = true;
+    fetch(_askApi() + '/api/ask/questions', { headers: _askHead() })
+      .then(function(r){
+        if (r.status === 401 || r.status === 403) { return { _denied: true }; }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data){
+        if (data._denied) {
+          _askLoaded = false;   // let a re-entitled user retry without a reload
+          var chips = document.getElementById('ask-chips');
+          if (chips) chips.innerHTML = '<div class="ask-chips-loading">Ask is not switched on for your account yet.</div>';
+          _panels('idle');
+          return;
+        }
+        _askQuestions = (data && data.questions) || [];
+        _renderChips();
+      })
+      .catch(function(err){
+        _askLoaded = false;
+        var chips = document.getElementById('ask-chips');
+        if (chips) chips.innerHTML = '<div class="ask-chips-loading">Could not load the question list (' + _e(err.message) + ').</div>';
+      });
+  };
+
+  function _renderChips(){
+    var el = document.getElementById('ask-chips');
+    if (!el) return;
+    if (!_askQuestions.length) {
+      el.innerHTML = '<div class="ask-chips-loading">No questions are configured.</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < _askQuestions.length; i++) {
+      var q = _askQuestions[i];
+      html += '<button class="ask-chip" data-key="' + _e(q.key) + '"'
+            + ' title="' + _e(q.blurb || '') + '"'
+            + ' onclick="askRun(\'' + _e(q.key) + '\')">'
+            + _e(q.label) + '</button>';
+    }
+    el.innerHTML = html;
+  }
+
+  function _markActive(key){
+    var chips = document.querySelectorAll('.ask-chip');
+    for (var i = 0; i < chips.length; i++) {
+      var on = chips[i].getAttribute('data-key') === key;
+      chips[i].className = on ? 'ask-chip active' : 'ask-chip';
+      if (_askBusy) { chips[i].setAttribute('disabled','disabled'); }
+      else          { chips[i].removeAttribute('disabled'); }
+    }
+  }
+
+  window.askRun = function(key, force){
+    if (_askBusy) return;
+    var cid = _askCid();
+    if (!cid) { _fail('No property is selected, so there is nothing to ask about.'); return; }
+
+    _askCurrent = key;
+    _askBusy = true;
+    _markActive(key);
+
+    var label = key;
+    for (var i = 0; i < (_askQuestions || []).length; i++) {
+      if (_askQuestions[i].key === key) { label = _askQuestions[i].label; break; }
+    }
+    var t = document.getElementById('ask-pending-title');
+    if (t) t.textContent = label;
+    _panels('pending');
+
+    var url = _askApi() + '/api/ask/' + encodeURIComponent(key) + (force ? '?force=1' : '');
+    fetch(url, { method:'POST', headers:_askHead(), body: JSON.stringify({ company_id: cid }) })
+      .then(function(r){ return r.json().then(function(j){ return { status:r.status, body:j }; }); })
+      .then(function(res){
+        if (res.status === 202) { _pollAgain(key); return; }   // already generating
+        _askBusy = false;
+        _markActive(key);
+        if (res.status === 403) { _fail('You are not authorized to ask about this property.'); return; }
+        if (res.status === 404) { _fail((res.body && res.body.detail) || 'That question or property could not be found.'); return; }
+        if (res.status === 409) { _fail((res.body && res.body.detail) || 'That property name matches more than one record.'); return; }
+        if (res.status >= 400)  { _fail((res.body && res.body.error) || ('Request failed (' + res.status + ').')); return; }
+        _renderAnswer(res.body, label);
+      })
+      .catch(function(err){
+        _askBusy = false; _markActive(key);
+        _fail('Network error: ' + err.message);
+      });
+  };
+
+  /* A 202 means another request for the same property and question is already
+     in flight. Wait for it rather than paying for a second model call. */
+  function _pollAgain(key){
+    if (_askPoll) clearTimeout(_askPoll);
+    _askPoll = setTimeout(function(){
+      _askBusy = false;
+      if (_askCurrent === key) window.askRun(key);
+    }, 4000);
+  }
+
+  window.askRefresh = function(){
+    if (_askCurrent) window.askRun(_askCurrent, true);
+  };
+
+  function _renderAnswer(a, label){
+    a = a || {};
+    document.getElementById('ask-answer-q').textContent = label;
+    document.getElementById('ask-headline').textContent = a.headline || '';
+    document.getElementById('ask-summary').textContent  = a.summary  || '';
+
+    var findings = a.findings || [];
+    var html = '';
+    for (var i = 0; i < findings.length; i++) {
+      var f = findings[i] || {};
+      html += '<div class="ask-finding">'
+            +   '<div class="ask-finding-title">' + _e(f.title) + '</div>'
+            +   '<div class="ask-finding-detail">' + _e(f.detail) + '</div>';
+      var ev = f.evidence || [];
+      if (ev.length) {
+        html += '<div class="ask-evidence">';
+        for (var k = 0; k < ev.length; k++) {
+          html += '<span class="ask-evidence-item">' + _e(ev[k]) + '</span>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    document.getElementById('ask-findings').innerHTML = html;
+
+    /* Missing inputs are shown, never swallowed. A source that is dark and a
+       source that says zero mean completely different things, and the second
+       one is what makes a client stop trusting the page. */
+    var gaps = a.missing_inputs || [];
+    var g = '';
+    if (gaps.length) {
+      g = '<div class="ask-block"><div class="ask-block-title">Not included in this answer</div>';
+      for (var m = 0; m < gaps.length; m++) {
+        var gp = gaps[m] || {};
+        g += '<div class="ask-gap"><b>' + _e(gp.input || gp.source) + '</b> — ' + _e(gp.reason) + '</div>';
+      }
+      g += '</div>';
+    }
+    var caveats = a.caveats || [];
+    if (caveats.length) {
+      g += '<div class="ask-block"><div class="ask-block-title">Data quality</div>';
+      for (var c = 0; c < caveats.length; c++) {
+        g += '<div class="ask-gap">' + _e(caveats[c]) + '</div>';
+      }
+      g += '</div>';
+    }
+    document.getElementById('ask-gaps').innerHTML = g;
+
+    /* next_step is the "so what". An answer that names a problem and stops is
+       the reporting posture this surface exists to replace. */
+    var step = document.getElementById('ask-nextstep');
+    if (step) {
+      step.innerHTML = a.next_step
+        ? '<div class="ask-block ask-nextstep"><div class="ask-block-title">What to do next</div>'
+          + '<div class="ask-gap">' + _e(a.next_step) + '</div></div>'
+        : '';
+    }
+
+    var ne = a.not_evidenced || [];
+    document.getElementById('ask-notevidenced').innerHTML = ne.length
+      ? '<div class="ask-block"><div class="ask-block-title">Asked but not answerable from this data</div>'
+        + ne.map(function(x){ return '<div class="ask-gap">' + _e(x) + '</div>'; }).join('') + '</div>'
+      : '';
+
+    /* Say who wrote it. "rules" means the model call failed or its output was
+       unusable and this is the fallback narrator — a reader deserves to know
+       which one they are looking at. */
+    var bits = [];
+    if (a.narrator === 'rules') {
+      bits.push('Written from the data directly — the narrative model was unavailable for this answer.');
+    }
+    if (a.generated_at) { bits.push('Generated ' + _e(a.generated_at) + '.'); }
+    if (a.cached)       { bits.push('Served from cache — use Re-run for fresh numbers.'); }
+    document.getElementById('ask-provenance').innerHTML = bits.join(' ');
+
+    _panels('answer');
+  }
+})();
+</script>
   {{ standard_footer_includes }}
 </body>
 </html>
