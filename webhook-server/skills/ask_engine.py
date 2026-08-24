@@ -43,7 +43,12 @@ logger = logging.getLogger(__name__)
 CACHE_HOURS = float(os.environ.get("ASK_CACHE_HOURS", "24"))
 CACHE_PROP = "portal_ask_cache"
 CACHE_TO_HUBSPOT = os.environ.get("ASK_CACHE_HUBSPOT", "true").lower() != "false"
-MAX_TOKENS = int(os.environ.get("ASK_MAX_TOKENS", "1400"))
+# 1400 was tuned against a direct claude-sonnet-4-5 call. Through the gateway
+# the stale model id resolves forward, and the current model writes longer: a
+# real answer came back at exactly 1400 output tokens — truncated mid-JSON,
+# which the parser could only report as "unparseable model output". Headroom is
+# cheap; a silently truncated answer costs a model call and yields nothing.
+MAX_TOKENS = int(os.environ.get("ASK_MAX_TOKENS", "4000"))
 
 _INFLIGHT = set()                       # (company_id, question_key) generating now
 _INFLIGHT_LOCK = threading.Lock()
@@ -91,28 +96,50 @@ def _complete(system: str, user: str, max_tokens: int = MAX_TOKENS) -> str:
     Everything above it deals in dicts, so swapping the transport is a change
     to this function body and nothing else.
 
-    # TODO(workstream-A): route through skills.llm_gateway
+    Goes through skills.llm_gateway, per CLAUDE.md rule 2. That is not
+    box-ticking: the gateway carries the retry policy, the timeout, the model
+    registry that maps the stale ids still sitting in config.py forward, and
+    the token/cost accounting that lands in loop_events. A client-facing
+    surface that answers questions on demand is exactly the thing whose spend
+    someone will want to read back later.
     """
-    from config import ANTHROPIC_API_KEY, CLAUDE_AGENT_MODEL
-    import anthropic
+    from skills import llm_gateway
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    msg = client.messages.create(
-        model=CLAUDE_AGENT_MODEL,
-        max_tokens=max_tokens,
-        temperature=0.2,
+    # Pass the configured model rather than taking the gateway default. The
+    # default is Opus; CLAUDE_AGENT_MODEL is what this surface was costed and
+    # tuned against, and the gateway's alias map is what carries the stale id
+    # forward to a current one. Omitting it here would quietly move every
+    # answer up a tier — ~4x the cost per question — as a side effect of
+    # migrating onto the gateway, which is not a migration decision to make
+    # silently.
+    try:
+        from config import CLAUDE_AGENT_MODEL as _model
+    except Exception:                                           # noqa: BLE001
+        _model = None
+
+    resp = llm_gateway.complete(
+        user,
         system=system,
-        messages=[{"role": "user", "content": user}],
+        model=_model,
+        max_tokens=max_tokens,
+        purpose="ask",
     )
-    return msg.content[0].text.strip()
+    if getattr(resp, "stop_reason", None) == "max_tokens":
+        # Say what actually happened. The JSON will fail to parse a moment from
+        # now, and "unparseable model output" points at the parser instead of
+        # at the ceiling.
+        logger.warning(
+            "ask: model output hit the %d-token ceiling and was truncated — "
+            "raise ASK_MAX_TOKENS", max_tokens)
+    return resp.text.strip()
 
 
 def _llm_available() -> bool:
     try:
-        from config import ANTHROPIC_API_KEY
+        from skills import llm_gateway
     except Exception:                                           # noqa: BLE001
         return False
-    return bool(ANTHROPIC_API_KEY)
+    return llm_gateway.is_configured()
 
 
 # ── prompt assembly ────────────────────────────────────────────────────────

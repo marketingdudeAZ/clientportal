@@ -195,6 +195,10 @@ def complete(
     over data rather than reformatting it. `effort` ("low".."max") tunes depth.
     `cache_system` caches the system prompt, which pays off when the same large
     context is reused across calls (the SWOT and digest paths both do this).
+    There is deliberately no `temperature`: current models reject it outright
+    ("`temperature` is deprecated for this model", HTTP 400). A caller carrying
+    one over from a legacy direct SDK call has to drop it, not have the gateway
+    forward it into a 400.
 
     Streaming is chosen automatically when max_tokens is large enough that a
     non-streaming call would risk an HTTP timeout.

@@ -1170,3 +1170,56 @@ def test_cache_status_is_clean_when_durable_caching_is_switched_off():
     with mock.patch.object(ask_engine, "CACHE_TO_HUBSPOT", False):
         st = ask_engine.cache_status()
     assert st["durable"] is False and st["reason"] is None
+
+
+class TestPropertyScoping:
+    """The route gates the FEATURE via _authorize(). It must also gate the
+    PROPERTY: the identifier arrives from the caller, which is the same shape
+    as the portal-tickets IDOR — change the id, read someone else's property.
+    """
+
+    def test_a_client_cannot_ask_about_someone_elses_property(self, client,
+                                                              monkeypatch):
+        import feature_access
+        monkeypatch.setattr(feature_access, "_load_access_table", lambda: {
+            "owner@someclient.com": {"role": "client", "beta_features": {"*"},
+                                     "companies": {"111"}},
+        })
+        feature_access.clear_cache()
+        called = []
+        monkeypatch.setattr(ask_engine, "answer",
+                            lambda *a, **k: called.append(a) or {})
+        r = client.post("/api/ask/whats_working", json={"company_id": "222"},
+                        headers={"X-Portal-Email": "owner@someclient.com"})
+        assert r.status_code == 403
+        assert not called, "the engine must not run for a property they cannot see"
+        feature_access.clear_cache()
+
+    def test_an_unresolvable_identifier_does_not_fail_open(self, client,
+                                                           monkeypatch):
+        """If the resolver errors, the gate must still close for a client."""
+        import feature_access
+        from skills import property_resolver
+        monkeypatch.setattr(feature_access, "_load_access_table", lambda: {
+            "owner@someclient.com": {"role": "client", "beta_features": {"*"},
+                                     "companies": {"111"}},
+        })
+        feature_access.clear_cache()
+        monkeypatch.setattr(property_resolver, "resolve",
+                            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("hubspot down")))
+        called = []
+        monkeypatch.setattr(ask_engine, "answer",
+                            lambda *a, **k: called.append(a) or {})
+        r = client.post("/api/ask/whats_working", json={"company_id": "222"},
+                        headers={"X-Portal-Email": "owner@someclient.com"})
+        assert r.status_code == 403
+        assert not called
+        feature_access.clear_cache()
+
+    def test_an_unknown_question_is_404_before_authorization(self, client,
+                                                             monkeypatch):
+        """A bad URL is a bad URL. Answering it with a 403 would tell a caller
+        which questions exist."""
+        r = client.post("/api/ask/not_a_question", json={"company_id": "222"},
+                        headers={"X-Portal-Email": "kyle.shipp@rpmliving.com"})
+        assert r.status_code == 404

@@ -25,7 +25,8 @@ import os
 
 from flask import Blueprint, jsonify, request
 
-from _route_utils import current_portal_email, preflight_response, require_access
+from _route_utils import (current_portal_email, preflight_response,
+                          require_access, require_company_access)
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,35 @@ def ask_answer(key):
         return jsonify({"error": "company_id is required"}), 400
 
     from skills import ask_engine, property_resolver, question_registry
+
+    # An unknown question is a 404 before anything is resolved or authorized —
+    # it is a bad URL, not a permission problem, and answering it with a 403
+    # would tell a caller which questions exist.
+    if key not in question_registry.keys():
+        return jsonify({
+            "error": "Unknown question",
+            "question": key,
+            "available": question_registry.keys(),
+        }), 404
+
+    # _authorize() answers "may this person use Ask at all". It does not answer
+    # "may this person ask about THIS property", and the identifier arrives
+    # from the caller — the same shape as the portal-tickets IDOR. Resolving
+    # here is only to give the gate a company id; the engine still receives the
+    # identifier exactly as sent, because deciding what an identifier means is
+    # the resolver's job and not this route's.
+    try:
+        scope = property_resolver.resolve(identifier).company_id
+    except Exception:                                           # noqa: BLE001
+        # Never fail open. An identifier we could not resolve is checked as
+        # sent: no client allowlist contains a uuid or a property name, so the
+        # gate closes, while an internal caller is already past it. The engine's
+        # own resolve() below then produces the 404/409, so there is one place
+        # that decides what an unresolvable identifier looks like.
+        scope = identifier
+    gate = require_company_access(scope)
+    if gate:
+        return gate
 
     force = str(request.args.get("force", "")).lower() in ("1", "true", "yes")
     try:
