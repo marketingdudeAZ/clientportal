@@ -69,6 +69,24 @@ BIGQUERY_SERVICE_ACCOUNT_JSON = os.getenv("BIGQUERY_SERVICE_ACCOUNT_JSON")
 BIGQUERY_DATASET_PROD = os.getenv("BIGQUERY_DATASET_PROD", "rpm_portal")
 BIGQUERY_DATASET_DEV = os.getenv("BIGQUERY_DATASET_DEV", "rpm_portal_dev")
 
+# BigQuery landing tables for apartments.com ILS data.
+#
+# These live in the repo-root config.py and were never copied here. This file
+# is the one production actually imports (the root copy shadows it only on the
+# repo-root/pytest sys.path), so `apartmentscom_ingestion.ingest_date()` —
+# which does `from config import BIGQUERY_APARTMENTSCOM_DAILY_TABLE` — raises
+# ImportError on Render every time it runs. It is a lazy import inside the
+# function, so nothing catches it at boot; the ILS ingest just fails.
+#
+# Any symbol added to one config.py has to be added to both. Values must match
+# the root copy exactly.
+BIGQUERY_APARTMENTSCOM_DAILY_TABLE = os.getenv(
+    "BIGQUERY_APARTMENTSCOM_DAILY_TABLE", "apartmentscom_ils_daily"
+)
+BIGQUERY_APARTMENTSCOM_MAP_TABLE = os.getenv(
+    "BIGQUERY_APARTMENTSCOM_MAP_TABLE", "apartmentscom_listing_map"
+)
+
 # --- Anthropic ---
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 CLAUDE_DIGEST_MODEL = "claude-sonnet-4-5"
