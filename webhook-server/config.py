@@ -234,6 +234,52 @@ PORTAL_TICKET_PREFILL_SOURCES = {
     "UUID": "uuid",
 }
 
+# --- "What needs your attention" work queue ---------------------------------
+#
+# NOTE — this block lives in BOTH config.py files (repo root and
+# webhook-server/). webhook-server's wins in production, but which one an
+# import resolves to depends on sys.path order, so a symbol that exists in
+# only one of them is an ImportError in half the processes that use it.
+# tests/test_attention.py pins the two copies identical.
+# The attention page answers one question for the whole team: what work is
+# outstanding right now. PORTAL_TICKET_TYPES above answers a different one —
+# which forms a client may FILE — so the two registries are deliberately not
+# the same list. A type can be filable but uninteresting on the queue (New
+# Business is sales intake), and a list can be worth watching without being
+# filable from the portal at all (the SEO/Paid/Social/Reputation delivery
+# lists, which the services team files into directly).
+#
+# `category` is the bucket the queue groups by. Three, because that is how the
+# services team already divides the work: creative, branding, digital.
+#
+# `key` reuses the PORTAL_TICKET_TYPES key wherever one exists so a task keeps
+# ONE identity across the ticket page and the attention queue — that is what
+# lets attention.py dedupe a portal-filed ticket against the same task found by
+# scanning its list.
+#
+# List ids come from env first. The three defaults below are the ids verified
+# against live ClickUp on 2026-08-17 and recorded in docs/portal-golive-plan.md;
+# they are defaulted (unlike the ticket picker, which stays silent when unset)
+# because a blank attention queue is indistinguishable from "nothing is
+# outstanding", which is the one answer this page must never give by accident.
+# The remaining lists stay env-only — nothing has verified their ids here.
+ATTENTION_TICKET_LISTS = [
+    {"key": "creative_ad_copy", "category": "creative", "label": "Ad Updates: Photos & New Specials",
+     "list_env": "CLICKUP_LIST_CREATIVE_AD_COPY", "list_id_default": "901111120522"},
+    {"key": "rebrand",          "category": "branding", "label": "Rebrands",
+     "list_env": "CLICKUP_LIST_REBRAND",          "list_id_default": "901111120555"},
+    {"key": "campaign_review",  "category": "digital",  "label": "Digital Marketing Review",
+     "list_env": "CLICKUP_LIST_CAMPAIGN_REVIEW",  "list_id_default": "901114166834"},
+    {"key": "seo",              "category": "digital",  "label": "SEO",
+     "list_env": "CLICKUP_LIST_SEO",              "list_id_default": ""},
+    {"key": "paid_media",       "category": "digital",  "label": "Paid Media",
+     "list_env": "CLICKUP_LIST_PAID_MEDIA",       "list_id_default": ""},
+    {"key": "social",           "category": "digital",  "label": "Social",
+     "list_env": "CLICKUP_LIST_SOCIAL",           "list_id_default": ""},
+    {"key": "reputation",       "category": "digital",  "label": "Reputation",
+     "list_env": "CLICKUP_LIST_REPUTATION",       "list_id_default": ""},
+]
+
 # Digital region → Account Manager. All 8 ClickUp forms embed this as a
 # SCREENSHOT of a spreadsheet and ask the requester to look themselves up.
 #
