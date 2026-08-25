@@ -386,7 +386,8 @@ def test_reputation_is_declared_dark_rather_than_quietly_omitted():
     """SOCi has no connector. 'What's working' must say so out loud."""
     pull = ask_context.pull_reputation(_identity())
     assert pull.available is False
-    assert "SOCi" in pull.source
+    assert "SOCi" in pull.source, "the raw Pull keeps the internal source; " \
+                                  "translation happens at serialisation"
     assert "no connector" in pull.missing_reason
     assert "reputation" in question_registry.get("whats_working").pulls[-1] or \
         "reputation" in question_registry.get("whats_working").pulls
@@ -638,7 +639,11 @@ def test_prompt_carries_numerator_denominator_and_source_for_every_claim():
         assert ("→" in line) or (" / " in line), line
     # The dark input is named in its own section, with what it would have told us.
     assert "INPUTS THAT WERE NOT AVAILABLE" in prompt
-    assert "tour_sources" in prompt and "no hyly_property_id" in prompt
+    # The prompt carries the gap in the SAME words the page uses. That is
+    # deliberate: the model was echoing internal reasons verbatim into
+    # not_evidenced, so feeding it jargon guaranteed jargon came back.
+    assert "Tours by source" in prompt or "tour" in prompt.lower()
+    assert "hyly" not in prompt.lower(), "internal vocabulary must not reach the model"
     # The question's own instruction rides with it.
     assert q.instruction in prompt
     assert q.label in prompt
@@ -761,7 +766,9 @@ def test_every_dark_input_reaches_not_evidenced_whatever_the_model_said():
                        "not_evidenced": []})
     out, _ = _generate("whats_not_working", pulls, body)
     joined = " || ".join(out["not_evidenced"])
-    assert "reputation:" in joined and "SOCi" in joined
+    assert "reputation:" in joined
+    assert "review" in joined.lower(), "the gap is named in the reader's words"
+    assert "soci" not in joined.lower(), "the vendor name must not survive"
     assert "tour_sources:" in joined
     assert {m["input"] for m in out["missing_inputs"]} == {"reputation", "tour_sources"}
     assert out["inputs"]["reputation"]["available"] is False
@@ -1105,7 +1112,8 @@ def test_the_answer_body_carries_its_receipts_end_to_end(client):
     assert out["viz"]["pull"] == "performance_trend"
     assert out["viz_data"]["months"][0]["month"] == "2026-04"
     assert all(NC in e for e in out["evidence"])
-    assert any("SOCi" in x for x in out["not_evidenced"])
+    assert any("review" in x.lower() for x in out["not_evidenced"]), \
+        "a dark input still reaches not_evidenced — described, not named"
 
 
 

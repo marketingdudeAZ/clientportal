@@ -1,1 +1,207 @@
-{"free_text": false, "questions": [{"key": "whats_working", "label": "What's working well at this property?", "blurb": "The channels and metrics that are genuinely up, with the numbers behind them.", "inputs": [{"name": "performance_trend", "required": true}, {"name": "lead_sources", "required": false}, {"name": "occupancy", "required": false}, {"name": "spend", "required": false}, {"name": "tour_sources", "required": false}, {"name": "reputation", "required": false}], "viz": {"kind": "line", "pull": "performance_trend", "x": "month", "series": ["sessions", "leads"], "title": "Sessions and leads by month", "note": "Plot both series on one chart \u2014 the story is usually the gap between them."}, "order": 1}, {"key": "whats_not_working", "label": "What's not working?", "blurb": "Declines and breakages, ranked by size, each with its own receipts.", "inputs": [{"name": "performance_trend", "required": true}, {"name": "lead_sources", "required": false}, {"name": "occupancy", "required": false}, {"name": "spend", "required": false}, {"name": "impression_share_lost", "required": false}, {"name": "tour_sources", "required": false}, {"name": "reputation", "required": false}], "viz": {"kind": "line", "pull": "performance_trend", "x": "month", "series": ["sessions", "leads"], "title": "Sessions and leads by month", "note": "Plot both series on one chart \u2014 the story is usually the gap between them."}, "order": 2}, {"key": "opportunities", "label": "Where are the opportunities?", "blurb": "Headroom we can actually act on \u2014 funded, unfunded, and blocked.", "inputs": [{"name": "performance_trend", "required": true}, {"name": "lead_sources", "required": false}, {"name": "impression_share_lost", "required": false}, {"name": "market_position", "required": false}, {"name": "occupancy", "required": false}, {"name": "spend", "required": false}, {"name": "plan", "required": false}, {"name": "open_requests", "required": false}], "viz": {"kind": "bar", "pull": "lead_sources", "x": "channel", "series": ["leads", "spend"], "title": "Leads and spend by channel, latest month", "note": "Sort by leads descending; show spend as a second series, not stacked."}, "order": 3}, {"key": "lead_sources", "label": "What sources are driving the most leads?", "blurb": "Lead volume and cost per lead by channel and platform, latest month.", "inputs": [{"name": "lead_sources", "required": true}, {"name": "performance_trend", "required": false}, {"name": "spend", "required": false}], "viz": {"kind": "bar", "pull": "lead_sources", "x": "source", "series": ["leads"], "title": "Leads by source, latest month", "note": "One bar per source, sorted descending; label each bar with its share."}, "order": 4}, {"key": "tour_sources", "label": "What sources are driving the most tours?", "blurb": "Completed tours by channel, and which channels convert leads into tours.", "inputs": [{"name": "tour_sources", "required": true}, {"name": "lead_sources", "required": false}, {"name": "occupancy", "required": false}], "viz": {"kind": "bar", "pull": "tour_sources", "x": "channel", "series": ["tours_completed", "leads"], "title": "Completed tours by channel", "note": "Show leads beside tours so the lead-to-tour gap is visible."}, "order": 5}]}
+{
+ "free_text": false,
+ "questions": [
+  {
+   "key": "whats_working",
+   "label": "What's working well at this property?",
+   "blurb": "The channels and metrics that are genuinely up, with the numbers behind them.",
+   "inputs": [
+    {
+     "name": "performance_trend",
+     "required": true
+    },
+    {
+     "name": "lead_sources",
+     "required": false
+    },
+    {
+     "name": "occupancy",
+     "required": false
+    },
+    {
+     "name": "spend",
+     "required": false
+    },
+    {
+     "name": "tour_sources",
+     "required": false
+    },
+    {
+     "name": "reputation",
+     "required": false
+    }
+   ],
+   "viz": {
+    "kind": "line",
+    "pull": "performance_trend",
+    "x": "month",
+    "series": [
+     "sessions",
+     "leads"
+    ],
+    "title": "Sessions and leads by month",
+    "note": "Plot both series on one chart \u2014 the story is usually the gap between them."
+   },
+   "order": 1
+  },
+  {
+   "key": "whats_not_working",
+   "label": "What's not working?",
+   "blurb": "Declines and breakages, ranked by size, each with its own receipts.",
+   "inputs": [
+    {
+     "name": "performance_trend",
+     "required": true
+    },
+    {
+     "name": "lead_sources",
+     "required": false
+    },
+    {
+     "name": "occupancy",
+     "required": false
+    },
+    {
+     "name": "spend",
+     "required": false
+    },
+    {
+     "name": "impression_share_lost",
+     "required": false
+    },
+    {
+     "name": "tour_sources",
+     "required": false
+    },
+    {
+     "name": "reputation",
+     "required": false
+    }
+   ],
+   "viz": {
+    "kind": "line",
+    "pull": "performance_trend",
+    "x": "month",
+    "series": [
+     "sessions",
+     "leads"
+    ],
+    "title": "Sessions and leads by month",
+    "note": "Plot both series on one chart \u2014 the story is usually the gap between them."
+   },
+   "order": 2
+  },
+  {
+   "key": "opportunities",
+   "label": "Where are the opportunities?",
+   "blurb": "Headroom we can actually act on \u2014 funded, unfunded, and blocked.",
+   "inputs": [
+    {
+     "name": "performance_trend",
+     "required": true
+    },
+    {
+     "name": "lead_sources",
+     "required": false
+    },
+    {
+     "name": "impression_share_lost",
+     "required": false
+    },
+    {
+     "name": "market_position",
+     "required": false
+    },
+    {
+     "name": "occupancy",
+     "required": false
+    },
+    {
+     "name": "spend",
+     "required": false
+    },
+    {
+     "name": "plan",
+     "required": false
+    },
+    {
+     "name": "open_requests",
+     "required": false
+    }
+   ],
+   "viz": {
+    "kind": "bar",
+    "pull": "lead_sources",
+    "x": "channel",
+    "series": [
+     "leads",
+     "spend"
+    ],
+    "title": "Leads and spend by channel, latest month",
+    "note": "Sort by leads descending; show spend as a second series, not stacked."
+   },
+   "order": 3
+  },
+  {
+   "key": "lead_sources",
+   "label": "What sources are driving the most leads?",
+   "blurb": "Lead volume and cost per lead by channel and platform, latest month.",
+   "inputs": [
+    {
+     "name": "lead_sources",
+     "required": true
+    },
+    {
+     "name": "performance_trend",
+     "required": false
+    },
+    {
+     "name": "spend",
+     "required": false
+    }
+   ],
+   "viz": {
+    "kind": "bar",
+    "pull": "lead_sources",
+    "x": "source",
+    "series": [
+     "leads"
+    ],
+    "title": "Leads by source, latest month",
+    "note": "One bar per source, sorted descending; label each bar with its share."
+   },
+   "order": 4
+  },
+  {
+   "key": "tour_sources",
+   "label": "What sources are driving the most tours?",
+   "blurb": "Completed tours by channel, and which channels convert leads into tours.",
+   "inputs": [
+    {
+     "name": "tour_sources",
+     "required": true
+    },
+    {
+     "name": "lead_sources",
+     "required": false
+    },
+    {
+     "name": "occupancy",
+     "required": false
+    }
+   ],
+   "viz": {
+    "kind": "bar",
+    "pull": "tour_sources",
+    "x": "channel",
+    "series": [
+     "tours_completed",
+     "leads"
+    ],
+    "title": "Completed tours by channel",
+    "note": "Show leads beside tours so the lead-to-tour gap is visible."
+   },
+   "order": 5
+  }
+ ]
+}

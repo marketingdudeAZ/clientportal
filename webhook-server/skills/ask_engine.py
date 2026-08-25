@@ -36,7 +36,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
-from skills import ask_context, question_registry
+from skills import ask_context, ask_language, question_registry
 
 logger = logging.getLogger(__name__)
 
@@ -473,8 +473,15 @@ def _generate(question, identity) -> Dict[str, Any]:
         "evidence": ctx.evidence(),
         "caveats": ctx.caveats(),
         "missing_inputs": ctx.missing_inputs(),
-        "inputs": {k: {"available": p.available, "source": p.source,
-                       "caveat": p.caveat, "missing_reason": p.missing_reason,
+        # Built from Pull.to_dict()'s translated fields rather than the raw
+        # attributes: this block ships in the same payload the page reads, and
+        # a table name here is one console.log away from a screenshot.
+        "inputs": {k: {"available": p.available,
+                       "label": ask_language.label(k),
+                       "source": ask_language.source(p.source),
+                       "caveat": p.caveat,
+                       "missing_reason": ask_language.reason(p.missing_reason,
+                                                             key=k),
                        "quality": p.quality}
                    for k, p in ctx.pulls.items()},
         # ISO-8601, because this string is rendered to a human. It used to

@@ -233,15 +233,25 @@ class Pull:
     quality: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialised for the API, so everything reader-facing is translated.
+
+        This is the one place every pull crosses into the payload, which makes
+        it the right place to guarantee that a table name or a config
+        instruction cannot ride along. `name` stays raw — the UI matches on it
+        and never prints it.
+        """
+        from skills import ask_language
         return {
             "name": self.name,
-            "source": self.source,
+            "label": ask_language.label(self.name),
+            "source": ask_language.source(self.source),
             "available": self.available,
             "data": self.data,
             "evidence": list(self.evidence),
             "signals": list(self.signals),
             "caveat": self.caveat,
-            "missing_reason": self.missing_reason,
+            "missing_reason": ask_language.reason(self.missing_reason,
+                                                  key=self.name),
             "quality": self.quality,
         }
 
@@ -281,7 +291,9 @@ def _int_param(key: str, value: int):
 
 # ── pulls ──────────────────────────────────────────────────────────────────
 
-NC_SOURCE = "BigQuery ninjacat_metrics"
+# The name the reader could go and check, not the table we happen to read.
+# This string is stamped on every evidence line the trend produces.
+NC_SOURCE = "Google Analytics + Google Ads"
 
 
 def pull_performance_trend(identity, months: int = TREND_MONTHS) -> Pull:
@@ -758,7 +770,7 @@ def pull_tour_sources(identity) -> Pull:
     Hyly is a 15-property beta. An unconfigured or unmapped property is a
     *caveat with a named missing input*, never an empty chart.
     """
-    name, src = "tour_sources", "BigQuery hyly_daily_activity_v1 (Hyly)"
+    name, src = "tour_sources", "Tour tracking"
     hyly_id = getattr(identity, "hyly_property_id", None)
     if not hyly_id:
         return _missing(name, src, (
@@ -1063,7 +1075,15 @@ class AskContext:
         return [p.caveat for p in self.pulls.values() if p.caveat]
 
     def missing_inputs(self) -> List[Dict[str, str]]:
-        return [{"input": p.name, "source": p.source, "reason": p.missing_reason}
+        """Dark sources, described the way the reader would describe them.
+
+        Everything routes through ask_language so internal vocabulary — table
+        names, HubSpot field names, vendor names nobody outside this team has
+        heard of, and above all configuration instructions — cannot reach a
+        page a leasing director reads.
+        """
+        from skills import ask_language
+        return [ask_language.describe_gap(p.name, p.source, p.missing_reason)
                 for p in self.pulls.values() if not p.available]
 
     def signals(self) -> List[Dict[str, Any]]:
