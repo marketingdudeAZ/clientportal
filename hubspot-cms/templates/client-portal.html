@@ -11453,6 +11453,7 @@ setTimeout(loadPropertySwitcher, 1500);
   var _sev = 'bug';
   var _shots = [];          // {name, type, blob, url}
   var _ready = false;
+  var _booting = false;
   var _sending = false;
 
   function _api()   { return window.__WEBHOOK_URL__ || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com'; }
@@ -11471,12 +11472,24 @@ setTimeout(loadPropertySwitcher, 1500);
 
   /* Ask the server whether reports have anywhere to land BEFORE showing the
      button. Appearing, accepting a carefully written report and only then
-     admitting there is no list configured is the worst possible order. */
+     admitting there is no list configured is the worst possible order.
+
+     Called from three places on purpose. window.__PORTAL_EMAIL__ is set by
+     HubL when the visitor is a known HubSpot contact, but Clerk ALSO sets it
+     from an async callback, so on a Clerk session it is still empty when this
+     script first runs. Checking once and giving up is why the button did not
+     appear on the first deploy. seoCheckEntitlement and contentCheckEntitlement
+     solve this the same way — DOMContentLoaded plus portal-data-ready — and the
+     timer covers a Clerk login that resolves without any property data being
+     fetched. */
   function _boot(){
-    if (!_email()) return;
+    if (_ready || _booting) return;
+    if (!_email()) return;          // no identity yet — a later trigger retries
+    _booting = true;
     fetch(_api() + '/api/feedback/health', { headers: { 'X-Portal-Email': _email() } })
       .then(function(r){ return r.ok ? r.json() : null; })
       .then(function(d){
+        _booting = false;
         if (!d || !d.ready) {
           if (d && d.reason) console.warn('[feedback] widget hidden:', d.reason);
           return;
@@ -11485,7 +11498,7 @@ setTimeout(loadPropertySwitcher, 1500);
         _renderSeverities(d.severities || []);
         document.getElementById('fb-launch').style.display = 'inline-flex';
       })
-      .catch(function(){});
+      .catch(function(){ _booting = false; });
   }
 
   function _renderSeverities(list){
@@ -11643,6 +11656,13 @@ setTimeout(loadPropertySwitcher, 1500);
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _boot);
   } else { _boot(); }
+  document.addEventListener('portal-data-ready', _boot);
+  // Bounded retry for a Clerk session that resolves late and fires no event.
+  var _tries = 0;
+  var _poll = setInterval(function(){
+    if (_ready || ++_tries > 8) { clearInterval(_poll); return; }
+    _boot();
+  }, 1500);
 })();
 </script>
   {{ standard_footer_includes }}
