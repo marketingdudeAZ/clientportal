@@ -1577,6 +1577,7 @@ body{line-height:1.55}
       </div>
       <div class="ask-headline" id="ask-headline"></div>
       <div class="ask-summary" id="ask-summary"></div>
+      <div id="ask-charts"></div>
       <div id="ask-findings"></div>
       <div id="ask-nextstep"></div>
       <div id="ask-gaps"></div>
@@ -11122,6 +11123,41 @@ setTimeout(loadPropertySwitcher, 1500);
 .ask-gap + .ask-gap{margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)}
 .ask-gap b{color:var(--tp);font-weight:700}
 .ask-nextstep{border-left:3px solid var(--cu)}
+/* Charts. Series colours are NOT the portal's --j/--cu: those are a slate and a
+   tan, and a slate reads as "no colour" as a data mark (chroma 0.014, below the
+   floor where a hue is perceptible). These are the nearest steps in the same
+   family that pass lightness, chroma, colour-vision separation and contrast in
+   both themes. */
+.ask-figure{margin:0 0 26px;padding:20px 22px;background:var(--white);
+  border:1px solid var(--bd);border-radius:11px}
+.ask-fig-title{font-size:13.5px;font-weight:700;color:var(--tp);margin-bottom:2px}
+.ask-fig-note{font-size:11.5px;color:var(--tm);margin-bottom:14px;line-height:1.5}
+.ask-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+.ask-legend span{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;
+  color:var(--ts);font-weight:600}
+.ask-legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.ask-chart{width:100%;overflow-x:auto}
+.ask-chart svg{display:block;max-width:100%;height:auto}
+.ask-src{font-size:10.5px;color:var(--tm);margin-top:9px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.ask-numbers{margin-top:12px}
+.ask-numbers summary{font-size:11.5px;color:var(--ts);cursor:pointer;
+  font-weight:600;list-style:none}
+.ask-numbers summary::-webkit-details-marker{display:none}
+.ask-numbers summary:before{content:"▸ ";color:var(--tm)}
+.ask-numbers[open] summary:before{content:"▾ "}
+.ask-numbers table{width:100%;border-collapse:collapse;margin-top:10px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}
+.ask-numbers th{text-align:right;padding:5px 8px;color:var(--tm);font-weight:600;
+  border-bottom:1px solid var(--bd);text-transform:uppercase;letter-spacing:.05em;
+  font-size:9.5px;white-space:nowrap}
+.ask-numbers th:first-child,.ask-numbers td:first-child{text-align:left}
+.ask-numbers td{text-align:right;padding:5px 8px;color:var(--ts);
+  border-bottom:1px solid var(--bd);font-variant-numeric:tabular-nums}
+.ask-tip{position:absolute;pointer-events:none;background:var(--tp);color:#fff;
+  border-radius:7px;padding:8px 10px;font-size:11px;line-height:1.55;
+  white-space:nowrap;opacity:0;transition:opacity .1s;z-index:40;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .ask-provenance{margin-top:24px;padding-top:14px;border-top:1px solid var(--bd);
   font-size:11px;color:var(--tm);line-height:1.6}
 </style>
@@ -11267,11 +11303,288 @@ setTimeout(loadPropertySwitcher, 1500);
     if (_askCurrent) window.askRun(_askCurrent, true);
   };
 
+  /* ── charts ───────────────────────────────────────────────────────────────
+     The engine already returns a viz spec and the monthly series; until now the
+     UI threw both away and printed only prose.
+
+     Sessions and leads are plotted INDEXED to 100 at the start of the window,
+     not on two y-axes. A dual axis lets you place the crossing point wherever
+     you like by choosing the scales, which is exactly the wrong property for a
+     chart whose whole job is to show that traffic rose while leads fell. Indexed
+     to a common base, the divergence is a fact of the data rather than a
+     drafting choice. Raw counts are one click away under the chart.
+     ─────────────────────────────────────────────────────────────────────── */
+  var SERIES_COLORS = { sessions: '#00806A', leads: '#BE7A22' };
+
+  function _fmt(n){
+    if (n == null || isNaN(n)) return '—';
+    return Number(n).toLocaleString('en-US');
+  }
+
+  function _months(a){
+    var vd = a.viz_data || {};
+    var rows = vd.months || [];
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (!r || !r.month) continue;
+      out.push(r);
+    }
+    out.sort(function(x, y){ return x.month < y.month ? -1 : 1; });
+    return out;
+  }
+
+  function _label(m){
+    var parts = String(m).split('-');
+    var names = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return (names[parseInt(parts[1], 10)] || m) + " '" + String(parts[0]).slice(2);
+  }
+
+  /* One line chart, one y-axis, N series already normalised by the caller. */
+  function _lineChart(opts){
+    var W = 640, H = 210, L = 44, R = 76, T = 14, B = 26;
+    var pts = opts.points, keys = opts.keys;
+    if (pts.length < 2) return '';
+
+    var lo = Infinity, hi = -Infinity;
+    for (var i = 0; i < pts.length; i++) {
+      for (var k = 0; k < keys.length; k++) {
+        var v = pts[i][keys[k]];
+        if (v == null || isNaN(v)) continue;
+        if (v < lo) lo = v; if (v > hi) hi = v;
+      }
+    }
+    if (lo === Infinity) return '';
+    if (hi === lo) { hi = lo + 1; }
+    var pad = (hi - lo) * 0.12;
+    lo -= pad; hi += pad;
+    if (opts.floorZero && lo > 0) lo = 0;
+
+    var x = function(i){ return L + (i / (pts.length - 1)) * (W - L - R); };
+    var y = function(v){ return T + (1 - (v - lo) / (hi - lo)) * (H - T - B); };
+
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="'
+            + _e(opts.title) + '">';
+
+    /* Recessive grid: four rules, no box, no vertical lines. */
+    for (var g = 0; g <= 3; g++) {
+      var gv = lo + (hi - lo) * (g / 3), gy = y(gv);
+      svg += '<line x1="' + L + '" y1="' + gy.toFixed(1) + '" x2="' + (W - R)
+           + '" y2="' + gy.toFixed(1) + '" stroke="currentColor" stroke-opacity=".12"/>';
+      svg += '<text x="' + (L - 8) + '" y="' + (gy + 3.5).toFixed(1)
+           + '" text-anchor="end" font-size="9.5" fill="currentColor" '
+           + 'fill-opacity=".45" font-family="ui-monospace,Menlo,monospace">'
+           + _e(opts.fmtAxis(gv)) + '</text>';
+    }
+
+    /* Baseline marker where one exists (index 100 = no change). */
+    if (opts.baseline != null && opts.baseline > lo && opts.baseline < hi) {
+      svg += '<line x1="' + L + '" y1="' + y(opts.baseline).toFixed(1) + '" x2="'
+           + (W - R) + '" y2="' + y(opts.baseline).toFixed(1)
+           + '" stroke="currentColor" stroke-opacity=".3" stroke-dasharray="3 3"/>';
+    }
+
+    /* x labels: first, last, and a couple between — never all of them. */
+    var step = Math.max(1, Math.round((pts.length - 1) / 4));
+    for (var xi = 0; xi < pts.length; xi += step) {
+      svg += '<text x="' + x(xi).toFixed(1) + '" y="' + (H - 8)
+           + '" text-anchor="middle" font-size="9.5" fill="currentColor" '
+           + 'fill-opacity=".45" font-family="ui-monospace,Menlo,monospace">'
+           + _e(_label(pts[xi].month)) + '</text>';
+    }
+
+    for (var s = 0; s < keys.length; s++) {
+      var key = keys[s], color = opts.colors[key], d = '', started = false;
+      for (var p = 0; p < pts.length; p++) {
+        var val = pts[p][key];
+        if (val == null || isNaN(val)) continue;
+        d += (started ? ' L' : 'M') + x(p).toFixed(1) + ' ' + y(val).toFixed(1);
+        started = true;
+      }
+      if (!started) continue;
+      svg += '<path d="' + d + '" fill="none" stroke="' + color
+           + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+
+      /* Emphasised endpoint + direct label — identity never rests on colour
+         alone, which also covers the colour-vision case. */
+      var last = pts.length - 1;
+      while (last > 0 && (pts[last][key] == null || isNaN(pts[last][key]))) last--;
+      var lv = pts[last][key];
+      if (lv != null && !isNaN(lv)) {
+        svg += '<circle cx="' + x(last).toFixed(1) + '" cy="' + y(lv).toFixed(1)
+             + '" r="3.6" fill="' + color + '" stroke="var(--white)" stroke-width="2"/>';
+        svg += '<text x="' + (x(last) + 9).toFixed(1) + '" y="' + (y(lv) + 3.5).toFixed(1)
+             + '" font-size="10.5" font-weight="600" fill="' + color + '">'
+             + _e(opts.fmtEnd(lv, key)) + '</text>';
+      }
+    }
+
+    /* Hover: a crosshair rule per month, with a generous invisible hit target. */
+    for (var h = 0; h < pts.length; h++) {
+      var hx = x(h), band = (W - L - R) / (pts.length - 1);
+      svg += '<rect class="ask-hit" data-i="' + h + '" x="' + (hx - band / 2).toFixed(1)
+           + '" y="' + T + '" width="' + band.toFixed(1) + '" height="' + (H - T - B)
+           + '" fill="transparent"/>';
+    }
+    svg += '<line class="ask-cross" x1="0" y1="' + T + '" x2="0" y2="' + (H - B)
+         + '" stroke="currentColor" stroke-opacity=".25" style="display:none"/>';
+    svg += '</svg>';
+    return svg;
+  }
+
+  function _figure(title, note, legend, svg, source, table){
+    return '<figure class="ask-figure" style="position:relative">'
+         + '<figcaption><div class="ask-fig-title">' + _e(title) + '</div>'
+         + (note ? '<div class="ask-fig-note">' + _e(note) + '</div>' : '')
+         + '</figcaption>'
+         + (legend || '')
+         + '<div class="ask-chart">' + svg + '</div>'
+         + (source ? '<div class="ask-src">' + _e(source) + '</div>' : '')
+         + (table || '')
+         + '<div class="ask-tip"></div></figure>';
+  }
+
+  function _renderCharts(a){
+    var host = document.getElementById('ask-charts');
+    if (!host) return;
+    host.innerHTML = '';
+
+    var rows = _months(a);
+    if (rows.length < 2) return;      // a trend needs more than one point
+
+    var html = '';
+
+    /* ── divergence, indexed ─────────────────────────────────────────── */
+    var base = null;
+    for (var b = 0; b < rows.length; b++) {
+      if (rows[b].sessions > 0 && rows[b].leads > 0) { base = rows[b]; break; }
+    }
+    if (base) {
+      var idx = [];
+      for (var i = 0; i < rows.length; i++) {
+        idx.push({
+          month: rows[i].month,
+          sessions: rows[i].sessions != null ? (rows[i].sessions / base.sessions) * 100 : null,
+          leads:    rows[i].leads    != null ? (rows[i].leads    / base.leads)    * 100 : null,
+          _raw: rows[i]
+        });
+      }
+      var legend = '<div class="ask-legend">'
+        + '<span><i style="background:' + SERIES_COLORS.sessions + '"></i>Sessions</span>'
+        + '<span><i style="background:' + SERIES_COLORS.leads + '"></i>Leads</span></div>';
+
+      var numbers = '<details class="ask-numbers"><summary>Show the numbers</summary>'
+        + '<table><thead><tr><th>Month</th><th>Sessions</th><th>Leads</th>'
+        + '<th>Conv.</th><th>Spend</th></tr></thead><tbody>';
+      for (var n = 0; n < rows.length; n++) {
+        var r = rows[n];
+        var cr = (r.sessions > 0 && r.leads != null)
+               ? ((r.leads / r.sessions) * 100).toFixed(2) + '%' : '—';
+        numbers += '<tr><td>' + _e(_label(r.month)) + '</td><td>' + _fmt(r.sessions)
+                + '</td><td>' + _fmt(r.leads) + '</td><td>' + cr + '</td><td>'
+                + (r.spend != null ? '$' + _fmt(Math.round(r.spend)) : '—')
+                + '</td></tr>';
+      }
+      numbers += '</tbody></table></details>';
+
+      html += _figure(
+        'Sessions and leads, indexed to ' + _label(base.month) + ' = 100',
+        'Both series share one axis. Where the lines separate, traffic and '
+          + 'inquiries stopped moving together.',
+        legend,
+        _lineChart({
+          points: idx, keys: ['sessions', 'leads'], colors: SERIES_COLORS,
+          title: 'Sessions and leads indexed to 100', baseline: 100,
+          fmtAxis: function(v){ return Math.round(v); },
+          fmtEnd: function(v){ return Math.round(v); }
+        }),
+        'BigQuery ninjacat_metrics · ' + ((a.viz_data || {}).window || ''),
+        numbers);
+    }
+
+    /* ── conversion rate: one series, one axis, no legend needed ──────── */
+    var conv = [], any = false;
+    for (var c = 0; c < rows.length; c++) {
+      var rr = rows[c];
+      var v = (rr.sessions > 0 && rr.leads != null) ? (rr.leads / rr.sessions) * 100 : null;
+      if (v != null) any = true;
+      conv.push({ month: rr.month, rate: v, _raw: rr });
+    }
+    if (any) {
+      html += _figure(
+        'Session-to-lead conversion rate',
+        'The rate the two lines above are really describing.',
+        '',
+        _lineChart({
+          points: conv, keys: ['rate'], colors: { rate: SERIES_COLORS.leads },
+          title: 'Conversion rate by month', floorZero: true,
+          fmtAxis: function(v){ return v.toFixed(1) + '%'; },
+          fmtEnd: function(v){ return v.toFixed(2) + '%'; }
+        }),
+        'BigQuery ninjacat_metrics · leads ÷ sessions', '');
+    }
+
+    host.innerHTML = html;
+    _wireHover(host, rows);
+  }
+
+  /* Crosshair + tooltip. A chart in a browser is an interactive object; a
+     reader who wants March should not have to count gridlines to find it. */
+  function _wireHover(host, rows){
+    var figures = host.querySelectorAll('.ask-figure');
+    for (var f = 0; f < figures.length; f++) {
+      (function(fig){
+        var svg = fig.querySelector('svg');
+        var tip = fig.querySelector('.ask-tip');
+        var cross = fig.querySelector('.ask-cross');
+        if (!svg || !tip) return;
+        var hits = fig.querySelectorAll('.ask-hit');
+        for (var h = 0; h < hits.length; h++) {
+          (function(hit){
+            hit.addEventListener('mouseenter', function(){
+              var i = parseInt(hit.getAttribute('data-i'), 10);
+              var r = rows[i];
+              if (!r) return;
+              var cr = (r.sessions > 0 && r.leads != null)
+                     ? ((r.leads / r.sessions) * 100).toFixed(2) + '%' : '—';
+              tip.innerHTML = '<b>' + _e(_label(r.month)) + '</b><br>'
+                + _fmt(r.sessions) + ' sessions<br>'
+                + _fmt(r.leads) + ' leads<br>' + cr + ' conversion';
+              var box = fig.getBoundingClientRect();
+              var hb = hit.getBoundingClientRect();
+              tip.style.left = Math.min(box.width - 150,
+                                Math.max(6, hb.left - box.left + hb.width / 2 - 60)) + 'px';
+              tip.style.top = (hb.top - box.top + 8) + 'px';
+              tip.style.opacity = '1';
+              if (cross) {
+                var cx = parseFloat(hit.getAttribute('x')) + parseFloat(hit.getAttribute('width')) / 2;
+                cross.setAttribute('x1', cx); cross.setAttribute('x2', cx);
+                cross.style.display = '';
+              }
+            });
+          })(hits[h]);
+        }
+        fig.addEventListener('mouseleave', function(){
+          tip.style.opacity = '0';
+          if (cross) cross.style.display = 'none';
+        });
+      })(figures[f]);
+    }
+  }
+
   function _renderAnswer(a, label){
     a = a || {};
     document.getElementById('ask-answer-q').textContent = label;
     document.getElementById('ask-headline').textContent = a.headline || '';
     document.getElementById('ask-summary').textContent  = a.summary  || '';
+
+    try { _renderCharts(a); }
+    catch (err) {
+      // A chart that cannot draw must not take the answer down with it.
+      var ch = document.getElementById('ask-charts');
+      if (ch) ch.innerHTML = '';
+      if (window.console) console.warn('[ask] chart render failed:', err);
+    }
 
     var findings = a.findings || [];
     var html = '';
