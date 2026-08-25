@@ -40,6 +40,8 @@ AUTH_MARKERS = (
     "X-Portal-Email",              # PORTAL_EMAIL (inline check)
     "current_portal_email",        # PORTAL_EMAIL (shared header-read helper)
     "require_access",              # PORTAL_EMAIL + feature gate (Beta/Prod partitioning)
+    "require_company_access",      # per-PROPERTY authorization, not just per-feature
+    "_authorize",                  # PORTAL_EMAIL + feature gate (routes/ask.py helper)
     "_internal_key_ok",            # INTERNAL_KEY (inline shared-secret helper)
     "_resolve_seo_context",        # PORTAL_EMAIL (SEO context helper)
     "_resolve_paid_context",       # PORTAL_EMAIL (paid context helper)

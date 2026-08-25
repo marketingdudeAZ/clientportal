@@ -16,6 +16,10 @@ Error contract:
       failure — the module may be deployed without every integration enabled.
 """
 
+# PEP 604 (`dict | None`) is used in signatures below; deployment is 3.11 but
+# the local dev interpreter is 3.9, where those annotations are evaluated at
+# import time and raise. Deferring annotation evaluation costs nothing at
+# runtime and makes this module importable on both.
 from __future__ import annotations
 
 import logging

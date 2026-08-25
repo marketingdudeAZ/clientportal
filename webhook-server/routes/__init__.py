@@ -4,7 +4,9 @@ Add new blueprints here as they're extracted from server.py. server.py
 calls `register_all(app)` once at startup.
 """
 
+from .ask import ask_bp
 from .attention import attention_bp
+from .feedback import feedback_bp
 from .ils import ils_bp
 from .budget_sync_api import budget_sync_api_bp
 from .clickup import clickup_bp
@@ -28,6 +30,7 @@ def register_all(app):
     # server.py — same URL, same response keys, one implementation.
     app.register_blueprint(attention_bp)
     app.register_blueprint(paid_bp)
+    app.register_blueprint(ask_bp)
     app.register_blueprint(portal_bp)
     app.register_blueprint(portal_tickets_bp)
     app.register_blueprint(portal_ui_bp)
@@ -36,6 +39,9 @@ def register_all(app):
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(property_brief_bp)
     app.register_blueprint(loop_bp)
+    # Portal QA feedback -> ClickUp. Internal-only; the widget
+    # hides itself unless CLICKUP_LIST_PORTAL_FEEDBACK is set.
+    app.register_blueprint(feedback_bp)
     app.register_blueprint(ils_bp)
     app.register_blueprint(clickup_bp)
     app.register_blueprint(budget_sync_api_bp)
