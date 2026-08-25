@@ -11346,6 +11346,305 @@ setTimeout(loadPropertySwitcher, 1500);
   }
 })();
 </script>
+<style>
+/* Portal feedback widget. Uses the template's inline tokens, same as Ask. */
+#fb-launch{position:fixed;right:22px;bottom:22px;z-index:9000;display:none;
+  align-items:center;gap:8px;background:var(--j);color:#fff;border:0;
+  border-radius:999px;padding:12px 19px;font-size:13px;font-weight:600;
+  font-family:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(16,24,40,.18)}
+#fb-launch:hover{background:var(--jd)}
+#fb-launch svg{flex-shrink:0}
+#fb-modal{position:fixed;inset:0;z-index:9001;display:none;
+  align-items:center;justify-content:center;background:rgba(16,24,40,.42);
+  padding:20px}
+#fb-modal.open{display:flex}
+.fb-panel{background:var(--white);border-radius:14px;width:100%;max-width:520px;
+  max-height:90vh;overflow-y:auto;box-shadow:0 18px 48px rgba(16,24,40,.28)}
+.fb-head{padding:20px 24px 0}
+.fb-title{font-size:17px;font-weight:700;color:var(--tp)}
+.fb-sub{font-size:12.5px;color:var(--ts);margin-top:4px;line-height:1.55}
+.fb-body{padding:18px 24px 24px}
+.fb-label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--ts);margin:16px 0 7px}
+.fb-sev{display:flex;gap:8px;flex-wrap:wrap}
+.fb-sev button{flex:1;min-width:118px;border:1px solid var(--bd);
+  background:var(--white);color:var(--tp);border-radius:9px;padding:10px 12px;
+  font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
+.fb-sev button:hover{border-color:var(--j)}
+.fb-sev button.on{background:var(--j);border-color:var(--j);color:#fff}
+#fb-note{width:100%;min-height:104px;border:1px solid var(--bd);border-radius:9px;
+  padding:11px 13px;font-family:inherit;font-size:13.5px;color:var(--tp);
+  line-height:1.6;resize:vertical}
+#fb-note:focus{outline:2px solid var(--j);outline-offset:-1px}
+.fb-drop{border:1px dashed var(--bd);border-radius:9px;padding:15px;
+  text-align:center;font-size:12.5px;color:var(--ts);cursor:pointer}
+.fb-drop:hover,.fb-drop.hot{border-color:var(--j);background:var(--bg)}
+.fb-shots{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.fb-shot{position:relative;width:74px;height:56px;border-radius:7px;
+  overflow:hidden;border:1px solid var(--bd)}
+.fb-shot img{width:100%;height:100%;object-fit:cover;display:block}
+.fb-shot button{position:absolute;top:2px;right:2px;width:18px;height:18px;
+  border:0;border-radius:50%;background:rgba(16,24,40,.72);color:#fff;
+  font-size:12px;line-height:1;cursor:pointer;padding:0}
+.fb-ctx{margin-top:14px;padding:10px 12px;background:var(--bg);border-radius:8px;
+  font-size:11.5px;color:var(--tm);line-height:1.6}
+.fb-actions{display:flex;gap:9px;align-items:center;margin-top:20px}
+.fb-actions .grow{flex:1}
+#fb-msg{font-size:12.5px;line-height:1.5}
+#fb-msg.err{color:#B4443A}
+#fb-msg.ok{color:#3F6B4F}
+.fb-btn{border:1px solid var(--bd);background:var(--white);color:var(--tp);
+  border-radius:8px;padding:9px 15px;font-size:13px;font-weight:600;
+  font-family:inherit;cursor:pointer}
+.fb-btn.primary{background:var(--j);border-color:var(--j);color:#fff}
+.fb-btn[disabled]{opacity:.55;cursor:default}
+</style>
+
+<button id="fb-launch" onclick="fbOpen()" title="Report something that isn't working">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+  Report an issue
+</button>
+
+<div id="fb-modal" onclick="if(event.target===this)fbClose()">
+  <div class="fb-panel" role="dialog" aria-modal="true" aria-labelledby="fb-title">
+    <div class="fb-head">
+      <div class="fb-title" id="fb-title">Report an issue</div>
+      <div class="fb-sub">Goes straight to the QA list in ClickUp. The page,
+        property, browser and window size are captured automatically — just say
+        what happened.</div>
+    </div>
+    <div class="fb-body">
+      <label class="fb-label">How bad is it</label>
+      <div class="fb-sev" id="fb-sev"></div>
+
+      <label class="fb-label" for="fb-note">What happened</label>
+      <textarea id="fb-note" placeholder="What did you expect, and what did you get instead?"></textarea>
+
+      <label class="fb-label">Screenshot</label>
+      <div class="fb-drop" id="fb-drop" tabindex="0"
+           onclick="document.getElementById('fb-file').click()"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('fb-file').click();}">
+        Paste with <b>&#8984;V</b>, drop an image here, or click to choose
+      </div>
+      <input type="file" id="fb-file" accept="image/*" multiple style="display:none" onchange="fbPick(event)">
+      <div class="fb-shots" id="fb-shots"></div>
+
+      <div class="fb-ctx" id="fb-ctx"></div>
+
+      <div class="fb-actions">
+        <span class="grow" id="fb-msg"></span>
+        <button class="fb-btn" onclick="fbClose()">Cancel</button>
+        <button class="fb-btn primary" id="fb-send" onclick="fbSend()">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── Portal feedback widget ─────────────────────────────────────────────────
+   For the testing week: a tester should be able to file a finding without
+   leaving the page she found it on. Anything slower than that gets written in
+   an email instead, and an email is not a queue.
+
+   Everything about the moment is captured for her — page, property, URL,
+   viewport, browser. She supplies a sentence and, ideally, a paste.
+   ───────────────────────────────────────────────────────────────────────── */
+(function(){
+  var _sev = 'bug';
+  var _shots = [];          // {name, type, blob, url}
+  var _ready = false;
+  var _sending = false;
+
+  function _api()   { return window.__WEBHOOK_URL__ || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com'; }
+  function _email() { return window.__PORTAL_EMAIL__ || ''; }
+  function _e(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+  function _currentPage(){
+    var active = document.querySelector('.nav-item.active');
+    return active ? active.textContent.trim() : (document.title || 'Portal');
+  }
+  function _propertyName(){
+    var d = (window.__PORTAL_PROP_DATA && window.__PORTAL_PROP_DATA.property) || {};
+    return d.name || d.property_name || '';
+  }
+
+  /* Ask the server whether reports have anywhere to land BEFORE showing the
+     button. Appearing, accepting a carefully written report and only then
+     admitting there is no list configured is the worst possible order. */
+  function _boot(){
+    if (!_email()) return;
+    fetch(_api() + '/api/feedback/health', { headers: { 'X-Portal-Email': _email() } })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        if (!d || !d.ready) {
+          if (d && d.reason) console.warn('[feedback] widget hidden:', d.reason);
+          return;
+        }
+        _ready = true;
+        _renderSeverities(d.severities || []);
+        document.getElementById('fb-launch').style.display = 'inline-flex';
+      })
+      .catch(function(){});
+  }
+
+  function _renderSeverities(list){
+    if (!list.length) {
+      list = [{key:'blocker',label:'Blocked me'},{key:'bug',label:'Wrong or broken'},
+              {key:'idea',label:'Works, but…'}];
+    }
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      html += '<button type="button" data-sev="' + _e(list[i].key) + '"'
+            + ' onclick="fbSeverity(\'' + _e(list[i].key) + '\')">'
+            + _e(list[i].label) + '</button>';
+    }
+    document.getElementById('fb-sev').innerHTML = html;
+    fbSeverity(_sev);
+  }
+
+  window.fbSeverity = function(key){
+    _sev = key;
+    var buttons = document.querySelectorAll('#fb-sev button');
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].className = buttons[i].getAttribute('data-sev') === key ? 'on' : '';
+    }
+  };
+
+  window.fbOpen = function(){
+    if (!_ready) return;
+    document.getElementById('fb-ctx').innerHTML =
+      'Attaching: <b>' + _e(_currentPage()) + '</b>'
+      + (_propertyName() ? ' · ' + _e(_propertyName()) : '')
+      + ' · ' + window.innerWidth + '×' + window.innerHeight;
+    document.getElementById('fb-modal').classList.add('open');
+    setTimeout(function(){ document.getElementById('fb-note').focus(); }, 40);
+  };
+
+  window.fbClose = function(){
+    document.getElementById('fb-modal').classList.remove('open');
+  };
+
+  function _addShot(file){
+    if (_shots.length >= 4) { _say('Four screenshots is the limit.', 'err'); return; }
+    if (file.size > 10 * 1024 * 1024) { _say(file.name + ' is over 10MB.', 'err'); return; }
+    var shot = { name: file.name || ('paste-' + (_shots.length + 1) + '.png'),
+                 type: file.type || 'image/png', blob: file,
+                 url: URL.createObjectURL(file) };
+    _shots.push(shot);
+    _renderShots();
+    _say('');
+  }
+
+  function _renderShots(){
+    var html = '';
+    for (var i = 0; i < _shots.length; i++) {
+      html += '<div class="fb-shot"><img src="' + _shots[i].url + '" alt="">'
+            + '<button type="button" title="Remove" onclick="fbDropShot(' + i + ')">&times;</button></div>';
+    }
+    document.getElementById('fb-shots').innerHTML = html;
+  }
+
+  window.fbDropShot = function(i){
+    if (_shots[i]) URL.revokeObjectURL(_shots[i].url);
+    _shots.splice(i, 1);
+    _renderShots();
+  };
+
+  window.fbPick = function(ev){
+    var files = ev.target.files || [];
+    for (var i = 0; i < files.length; i++) _addShot(files[i]);
+    ev.target.value = '';
+  };
+
+  function _say(text, kind){
+    var el = document.getElementById('fb-msg');
+    el.textContent = text || '';
+    el.className = kind || '';
+  }
+
+  window.fbSend = function(){
+    if (_sending) return;
+    var note = document.getElementById('fb-note').value.trim();
+    if (!note && !_shots.length) {
+      _say('Say what happened, or attach a screenshot.', 'err');
+      return;
+    }
+    _sending = true;
+    document.getElementById('fb-send').setAttribute('disabled', 'disabled');
+    _say('Sending…');
+
+    var fd = new FormData();
+    fd.append('note', note);
+    fd.append('severity', _sev);
+    fd.append('page', _currentPage());
+    fd.append('url', window.location.href);
+    fd.append('company_id', window.__PORTAL_COMPANY_ID__ || '');
+    fd.append('property_name', _propertyName());
+    fd.append('viewport', window.innerWidth + 'x' + window.innerHeight);
+    for (var i = 0; i < _shots.length; i++) {
+      fd.append('screenshot', _shots[i].blob, _shots[i].name);
+    }
+
+    fetch(_api() + '/api/feedback', {
+      method: 'POST', headers: { 'X-Portal-Email': _email() }, body: fd
+    })
+      .then(function(r){ return r.json().then(function(j){ return {ok: r.ok, body: j}; }); })
+      .then(function(res){
+        _sending = false;
+        document.getElementById('fb-send').removeAttribute('disabled');
+        if (!res.ok || !res.body.ok) {
+          _say((res.body && res.body.error) || 'That did not send. Nothing was saved.', 'err');
+          return;
+        }
+        var extra = (res.body.dropped && res.body.dropped.length)
+          ? ' (' + res.body.dropped.length + ' screenshot issue)' : '';
+        _say('Filed' + extra + '. Thank you.', 'ok');
+        document.getElementById('fb-note').value = '';
+        while (_shots.length) fbDropShot(0);
+        setTimeout(function(){ fbClose(); _say(''); }, 1400);
+      })
+      .catch(function(err){
+        _sending = false;
+        document.getElementById('fb-send').removeAttribute('disabled');
+        _say('Network error — nothing was saved. Try again.', 'err');
+      });
+  };
+
+  /* Paste anywhere while the panel is open. This is the fast path: screenshot
+     with the OS shortcut, Cmd-V, done. */
+  document.addEventListener('paste', function(ev){
+    if (!document.getElementById('fb-modal').classList.contains('open')) return;
+    var items = (ev.clipboardData && ev.clipboardData.items) || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.indexOf('image') === 0) {
+        var file = items[i].getAsFile();
+        if (file) { _addShot(file); ev.preventDefault(); }
+      }
+    }
+  });
+
+  var drop = document.getElementById('fb-drop');
+  ['dragenter','dragover'].forEach(function(t){
+    drop.addEventListener(t, function(e){ e.preventDefault(); drop.classList.add('hot'); });
+  });
+  ['dragleave','drop'].forEach(function(t){
+    drop.addEventListener(t, function(e){ e.preventDefault(); drop.classList.remove('hot'); });
+  });
+  drop.addEventListener('drop', function(e){
+    var files = (e.dataTransfer && e.dataTransfer.files) || [];
+    for (var i = 0; i < files.length; i++) _addShot(files[i]);
+  });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') fbClose();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _boot);
+  } else { _boot(); }
+})();
+</script>
   {{ standard_footer_includes }}
 </body>
 </html>

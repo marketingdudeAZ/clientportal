@@ -528,6 +528,40 @@ def create_task(
     return r.json() if r is not None else None
 
 
+def attach_file(task_id: str, filename: str, content: bytes,
+                content_type: str = "application/octet-stream") -> dict[str, Any] | None:
+    """Attach a file to a task. Returns the attachment dict, or None.
+
+    Not routed through `_request`: `_headers()` pins Content-Type to
+    application/json, and multipart needs requests to set its own boundary.
+    Passing both produces a 400 that reads like an auth failure.
+
+    Never retried. A retried upload against a 502 that actually landed leaves
+    the same screenshot on the task twice, and a duplicate image is worse than
+    a missing one when someone is triaging a bug report.
+    """
+    if not CLICKUP_API_KEY or not task_id or not content:
+        return None
+    try:
+        resp = requests.post(
+            f"{CU_BASE}/task/{task_id}/attachment",
+            headers={"Authorization": CLICKUP_API_KEY},   # no Content-Type
+            files={"attachment": (filename, content, content_type)},
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        logger.warning("ClickUp attach %s failed: %s", task_id, e)
+        return None
+    if not _ok(resp):
+        logger.warning("ClickUp attach %s -> %s %s",
+                       task_id, resp.status_code, resp.text[:200])
+        return None
+    try:
+        return resp.json()
+    except ValueError:
+        return {}
+
+
 def add_tag(task_id: str, tag: str) -> bool:
     """Add a tag to a task (used as a 'recap-posted' dedupe marker). Best-effort."""
     if not CLICKUP_API_KEY or not task_id or not tag:

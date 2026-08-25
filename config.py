@@ -99,6 +99,10 @@ DIGEST_CACHE_HOURS = 24
 
 # --- ClickUp ---
 CLICKUP_API_KEY = os.getenv("CLICKUP_API_KEY")
+# ClickUp list that portal QA feedback files into (portal_feedback.py). Unset
+# means the widget stays hidden rather than accepting reports it cannot file.
+CLICKUP_LIST_PORTAL_FEEDBACK = os.getenv("CLICKUP_LIST_PORTAL_FEEDBACK", "")
+
 CLICKUP_LISTS = {
     "seo": os.getenv("CLICKUP_LIST_SEO"),
     "paid_media": os.getenv("CLICKUP_LIST_PAID_MEDIA"),
