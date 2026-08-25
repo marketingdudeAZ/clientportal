@@ -683,7 +683,8 @@ def test_a_finding_that_cites_no_real_evidence_index_is_dropped(findings):
 def test_a_supported_finding_is_rewritten_to_carry_its_evidence_verbatim():
     out = ask_engine._coerce_findings(
         [{"title": "Leads fell", "detail": "d", "evidence": [1, 1, 0]}], ["e0", "e1"])
-    assert out == [{"title": "Leads fell", "detail": "d", "evidence": ["e0", "e1"]}]
+    assert out == [{"title": "Leads fell", "detail": "d", "because": None,
+                    "so_what": None, "evidence": ["e0", "e1"]}]
 
 
 @pytest.mark.parametrize("raw", [
@@ -1223,3 +1224,55 @@ class TestPropertyScoping:
         r = client.post("/api/ask/not_a_question", json={"company_id": "222"},
                         headers={"X-Portal-Email": "kyle.shipp@rpmliving.com"})
         assert r.status_code == 404
+
+
+class TestTheFindingIsAChain:
+    """An answer is read aloud to a client by an account manager, so three
+    parallel observations is a failure mode. Each finding carries what moved,
+    why, and what it means — A and B, because C."""
+
+    def test_the_causal_link_survives_coercion(self):
+        out = ask_engine._coerce_findings([{
+            "title": "Leads turned up",
+            "detail": "Leads rose 107 to 114 (+6.5%).",
+            "because": "Paid search leads grew 57 to 66 (+15.8%).",
+            "so_what": "The channel taking most of the budget is producing the growth.",
+            "evidence": [0],
+        }], ["e0"])
+        assert out[0]["because"].startswith("Paid search")
+        assert out[0]["so_what"].startswith("The channel")
+
+    def test_an_absent_driver_stays_absent_rather_than_becoming_empty_string(self):
+        """A model that cannot find a driver in the evidence must leave the
+        link open. None renders nothing; "" would render an empty label."""
+        out = ask_engine._coerce_findings([{
+            "title": "t", "detail": "d", "evidence": [0]}], ["e0"])
+        assert out[0]["because"] is None
+        assert out[0]["so_what"] is None
+
+    def test_whitespace_only_driver_is_treated_as_absent(self):
+        out = ask_engine._coerce_findings([{
+            "title": "t", "detail": "d", "because": "   ", "evidence": [0]}], ["e0"])
+        assert out[0]["because"] is None
+
+    def test_the_prompt_demands_the_chain_and_permits_an_open_link(self):
+        p = ask_engine.SYSTEM_PROMPT
+        assert "because" in p and "so_what" in p
+        assert "because: null" in p, "the model must be told it may leave a link open"
+        assert "build" in p, "findings must be ordered to build on each other"
+
+    def test_the_prompt_forbids_restating_known_missing_inputs(self):
+        """The portal prints missing inputs under their own heading; a model
+        that repeats them shows the reader the same gap twice."""
+        assert "not_evidenced" in ask_engine.SYSTEM_PROMPT
+        assert "twice" in ask_engine.SYSTEM_PROMPT
+
+
+def test_generated_at_is_a_readable_timestamp_not_a_unix_float():
+    """It is rendered straight onto the page. It used to arrive as
+    "1787695889.602226"."""
+    stamp = ask_engine._now_iso()
+    assert stamp.endswith("UTC")
+    assert "." not in stamp
+    import re
+    assert re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$", stamp)

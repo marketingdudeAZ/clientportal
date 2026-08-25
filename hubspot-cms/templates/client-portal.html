@@ -11111,6 +11111,12 @@ setTimeout(loadPropertySwitcher, 1500);
 .ask-finding-detail{font-size:13px;color:var(--ts);line-height:1.65;max-width:74ch}
 /* Evidence is the point of this product: a claim a client can check. It is
    deliberately not collapsed behind a disclosure. */
+.ask-link{display:flex;gap:9px;margin-top:9px;font-size:13px;line-height:1.6;
+  color:var(--ts);max-width:74ch}
+.ask-link-k{flex:0 0 62px;font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--tm);padding-top:4px}
+.ask-link-so{color:var(--tp);font-weight:500}
+.ask-link-so .ask-link-k{color:var(--cu)}
 .ask-evidence{margin-top:12px;padding:11px 14px;background:var(--bg);
   border-radius:8px;font-size:11.5px;color:var(--ts);line-height:1.7}
 .ask-evidence-item{display:block}
@@ -11593,6 +11599,18 @@ setTimeout(loadPropertySwitcher, 1500);
       html += '<div class="ask-finding">'
             +   '<div class="ask-finding-title">' + _e(f.title) + '</div>'
             +   '<div class="ask-finding-detail">' + _e(f.detail) + '</div>';
+      /* The chain. Labelled rather than run together, so an account manager can
+         read straight down it and say the three parts in order: what moved,
+         why, and what it means. `because` is optional — an honest open link
+         beats an invented driver — so each part only renders when it exists. */
+      if (f.because) {
+        html += '<div class="ask-link"><span class="ask-link-k">Because</span>'
+              + '<span>' + _e(f.because) + '</span></div>';
+      }
+      if (f.so_what) {
+        html += '<div class="ask-link ask-link-so"><span class="ask-link-k">So</span>'
+              + '<span>' + _e(f.so_what) + '</span></div>';
+      }
       var ev = f.evidence || [];
       if (ev.length) {
         html += '<div class="ask-evidence">';
@@ -11638,7 +11656,33 @@ setTimeout(loadPropertySwitcher, 1500);
         : '';
     }
 
-    var ne = a.not_evidenced || [];
+    /* not_evidenced overlaps missing_inputs almost entirely, and the model
+       sometimes repeats itself inside it too, so the same gap was printing up
+       to three times under two different headings. Keep only what the
+       "Not included" block above has not already said. */
+    var seen = {};
+    for (var g2 = 0; g2 < gaps.length; g2++) {
+      var gp2 = gaps[g2] || {};
+      seen[String(gp2.input || '').toLowerCase()] = true;
+      seen[String(gp2.source || '').toLowerCase()] = true;
+    }
+    function _fingerprint(text){
+      return String(text || '').toLowerCase().replace(/[^a-z0-9 ]/g, '')
+             .split(/\s+/).slice(0, 8).join(' ');
+    }
+    var ne = [], neSeen = {};
+    for (var q = 0; q < (a.not_evidenced || []).length; q++) {
+      var line = a.not_evidenced[q];
+      var fp = _fingerprint(line);
+      if (!fp || neSeen[fp]) continue;                 // duplicate of itself
+      var covered = false;
+      for (var key in seen) {
+        if (key && key.length > 3 && fp.indexOf(key) !== -1) { covered = true; break; }
+      }
+      if (covered) continue;                           // already said above
+      neSeen[fp] = true;
+      ne.push(line);
+    }
     document.getElementById('ask-notevidenced').innerHTML = ne.length
       ? '<div class="ask-block"><div class="ask-block-title">Asked but not answerable from this data</div>'
         + ne.map(function(x){ return '<div class="ask-gap">' + _e(x) + '</div>'; }).join('') + '</div>'
