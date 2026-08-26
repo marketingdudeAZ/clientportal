@@ -61,6 +61,7 @@ from flask import Blueprint, jsonify, request
 import asset_index
 import asset_resizer
 import drive_client
+import gcs_client
 import hubspot_client
 from _route_utils import current_portal_email, preflight_response
 
@@ -72,6 +73,21 @@ assets_bp = Blueprint("assets", __name__)
 _COMPANY_PROPERTIES = ["uuid", "name", "google_ads_customer_id", "plestatus"]
 
 _MAX_FILES_PER_BATCH = 40
+
+
+def _store():
+    """The storage backend. GCS by default; Drive if it is ever available.
+
+    ADR 0020 specified a Google Shared Drive. The org has no Google Workspace —
+    mail is Microsoft 365 and the team works from personal Gmail, where a
+    Shared Drive cannot exist at any storage tier — so the default is a bucket.
+    The Drive path is kept rather than deleted: the reason it was chosen
+    (Fluency ingests natively from Drive) is still true, and if a Workspace
+    seat ever lands this is a one-variable change.
+    """
+    if (os.environ.get("ASSETS_BACKEND", "") or "gcs").strip().lower() == "drive":
+        return drive_client
+    return gcs_client
 
 
 def _enabled() -> bool:
@@ -177,13 +193,13 @@ def _upload_one(file_storage, folder_name: str, property_uuid: str,
 
     # New upload = new asset_id folder. Nothing here can overwrite an existing
     # file, which is what keeps a Fluency re-read valid (ADR 0020).
-    asset_folder_id = drive_client.ensure_path(
+    asset_folder_id = _store().ensure_path(
         [folder_name, asset_index.KIND_FOLDER[kind], asset_id]
     )
 
     file_ids, variants = {}, {}
     for variant, (payload, mime, drive_filename) in payloads.items():
-        created = drive_client.upload_file(
+        created = _store().upload_file(
             asset_folder_id, drive_filename, payload, mime,
             description=name,
             app_properties={
@@ -347,7 +363,7 @@ def rename(asset_id):
     folder_id = asset.get("drive_folder_id")
     if folder_id:
         try:
-            drive_client.set_metadata(
+            _store().set_metadata(
                 folder_id, description=name, app_properties={"display_name": name},
             )
         except Exception as e:  # noqa: BLE001
@@ -388,8 +404,8 @@ def remove(asset_id):
     folder_id = asset.get("drive_folder_id")
     if folder_id:
         try:
-            mapping_folder_id = drive_client.ensure_path([folder_name])
-            drive_client.archive_asset_folder(folder_id, mapping_folder_id)
+            mapping_folder_id = _store().ensure_path([folder_name])
+            _store().archive_asset_folder(folder_id, mapping_folder_id)
         except drive_client.DriveNotConfigured as e:
             return jsonify({"error": "Asset storage isn't connected yet.",
                             "detail": str(e)}), 503

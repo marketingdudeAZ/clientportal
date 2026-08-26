@@ -16,6 +16,7 @@ around them:
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import os
@@ -67,15 +68,35 @@ def _upload_form(files, uuid="12345", **extra):
     return data
 
 
+class _StorePatch:
+    """Patch the storage connector so uploads succeed without a real backend.
+
+    Pins the route to the Drive connector for the duration, because these
+    tests assert ROUTE behaviour — status codes, index rows, error mapping —
+    and should not change meaning when the default backend does. The GCS
+    backend has its own tests; the two surfaces are asserted to match in
+    test_gcs_client.TestDriveParity.
+    """
+
+    def __enter__(self):
+        self._stack = contextlib.ExitStack()
+        self._stack.enter_context(
+            mock.patch.object(assets_routes, "_store",
+                              return_value=assets_routes.drive_client))
+        return self._stack.enter_context(mock.patch.multiple(
+            assets_routes.drive_client,
+            ensure_path=mock.DEFAULT,
+            upload_file=mock.DEFAULT,
+            set_metadata=mock.DEFAULT,
+            archive_asset_folder=mock.DEFAULT,
+        ))
+
+    def __exit__(self, *exc):
+        return self._stack.__exit__(*exc)
+
+
 def _drive_ok():
-    """Patch the Drive connector so uploads succeed without a Shared Drive."""
-    return mock.patch.multiple(
-        assets_routes.drive_client,
-        ensure_path=mock.DEFAULT,
-        upload_file=mock.DEFAULT,
-        set_metadata=mock.DEFAULT,
-        archive_asset_folder=mock.DEFAULT,
-    )
+    return _StorePatch()
 
 
 def _hubspot_ok(results=None):

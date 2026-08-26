@@ -268,3 +268,74 @@ doesn't have. That's an auth-model decision, not an asset-pipeline task.
    the Drive** (which Google identity gets read access).
 3. Confirm the **ad-size set** (1.91:1, 1:1, 4:5, display) — add/drop any.
 ```
+
+---
+
+## Addendum, 2026-08-26 — the Shared Drive does not exist and cannot
+
+**Status of the original decision: superseded in its storage choice, upheld in
+everything else.**
+
+This ADR specified a Google Shared Drive. That was never checked against what
+the organisation actually has.
+
+What we found:
+
+* RPM Living's mail runs on **Microsoft 365**
+  (`rpmliving-com.mail.protection.outlook.com`). There is no Google Workspace on
+  the corporate domain. The `google-site-verification` TXT record on
+  rpmliving.com is for a Google product like Search Console, not Workspace.
+* The digital team works from **personal Gmail accounts**
+  (`rpmdigitalteam@gmail.com`, `rpmdigitalreports@gmail.com`).
+* **A Shared Drive cannot exist on a `@gmail.com` account at any storage tier.**
+  Shared drives are a Workspace feature and require a domain the customer
+  controls. A Google One upgrade — which was purchased while investigating
+  this — is consumer storage and does not provide them.
+* The documented fallback of "a normal folder shared with the service account"
+  does not work either: a service account has **no storage quota** and cannot
+  own My Drive files, so it cannot be the owner of files it creates. That
+  constraint is the reason this ADR called for a Shared Drive in the first
+  place.
+
+### What changed
+
+Storage moves to **Google Cloud Storage** in the existing `rpm-portal-492523`
+project, where the platform service account already lives.
+`webhook-server/gcs_client.py` mirrors `drive_client`'s public surface exactly,
+and `routes/assets.py` selects between them:
+
+    ASSETS_BACKEND=gcs      (default) bucket
+    ASSETS_BACKEND=drive    the original path, if a Workspace seat ever lands
+
+The Drive connector is **kept, not deleted**. The reason it was chosen —
+Fluency ingests natively from Drive (Method 2) — remains true, and a Workspace
+seat would make it preferable again.
+
+### What did NOT change
+
+Both lifecycle policies survive intact, because they are about Fluency's reads
+and have nothing to do with the vendor:
+
+* **Never overwrite** — a replacement is a new `asset_id` prefix.
+* **Archive, never hard-delete** — objects are copied under `_archive/` and only
+  then deleted. GCS has no move, so the copy of every object completes before
+  any delete: a half-archived asset that still has its originals is
+  recoverable, one that deleted first is not.
+
+### The open question this creates
+
+Drive was chosen for **Fluency's native ingestion**. A bucket is not on that
+list, so Fluency needs a URL:
+
+* `ASSETS_URL_MODE=signed` (default) — objects stay private, V4 signed URLs,
+  **seven-day maximum lifetime**. Correct if a platform fetches once at ingest;
+  wrong if it re-reads later, which is exactly what "never overwrite" was
+  designed to keep valid.
+* `ASSETS_URL_MODE=public` — stable URLs that never expire, at the cost of the
+  objects being readable by anyone holding the link.
+
+Signed is the default because publishing client creative should be a decision
+someone made deliberately. **Which mode Fluency actually needs is unresolved and
+is a conversation with Fluency, not a code change.** Until it is settled, treat
+the asset pipeline as unproven at the Fluency handoff even though the upload,
+resize, index and archive paths are covered by tests.
