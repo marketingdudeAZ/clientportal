@@ -36,7 +36,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
-from skills import ask_context, question_registry
+from skills import ask_context, ask_language, question_registry
 
 logger = logging.getLogger(__name__)
 
@@ -74,18 +74,50 @@ SYSTEM_PROMPT = (
     "cannot support with an index must not be written.\n"
     "4. If an input was missing, say which one and what it would have told us. "
     "Do not fill the gap with an assumption, and do not imply the data is zero.\n"
+    "4b. The prompt already lists the inputs that were unavailable, and the "
+    "portal prints that list under its own heading. `not_evidenced` is ONLY for "
+    "gaps that list does not already cover — something the question asked that "
+    "the evidence cannot answer for a different reason. Repeating an input that "
+    "is already named as missing prints the same gap to the reader twice. If "
+    "there is nothing to add, return an empty list.\n"
     "5. Write to a leasing director in second person. Direct, specific, no "
     "filler, no marketing language. Do not promise lease counts.\n"
     "6. If the honest answer is 'not much' or 'we cannot tell from this', say "
     "that.\n"
     "\n"
+    "THE SHAPE OF A FINDING. This answer is read out loud to a client by an "
+    "account manager, so a list of parallel observations is a failure. Each "
+    "finding is one link in a chain and carries three parts:\n"
+    "  observation — what moved, with both raw values\n"
+    "  because     — the driver, named from a DIFFERENT evidence line than the "
+    "observation wherever one exists. This is the 'why', and it is the part "
+    "that makes the finding sayable to a client.\n"
+    "  so_what     — what it means for the property, in plain words. Not a "
+    "restatement of the numbers. What a leasing director should now believe, "
+    "or do differently.\n"
+    "Write 'because' as a real causal link supported by evidence. If nothing in "
+    "the evidence explains the movement, write because: null rather than "
+    "inventing a driver — an honest gap in the chain beats a fabricated one.\n"
+    "\n"
+    "Order the findings so they build: the movement first, then what drove it, "
+    "then what it costs or wins. Each finding should make more sense for having "
+    "read the one above it.\n"
+    "\n"
     "Return ONLY valid JSON, no markdown fence, in exactly this shape:\n"
     '{"headline": "one sentence", "summary": "2-4 sentences", '
-    '"findings": [{"title": "short", "detail": "1-3 sentences", '
+    '"findings": [{"title": "short", "detail": "the observation, 1-2 sentences", '
+    '"because": "the driver, one sentence, or null", '
+    '"so_what": "what it means, one sentence", '
     '"evidence": [0, 2]}], "next_step": "one concrete action or null", '
     '"not_evidenced": ["what you could not answer and why"]}\n'
-    "2 to 5 findings, ordered most important first."
+    "2 to 5 findings, ordered so they build on each other."
 )
+
+
+def _now_iso() -> str:
+    """UTC, to the minute. Seconds are noise on a page a person reads."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
 # ── the ONE Claude call ────────────────────────────────────────────────────
@@ -231,6 +263,11 @@ def _coerce_findings(raw: Any, evidence: List[str]) -> List[Dict[str, Any]]:
         out.append({
             "title": str(item.get("title") or "").strip(),
             "detail": str(item.get("detail") or "").strip(),
+            # The causal link. Optional by design: a model that cannot find a
+            # driver in the evidence should leave the chain open rather than
+            # invent one, so an empty `because` is a valid honest answer.
+            "because": str(item.get("because") or "").strip() or None,
+            "so_what": str(item.get("so_what") or "").strip() or None,
             "evidence": [evidence[i] for i in sorted(set(idxs))],
         })
     return out
@@ -436,11 +473,20 @@ def _generate(question, identity) -> Dict[str, Any]:
         "evidence": ctx.evidence(),
         "caveats": ctx.caveats(),
         "missing_inputs": ctx.missing_inputs(),
-        "inputs": {k: {"available": p.available, "source": p.source,
-                       "caveat": p.caveat, "missing_reason": p.missing_reason,
+        # Built from Pull.to_dict()'s translated fields rather than the raw
+        # attributes: this block ships in the same payload the page reads, and
+        # a table name here is one console.log away from a screenshot.
+        "inputs": {k: {"available": p.available,
+                       "label": ask_language.label(k),
+                       "source": ask_language.source(p.source),
+                       "caveat": p.caveat,
+                       "missing_reason": ask_language.reason(p.missing_reason,
+                                                             key=k),
                        "quality": p.quality}
                    for k, p in ctx.pulls.items()},
-        "generated_at": time.time(),
+        # ISO-8601, because this string is rendered to a human. It used to
+        # reach the page as a raw unix float ("1787695889.602226").
+        "generated_at": _now_iso(),
         "cached": False,
         "cache": cache_status(),
     }

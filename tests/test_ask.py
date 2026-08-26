@@ -386,7 +386,8 @@ def test_reputation_is_declared_dark_rather_than_quietly_omitted():
     """SOCi has no connector. 'What's working' must say so out loud."""
     pull = ask_context.pull_reputation(_identity())
     assert pull.available is False
-    assert "SOCi" in pull.source
+    assert "SOCi" in pull.source, "the raw Pull keeps the internal source; " \
+                                  "translation happens at serialisation"
     assert "no connector" in pull.missing_reason
     assert "reputation" in question_registry.get("whats_working").pulls[-1] or \
         "reputation" in question_registry.get("whats_working").pulls
@@ -638,7 +639,11 @@ def test_prompt_carries_numerator_denominator_and_source_for_every_claim():
         assert ("→" in line) or (" / " in line), line
     # The dark input is named in its own section, with what it would have told us.
     assert "INPUTS THAT WERE NOT AVAILABLE" in prompt
-    assert "tour_sources" in prompt and "no hyly_property_id" in prompt
+    # The prompt carries the gap in the SAME words the page uses. That is
+    # deliberate: the model was echoing internal reasons verbatim into
+    # not_evidenced, so feeding it jargon guaranteed jargon came back.
+    assert "Tours by source" in prompt or "tour" in prompt.lower()
+    assert "hyly" not in prompt.lower(), "internal vocabulary must not reach the model"
     # The question's own instruction rides with it.
     assert q.instruction in prompt
     assert q.label in prompt
@@ -683,7 +688,8 @@ def test_a_finding_that_cites_no_real_evidence_index_is_dropped(findings):
 def test_a_supported_finding_is_rewritten_to_carry_its_evidence_verbatim():
     out = ask_engine._coerce_findings(
         [{"title": "Leads fell", "detail": "d", "evidence": [1, 1, 0]}], ["e0", "e1"])
-    assert out == [{"title": "Leads fell", "detail": "d", "evidence": ["e0", "e1"]}]
+    assert out == [{"title": "Leads fell", "detail": "d", "because": None,
+                    "so_what": None, "evidence": ["e0", "e1"]}]
 
 
 @pytest.mark.parametrize("raw", [
@@ -760,7 +766,9 @@ def test_every_dark_input_reaches_not_evidenced_whatever_the_model_said():
                        "not_evidenced": []})
     out, _ = _generate("whats_not_working", pulls, body)
     joined = " || ".join(out["not_evidenced"])
-    assert "reputation:" in joined and "SOCi" in joined
+    assert "reputation:" in joined
+    assert "review" in joined.lower(), "the gap is named in the reader's words"
+    assert "soci" not in joined.lower(), "the vendor name must not survive"
     assert "tour_sources:" in joined
     assert {m["input"] for m in out["missing_inputs"]} == {"reputation", "tour_sources"}
     assert out["inputs"]["reputation"]["available"] is False
@@ -1104,7 +1112,8 @@ def test_the_answer_body_carries_its_receipts_end_to_end(client):
     assert out["viz"]["pull"] == "performance_trend"
     assert out["viz_data"]["months"][0]["month"] == "2026-04"
     assert all(NC in e for e in out["evidence"])
-    assert any("SOCi" in x for x in out["not_evidenced"])
+    assert any("review" in x.lower() for x in out["not_evidenced"]), \
+        "a dark input still reaches not_evidenced — described, not named"
 
 
 
@@ -1223,3 +1232,55 @@ class TestPropertyScoping:
         r = client.post("/api/ask/not_a_question", json={"company_id": "222"},
                         headers={"X-Portal-Email": "kyle.shipp@rpmliving.com"})
         assert r.status_code == 404
+
+
+class TestTheFindingIsAChain:
+    """An answer is read aloud to a client by an account manager, so three
+    parallel observations is a failure mode. Each finding carries what moved,
+    why, and what it means — A and B, because C."""
+
+    def test_the_causal_link_survives_coercion(self):
+        out = ask_engine._coerce_findings([{
+            "title": "Leads turned up",
+            "detail": "Leads rose 107 to 114 (+6.5%).",
+            "because": "Paid search leads grew 57 to 66 (+15.8%).",
+            "so_what": "The channel taking most of the budget is producing the growth.",
+            "evidence": [0],
+        }], ["e0"])
+        assert out[0]["because"].startswith("Paid search")
+        assert out[0]["so_what"].startswith("The channel")
+
+    def test_an_absent_driver_stays_absent_rather_than_becoming_empty_string(self):
+        """A model that cannot find a driver in the evidence must leave the
+        link open. None renders nothing; "" would render an empty label."""
+        out = ask_engine._coerce_findings([{
+            "title": "t", "detail": "d", "evidence": [0]}], ["e0"])
+        assert out[0]["because"] is None
+        assert out[0]["so_what"] is None
+
+    def test_whitespace_only_driver_is_treated_as_absent(self):
+        out = ask_engine._coerce_findings([{
+            "title": "t", "detail": "d", "because": "   ", "evidence": [0]}], ["e0"])
+        assert out[0]["because"] is None
+
+    def test_the_prompt_demands_the_chain_and_permits_an_open_link(self):
+        p = ask_engine.SYSTEM_PROMPT
+        assert "because" in p and "so_what" in p
+        assert "because: null" in p, "the model must be told it may leave a link open"
+        assert "build" in p, "findings must be ordered to build on each other"
+
+    def test_the_prompt_forbids_restating_known_missing_inputs(self):
+        """The portal prints missing inputs under their own heading; a model
+        that repeats them shows the reader the same gap twice."""
+        assert "not_evidenced" in ask_engine.SYSTEM_PROMPT
+        assert "twice" in ask_engine.SYSTEM_PROMPT
+
+
+def test_generated_at_is_a_readable_timestamp_not_a_unix_float():
+    """It is rendered straight onto the page. It used to arrive as
+    "1787695889.602226"."""
+    stamp = ask_engine._now_iso()
+    assert stamp.endswith("UTC")
+    assert "." not in stamp
+    import re
+    assert re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$", stamp)
