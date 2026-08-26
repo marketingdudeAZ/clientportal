@@ -8,6 +8,8 @@ outage must never abandon work in progress.
 from __future__ import annotations
 
 import logging
+import os
+import time
 from typing import Any
 
 import requests
@@ -18,6 +20,33 @@ logger = logging.getLogger(__name__)
 
 CU_BASE = "https://api.clickup.com/api/v2"
 _TIMEOUT = 10
+
+_MAX_RETRIES = int(os.getenv("CLICKUP_MAX_RETRIES", "2"))
+_MAX_BACKOFF = 8.0
+
+# Total wall clock ONE ClickUp call may consume, retries and sleeps included.
+# This is the load-bearing number. Retries multiply worst-case latency, and the
+# server runs a small fixed thread pool (start.py) — so backoff WITHOUT a budget
+# makes a slow ClickUp strictly worse, not better: threads pile up sleeping.
+_CALL_BUDGET = float(os.getenv("CLICKUP_CALL_BUDGET", "25"))
+
+_SESSION: requests.Session | None = None
+
+
+def _session() -> requests.Session:
+    """One pooled session for the process.
+
+    pool_maxsize must exceed the ticket-list fan-out
+    (portal_tickets._FETCH_WORKERS) or concurrent GETs serialize on the
+    connection pool and the fan-out buys nothing.
+    """
+    global _SESSION
+    if _SESSION is None:
+        s = requests.Session()
+        s.mount("https://", requests.adapters.HTTPAdapter(
+            pool_connections=4, pool_maxsize=16))
+        _SESSION = s
+    return _SESSION
 
 
 def _headers() -> dict[str, str]:
@@ -31,87 +60,163 @@ def _ok(resp: requests.Response) -> bool:
     return 200 <= resp.status_code < 300
 
 
+def _retry_after_seconds(resp: requests.Response, attempt: int) -> float:
+    """Respect ClickUp's Retry-After; else capped exponential backoff.
+
+    Deliberately mirrors hubspot_client._retry_after_seconds — one backoff shape
+    across the platform rather than two that drift apart.
+    """
+    hdr = resp.headers.get("Retry-After")
+    if hdr:
+        try:
+            return min(float(hdr), _MAX_BACKOFF)
+        except ValueError:
+            pass
+    return min(2.0 ** attempt, _MAX_BACKOFF)
+
+
+def _request(method: str, path: str, **kwargs) -> requests.Response | None:
+    """The single ClickUp transport: 429 + 5xx retry under a wall-clock budget.
+
+    Returns None rather than raising. Unlike hubspot_client._request, this
+    module's entire contract is best-effort — "a ClickUp outage must never
+    abandon work in progress" (module docstring) — and a dozen call sites depend
+    on that. The retry SHAPE is copied from hubspot_client; the failure MODE is
+    not.
+
+    Retry policy differs by method on purpose:
+      * 429 — retried for every method. ClickUp rejected the request outright,
+        so there is no side effect to duplicate.
+      * 5xx — retried for GET only. A retried POST /task against a 502 that
+        actually landed would file the ticket twice.
+    """
+    url = f"{CU_BASE}/{path.lstrip('/')}"
+    kwargs.setdefault("timeout", _TIMEOUT)
+    deadline = time.monotonic() + _CALL_BUDGET
+    attempt = 0
+    while True:
+        try:
+            resp = _session().request(method, url, headers=_headers(), **kwargs)
+        except requests.RequestException as e:
+            logger.warning("ClickUp %s %s network error: %s", method, path, e)
+            return None
+        if _ok(resp):
+            return resp
+        retryable = resp.status_code == 429 or (
+            resp.status_code >= 500 and method.upper() == "GET")
+        if retryable and attempt < _MAX_RETRIES:
+            attempt += 1
+            delay = _retry_after_seconds(resp, attempt)
+            if time.monotonic() + delay > deadline:
+                logger.warning("ClickUp %s %s -> %s; call budget exhausted",
+                               method, path, resp.status_code)
+                return None
+            logger.warning("ClickUp %s %s -> %s — backoff %.1fs (attempt %d)",
+                           method, path, resp.status_code, delay, attempt)
+            time.sleep(delay)
+            continue
+        logger.warning("ClickUp %s %s -> %s %s",
+                       method, path, resp.status_code, resp.text[:200])
+        return None
+
+
 # ── Reads ──────────────────────────────────────────────────────────────────
 
 def get_task(task_id: str) -> dict[str, Any] | None:
     """Fetch a ClickUp task. Returns None when the task is missing or auth fails."""
     if not CLICKUP_API_KEY or not task_id:
         return None
-    try:
-        r = requests.get(
-            f"{CU_BASE}/task/{task_id}",
-            headers=_headers(),
-            params={"include_subtasks": "false"},
-            timeout=_TIMEOUT,
-        )
-    except requests.RequestException as e:
-        logger.warning("ClickUp get_task network error for %s: %s", task_id, e)
-        return None
-    if not _ok(r):
-        logger.warning("ClickUp get_task %s -> %s %s", task_id, r.status_code, r.text[:200])
-        return None
-    return r.json()
+    r = _request("GET", f"task/{task_id}", params={"include_subtasks": "false"})
+    return r.json() if r is not None else None
 
 
-def get_list_fields(list_id: str) -> list[dict[str, Any]]:
-    """Return a list's custom-field definitions (`GET /list/{id}/field`).
+_FIELD_CACHE_TTL = float(os.getenv("CLICKUP_FIELD_CACHE_TTL", "900"))   # 15 min
 
-    Each field carries `id`, `name`, `type`, `required`, and (for
-    drop_down/labels) a `type_config.options` list. The portal renders its
-    per-type ticket form directly from this, so a field your team adds in
-    ClickUp shows up in the portal with no redeploy. Empty on any failure —
-    the caller degrades to a plain description-only form.
+# After a failed refresh, don't re-hit ClickUp for this long. Without it a hard
+# ClickUp outage costs one full _CALL_BUDGET per list per request — 6 types ×
+# 25s on a small thread pool is the outage amplifying itself.
+_FIELD_FAIL_COOLDOWN = 60.0
+
+_FIELD_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_FIELD_FAIL_UNTIL: dict[str, float] = {}
+
+
+def clear_field_cache() -> None:
+    """Drop cached list schemas. Call in tests (mirrors feature_access.clear_cache)."""
+    _FIELD_CACHE.clear()
+    _FIELD_FAIL_UNTIL.clear()
+
+
+def get_list_fields(list_id: str) -> list[dict[str, Any]] | None:
+    """A list's custom-field definitions, cached 15 min, stale-on-error.
+
+    Returns:
+      list — the schema. `[]` means a GENUINELY fieldless list.
+      None — we could not find out.
+
+    CALLERS MUST TREAT None AS "this type is unavailable right now" AND MUST NOT
+    TREAT IT AS "no fields". This function used to return [] for both, which
+    meant a rate-limited fetch rendered a form with no fields on it: the
+    requester filled in a subject, submitted successfully, and filed a task
+    missing every required field. Marketing could not distinguish that from a
+    lazy requester.
+
+    Schemas change monthly, so a 15-minute TTL removes essentially all
+    rate-limit exposure on this path; the stale fallback covers the rest.
     """
     if not CLICKUP_API_KEY or not list_id:
-        return []
-    try:
-        r = requests.get(
-            f"{CU_BASE}/list/{list_id}/field",
-            headers=_headers(),
-            timeout=_TIMEOUT,
-        )
-    except requests.RequestException as e:
-        logger.warning("ClickUp get_list_fields network error for %s: %s", list_id, e)
-        return []
-    if not _ok(r):
-        logger.warning("ClickUp get_list_fields %s -> %s %s", list_id, r.status_code, r.text[:200])
-        return []
-    return r.json().get("fields") or []
+        return None
+    now = time.monotonic()
+    hit = _FIELD_CACHE.get(list_id)
+    if hit and (now - hit[0]) < _FIELD_CACHE_TTL:
+        return hit[1]
+    if now < _FIELD_FAIL_UNTIL.get(list_id, 0.0):
+        return hit[1] if hit else None          # cooling down after a failure
+
+    r = _request("GET", f"list/{list_id}/field")
+    if r is None:
+        _FIELD_FAIL_UNTIL[list_id] = now + _FIELD_FAIL_COOLDOWN
+        if hit:
+            logger.warning("ClickUp get_list_fields %s failed — serving schema "
+                           "cached %.0fs ago", list_id, now - hit[0])
+            return hit[1]
+        return None
+
+    fields = r.json().get("fields") or []
+    _FIELD_CACHE[list_id] = (now, fields)
+    _FIELD_FAIL_UNTIL.pop(list_id, None)
+    return fields
 
 
 def get_list(list_id: str) -> dict[str, Any] | None:
     """Fetch a list's metadata (name, status set). Used to map ClickUp statuses."""
     if not CLICKUP_API_KEY or not list_id:
         return None
-    try:
-        r = requests.get(f"{CU_BASE}/list/{list_id}", headers=_headers(), timeout=_TIMEOUT)
-    except requests.RequestException as e:
-        logger.warning("ClickUp get_list network error for %s: %s", list_id, e)
+    r = _request("GET", f"list/{list_id}")
+    return r.json() if r is not None else None
+
+
+def get_view(view_id: str) -> dict[str, Any] | None:
+    """Fetch one view (form, list, board…) by its id.
+
+    The id segment in a public ClickUp form URL *is* the view id, and the view
+    carries `parent` — the list the form files into. That makes it the only
+    authoritative way to answer "which list does this form feed?", which name
+    matching can only ever guess at. Returns None on failure, which callers
+    must not confuse with "the form has no parent".
+    """
+    if not CLICKUP_API_KEY or not view_id:
         return None
-    if not _ok(r):
-        logger.warning("ClickUp get_list %s -> %s %s", list_id, r.status_code, r.text[:200])
-        return None
-    return r.json()
+    r = _request("GET", f"view/{view_id}")
+    return (r.json().get("view") or None) if r is not None else None
 
 
 def get_tasks(list_id: str, *, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Fetch tasks in a list (single page). Best-effort — empty on failure."""
     if not CLICKUP_API_KEY or not list_id:
         return []
-    try:
-        r = requests.get(
-            f"{CU_BASE}/list/{list_id}/task",
-            headers=_headers(),
-            params=params or {},
-            timeout=_TIMEOUT,
-        )
-    except requests.RequestException as e:
-        logger.warning("ClickUp get_tasks network error for %s: %s", list_id, e)
-        return []
-    if not _ok(r):
-        logger.warning("ClickUp get_tasks %s -> %s %s", list_id, r.status_code, r.text[:200])
-        return []
-    return r.json().get("tasks") or []
+    r = _request("GET", f"list/{list_id}/task", params=params or {})
+    return (r.json().get("tasks") or []) if r is not None else []
 
 
 def discover_workspace_lists(workspace_id: str) -> list[dict[str, Any]]:
@@ -416,20 +521,45 @@ def create_task(
         payload["assignees"] = assignees
     if custom_fields:
         payload["custom_fields"] = custom_fields
+    # POST: _request retries 429 (rejected outright, nothing landed) but never
+    # a 5xx — a retried create against a 502 that actually succeeded would file
+    # the requester's ticket twice.
+    r = _request("POST", f"list/{list_id}/task", json=payload)
+    return r.json() if r is not None else None
+
+
+def attach_file(task_id: str, filename: str, content: bytes,
+                content_type: str = "application/octet-stream") -> dict[str, Any] | None:
+    """Attach a file to a task. Returns the attachment dict, or None.
+
+    Not routed through `_request`: `_headers()` pins Content-Type to
+    application/json, and multipart needs requests to set its own boundary.
+    Passing both produces a 400 that reads like an auth failure.
+
+    Never retried. A retried upload against a 502 that actually landed leaves
+    the same screenshot on the task twice, and a duplicate image is worse than
+    a missing one when someone is triaging a bug report.
+    """
+    if not CLICKUP_API_KEY or not task_id or not content:
+        return None
     try:
-        r = requests.post(
-            f"{CU_BASE}/list/{list_id}/task",
-            headers=_headers(),
-            json=payload,
+        resp = requests.post(
+            f"{CU_BASE}/task/{task_id}/attachment",
+            headers={"Authorization": CLICKUP_API_KEY},   # no Content-Type
+            files={"attachment": (filename, content, content_type)},
             timeout=_TIMEOUT,
         )
     except requests.RequestException as e:
-        logger.warning("ClickUp create_task network error for list %s: %s", list_id, e)
+        logger.warning("ClickUp attach %s failed: %s", task_id, e)
         return None
-    if not _ok(r):
-        logger.warning("ClickUp create_task list=%s -> %s %s", list_id, r.status_code, r.text[:200])
+    if not _ok(resp):
+        logger.warning("ClickUp attach %s -> %s %s",
+                       task_id, resp.status_code, resp.text[:200])
         return None
-    return r.json()
+    try:
+        return resp.json()
+    except ValueError:
+        return {}
 
 
 def add_tag(task_id: str, tag: str) -> bool:

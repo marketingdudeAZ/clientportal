@@ -6,6 +6,8 @@ Source of truth for 'does this company have SEO, and at which tier'. Checks:
   3. Returns None if no signal (customer not on SEO).
 """
 
+from __future__ import annotations
+
 import logging
 
 import requests

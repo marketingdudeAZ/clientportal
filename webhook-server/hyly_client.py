@@ -1,19 +1,32 @@
-"""Hyly BigQuery client (ADR 0015).
+"""Hyly BigQuery reader — Convert stage data (ADR 0015, revised by ADR 0022).
 
-Read-only access to Hyly's three tables:
-  - daily_activity_summary  (per-day × per-source rollup)
-  - contact_submits         (lead-level events)
-  - website_visits          (page-view-level journey)
+WHAT CHANGED FROM ADR 0015
+--------------------------
+ADR 0015 assumed Hyly would deliver three pre-aggregated tables
+(`daily_activity_summary`, `contact_submits`, `website_visits`). They do not
+exist. What Hyly actually delivers is a per-contact funnel table,
+`ga_hyly_mti`, in a project we do not own. See ADR 0022.
 
-Join key: `property_id` (Hyly's id, stored on HubSpot company records
-as `hyly_property_id` custom property — per ADR 0015).
+This module therefore reads our OWN rollup — `hyly_daily_activity_v1`, built
+by migration 0022 into the landing dataset we control — rather than querying
+the vendor's tables directly. Three reasons: the vendor project is named
+"gds-prototype-*" and can change under us, the raw GA4 table is 10 GB and must
+never be scanned on a page load, and the channel normalisation is ours.
 
-Hyly's data lives in their own BQ dataset within our project. Configure
-via `BIGQUERY_HYLY_DATASET` env var. When unset, every function returns
-an empty list and logs once — useful before Hyly beta lands so callers
-don't error.
+CONFIG
+------
+  BIGQUERY_HYLY_PROJECT   project holding the rollup (defaults to
+                          BIGQUERY_PROJECT_ID for backwards compatibility)
+  BIGQUERY_HYLY_DATASET   dataset holding the rollup
+  BIGQUERY_SERVICE_ACCOUNT_JSON / BIGQUERY_PROJECT_ID  credentials + billing
 
-All queries are property-scoped + date-bounded for cost control.
+FAILURE POLICY
+--------------
+Unset config is a normal state — Hyly is a 15-property beta — and returns
+empty. A query that FAILS while config is present raises `HylyQueryError`.
+The previous version swallowed every exception into `[]`, which made a wrong
+table name look identical to "this property has no data". That is the failure
+shape that hid 46 silent Fluency budget no-ops; we do not repeat it here.
 """
 
 from __future__ import annotations
@@ -21,14 +34,32 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, date, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# ── BQ client (shared with loop_writer to avoid duplicate auth) ──────────────
-
 _cache: dict = {"client": None, "logged_missing": False}
+
+# Hyly's feed is daily. Two days of slack absorbs a weekend hiccup or a single
+# failed run; beyond that the portal says so out loud rather than quietly
+# showing old numbers as if they were current.
+STALE_AFTER_DAYS = 2
+
+# Milestone columns, in funnel order. Keys are the public metric names.
+FUNNEL = [
+    ("leads", "leads"),
+    ("tours_scheduled", "tours_scheduled"),
+    ("tours_completed", "tours_completed"),
+    ("applications", "applications"),
+    ("leases", "leases"),
+]
+
+
+class HylyQueryError(RuntimeError):
+    """Raised when Hyly BQ is configured but a query fails.
+
+    Callers should surface this (502), never render it as "no data".
+    """
 
 
 def _bq():
@@ -41,36 +72,90 @@ def _bq():
     try:
         from google.cloud import bigquery
         from google.oauth2 import service_account
-        if sa.strip().startswith("{"):
-            info = json.loads(sa)
-        else:
-            with open(sa) as fp:
-                info = json.load(fp)
+        info = json.loads(sa) if sa.strip().startswith("{") else json.load(open(sa))
         creds = service_account.Credentials.from_service_account_info(info)
         _cache["client"] = bigquery.Client(project=project, credentials=creds)
         return _cache["client"]
     except Exception as exc:
-        logger.warning("hyly_client BQ init failed: %s", exc)
-        return None
+        # Client construction failing is a config problem, not a data problem.
+        raise HylyQueryError(f"Hyly BQ client init failed: {exc}") from exc
 
 
 def _hyly_ref() -> Optional[str]:
-    project = os.environ.get("BIGQUERY_PROJECT_ID")
+    """`project.dataset` holding the rollup, or None when unconfigured.
+
+    ADR 0015 assumed the Hyly dataset lived in our own project, so the original
+    built this from BIGQUERY_PROJECT_ID. It does not — hence the separate
+    BIGQUERY_HYLY_PROJECT, which falls back to the old behaviour when unset.
+    """
     dataset = os.environ.get("BIGQUERY_HYLY_DATASET")
+    project = (os.environ.get("BIGQUERY_HYLY_PROJECT")
+               or os.environ.get("BIGQUERY_PROJECT_ID"))
     if not (project and dataset):
         if not _cache["logged_missing"]:
-            logger.info("hyly_client: BIGQUERY_HYLY_DATASET unset — returning empty results")
+            logger.info("hyly_client: BIGQUERY_HYLY_DATASET/PROJECT unset — "
+                        "returning empty results")
             _cache["logged_missing"] = True
         return None
     return f"{project}.{dataset}"
 
 
+def rollup_table() -> Optional[str]:
+    ref = _hyly_ref()
+    return f"{ref}.hyly_daily_activity_v1" if ref else None
+
+
 def is_configured() -> bool:
-    """True when env is set up to read Hyly tables."""
-    return _hyly_ref() is not None and _bq() is not None
+    """True when env is set up to read the Hyly rollup."""
+    try:
+        return _hyly_ref() is not None and _bq() is not None
+    except HylyQueryError:
+        return False
 
 
-# ── Daily activity (per-channel rollup) ──────────────────────────────────────
+def _query(sql: str, params: list) -> list[dict]:
+    """Run a parameterised query. Empty when unconfigured; raises on failure."""
+    client = _bq()
+    if not (client and _hyly_ref()):
+        return []
+    from google.cloud import bigquery
+    cfg = bigquery.QueryJobConfig(query_parameters=params)
+    try:
+        return [dict(r.items()) for r in client.query(sql, job_config=cfg).result()]
+    except Exception as exc:
+        # Loud on purpose — see FAILURE POLICY above.
+        raise HylyQueryError(f"Hyly query failed: {exc}") from exc
+
+
+def get_data_freshness() -> dict:
+    """How current the Hyly rollup is, for display and for alerting.
+
+    The portal must state what it knows rather than implying it is live. A
+    dashboard frozen at a past date while looking current is worse than one
+    that says so — this is the same failure the 2026-08-11 snapshot produced,
+    where nothing refreshed and nothing complained.
+
+    Returns {data_through, days_behind, is_stale, stale_after_days} — or
+    {data_through: None} when unconfigured.
+    """
+    table = rollup_table()
+    if not table:
+        return {"data_through": None, "days_behind": None,
+                "is_stale": None, "stale_after_days": STALE_AFTER_DAYS}
+    rows = _query(f"SELECT MAX(activity_date) AS newest FROM `{table}`", [])
+    newest = rows[0]["newest"] if rows else None
+    if not newest:
+        return {"data_through": None, "days_behind": None,
+                "is_stale": True, "stale_after_days": STALE_AFTER_DAYS}
+    from datetime import date
+    days = (date.today() - newest).days
+    return {
+        "data_through": newest.isoformat(),
+        "days_behind": days,
+        "is_stale": days > STALE_AFTER_DAYS,
+        "stale_after_days": STALE_AFTER_DAYS,
+    }
+
 
 def get_daily_activity(
     hyly_property_id: str,
@@ -78,53 +163,33 @@ def get_daily_activity(
     start_date: str,
     end_date: str,
 ) -> list[dict]:
-    """Per-day × per-source rollup for one property.
+    """Per-day x per-channel funnel rollup for one property.
 
-    start_date / end_date: 'YYYY-MM-DD', inclusive.
-    Returns list of dicts: {event_date, source, visitors, known_visitors,
-                             total_views, converted_contacts, ...}.
+    Returns dicts of: activity_date, channel, leads, tours_scheduled,
+    tours_completed, applications, leases.
     """
-    client = _bq()
-    ref = _hyly_ref()
-    if not (client and ref and hyly_property_id):
+    table = rollup_table()
+    if not (table and hyly_property_id):
         return []
-
     from google.cloud import bigquery
     sql = f"""
       SELECT
-        event_date,
-        source,
-        SAFE_CAST(visitors AS INT64) AS visitors,
-        SAFE_CAST(known_visitors AS INT64) AS known_visitors,
-        SAFE_CAST(total_views AS INT64) AS total_views,
-        SAFE_CAST(converted_contacts AS INT64) AS converted_contacts,
-        SAFE_CAST(visitors_ndls AS INT64) AS visitors_ndls,
-        SAFE_CAST(known_visitors_ndls AS INT64) AS known_visitors_ndls,
-        SAFE_CAST(total_views_ndls AS INT64) AS total_views_ndls,
-        SAFE_CAST(converted_contacts_ndls AS INT64) AS converted_contacts_ndls
-      FROM `{ref}.daily_activity_summary`
-      WHERE CAST(property_id AS STRING) = @pid
-        AND DATE(event_date) BETWEEN DATE(@start) AND DATE(@end)
-      ORDER BY event_date DESC, source
+        activity_date, channel,
+        leads, tours_scheduled, tours_completed, applications, leases
+      FROM `{table}`
+      WHERE hyly_property_id = @pid
+        AND activity_date BETWEEN DATE(@start) AND DATE(@end)
+      ORDER BY activity_date DESC, channel
     """
-    params = [
+    rows = _query(sql, [
         bigquery.ScalarQueryParameter("pid", "STRING", str(hyly_property_id)),
         bigquery.ScalarQueryParameter("start", "STRING", start_date),
         bigquery.ScalarQueryParameter("end", "STRING", end_date),
-    ]
-    cfg = bigquery.QueryJobConfig(query_parameters=params)
-    try:
-        out = []
-        for r in client.query(sql, job_config=cfg).result():
-            d = dict(r.items())
-            if d.get("event_date"):
-                d["event_date"] = d["event_date"].isoformat()
-            out.append(d)
-        return out
-    except Exception as exc:
-        logger.warning("hyly_client.get_daily_activity failed for %s: %s",
-                       hyly_property_id, exc)
-        return []
+    ])
+    for r in rows:
+        if r.get("activity_date"):
+            r["activity_date"] = r["activity_date"].isoformat()
+    return rows
 
 
 def get_channel_summary(
@@ -133,43 +198,42 @@ def get_channel_summary(
     start_date: str,
     end_date: str,
 ) -> dict:
-    """Aggregated per-channel summary across the date range.
+    """Per-channel funnel totals across the range, plus a `_total` key.
 
-    Returns:
-      {
-        "Google PayPerClick (PPC)": {visitors, known_visitors, contacts, conv_rate},
-        "apartments.com": {...},
-        ...
-        "_total": {...}
-      }
+    Shape per channel:
+      {leads, tours_scheduled, tours_completed, applications, leases,
+       lead_to_tour, lead_to_lease}
+
+    NOTE: ADR 0015 specified `visitors` / `known_visitors` here. Hyly's funnel
+    table has no visitor counts — those live in `ga4_analytics_events` and are
+    not yet ingested — so the funnel now starts at `leads`. Callers that sorted
+    on `visitors` must sort on `leads` instead.
     """
     rows = get_daily_activity(hyly_property_id,
                               start_date=start_date, end_date=end_date)
-    by_source: dict = {}
+    by_channel: dict = {}
     for row in rows:
-        s = row.get("source") or "(unknown)"
-        agg = by_source.setdefault(s, {
-            "visitors": 0, "known_visitors": 0,
-            "total_views": 0, "contacts": 0,
-        })
-        agg["visitors"] += row.get("visitors") or 0
-        agg["known_visitors"] += row.get("known_visitors") or 0
-        agg["total_views"] += row.get("total_views") or 0
-        agg["contacts"] += row.get("converted_contacts") or 0
+        agg = by_channel.setdefault(row.get("channel") or "Unattributed",
+                                    {k: 0 for _, k in FUNNEL})
+        for _, key in FUNNEL:
+            agg[key] += row.get(key) or 0
 
-    total = {"visitors": 0, "known_visitors": 0,
-             "total_views": 0, "contacts": 0}
-    for v in by_source.values():
-        for k in total:
+    total = {k: 0 for _, k in FUNNEL}
+    for v in by_channel.values():
+        for _, k in FUNNEL:
             total[k] += v[k]
-        v["conv_rate"] = (v["contacts"] / v["visitors"]) if v["visitors"] else None
 
-    total["conv_rate"] = (total["contacts"] / total["visitors"]) if total["visitors"] else None
-    by_source["_total"] = total
-    return by_source
+    def _rates(d: dict) -> dict:
+        leads = d.get("leads") or 0
+        d["lead_to_tour"] = (d["tours_completed"] / leads) if leads else None
+        d["lead_to_lease"] = (d["leases"] / leads) if leads else None
+        return d
 
+    for v in by_channel.values():
+        _rates(v)
+    by_channel["_total"] = _rates(total)
+    return by_channel
 
-# ── Contact submits (lead-level) ─────────────────────────────────────────────
 
 def get_contact_submits(
     hyly_property_id: str,
@@ -178,200 +242,54 @@ def get_contact_submits(
     end_date: str,
     limit: int = 5000,
 ) -> list[dict]:
-    """Lead-level events with full attribution. Newest first.
+    """Lead-level rows for one property, newest first.
 
-    Returns dicts with the columns the BQ table exposes — see ADR 0015
-    for the full list. Caller typically cares about:
-      created_at, email, utm_source, utm_medium, utm_campaign,
-      detected_source, hybeacon_channel_name, page, act_url
+    Reads the vendor funnel table directly (not the rollup) because this is
+    contact-grain. Requires BIGQUERY_HYLY_SOURCE_TABLE to be set to the fully
+    qualified vendor table; returns empty when it is not.
     """
-    client = _bq()
-    ref = _hyly_ref()
-    if not (client and ref and hyly_property_id):
+    src = os.environ.get("BIGQUERY_HYLY_SOURCE_TABLE", "").strip()
+    if not (src and hyly_property_id):
         return []
-
     from google.cloud import bigquery
     sql = f"""
       SELECT
-        created_at,
-        email,
-        first_name,
-        last_name,
-        page_url,
-        referrer,
-        gclid,
-        detected_source,
-        act_url,
-        `api.in_utm_source`     AS utm_source,
-        `api.in_utm_medium`     AS utm_medium,
-        `api.in_utm_campaign`   AS utm_campaign,
-        `api.in_utm_term`       AS utm_term,
-        `api.in_utm_content`    AS utm_content,
-        `api.hybeacon_channel_name` AS hybeacon_channel,
-        `api.hybeacon_source_name`  AS hybeacon_source,
-        `api.hybeacon_method_name`  AS hybeacon_method,
-        Page AS page,
-        counted
-      FROM `{ref}.contact_submits`
+        CAST(contact_id AS STRING)   AS contact_id,
+        ANY_VALUE(property_name)     AS property_name,
+        MIN(h_cc_event_datetime)     AS lead_at,
+        MIN(h_fts_event_datetime)    AS tour_scheduled_at,
+        MIN(h_ft_event_datetime)     AS toured_at,
+        MIN(h_app_event_datetime)    AS applied_at,
+        MIN(h_lease_event_datetime)  AS leased_at,
+        ARRAY_AGG(source_mapped IGNORE NULLS ORDER BY event_datetime ASC)[SAFE_OFFSET(0)] AS source_raw
+      FROM `{src}`
       WHERE CAST(property_id AS STRING) = @pid
-        AND DATE(created_at) BETWEEN DATE(@start) AND DATE(@end)
-      ORDER BY created_at DESC
+        AND h_cc_event_datetime IS NOT NULL
+        AND DATE(h_cc_event_datetime) BETWEEN DATE(@start) AND DATE(@end)
+      GROUP BY contact_id
+      ORDER BY lead_at DESC
       LIMIT @lim
     """
-    params = [
+    rows = _query(sql, [
         bigquery.ScalarQueryParameter("pid", "STRING", str(hyly_property_id)),
         bigquery.ScalarQueryParameter("start", "STRING", start_date),
         bigquery.ScalarQueryParameter("end", "STRING", end_date),
-        bigquery.ScalarQueryParameter("lim", "INT64", limit),
-    ]
-    cfg = bigquery.QueryJobConfig(query_parameters=params)
-    try:
-        out = []
-        for r in client.query(sql, job_config=cfg).result():
-            d = dict(r.items())
-            if d.get("created_at"):
-                d["created_at"] = d["created_at"].isoformat()
-            out.append(d)
-        return out
-    except Exception as exc:
-        logger.warning("hyly_client.get_contact_submits failed for %s: %s",
-                       hyly_property_id, exc)
-        return []
+        bigquery.ScalarQueryParameter("lim", "INT64", int(limit)),
+    ])
+    # No PII leaves Hyly's perimeter: this table carries no email/name columns,
+    # so contact_id is the only identifier we surface (ADR 0015 privacy note).
+    for r in rows:
+        for k in ("lead_at", "tour_scheduled_at", "toured_at", "applied_at", "leased_at"):
+            if r.get(k):
+                r[k] = r[k].isoformat()
+    return rows
 
 
-# ── Website visits (page-view-level) ─────────────────────────────────────────
+def get_website_visits(*_args: Any, **_kwargs: Any) -> list[dict]:
+    """Not available.
 
-def get_website_visits(
-    hyly_property_id: str,
-    *,
-    start_date: str,
-    end_date: str,
-    limit: int = 10000,
-) -> list[dict]:
-    """Page-view-level journey data. Useful for building prospect journey
-    timelines + retroactive attribution analysis. Same column shape as
-    contact_submits with type=visit instead of type=note.
+    ADR 0015 assumed a `website_visits` table. Page-view data lives in
+    `ga4_analytics_events`, which is not yet ingested (ADR 0022, open item).
+    Returns empty rather than raising so callers degrade cleanly.
     """
-    client = _bq()
-    ref = _hyly_ref()
-    if not (client and ref and hyly_property_id):
-        return []
-
-    from google.cloud import bigquery
-    sql = f"""
-      SELECT
-        created_at,
-        email,
-        page_url,
-        referrer,
-        gclid,
-        detected_source,
-        `api.in_utm_source`     AS utm_source,
-        `api.in_utm_medium`     AS utm_medium,
-        `api.in_utm_campaign`   AS utm_campaign,
-        `api.hybeacon_channel_name` AS hybeacon_channel,
-        Page AS page
-      FROM `{ref}.website_visits`
-      WHERE CAST(property_id AS STRING) = @pid
-        AND DATE(created_at) BETWEEN DATE(@start) AND DATE(@end)
-      ORDER BY created_at DESC
-      LIMIT @lim
-    """
-    params = [
-        bigquery.ScalarQueryParameter("pid", "STRING", str(hyly_property_id)),
-        bigquery.ScalarQueryParameter("start", "STRING", start_date),
-        bigquery.ScalarQueryParameter("end", "STRING", end_date),
-        bigquery.ScalarQueryParameter("lim", "INT64", limit),
-    ]
-    cfg = bigquery.QueryJobConfig(query_parameters=params)
-    try:
-        out = []
-        for r in client.query(sql, job_config=cfg).result():
-            d = dict(r.items())
-            if d.get("created_at"):
-                d["created_at"] = d["created_at"].isoformat()
-            out.append(d)
-        return out
-    except Exception as exc:
-        logger.warning("hyly_client.get_website_visits failed for %s: %s",
-                       hyly_property_id, exc)
-        return []
-
-
-# ── Loop event emission ──────────────────────────────────────────────────────
-
-def emit_loop_events_for_recent_submits(
-    hyly_property_id: str,
-    property_uuid: str,
-    *,
-    since_hours: int = 24,
-) -> int:
-    """Pull recent contact submits and write them as Loop convert events.
-    Returns the count written.
-
-    Designed to be called by a daily cron (or a webhook from Hyly if
-    they ever support one). Idempotent — `source_id=act_url` is the
-    dedupe key, so re-running over the same window doesn't duplicate.
-    """
-    import loop_writer
-
-    if not (hyly_property_id and property_uuid):
-        return 0
-
-    since = datetime.utcnow() - timedelta(hours=since_hours)
-    end_dt = datetime.utcnow()
-    submits = get_contact_submits(
-        hyly_property_id,
-        start_date=since.strftime("%Y-%m-%d"),
-        end_date=end_dt.strftime("%Y-%m-%d"),
-        limit=5000,
-    )
-
-    n = 0
-    for s in submits:
-        # Privacy: hash email before writing to loop_events (PII stays in Hyly)
-        email = (s.get("email") or "").strip().lower()
-        if email:
-            import hashlib
-            email_hash = hashlib.sha256(email.encode()).hexdigest()[:16]
-        else:
-            email_hash = None
-
-        # Idempotency: use act_url as the source_id (unique per Hyly lead)
-        source_id = s.get("act_url") or None
-        if not source_id:
-            continue  # can't dedupe without a stable id
-
-        # Parse the created_at back to datetime
-        created_at = s.get("created_at")
-        if isinstance(created_at, str):
-            try:
-                created_at = datetime.fromisoformat(created_at)
-            except ValueError:
-                created_at = None
-
-        loop_writer.record(
-            stage="convert",
-            event_type="lead_submitted",
-            property_uuid=property_uuid,
-            source="hyly",
-            source_id=source_id,
-            occurred_at=created_at,
-            magnitude=1.0,
-            trigger="cron",
-            payload={
-                "email_hash":     email_hash,
-                "utm_source":     s.get("utm_source"),
-                "utm_medium":     s.get("utm_medium"),
-                "utm_campaign":   s.get("utm_campaign"),
-                "utm_term":       s.get("utm_term"),
-                "utm_content":    s.get("utm_content"),
-                "gclid":          s.get("gclid"),
-                "detected_source": s.get("detected_source"),
-                "hybeacon_channel": s.get("hybeacon_channel"),
-                "hybeacon_source":  s.get("hybeacon_source"),
-                "page":           s.get("page"),
-            },
-        )
-        n += 1
-    return n
+    return []

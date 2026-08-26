@@ -29,6 +29,8 @@ os.environ.setdefault("WEBHOOK_SECRET", "test")
 #   HMAC_BODY       — webhook body HMAC via hmac_validator.validate_signature
 #   INTERNAL_KEY    — server-to-server shared secret via require_internal_key
 #   PORTAL_EMAIL    — interim portal trust via X-Portal-Email header read
+#   PILOT_ROSTER    — asserted portal email + exact-match pilot allowlist +
+#                     feature gate (portal ticketing; attribution, not proof)
 #   PROVIDER_SIG    — delegated provider signature check via normalize_webhook
 #   SIGNED_REQUEST  — future signed-request decorator (reserved)
 AUTH_MARKERS = (
@@ -38,6 +40,8 @@ AUTH_MARKERS = (
     "X-Portal-Email",              # PORTAL_EMAIL (inline check)
     "current_portal_email",        # PORTAL_EMAIL (shared header-read helper)
     "require_access",              # PORTAL_EMAIL + feature gate (Beta/Prod partitioning)
+    "require_company_access",      # per-PROPERTY authorization, not just per-feature
+    "_authorize",                  # PORTAL_EMAIL + feature gate (routes/ask.py helper)
     "_internal_key_ok",            # INTERNAL_KEY (inline shared-secret helper)
     "_resolve_seo_context",        # PORTAL_EMAIL (SEO context helper)
     "_resolve_paid_context",       # PORTAL_EMAIL (paid context helper)
@@ -45,6 +49,12 @@ AUTH_MARKERS = (
     "_require_caller",             # PORTAL_EMAIL (assets blueprint helper)
     "_is_authorized",              # INTERNAL_KEY/PORTAL_EMAIL (loop blueprint helper)
     "_is_internal",                # INTERNAL_KEY (loop blueprint internal-only helper)
+    "_gate",                       # PILOT_ROSTER (portal-tickets blueprint)
+    # INTERNAL_KEY (budget-sync blueprint). This test reads the HANDLER's own
+    # source, so a check one call deeper is invisible to it: budget_sync_api's
+    # handlers call _guard(), which calls _is_internal() — already a marker —
+    # and the indirection alone was enough to fail the whole suite on main.
+    "_guard",
     "normalize_webhook",           # PROVIDER_SIG
     "require_portal_auth",         # SIGNED_REQUEST (reserved)
     "verify_request_signature",    # SIGNED_REQUEST (raw helper)

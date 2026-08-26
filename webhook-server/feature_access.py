@@ -107,6 +107,15 @@ FEATURES: dict[str, Feature] = {
         # moment they ship, without touching this file again.
         Feature("budgeting_forecasting", "Budgeting & Forecasting"),
         Feature("call_prep", "Call Prep"),
+        # Ticket intake through the portal. Beta by default: the pilot is a
+        # handful of named requesters in the HubDB access table, NOT everyone
+        # with a portal login. Setting the CLICKUP_LIST_* env vars without this
+        # gate would turn ticketing on portfolio-wide in one step.
+        Feature("portal_tickets", "Portal Ticketing"),
+        # The preset-question Ask surface. Beta by default: it puts an
+        # LLM-written narrative in front of a client, so it opens to
+        # internal staff and named pilot accounts first.
+        Feature("ask", "Ask — preset questions"),
     )
 }
 
@@ -160,7 +169,15 @@ def _load_access_table() -> dict[str, dict]:
         role = ROLE_INTERNAL if role == ROLE_INTERNAL else ROLE_CLIENT
         raw = str(row.get("beta_features") or "")
         beta = {p.strip() for p in raw.split(",") if p.strip()}
-        out[email] = {"role": role, "beta_features": beta}
+        # Optional `companies` column: which HubSpot company ids this person
+        # may see. Only consulted for client-role users — internal staff are
+        # portfolio-wide by design. Absent column, or empty for a given row,
+        # means the client is scoped to nothing and every company check fails
+        # closed. That is deliberate: a client whose scope nobody has set
+        # should see an error someone has to fix, not the whole portfolio.
+        raw_co = str(row.get("companies") or "")
+        companies = {p.strip() for p in raw_co.split(",") if p.strip()}
+        out[email] = {"role": role, "beta_features": beta, "companies": companies}
     return out
 
 
@@ -228,6 +245,36 @@ def can_access(email: str | None, feature_key: str) -> bool:
     if role_for(email) == ROLE_INTERNAL:
         return True
     return bool(email) and _client_allowlisted(email, feature_key)
+
+
+def companies_for(email: str | None) -> set:
+    """HubSpot company ids a client-role user may access.
+
+    Internal users are not scoped and this is not the function that decides
+    that — see `_route_utils.require_company_access`, which short-circuits on
+    role before it gets here.
+
+    Sources, in order: the `companies` column of the HubDB portal-access row,
+    then the PORTAL_COMPANY_ACCESS env fallback ("email:id|id,email:id") for
+    setting up a client before the HubDB row exists. Union of both, because
+    the failure everyone actually hits is "I added them in one place".
+    """
+    if not email:
+        return set()
+    email = email.lower().strip()
+    row = _access_map().get(email) or {}
+    out = set(row.get("companies") or ())
+
+    raw = os.environ.get("PORTAL_COMPANY_ACCESS", "")
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry or ":" not in entry:
+            continue
+        who, _, ids = entry.partition(":")
+        if who.strip().lower() != email:
+            continue
+        out |= {i.strip() for i in ids.split("|") if i.strip()}
+    return out
 
 
 def resolve_features(email: str | None) -> dict[str, dict]:

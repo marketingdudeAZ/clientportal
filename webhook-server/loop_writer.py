@@ -88,8 +88,14 @@ LOOP_EVENT_TYPES = {
     # ops
     "cron_started", "cron_completed", "backfill_completed",
     "aptiq_token_warning", "aptiq_token_critical", "aptiq_token_checked",
+    # ops — LLM spend, emitted by skills/llm_gateway.py so token cost is
+    # observable in the same table as everything else (ADR 0010).
+    "llm_call_completed",
     "aptiq_history_backfill", "seo_refresh", "hyly_pull",
     "r1_violation",
+    # ops — portal ticketing funnel (see loop_ticket_events.py)
+    "portal_ticket_filed", "portal_ticket_recap_matched",
+    "portal_ticket_unmatched",
     # operational job tracking
     "job",
 }

@@ -399,6 +399,12 @@ body{font-family:'Montserrat',-apple-system,sans-serif;font-size:14px;color:var(
 .ticket-status.open{background:#FEF9C3;color:#854D0E}
 .ticket-status.in-progress{background:#DBEAFE;color:#1D4ED8}
 .ticket-status.resolved{background:#DCFCE7;color:#166534}
+/* Done shared in-progress's blue, so the two states a requester most needs to
+   tell apart looked identical. needs-you is the only status they can act on,
+   so it gets the strongest treatment. unresolved reads as absent-not-closed. */
+.ticket-status.done{background:#DCFCE7;color:#166534}
+.ticket-status.needs-you{background:#FFEDD5;color:#9A3412}
+.ticket-status.unresolved{background:#F1F5F9;color:#64748B}
 .ticket-status.escalated{background:#EDE9FE;color:#5B21B6}
 .ticket-chevron{color:var(--tm);transition:transform .25s}
 .ticket-card.expanded .ticket-chevron{transform:rotate(180deg)}
@@ -1144,6 +1150,10 @@ body{line-height:1.55}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Performance
       </div>
+      <div class="nav-item" onclick="nav('ask',this)" title="Preset questions answered from this property's data">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Ask
+      </div>
       <div class="nav-item" onclick="nav('services',this)" title="Plan, spend, recommendations, paid media">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
         Plan &amp; Spend
@@ -1535,6 +1545,55 @@ body{line-height:1.55}
 </section>
 
 <!-- ── SEO & AI INSIGHTS ── -->
+<section id="section-ask" class="section">
+  <div class="sec-topbar">
+    <div>
+      <div class="sec-title">Ask</div>
+      <div class="sec-sub">Pick a question. Every number comes back with what it was divided by and where it came from.</div>
+    </div>
+  </div>
+
+  <!-- Chips are rendered from the registry manifest, not hard-coded here.
+       Adding a question in skills/question_registry.py makes it appear on this
+       page with no template change and no redeploy of this file. -->
+  <div id="ask-chips" class="ask-chips">
+    <div class="ask-chips-loading">Loading questions…</div>
+  </div>
+
+  <!-- Nothing is answered until someone asks. The whole point of this surface
+       is that it does not bombard a page with data nobody requested. -->
+  <div id="ask-idle" class="card card-p ask-idle">
+    <div class="ask-idle-title">No question asked yet</div>
+    <div class="ask-idle-sub">Choose one above. Answers take a few seconds because they are assembled from the warehouse and written fresh, not pulled from a cached dashboard.</div>
+  </div>
+
+  <div id="ask-pending" class="card card-p ask-pending" style="display:none">
+    <div class="ask-spinner"></div>
+    <div>
+      <div class="ask-pending-title" id="ask-pending-title">Working on it…</div>
+      <div class="ask-pending-sub">Reading performance, spend, occupancy and ticket history for this property, then writing the answer. Usually 20–40 seconds.</div>
+    </div>
+  </div>
+
+  <div id="ask-error" class="card card-p ask-error" style="display:none"></div>
+
+  <div id="ask-answer" style="display:none">
+    <div class="card card-p ask-answer-card">
+      <div class="ask-answer-head">
+        <div class="ask-answer-q" id="ask-answer-q"></div>
+        <button class="btn btn-secondary btn-sm" id="ask-refresh" onclick="askRefresh()" title="Ignore the cached answer and ask again">Re-run</button>
+      </div>
+      <div class="ask-headline" id="ask-headline"></div>
+      <div class="ask-summary" id="ask-summary"></div>
+      <div id="ask-findings"></div>
+      <div id="ask-nextstep"></div>
+      <div id="ask-gaps"></div>
+      <div id="ask-notevidenced"></div>
+      <div class="ask-provenance" id="ask-provenance"></div>
+    </div>
+  </div>
+</section>
+
 <section id="section-seo" class="section">
   <div class="sec-topbar">
     <div>
@@ -3513,6 +3572,7 @@ function nav(id, el) {
   if (id === 'video')            { loadVideoCreative(); }
   // Forecast page retired 2026-07 — funnel forecast now lives on Plan & Spend
   if (id === 'performance')      { loadPerformance(); loadSwot(); }
+  if (id === 'ask')              { loadAsk(); }
   if (id === 'activity')         { loadActivity(); }
   if (id === 'recommendations')  { loadCallPrep(); }
   if (id === 'seo')              { if (typeof loadSeoInsights === 'function') loadSeoInsights(); }
@@ -3716,18 +3776,44 @@ function _loadTicketTypes(force) {
   if (!sel) return;
   if (__TICKET_TYPES__ && !force) return;
   var API_BASE = window.__WEBHOOK_URL__ || 'https://rpm-portal-server.onrender.com';
-  fetch(API_BASE + '/api/portal-tickets/types', {
+  // company_id lets the API tell a prefill field it WILL fill (hide it) from
+  // one it cannot (render it, so the requester can). Read off window here —
+  // COMPANY_ID/UUID are function-local in loadTickets et al, not globals.
+  var CID  = window.__PORTAL_COMPANY_ID__ || '';
+  var PUID = window.__PORTAL_UUID__ || '';
+  fetch(API_BASE + '/api/portal-tickets/types?company_id=' + encodeURIComponent(CID)
+        + '&uuid=' + encodeURIComponent(PUID), {
     headers: { 'X-Portal-Email': window.__PORTAL_EMAIL__ || 'portal@rpmliving.com' }
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     __TICKET_TYPES__ = {};
     var types = (data && data.types) || [];
-    if (!types.length) { sel.innerHTML = '<option value="">No request types available</option>'; return; }
+    var unavailable = (data && data.unavailable) || [];
+
+    // Nothing online at all: don't open a form the requester can't submit.
+    // Point them at the fallback instead of a dropdown containing a sentence.
+    if (!types.length) {
+      _renderNoTicketTypes(unavailable, (data && data.fallback_email) || '');
+      return;
+    }
+
+    // Available and unavailable, merged back into registry order. An
+    // unavailable type renders DISABLED with the reason attached rather than
+    // being omitted — with 3 of 6 silently missing, a requester can't tell
+    // "my type isn't on yet" from "I'm misreading these labels", so they pick
+    // the nearest wrong one. That misroute is what this prevents.
+    var merged = types.concat(unavailable).sort(function(a, b){
+      return (a.order || 0) - (b.order || 0);
+    });
     sel.innerHTML = '<option value="">Select a request type…</option>' +
-      types.map(function(t){
-        __TICKET_TYPES__[t.key] = t;
-        return '<option value="' + _escAttr(t.key) + '">' + _escHtml(t.label) + '</option>';
+      merged.map(function(t){
+        if (t.available) {
+          __TICKET_TYPES__[t.key] = t;
+          return '<option value="' + _escAttr(t.key) + '">' + _escHtml(t.label) + '</option>';
+        }
+        return '<option value="" disabled>' + _escHtml(t.label) +
+               ' — not online yet</option>';
       }).join('');
     // Say what we attach for them, so the fields they DON'T see aren't a mystery.
     var note = document.getElementById('ct-prefill-note');
@@ -3738,7 +3824,109 @@ function _loadTicketTypes(force) {
         pf.map(function(n){ return '<b>' + _escHtml(n) + '</b>'; }).join(' · ');
     }
   })
-  .catch(function(){ sel.innerHTML = '<option value="">Could not load request types</option>'; });
+  .catch(function(){
+    sel.innerHTML = '<option value="">Could not load request types — refresh, ' +
+                    'or email your Account Manager</option>';
+  });
+}
+
+// Zero types online. Replace the form with the fallback route rather than
+// leaving a dropdown that reads as broken.
+function _renderNoTicketTypes(unavailable, fallbackEmail) {
+  var form = document.getElementById('create-ticket-form');
+  if (!form) return;
+  // form_url is null unless CLICKUP_FORM_BASE_URL is configured — a dead
+  // "use the form instead" link strands the requester twice, so only render
+  // links we know resolve.
+  var links = (unavailable || []).filter(function(t){ return t.form_url; })
+    .map(function(t){
+      return '<li><a href="' + _escAttr(t.form_url) + '" target="_blank" rel="noopener">' +
+             _escHtml(t.label) + '</a></li>';
+    }).join('');
+  var mail = fallbackEmail
+    ? '<a href="mailto:' + _escAttr(fallbackEmail) + '">' + _escHtml(fallbackEmail) + '</a>'
+    : 'your Account Manager';
+  form.innerHTML =
+    '<div style="padding:24px;font-size:13px;color:var(--tm)">' +
+      '<div style="font-weight:600;color:var(--ts);margin-bottom:8px">' +
+        'Requests aren\'t open in the portal yet</div>' +
+      (links ? '<p>Use the request forms for now:</p><ul>' + links + '</ul>'
+             : '<p>Send your request to ' + mail + ' and we\'ll take it from there.</p>') +
+    '</div>';
+}
+
+// One field → its markup. Shared by the sectioned and flat renderers so the
+// two can never drift in what they support.
+function _ticketFieldHtml(f) {
+  var req  = f.required ? ' <span style="color:#c0392b">*</span>' : '';
+  var attr = 'data-fid="' + _escAttr(f.id) + '" data-req="' + (f.required ? '1' : '') + '"';
+  if (f.validate)  attr += ' data-validate="' + _escAttr(f.validate) + '"';
+  if (f.maxlength) attr += ' maxlength="' + _escAttr(f.maxlength) + '"';
+  var opts = (f.options || []).map(function(o){
+    return '<option value="' + _escAttr(o.label) + '">' + _escHtml(o.label) + '</option>';
+  }).join('');
+  var ctl;
+  switch (f.input) {
+    case 'textarea':    ctl = '<textarea class="form-textarea ct-f" ' + attr + '></textarea>'; break;
+    case 'select':      ctl = '<select class="form-select ct-f" ' + attr + '><option value="">Select…</option>' + opts + '</select>'; break;
+    case 'multiselect': ctl = '<select class="form-select ct-f" multiple ' + attr + '>' + opts + '</select>'; break;
+    case 'checkbox':    ctl = '<input type="checkbox" class="ct-f" ' + attr + '/>'; break;
+    case 'number':
+    case 'currency':    ctl = '<input type="number" step="any" class="form-input ct-f" ' + attr + '/>'; break;
+    case 'date':        ctl = '<input type="date" class="form-input ct-f" ' + attr + '/>'; break;
+    case 'email':       ctl = '<input type="email" class="form-input ct-f" ' + attr + '/>'; break;
+    case 'url':         ctl = '<input type="url" class="form-input ct-f" ' + attr + '/>'; break;
+    default:            ctl = '<input type="text" class="form-input ct-f" ' + attr + '/>';
+  }
+  // Help sits ABOVE the control: it is instruction for filling the field in,
+  // not a footnote about what you already typed.
+  var help = f.help
+    ? '<div class="ct-help" style="font-size:12px;color:' +
+      (f.degraded_known ? '#b4780f' : 'var(--tm)') + ';margin:2px 0 6px">' +
+      _escHtml(f.help) + '</div>' : '';
+  var counter = f.maxlength
+    ? '<div class="ct-count" style="font-size:11px;color:var(--tm);text-align:right"></div>' : '';
+  return '<div class="form-row"><label class="form-label">' +
+         _escHtml(f.name || '') + req + '</label>' + help + ctl + counter + '</div>';
+}
+
+// What we attach without asking. A read-only line, NOT disabled inputs — a
+// disabled input still reads as "a field to deal with", which is the thing
+// this whole tier exists to remove.
+function _ticketIdentityCard(t) {
+  var ident = t.identity || {};
+  var vals = Object.keys(ident).map(function(k){ return ident[k]; })
+    .filter(function(v){ return v; });
+  if (!vals.length) return '';
+  return '<div style="padding:10px 12px;margin-bottom:12px;border-radius:4px;' +
+    'background:var(--bg2,#f7f9fc);font-size:12.5px;color:var(--tm)">' +
+    'Submitting for <b style="color:var(--ts)">' +
+    vals.map(_escHtml).join('</b> · <b style="color:var(--ts)">') + '</b>' +
+    '<div style="margin-top:4px">We\'ll attach these automatically — ' +
+    'you don\'t need to re-enter them.</div></div>';
+}
+
+// The SLA / prerequisite / note framing that lives on the ClickUp form and has
+// never made it into the portal. Rendered before the fields, because every one
+// of these changes whether the requester should be filling this form at all.
+function _ticketFormBanner(t) {
+  var bits = '';
+  if (t.sla) {
+    bits += '<div style="font-weight:600;color:var(--ts);margin-bottom:4px">' +
+            _escHtml(t.sla) + '</div>';
+  }
+  (t.notes || []).forEach(function(n){
+    bits += '<div style="margin-bottom:4px">' + _escHtml(n) + '</div>';
+  });
+  if ((t.prereqs || []).length) {
+    bits += '<div style="margin-top:6px">Before you submit, confirm:</div><ul style="margin:4px 0 0 18px">' +
+            t.prereqs.map(function(p){ return '<li>' + _escHtml(p) + '</li>'; }).join('') +
+            '</ul>';
+  }
+  if (!bits) return '';
+  return '<div class="ct-banner" style="padding:10px 12px;margin-bottom:12px;' +
+         'border-left:3px solid var(--accent,#2d7ff9);background:var(--bg2,#f7f9fc);' +
+         'font-size:12px;color:var(--tm);border-radius:4px">' + bits + '</div>';
 }
 
 // Render the selected type's fields into the form.
@@ -3748,27 +3936,66 @@ function renderTicketFields(typeKey) {
   box.innerHTML = '';
   var t = __TICKET_TYPES__ && __TICKET_TYPES__[typeKey];
   if (!t || !t.fields) return;
-  box.innerHTML = t.fields.map(function(f){
-    var req  = f.required ? ' <span style="color:#c0392b">*</span>' : '';
-    var attr = 'data-fid="' + _escAttr(f.id) + '" data-req="' + (f.required ? '1' : '') + '"';
-    var opts = (f.options || []).map(function(o){
-      return '<option value="' + _escAttr(o.label) + '">' + _escHtml(o.label) + '</option>';
+
+  var html = _ticketFormBanner(t) + _ticketIdentityCard(t);
+  if (t.sections && t.sections.length) {
+    html += t.sections.map(function(s){
+      var head = s.title
+        ? '<div class="ct-section" style="font-weight:600;color:var(--ts);' +
+          'margin:14px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--bd,#e4e8ee)">' +
+          _escHtml(s.title) + '</div>' : '';
+      var shelp = s.help
+        ? '<div style="font-size:12px;color:var(--tm);margin-bottom:8px">' +
+          _escHtml(s.help) + '</div>' : '';
+      return head + shelp + (s.fields || []).map(_ticketFieldHtml).join('');
     }).join('');
-    var ctl;
-    switch (f.input) {
-      case 'textarea':    ctl = '<textarea class="form-textarea ct-f" ' + attr + '></textarea>'; break;
-      case 'select':      ctl = '<select class="form-select ct-f" ' + attr + '><option value="">Select…</option>' + opts + '</select>'; break;
-      case 'multiselect': ctl = '<select class="form-select ct-f" multiple ' + attr + '>' + opts + '</select>'; break;
-      case 'checkbox':    ctl = '<input type="checkbox" class="ct-f" ' + attr + '/>'; break;
-      case 'number':
-      case 'currency':    ctl = '<input type="number" step="any" class="form-input ct-f" ' + attr + '/>'; break;
-      case 'date':        ctl = '<input type="date" class="form-input ct-f" ' + attr + '/>'; break;
-      case 'email':       ctl = '<input type="email" class="form-input ct-f" ' + attr + '/>'; break;
-      case 'url':         ctl = '<input type="url" class="form-input ct-f" ' + attr + '/>'; break;
-      default:            ctl = '<input type="text" class="form-input ct-f" ' + attr + '/>';
-    }
-    return '<div class="form-row"><label class="form-label">' + _escHtml(f.name || '') + req + '</label>' + ctl + '</div>';
-  }).join('');
+  } else {
+    // A type with no manifest yet, or an older API response.
+    html += t.fields.map(_ticketFieldHtml).join('');
+  }
+  box.innerHTML = html;
+  _wireTicketFieldRules(box);
+}
+
+// Live character count + the special-copy rule, as you type. Advice only —
+// the same rule is enforced server-side in portal_tickets._coerce, because
+// the API is reachable without this page.
+function _wireTicketFieldRules(box) {
+  box.querySelectorAll('.ct-f').forEach(function(el){
+    var row  = el.closest('.form-row');
+    var max  = parseInt(el.getAttribute('maxlength') || '', 10);
+    var rule = el.getAttribute('data-validate');
+    if (!max && !rule) return;
+    var count = row.querySelector('.ct-count');
+    var warn  = document.createElement('div');
+    warn.className = 'ct-warn';
+    warn.style.cssText = 'font-size:12px;color:#c0392b;margin-top:4px;display:none';
+    row.appendChild(warn);
+    var check = function(){
+      var v = el.value || '';
+      if (count) count.textContent = v.length + ' / ' + max;
+      var msg = rule ? _ticketRuleComplaint(rule, v) : '';
+      warn.textContent = msg;
+      warn.style.display = msg ? '' : 'none';
+    };
+    el.addEventListener('input', check);
+    check();
+  });
+}
+
+// Mirrors portal_tickets._no_caps_no_punct_except_period. Kept deliberately
+// literal rather than clever so the two stay comparable by eye.
+function _ticketRuleComplaint(rule, value) {
+  if (rule !== 'no_caps_no_punct_except_period' || !value) return '';
+  if (/[A-Z]/.test(value)) {
+    return 'Please use no capital letters — write it the way it should appear in the ad.';
+  }
+  var bad = value.replace(/[a-z0-9\s.$]/g, '');
+  if (bad) {
+    var uniq = bad.split('').filter(function(c, i, a){ return a.indexOf(c) === i; });
+    return 'Please remove ' + uniq.join(' ') + ' — periods are the only punctuation allowed.';
+  }
+  return '';
 }
 
 function submitTicket() {
@@ -3790,6 +4017,23 @@ function submitTicket() {
     }
   });
   if (missing.length) { alert('Please fill in: ' + missing.join(', ')); return; }
+
+  // Manifest rules (length, the special-copy rule). The server rejects these
+  // too; catching them here saves a round trip and keeps the complaint next to
+  // the field that caused it.
+  var broken = [];
+  form.querySelectorAll('#ct-fields .ct-f').forEach(function(el){
+    var rule = el.getAttribute('data-validate');
+    var max  = parseInt(el.getAttribute('maxlength') || '', 10);
+    var v    = (el.value || '').trim();
+    if (!v) return;
+    var lbl  = el.closest('.form-row').querySelector('.form-label');
+    var name = lbl ? lbl.textContent.replace(' *', '').trim() : 'a field';
+    if (max && v.length > max) { broken.push(name + ': shorten to ' + max + ' characters'); return; }
+    var msg = rule ? _ticketRuleComplaint(rule, v) : '';
+    if (msg) broken.push(name + ': ' + msg);
+  });
+  if (broken.length) { alert(broken.join('\n')); return; }
 
   var existingPanel = form.querySelector('.kb-deflect-panel');
   if (existingPanel) existingPanel.remove();
@@ -3908,12 +4152,48 @@ function loadTickets() {
     var list = document.getElementById('tickets-list');
     if (!list) return;
     var tickets = (data && data.tickets) || [];
+    // True on day 1 and every day after: _read_mappings only returns rows the
+    // portal itself wrote, so this list is structurally incomplete whether it
+    // holds 0 rows or 6. Say so rather than imply completeness.
+    var SCOPE_NOTE = '<div style="padding:10px 16px;color:var(--tm);font-size:12px">' +
+      'This shows requests filed through the portal. Requests filed outside it ' +
+      '— by email, or on the ClickUp forms — aren\'t shown here.</div>';
+
     if (!tickets.length) {
-      list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tm);font-size:13px">No open requests</div><div id="submitted-ticket-placeholder"></div>';
+      // "No open requests" and "we can't read your requests" look identical
+      // from here, and the second one reads as "the thing I filed never
+      // happened". Never show the reassuring one when we don't know.
+      var emptyHead = (data && data.tracking_degraded)
+        ? '<div style="font-weight:600;color:var(--ts);margin-bottom:6px">' +
+          'We can\'t show your requests right now</div>' +
+          '<div style="font-size:12.5px">' +
+          _escHtml(data.tracking_message || '') + '</div>'
+        : '<div style="font-weight:600;color:var(--ts);margin-bottom:6px">No open requests</div>';
+      list.innerHTML =
+        '<div style="padding:24px 24px 4px;text-align:center;color:var(--tm);font-size:13px">' +
+          emptyHead +
+        '</div>' + SCOPE_NOTE + '<div id="submitted-ticket-placeholder"></div>';
       return;
     }
-    list.innerHTML = tickets.map(_renderClickupTicketCard).join('') +
-      '<div id="submitted-ticket-placeholder"></div>';
+
+    // Partial rendered as complete is the worst failure available on a status
+    // surface — a requester concludes their request was never filed. Say how
+    // many we couldn't check.
+    var banner = '';
+    if (data && data.tracking_degraded) {
+      banner = '<div style="padding:10px 16px;margin-bottom:8px;border-radius:6px;' +
+        'background:rgba(180,120,20,.10);color:var(--ts);font-size:12.5px">' +
+        _escHtml(data.tracking_message || '') + '</div>';
+    } else if (data && data.degraded) {
+      var n = data.unresolved_count || 0;
+      banner = '<div style="padding:10px 16px;margin-bottom:8px;border-radius:6px;' +
+        'background:rgba(180,120,20,.10);color:var(--ts);font-size:12.5px">' +
+        n + (n === 1 ? ' request couldn\'t' : ' requests couldn\'t') +
+        ' be checked just now — they\'re still open. Refresh to retry.</div>';
+    }
+    list.innerHTML = banner + tickets.map(_renderClickupTicketCard).join('') +
+      SCOPE_NOTE + '<div id="submitted-ticket-placeholder"></div>';
+    // Placeholders count as open — they are.
     var open = tickets.filter(function(t){ return t.status !== 'Done'; }).length;
     var badge = document.getElementById('tickets-badge');
     if (badge) badge.textContent = open;
@@ -3930,7 +4210,14 @@ function loadTickets() {
 // A ClickUp-backed ticket card: subject, type, client-safe status, age, and a
 // deep-link. No inline thread \u2014 the client-facing record is the on-Done recap.
 function _renderClickupTicketCard(t) {
-  var statusClass = (t.status === 'In progress' || t.status === 'Done') ? 'in-progress' : 'open';
+  // 'Done' and 'In progress' shared one class, so the two states a requester
+  // most needs to tell apart looked identical. 'Needs your approval' is the
+  // one that wants to stand out — it's the only status they can act on.
+  var statusClass = 'open';
+  if (t.status === 'Done') statusClass = 'done';
+  else if (t.status === 'In progress') statusClass = 'in-progress';
+  else if (t.status === 'Needs your approval') statusClass = 'needs-you';
+  else if (t.unresolved) statusClass = 'unresolved';
   var dateStr = '';
   if (t.created_ts) { try { dateStr = new Date(t.created_ts).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}); } catch(e){} }
   var age = (typeof t.age_days === 'number') ? (t.age_days === 0 ? 'today' : t.age_days + 'd ago') : '';
@@ -3946,6 +4233,12 @@ function _renderClickupTicketCard(t) {
       '<svg class="ticket-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>' +
     '</div>' +
     '<div class="ticket-body">' +
+      (t.unresolved
+        ? '<div style="padding:8px 0;color:var(--tm);font-size:12.5px">' +
+            'We couldn\'t reach ClickUp for this request just now. It was filed' +
+            (dateStr ? ' on ' + _escHtml(dateStr) : '') +
+            ' and is still open \u2014 refresh in a minute.</div>'
+        : '') +
       '<div class="ticket-foot">' +
         '<div class="ticket-date">Opened ' + dateStr + (age ? ' \u00b7 ' + age : '') + by + '</div>' +
         '<div style="display:flex;gap:8px;">' + link + '</div>' +
@@ -10988,6 +11281,595 @@ setTimeout(loadPropertySwitcher, 1500);
   }
 </script>
 
+<style>
+/* Ask surface. Uses the template's inline tokens (--j, --cu, --tp, --ts, --tm,
+   --bd, --bg) rather than portal.css — the two have drifted and the inline
+   copy is what actually renders. */
+.ask-chips{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:22px}
+.ask-chips-loading{font-size:12.5px;color:var(--tm);padding:6px 0}
+.ask-chip{border:1px solid var(--bd);background:var(--white);color:var(--tp);
+  border-radius:999px;padding:9px 16px;font-size:13px;font-weight:600;
+  cursor:pointer;transition:border-color .12s,background .12s,color .12s}
+.ask-chip:hover{border-color:var(--j);background:var(--bg)}
+.ask-chip.active{background:var(--j);border-color:var(--j);color:#fff}
+.ask-chip[disabled]{opacity:.5;cursor:default}
+.ask-idle,.ask-pending,.ask-error{margin-top:2px}
+.ask-idle-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:4px}
+.ask-idle-sub,.ask-pending-sub{font-size:12.5px;color:var(--ts);line-height:1.55;max-width:62ch}
+.ask-pending{display:flex;gap:16px;align-items:flex-start}
+.ask-pending-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:4px}
+.ask-spinner{width:17px;height:17px;border:2px solid var(--bd);border-top-color:var(--j);
+  border-radius:50%;animation:ask-spin .8s linear infinite;flex-shrink:0;margin-top:2px}
+@keyframes ask-spin{to{transform:rotate(360deg)}}
+.ask-error{border-left:3px solid #B4443A;font-size:13px;color:var(--tp);line-height:1.6}
+.ask-answer-head{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:16px;margin-bottom:14px}
+.ask-answer-q{font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--tm)}
+.ask-headline{font-size:17px;font-weight:700;color:var(--tp);line-height:1.45;
+  margin-bottom:10px}
+.ask-summary{font-size:13.5px;color:var(--ts);line-height:1.65;max-width:74ch;
+  margin-bottom:26px}
+.ask-finding{border-top:1px solid var(--bd);padding:20px 0}
+.ask-finding-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:6px}
+.ask-finding-detail{font-size:13px;color:var(--ts);line-height:1.65;max-width:74ch}
+/* Evidence is the point of this product: a claim a client can check. It is
+   deliberately not collapsed behind a disclosure. */
+.ask-evidence{margin-top:12px;padding:11px 14px;background:var(--bg);
+  border-radius:8px;font-size:11.5px;color:var(--ts);line-height:1.7}
+.ask-evidence-item{display:block}
+.ask-evidence-item + .ask-evidence-item{margin-top:3px}
+.ask-block{margin-top:24px;padding:16px 18px;border-radius:10px;
+  background:var(--bg);border:1px solid var(--bd)}
+.ask-block-title{font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--ts);margin-bottom:9px}
+.ask-gap{font-size:12.5px;color:var(--ts);line-height:1.6}
+.ask-gap + .ask-gap{margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)}
+.ask-gap b{color:var(--tp);font-weight:700}
+.ask-nextstep{border-left:3px solid var(--cu)}
+.ask-provenance{margin-top:24px;padding-top:14px;border-top:1px solid var(--bd);
+  font-size:11px;color:var(--tm);line-height:1.6}
+</style>
+<script>
+/* ── Ask ────────────────────────────────────────────────────────────────────
+   Preset questions only. There is no free-text box, and its absence is a
+   product decision rather than an unfinished feature — the manifest says so
+   explicitly with free_text:false.
+
+   Nothing runs on section open except loading the question list. An answer
+   costs a model call, so it happens when somebody asks for it.
+   ───────────────────────────────────────────────────────────────────────── */
+(function(){
+  var _askQuestions = null;
+  var _askLoaded    = false;
+  var _askBusy      = false;
+  var _askCurrent   = null;
+  var _askPoll      = null;
+
+  function _askApi()    { return window.__WEBHOOK_URL__ || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com'; }
+  function _askCid()    { return window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || ''; }
+  function _askEmail()  { return window.__PORTAL_EMAIL__ || ''; }
+  function _askHead()   { return { 'Content-Type':'application/json', 'X-Portal-Email': _askEmail() }; }
+  function _e(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function _show(id, on){ var el=document.getElementById(id); if(el) el.style.display = on ? '' : 'none'; }
+
+  function _panels(which){
+    _show('ask-idle',    which === 'idle');
+    _show('ask-pending', which === 'pending');
+    _show('ask-error',   which === 'error');
+    _show('ask-answer',  which === 'answer');
+  }
+
+  function _fail(msg){
+    var el = document.getElementById('ask-error');
+    if (el) el.innerHTML = _e(msg);
+    _panels('error');
+  }
+
+  window.loadAsk = function(){
+    if (_askLoaded) return;
+    _askLoaded = true;
+    fetch(_askApi() + '/api/ask/questions', { headers: _askHead() })
+      .then(function(r){
+        if (r.status === 401 || r.status === 403) { return { _denied: true }; }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data){
+        if (data._denied) {
+          _askLoaded = false;   // let a re-entitled user retry without a reload
+          var chips = document.getElementById('ask-chips');
+          if (chips) chips.innerHTML = '<div class="ask-chips-loading">Ask is not switched on for your account yet.</div>';
+          _panels('idle');
+          return;
+        }
+        _askQuestions = (data && data.questions) || [];
+        _renderChips();
+      })
+      .catch(function(err){
+        _askLoaded = false;
+        var chips = document.getElementById('ask-chips');
+        if (chips) chips.innerHTML = '<div class="ask-chips-loading">Could not load the question list (' + _e(err.message) + ').</div>';
+      });
+  };
+
+  function _renderChips(){
+    var el = document.getElementById('ask-chips');
+    if (!el) return;
+    if (!_askQuestions.length) {
+      el.innerHTML = '<div class="ask-chips-loading">No questions are configured.</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < _askQuestions.length; i++) {
+      var q = _askQuestions[i];
+      html += '<button class="ask-chip" data-key="' + _e(q.key) + '"'
+            + ' title="' + _e(q.blurb || '') + '"'
+            + ' onclick="askRun(\'' + _e(q.key) + '\')">'
+            + _e(q.label) + '</button>';
+    }
+    el.innerHTML = html;
+  }
+
+  function _markActive(key){
+    var chips = document.querySelectorAll('.ask-chip');
+    for (var i = 0; i < chips.length; i++) {
+      var on = chips[i].getAttribute('data-key') === key;
+      chips[i].className = on ? 'ask-chip active' : 'ask-chip';
+      if (_askBusy) { chips[i].setAttribute('disabled','disabled'); }
+      else          { chips[i].removeAttribute('disabled'); }
+    }
+  }
+
+  window.askRun = function(key, force){
+    if (_askBusy) return;
+    var cid = _askCid();
+    if (!cid) { _fail('No property is selected, so there is nothing to ask about.'); return; }
+
+    _askCurrent = key;
+    _askBusy = true;
+    _markActive(key);
+
+    var label = key;
+    for (var i = 0; i < (_askQuestions || []).length; i++) {
+      if (_askQuestions[i].key === key) { label = _askQuestions[i].label; break; }
+    }
+    var t = document.getElementById('ask-pending-title');
+    if (t) t.textContent = label;
+    _panels('pending');
+
+    var url = _askApi() + '/api/ask/' + encodeURIComponent(key) + (force ? '?force=1' : '');
+    fetch(url, { method:'POST', headers:_askHead(), body: JSON.stringify({ company_id: cid }) })
+      .then(function(r){ return r.json().then(function(j){ return { status:r.status, body:j }; }); })
+      .then(function(res){
+        if (res.status === 202) { _pollAgain(key); return; }   // already generating
+        _askBusy = false;
+        _markActive(key);
+        if (res.status === 403) { _fail('You are not authorized to ask about this property.'); return; }
+        if (res.status === 404) { _fail((res.body && res.body.detail) || 'That question or property could not be found.'); return; }
+        if (res.status === 409) { _fail((res.body && res.body.detail) || 'That property name matches more than one record.'); return; }
+        if (res.status >= 400)  { _fail((res.body && res.body.error) || ('Request failed (' + res.status + ').')); return; }
+        _renderAnswer(res.body, label);
+      })
+      .catch(function(err){
+        _askBusy = false; _markActive(key);
+        _fail('Network error: ' + err.message);
+      });
+  };
+
+  /* A 202 means another request for the same property and question is already
+     in flight. Wait for it rather than paying for a second model call. */
+  function _pollAgain(key){
+    if (_askPoll) clearTimeout(_askPoll);
+    _askPoll = setTimeout(function(){
+      _askBusy = false;
+      if (_askCurrent === key) window.askRun(key);
+    }, 4000);
+  }
+
+  window.askRefresh = function(){
+    if (_askCurrent) window.askRun(_askCurrent, true);
+  };
+
+  function _renderAnswer(a, label){
+    a = a || {};
+    document.getElementById('ask-answer-q').textContent = label;
+    document.getElementById('ask-headline').textContent = a.headline || '';
+    document.getElementById('ask-summary').textContent  = a.summary  || '';
+
+    var findings = a.findings || [];
+    var html = '';
+    for (var i = 0; i < findings.length; i++) {
+      var f = findings[i] || {};
+      html += '<div class="ask-finding">'
+            +   '<div class="ask-finding-title">' + _e(f.title) + '</div>'
+            +   '<div class="ask-finding-detail">' + _e(f.detail) + '</div>';
+      var ev = f.evidence || [];
+      if (ev.length) {
+        html += '<div class="ask-evidence">';
+        for (var k = 0; k < ev.length; k++) {
+          html += '<span class="ask-evidence-item">' + _e(ev[k]) + '</span>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    document.getElementById('ask-findings').innerHTML = html;
+
+    /* Missing inputs are shown, never swallowed. A source that is dark and a
+       source that says zero mean completely different things, and the second
+       one is what makes a client stop trusting the page. */
+    var gaps = a.missing_inputs || [];
+    var g = '';
+    if (gaps.length) {
+      g = '<div class="ask-block"><div class="ask-block-title">Not included in this answer</div>';
+      for (var m = 0; m < gaps.length; m++) {
+        var gp = gaps[m] || {};
+        g += '<div class="ask-gap"><b>' + _e(gp.input || gp.source) + '</b> — ' + _e(gp.reason) + '</div>';
+      }
+      g += '</div>';
+    }
+    var caveats = a.caveats || [];
+    if (caveats.length) {
+      g += '<div class="ask-block"><div class="ask-block-title">Data quality</div>';
+      for (var c = 0; c < caveats.length; c++) {
+        g += '<div class="ask-gap">' + _e(caveats[c]) + '</div>';
+      }
+      g += '</div>';
+    }
+    document.getElementById('ask-gaps').innerHTML = g;
+
+    /* next_step is the "so what". An answer that names a problem and stops is
+       the reporting posture this surface exists to replace. */
+    var step = document.getElementById('ask-nextstep');
+    if (step) {
+      step.innerHTML = a.next_step
+        ? '<div class="ask-block ask-nextstep"><div class="ask-block-title">What to do next</div>'
+          + '<div class="ask-gap">' + _e(a.next_step) + '</div></div>'
+        : '';
+    }
+
+    var ne = a.not_evidenced || [];
+    document.getElementById('ask-notevidenced').innerHTML = ne.length
+      ? '<div class="ask-block"><div class="ask-block-title">Asked but not answerable from this data</div>'
+        + ne.map(function(x){ return '<div class="ask-gap">' + _e(x) + '</div>'; }).join('') + '</div>'
+      : '';
+
+    /* Say who wrote it. "rules" means the model call failed or its output was
+       unusable and this is the fallback narrator — a reader deserves to know
+       which one they are looking at. */
+    var bits = [];
+    if (a.narrator === 'rules') {
+      bits.push('Written from the data directly — the narrative model was unavailable for this answer.');
+    }
+    if (a.generated_at) { bits.push('Generated ' + _e(a.generated_at) + '.'); }
+    if (a.cached)       { bits.push('Served from cache — use Re-run for fresh numbers.'); }
+    document.getElementById('ask-provenance').innerHTML = bits.join(' ');
+
+    _panels('answer');
+  }
+})();
+</script>
+<style>
+/* Portal feedback widget. Uses the template's inline tokens, same as Ask. */
+#fb-launch{position:fixed;right:22px;bottom:22px;z-index:9000;display:none;
+  align-items:center;gap:8px;background:var(--j);color:#fff;border:0;
+  border-radius:999px;padding:12px 19px;font-size:13px;font-weight:600;
+  font-family:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(16,24,40,.18)}
+#fb-launch:hover{background:var(--jd)}
+#fb-launch svg{flex-shrink:0}
+#fb-modal{position:fixed;inset:0;z-index:9001;display:none;
+  align-items:center;justify-content:center;background:rgba(16,24,40,.42);
+  padding:20px}
+#fb-modal.open{display:flex}
+.fb-panel{background:var(--white);border-radius:14px;width:100%;max-width:520px;
+  max-height:90vh;overflow-y:auto;box-shadow:0 18px 48px rgba(16,24,40,.28)}
+.fb-head{padding:20px 24px 0}
+.fb-title{font-size:17px;font-weight:700;color:var(--tp)}
+.fb-sub{font-size:12.5px;color:var(--ts);margin-top:4px;line-height:1.55}
+.fb-body{padding:18px 24px 24px}
+.fb-label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--ts);margin:16px 0 7px}
+.fb-sev{display:flex;gap:8px;flex-wrap:wrap}
+.fb-sev button{flex:1;min-width:118px;border:1px solid var(--bd);
+  background:var(--white);color:var(--tp);border-radius:9px;padding:10px 12px;
+  font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
+.fb-sev button:hover{border-color:var(--j)}
+.fb-sev button.on{background:var(--j);border-color:var(--j);color:#fff}
+#fb-note{width:100%;min-height:104px;border:1px solid var(--bd);border-radius:9px;
+  padding:11px 13px;font-family:inherit;font-size:13.5px;color:var(--tp);
+  line-height:1.6;resize:vertical}
+#fb-note:focus{outline:2px solid var(--j);outline-offset:-1px}
+.fb-drop{border:1px dashed var(--bd);border-radius:9px;padding:15px;
+  text-align:center;font-size:12.5px;color:var(--ts);cursor:pointer}
+.fb-drop:hover,.fb-drop.hot{border-color:var(--j);background:var(--bg)}
+.fb-shots{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.fb-shot{position:relative;width:74px;height:56px;border-radius:7px;
+  overflow:hidden;border:1px solid var(--bd)}
+.fb-shot img{width:100%;height:100%;object-fit:cover;display:block}
+.fb-shot button{position:absolute;top:2px;right:2px;width:18px;height:18px;
+  border:0;border-radius:50%;background:rgba(16,24,40,.72);color:#fff;
+  font-size:12px;line-height:1;cursor:pointer;padding:0}
+.fb-ctx{margin-top:14px;padding:10px 12px;background:var(--bg);border-radius:8px;
+  font-size:11.5px;color:var(--tm);line-height:1.6}
+.fb-actions{display:flex;gap:9px;align-items:center;margin-top:20px}
+.fb-actions .grow{flex:1}
+#fb-msg{font-size:12.5px;line-height:1.5}
+#fb-msg.err{color:#B4443A}
+#fb-msg.ok{color:#3F6B4F}
+.fb-btn{border:1px solid var(--bd);background:var(--white);color:var(--tp);
+  border-radius:8px;padding:9px 15px;font-size:13px;font-weight:600;
+  font-family:inherit;cursor:pointer}
+.fb-btn.primary{background:var(--j);border-color:var(--j);color:#fff}
+.fb-btn[disabled]{opacity:.55;cursor:default}
+</style>
+
+<button id="fb-launch" onclick="fbOpen()" title="Report something that isn't working">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+  Report an issue
+</button>
+
+<div id="fb-modal" onclick="if(event.target===this)fbClose()">
+  <div class="fb-panel" role="dialog" aria-modal="true" aria-labelledby="fb-title">
+    <div class="fb-head">
+      <div class="fb-title" id="fb-title">Report an issue</div>
+      <div class="fb-sub">Goes straight to the QA list in ClickUp. The page,
+        property, browser and window size are captured automatically — just say
+        what happened.</div>
+    </div>
+    <div class="fb-body">
+      <label class="fb-label">How bad is it</label>
+      <div class="fb-sev" id="fb-sev"></div>
+
+      <label class="fb-label" for="fb-note">What happened</label>
+      <textarea id="fb-note" placeholder="What did you expect, and what did you get instead?"></textarea>
+
+      <label class="fb-label">Screenshot</label>
+      <div class="fb-drop" id="fb-drop" tabindex="0"
+           onclick="document.getElementById('fb-file').click()"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('fb-file').click();}">
+        Paste with <b>&#8984;V</b>, drop an image here, or click to choose
+      </div>
+      <input type="file" id="fb-file" accept="image/*" multiple style="display:none" onchange="fbPick(event)">
+      <div class="fb-shots" id="fb-shots"></div>
+
+      <div class="fb-ctx" id="fb-ctx"></div>
+
+      <div class="fb-actions">
+        <span class="grow" id="fb-msg"></span>
+        <button class="fb-btn" onclick="fbClose()">Cancel</button>
+        <button class="fb-btn primary" id="fb-send" onclick="fbSend()">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── Portal feedback widget ─────────────────────────────────────────────────
+   For the testing week: a tester should be able to file a finding without
+   leaving the page she found it on. Anything slower than that gets written in
+   an email instead, and an email is not a queue.
+
+   Everything about the moment is captured for her — page, property, URL,
+   viewport, browser. She supplies a sentence and, ideally, a paste.
+   ───────────────────────────────────────────────────────────────────────── */
+(function(){
+  var _sev = 'bug';
+  var _shots = [];          // {name, type, blob, url}
+  var _ready = false;
+  var _booting = false;
+  var _sending = false;
+
+  function _api()   { return window.__WEBHOOK_URL__ || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com'; }
+  function _email() { return window.__PORTAL_EMAIL__ || ''; }
+  function _e(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+  function _currentPage(){
+    var active = document.querySelector('.nav-item.active');
+    return active ? active.textContent.trim() : (document.title || 'Portal');
+  }
+  function _propertyName(){
+    var d = (window.__PORTAL_PROP_DATA && window.__PORTAL_PROP_DATA.property) || {};
+    return d.name || d.property_name || '';
+  }
+
+  /* Ask the server whether reports have anywhere to land BEFORE showing the
+     button. Appearing, accepting a carefully written report and only then
+     admitting there is no list configured is the worst possible order.
+
+     Called from three places on purpose. window.__PORTAL_EMAIL__ is set by
+     HubL when the visitor is a known HubSpot contact, but Clerk ALSO sets it
+     from an async callback, so on a Clerk session it is still empty when this
+     script first runs. Checking once and giving up is why the button did not
+     appear on the first deploy. seoCheckEntitlement and contentCheckEntitlement
+     solve this the same way — DOMContentLoaded plus portal-data-ready — and the
+     timer covers a Clerk login that resolves without any property data being
+     fetched. */
+  function _boot(){
+    if (_ready || _booting) return;
+    if (!_email()) return;          // no identity yet — a later trigger retries
+    _booting = true;
+    fetch(_api() + '/api/feedback/health', { headers: { 'X-Portal-Email': _email() } })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        _booting = false;
+        if (!d || !d.ready) {
+          if (d && d.reason) console.warn('[feedback] widget hidden:', d.reason);
+          return;
+        }
+        _ready = true;
+        _renderSeverities(d.severities || []);
+        document.getElementById('fb-launch').style.display = 'inline-flex';
+      })
+      .catch(function(){ _booting = false; });
+  }
+
+  function _renderSeverities(list){
+    if (!list.length) {
+      list = [{key:'blocker',label:'Blocked me'},{key:'bug',label:'Wrong or broken'},
+              {key:'idea',label:'Works, but…'}];
+    }
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      html += '<button type="button" data-sev="' + _e(list[i].key) + '"'
+            + ' onclick="fbSeverity(\'' + _e(list[i].key) + '\')">'
+            + _e(list[i].label) + '</button>';
+    }
+    document.getElementById('fb-sev').innerHTML = html;
+    fbSeverity(_sev);
+  }
+
+  window.fbSeverity = function(key){
+    _sev = key;
+    var buttons = document.querySelectorAll('#fb-sev button');
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].className = buttons[i].getAttribute('data-sev') === key ? 'on' : '';
+    }
+  };
+
+  window.fbOpen = function(){
+    if (!_ready) return;
+    document.getElementById('fb-ctx').innerHTML =
+      'Attaching: <b>' + _e(_currentPage()) + '</b>'
+      + (_propertyName() ? ' · ' + _e(_propertyName()) : '')
+      + ' · ' + window.innerWidth + '×' + window.innerHeight;
+    document.getElementById('fb-modal').classList.add('open');
+    setTimeout(function(){ document.getElementById('fb-note').focus(); }, 40);
+  };
+
+  window.fbClose = function(){
+    document.getElementById('fb-modal').classList.remove('open');
+  };
+
+  function _addShot(file){
+    if (_shots.length >= 4) { _say('Four screenshots is the limit.', 'err'); return; }
+    if (file.size > 10 * 1024 * 1024) { _say(file.name + ' is over 10MB.', 'err'); return; }
+    var shot = { name: file.name || ('paste-' + (_shots.length + 1) + '.png'),
+                 type: file.type || 'image/png', blob: file,
+                 url: URL.createObjectURL(file) };
+    _shots.push(shot);
+    _renderShots();
+    _say('');
+  }
+
+  function _renderShots(){
+    var html = '';
+    for (var i = 0; i < _shots.length; i++) {
+      html += '<div class="fb-shot"><img src="' + _shots[i].url + '" alt="">'
+            + '<button type="button" title="Remove" onclick="fbDropShot(' + i + ')">&times;</button></div>';
+    }
+    document.getElementById('fb-shots').innerHTML = html;
+  }
+
+  window.fbDropShot = function(i){
+    if (_shots[i]) URL.revokeObjectURL(_shots[i].url);
+    _shots.splice(i, 1);
+    _renderShots();
+  };
+
+  window.fbPick = function(ev){
+    var files = ev.target.files || [];
+    for (var i = 0; i < files.length; i++) _addShot(files[i]);
+    ev.target.value = '';
+  };
+
+  function _say(text, kind){
+    var el = document.getElementById('fb-msg');
+    el.textContent = text || '';
+    el.className = kind || '';
+  }
+
+  window.fbSend = function(){
+    if (_sending) return;
+    var note = document.getElementById('fb-note').value.trim();
+    if (!note && !_shots.length) {
+      _say('Say what happened, or attach a screenshot.', 'err');
+      return;
+    }
+    _sending = true;
+    document.getElementById('fb-send').setAttribute('disabled', 'disabled');
+    _say('Sending…');
+
+    var fd = new FormData();
+    fd.append('note', note);
+    fd.append('severity', _sev);
+    fd.append('page', _currentPage());
+    fd.append('url', window.location.href);
+    fd.append('company_id', window.__PORTAL_COMPANY_ID__ || '');
+    fd.append('property_name', _propertyName());
+    fd.append('viewport', window.innerWidth + 'x' + window.innerHeight);
+    for (var i = 0; i < _shots.length; i++) {
+      fd.append('screenshot', _shots[i].blob, _shots[i].name);
+    }
+
+    fetch(_api() + '/api/feedback', {
+      method: 'POST', headers: { 'X-Portal-Email': _email() }, body: fd
+    })
+      .then(function(r){ return r.json().then(function(j){ return {ok: r.ok, body: j}; }); })
+      .then(function(res){
+        _sending = false;
+        document.getElementById('fb-send').removeAttribute('disabled');
+        if (!res.ok || !res.body.ok) {
+          _say((res.body && res.body.error) || 'That did not send. Nothing was saved.', 'err');
+          return;
+        }
+        var extra = (res.body.dropped && res.body.dropped.length)
+          ? ' (' + res.body.dropped.length + ' screenshot issue)' : '';
+        _say('Filed' + extra + '. Thank you.', 'ok');
+        document.getElementById('fb-note').value = '';
+        while (_shots.length) fbDropShot(0);
+        setTimeout(function(){ fbClose(); _say(''); }, 1400);
+      })
+      .catch(function(err){
+        _sending = false;
+        document.getElementById('fb-send').removeAttribute('disabled');
+        _say('Network error — nothing was saved. Try again.', 'err');
+      });
+  };
+
+  /* Paste anywhere while the panel is open. This is the fast path: screenshot
+     with the OS shortcut, Cmd-V, done. */
+  document.addEventListener('paste', function(ev){
+    if (!document.getElementById('fb-modal').classList.contains('open')) return;
+    var items = (ev.clipboardData && ev.clipboardData.items) || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.indexOf('image') === 0) {
+        var file = items[i].getAsFile();
+        if (file) { _addShot(file); ev.preventDefault(); }
+      }
+    }
+  });
+
+  var drop = document.getElementById('fb-drop');
+  ['dragenter','dragover'].forEach(function(t){
+    drop.addEventListener(t, function(e){ e.preventDefault(); drop.classList.add('hot'); });
+  });
+  ['dragleave','drop'].forEach(function(t){
+    drop.addEventListener(t, function(e){ e.preventDefault(); drop.classList.remove('hot'); });
+  });
+  drop.addEventListener('drop', function(e){
+    var files = (e.dataTransfer && e.dataTransfer.files) || [];
+    for (var i = 0; i < files.length; i++) _addShot(files[i]);
+  });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') fbClose();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _boot);
+  } else { _boot(); }
+  document.addEventListener('portal-data-ready', _boot);
+  // Bounded retry for a Clerk session that resolves late and fires no event.
+  var _tries = 0;
+  var _poll = setInterval(function(){
+    if (_ready || ++_tries > 8) { clearInterval(_poll); return; }
+    _boot();
+  }, 1500);
+})();
+</script>
   {{ standard_footer_includes }}
 </body>
 </html>

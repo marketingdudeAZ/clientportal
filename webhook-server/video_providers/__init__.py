@@ -10,6 +10,8 @@ Adding a new provider:
   3. Register it in the PROVIDERS dict below
 """
 
+from __future__ import annotations
+
 from .base import VideoProvider, ProviderError
 from .creatify_provider import CreatifyProvider
 from .heygen_provider import HeyGenProvider

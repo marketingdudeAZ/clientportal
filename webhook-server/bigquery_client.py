@@ -13,6 +13,12 @@ schema inspection is complete. Use get_ninjacat_metrics() only after
 actual column names are documented.
 """
 
+# Defers annotation evaluation so `X | None` parses under 3.9 as well as the
+# 3.11 the host runs. This module already used that syntax unquoted (see
+# get_aptiq_snapshot_at), which made it un-importable locally and left its
+# tests uncollectable on any 3.9 machine.
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -32,6 +38,40 @@ logger = logging.getLogger(__name__)
 _client = None
 
 
+def _sa_info() -> dict | None:
+    """Service-account credentials as a dict, or None if unavailable.
+
+    BIGQUERY_SERVICE_ACCOUNT_JSON may hold EITHER the raw JSON blob OR a path to
+    a file. Both are supported because the two deployment shapes differ:
+    locally it is a path; on the host it is an env var, and there is no file on
+    disk to point at.
+
+    This used to accept a path only (`os.path.exists(sa_path)` or bust), which
+    made a JSON-in-env deployment fail in the worst possible way — silently.
+    `portal_tickets._record_mapping` swallows a write failure by design and
+    `_read_mappings` returns [], so the portal showed "No open requests" forever
+    with no error anywhere, indistinguishable from an unconfigured ticket type.
+
+    Mirrors fluency_feed._gc (fluency_feed.py:235), which has always handled
+    both. Single helper so _get_client() and is_bigquery_configured() can never
+    disagree about whether credentials exist — a mismatch there is exactly how
+    the silent-empty-list failure reappears.
+    """
+    raw = (BIGQUERY_SERVICE_ACCOUNT_JSON or "").strip()
+    if not raw or raw == "path/to/service_account.json":
+        return None
+    try:
+        if raw.startswith("{"):
+            return json.loads(raw)
+        if os.path.exists(raw):
+            with open(raw) as f:
+                return json.load(f)
+    except (OSError, ValueError) as e:
+        logger.warning("BigQuery service account could not be parsed: %s", e)
+        return None
+    return None
+
+
 def _get_client():
     global _client
     if _client is not None:
@@ -46,15 +86,11 @@ def _get_client():
     if not BIGQUERY_PROJECT_ID:
         raise RuntimeError("BIGQUERY_PROJECT_ID not set in .env")
 
-    sa_path = BIGQUERY_SERVICE_ACCOUNT_JSON
-    if not sa_path or sa_path == "path/to/service_account.json":
-        raise RuntimeError("BIGQUERY_SERVICE_ACCOUNT_JSON not configured in .env")
-
-    if not os.path.exists(sa_path):
-        raise RuntimeError(f"Service account file not found: {sa_path}")
-
-    with open(sa_path) as f:
-        sa_info = json.load(f)
+    sa_info = _sa_info()
+    if sa_info is None:
+        raise RuntimeError(
+            "BIGQUERY_SERVICE_ACCOUNT_JSON not configured — set it to the raw "
+            "service-account JSON or a path to the key file")
 
     from google.oauth2 import service_account as sa_module
     creds = sa_module.Credentials.from_service_account_info(
@@ -229,15 +265,15 @@ def upsert_rpm_properties(rows):
 
 
 def is_bigquery_configured():
-    """Return True if BQ env vars look set up. Used for graceful fallback."""
+    """Return True if BQ env vars look set up. Used for graceful fallback.
+
+    Shares _sa_info() with _get_client() on purpose: when these two disagree,
+    callers take the "configured" path and then fail on connect, or take the
+    fallback path and silently return no data. Both were live failure modes.
+    """
     if not BIGQUERY_PROJECT_ID:
         return False
-    sa = BIGQUERY_SERVICE_ACCOUNT_JSON
-    if not sa or sa == "path/to/service_account.json":
-        return False
-    if not os.path.exists(sa):
-        return False
-    return True
+    return _sa_info() is not None
 
 
 def get_ninjacat_current_perf(property_uuid):

@@ -32,6 +32,8 @@ When extracting a section into a blueprint, follow the pattern in
 `routes/paid.py`. Add the new blueprint to `routes/__init__.register_all`.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import sys
@@ -81,6 +83,10 @@ def _clerk_identity():
         if ident:
             request.environ["HTTP_X_PORTAL_EMAIL"] = ident["email"]
             request.environ["HTTP_X_PORTAL_USER_ID"] = ident["user_id"]
+            # Proof-of-identity marker for _route_utils.identity_is_verified().
+            # NOT a header: anything HTTP_* can be sent by the caller, so
+            # X-Portal-User-Id above proves nothing on its own.
+            request.environ["portal.identity_verified"] = True
         elif os.environ.get("CLERK_SECRET_KEY"):
             # A Bearer token was presented but failed verification — do not
             # let a stale spoofable header ride along beside a bad token.
@@ -1395,6 +1401,12 @@ def sync_properties_to_bq():
                 "unit_count":         units,
                 "occupancy_status":   props.get("occupancy_status", ""),
                 "plestatus":          props.get("plestatus", ""),
+                # Platform join keys. Without these, loop_convert_v1 resolves
+                # to zero rows — the view filters on hyly_property_id being
+                # present (ADR 0022).
+                "hyly_property_id":   (props.get("hyly_property_id") or "").strip(),
+                "aptiq_property_id":  (props.get("aptiq_property_id") or "").strip(),
+                "aptiq_market_id":    (props.get("aptiq_market_id") or "").strip(),
                 "updated_at":         now_iso,
             })
 
@@ -6246,37 +6258,17 @@ def disposition_retain():
                     "retained": retained}), (200 if ok else 502)
 
 
-@app.route("/api/needs-you", methods=["GET", "OPTIONS"])
-def needs_you():
-    """The 'What needs you' action inbox: onboarding + dispositions + open tickets.
-
-    Onboarding = properties coming online + completeness flags. Dispositions =
-    retain/turn-off review. Attention = aging/open tickets (the non-health
-    triage signals). Health-score rows are intentionally dropped — Properties
-    and Portfolio Dashboard already show those.
-    """
-    if request.method == "OPTIONS":
-        return _preflight_response()
-    if not request.headers.get("X-Portal-Email", "").strip():
-        return jsonify({"error": "Authentication required"}), 401
-    onb = dispo = attn = []
-    try:
-        import onboarding
-        onb = onboarding.list_onboarding()
-    except Exception as e:
-        logger.warning("needs-you onboarding failed: %s", e)
-    try:
-        import disposition
-        dispo = disposition.list_dispositioning()
-    except Exception as e:
-        logger.warning("needs-you dispositions failed: %s", e)
-    try:
-        import triage as _tri
-        rows = (_tri.get_portfolio_triage() or {}).get("rows", [])
-        attn = [r for r in rows if r.get("reason_kind") in ("ticket_aging", "ticket_open")]
-    except Exception as e:
-        logger.warning("needs-you attention failed: %s", e)
-    return jsonify({"onboarding": onb, "dispositions": dispo, "attention": attn})
+# /api/needs-you MOVED to routes/attention.py (registered by register_all).
+#
+# Same URL, same response keys — the 'What needs you' action inbox still
+# returns onboarding + dispositions + attention, with health-score triage rows
+# still excluded because Properties and the Portfolio Dashboard already show
+# them. It now also carries `work`: open creative / branding / digital tickets
+# from ClickUp and HubSpot Service Hub, so the queue is complete.
+#
+# Not left here delegating: two rules on one URL is a routing coin-flip, and
+# the whole reason for the move is that there is exactly one implementation.
+# `attention.build()` is the entry point if you need the payload in-process.
 
 
 # ─── AI SWOT (Performance page) ─────────────────────────────────────────────
@@ -6305,7 +6297,35 @@ def get_performance_swot():
 
 @app.route("/health", methods=["GET"])
 def health():
-    return '{"status":"ok"}', 200, {"Content-Type": "application/json"}
+    """Liveness plus the two config facts that fail silently when wrong.
+
+    `bigquery` false means the ticket mapping table cannot be written or read,
+    which renders as "No open requests" forever with no error — the same symptom
+    as an unconfigured ticket type. `portal_ticket_types` is 0 until the
+    CLICKUP_LIST_* vars are set, so the pair distinguishes "not switched on yet"
+    from "switched on and broken" without shell access to the host.
+
+    Deliberately no secrets, no counts of real data, no auth: this is a probe a
+    load balancer and an on-call human both hit.
+    """
+    payload = {"status": "ok"}
+    try:
+        import bigquery_client
+        payload["bigquery"] = bigquery_client.is_bigquery_configured()
+    except Exception:  # noqa: BLE001 — health must never 500
+        payload["bigquery"] = False
+    try:
+        import portal_tickets
+        payload["portal_ticket_types"] = len(portal_tickets.configured_types())
+        # `bigquery` true only means the CREDENTIALS resolve. This is the
+        # stronger fact: whether a mapping row has actually failed to write or
+        # read since boot, which is the difference between "a requester can see
+        # what they filed" and "the portal quietly forgets".
+        payload["ticket_tracking_degraded"] = portal_tickets.tracking_degraded()
+    except Exception:  # noqa: BLE001
+        payload["portal_ticket_types"] = 0
+        payload["ticket_tracking_degraded"] = True
+    return jsonify(payload), 200
 
 
 # ═══════════════════════════════════════════════════════════════════════════

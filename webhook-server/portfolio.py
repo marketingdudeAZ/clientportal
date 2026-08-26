@@ -28,6 +28,10 @@ CACHE_TTL_SECONDS = 900  # 15 minutes — large query, expensive to re-fetch
 COMPANY_PROPS = [
     "name", "address", "city", "state", "zip", "uuid", "domain",
     "rpmmarket", "plestatus", "totalunits",
+    # Platform IDs synced into rpm_properties — the join keys the BQ
+    # warehouse uses to reach Hyly and AptIQ (ADR 0015 / 0022).
+    "hyly_property_id", "aptiq_property_id", "aptiq_market_id",
+    "ninjacat_system_id",
     "redlight_report_score", "redlight_flag_count",
     "redlight_digital_flags", "redlight_pm_flags",
     "redlight_ops_flags", "redlight_operations_flags",
