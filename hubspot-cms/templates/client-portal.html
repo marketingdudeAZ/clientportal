@@ -1142,6 +1142,10 @@ body{line-height:1.55}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Performance
       </div>
+      <div class="nav-item" onclick="nav('ask',this)" title="Preset questions answered from this property's data">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Ask
+      </div>
       <div class="nav-item" onclick="nav('services',this)" title="Plan, spend, recommendations, paid media">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
         Plan &amp; Spend
@@ -1533,6 +1537,55 @@ body{line-height:1.55}
 </section>
 
 <!-- ── SEO & AI INSIGHTS ── -->
+<section id="section-ask" class="section">
+  <div class="sec-topbar">
+    <div>
+      <div class="sec-title">Ask</div>
+      <div class="sec-sub">Pick a question. Every number comes back with what it was divided by and where it came from.</div>
+    </div>
+  </div>
+
+  <!-- Chips are rendered from the registry manifest, not hard-coded here.
+       Adding a question in skills/question_registry.py makes it appear on this
+       page with no template change and no redeploy of this file. -->
+  <div id="ask-chips" class="ask-chips">
+    <div class="ask-chips-loading">Loading questions…</div>
+  </div>
+
+  <!-- Nothing is answered until someone asks. The whole point of this surface
+       is that it does not bombard a page with data nobody requested. -->
+  <div id="ask-idle" class="card card-p ask-idle">
+    <div class="ask-idle-title">No question asked yet</div>
+    <div class="ask-idle-sub">Choose one above. Answers take a few seconds because they are assembled from the warehouse and written fresh, not pulled from a cached dashboard.</div>
+  </div>
+
+  <div id="ask-pending" class="card card-p ask-pending" style="display:none">
+    <div class="ask-spinner"></div>
+    <div>
+      <div class="ask-pending-title" id="ask-pending-title">Working on it…</div>
+      <div class="ask-pending-sub">Reading performance, spend, occupancy and ticket history for this property, then writing the answer. Usually 20–40 seconds.</div>
+    </div>
+  </div>
+
+  <div id="ask-error" class="card card-p ask-error" style="display:none"></div>
+
+  <div id="ask-answer" style="display:none">
+    <div class="card card-p ask-answer-card">
+      <div class="ask-answer-head">
+        <div class="ask-answer-q" id="ask-answer-q"></div>
+        <button class="btn btn-secondary btn-sm" id="ask-refresh" onclick="askRefresh()" title="Ignore the cached answer and ask again">Re-run</button>
+      </div>
+      <div class="ask-headline" id="ask-headline"></div>
+      <div class="ask-summary" id="ask-summary"></div>
+      <div id="ask-findings"></div>
+      <div id="ask-nextstep"></div>
+      <div id="ask-gaps"></div>
+      <div id="ask-notevidenced"></div>
+      <div class="ask-provenance" id="ask-provenance"></div>
+    </div>
+  </div>
+</section>
+
 <section id="section-seo" class="section">
   <div class="sec-topbar">
     <div>
@@ -3511,6 +3564,7 @@ function nav(id, el) {
   if (id === 'video')            { loadVideoCreative(); }
   // Forecast page retired 2026-07 — funnel forecast now lives on Plan & Spend
   if (id === 'performance')      { loadPerformance(); loadSwot(); }
+  if (id === 'ask')              { loadAsk(); }
   if (id === 'activity')         { loadActivity(); }
   if (id === 'recommendations')  { loadCallPrep(); }
   if (id === 'seo')              { if (typeof loadSeoInsights === 'function') loadSeoInsights(); }
@@ -11022,6 +11076,595 @@ setTimeout(loadPropertySwitcher, 1500);
   }
 </script>
 
+<style>
+/* Ask surface. Uses the template's inline tokens (--j, --cu, --tp, --ts, --tm,
+   --bd, --bg) rather than portal.css — the two have drifted and the inline
+   copy is what actually renders. */
+.ask-chips{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:22px}
+.ask-chips-loading{font-size:12.5px;color:var(--tm);padding:6px 0}
+.ask-chip{border:1px solid var(--bd);background:var(--white);color:var(--tp);
+  border-radius:999px;padding:9px 16px;font-size:13px;font-weight:600;
+  cursor:pointer;transition:border-color .12s,background .12s,color .12s}
+.ask-chip:hover{border-color:var(--j);background:var(--bg)}
+.ask-chip.active{background:var(--j);border-color:var(--j);color:#fff}
+.ask-chip[disabled]{opacity:.5;cursor:default}
+.ask-idle,.ask-pending,.ask-error{margin-top:2px}
+.ask-idle-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:4px}
+.ask-idle-sub,.ask-pending-sub{font-size:12.5px;color:var(--ts);line-height:1.55;max-width:62ch}
+.ask-pending{display:flex;gap:16px;align-items:flex-start}
+.ask-pending-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:4px}
+.ask-spinner{width:17px;height:17px;border:2px solid var(--bd);border-top-color:var(--j);
+  border-radius:50%;animation:ask-spin .8s linear infinite;flex-shrink:0;margin-top:2px}
+@keyframes ask-spin{to{transform:rotate(360deg)}}
+.ask-error{border-left:3px solid #B4443A;font-size:13px;color:var(--tp);line-height:1.6}
+.ask-answer-head{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:16px;margin-bottom:14px}
+.ask-answer-q{font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--tm)}
+.ask-headline{font-size:17px;font-weight:700;color:var(--tp);line-height:1.45;
+  margin-bottom:10px}
+.ask-summary{font-size:13.5px;color:var(--ts);line-height:1.65;max-width:74ch;
+  margin-bottom:26px}
+.ask-finding{border-top:1px solid var(--bd);padding:20px 0}
+.ask-finding-title{font-size:14px;font-weight:700;color:var(--tp);margin-bottom:6px}
+.ask-finding-detail{font-size:13px;color:var(--ts);line-height:1.65;max-width:74ch}
+/* Evidence is the point of this product: a claim a client can check. It is
+   deliberately not collapsed behind a disclosure. */
+.ask-evidence{margin-top:12px;padding:11px 14px;background:var(--bg);
+  border-radius:8px;font-size:11.5px;color:var(--ts);line-height:1.7}
+.ask-evidence-item{display:block}
+.ask-evidence-item + .ask-evidence-item{margin-top:3px}
+.ask-block{margin-top:24px;padding:16px 18px;border-radius:10px;
+  background:var(--bg);border:1px solid var(--bd)}
+.ask-block-title{font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--ts);margin-bottom:9px}
+.ask-gap{font-size:12.5px;color:var(--ts);line-height:1.6}
+.ask-gap + .ask-gap{margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)}
+.ask-gap b{color:var(--tp);font-weight:700}
+.ask-nextstep{border-left:3px solid var(--cu)}
+.ask-provenance{margin-top:24px;padding-top:14px;border-top:1px solid var(--bd);
+  font-size:11px;color:var(--tm);line-height:1.6}
+</style>
+<script>
+/* ── Ask ────────────────────────────────────────────────────────────────────
+   Preset questions only. There is no free-text box, and its absence is a
+   product decision rather than an unfinished feature — the manifest says so
+   explicitly with free_text:false.
+
+   Nothing runs on section open except loading the question list. An answer
+   costs a model call, so it happens when somebody asks for it.
+   ───────────────────────────────────────────────────────────────────────── */
+(function(){
+  var _askQuestions = null;
+  var _askLoaded    = false;
+  var _askBusy      = false;
+  var _askCurrent   = null;
+  var _askPoll      = null;
+
+  function _askApi()    { return window.__WEBHOOK_URL__ || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com'; }
+  function _askCid()    { return window.__PORTAL_COMPANY_ID__ || window.__PORTAL_COMPANY_ID || ''; }
+  function _askEmail()  { return window.__PORTAL_EMAIL__ || ''; }
+  function _askHead()   { return { 'Content-Type':'application/json', 'X-Portal-Email': _askEmail() }; }
+  function _e(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function _show(id, on){ var el=document.getElementById(id); if(el) el.style.display = on ? '' : 'none'; }
+
+  function _panels(which){
+    _show('ask-idle',    which === 'idle');
+    _show('ask-pending', which === 'pending');
+    _show('ask-error',   which === 'error');
+    _show('ask-answer',  which === 'answer');
+  }
+
+  function _fail(msg){
+    var el = document.getElementById('ask-error');
+    if (el) el.innerHTML = _e(msg);
+    _panels('error');
+  }
+
+  window.loadAsk = function(){
+    if (_askLoaded) return;
+    _askLoaded = true;
+    fetch(_askApi() + '/api/ask/questions', { headers: _askHead() })
+      .then(function(r){
+        if (r.status === 401 || r.status === 403) { return { _denied: true }; }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data){
+        if (data._denied) {
+          _askLoaded = false;   // let a re-entitled user retry without a reload
+          var chips = document.getElementById('ask-chips');
+          if (chips) chips.innerHTML = '<div class="ask-chips-loading">Ask is not switched on for your account yet.</div>';
+          _panels('idle');
+          return;
+        }
+        _askQuestions = (data && data.questions) || [];
+        _renderChips();
+      })
+      .catch(function(err){
+        _askLoaded = false;
+        var chips = document.getElementById('ask-chips');
+        if (chips) chips.innerHTML = '<div class="ask-chips-loading">Could not load the question list (' + _e(err.message) + ').</div>';
+      });
+  };
+
+  function _renderChips(){
+    var el = document.getElementById('ask-chips');
+    if (!el) return;
+    if (!_askQuestions.length) {
+      el.innerHTML = '<div class="ask-chips-loading">No questions are configured.</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < _askQuestions.length; i++) {
+      var q = _askQuestions[i];
+      html += '<button class="ask-chip" data-key="' + _e(q.key) + '"'
+            + ' title="' + _e(q.blurb || '') + '"'
+            + ' onclick="askRun(\'' + _e(q.key) + '\')">'
+            + _e(q.label) + '</button>';
+    }
+    el.innerHTML = html;
+  }
+
+  function _markActive(key){
+    var chips = document.querySelectorAll('.ask-chip');
+    for (var i = 0; i < chips.length; i++) {
+      var on = chips[i].getAttribute('data-key') === key;
+      chips[i].className = on ? 'ask-chip active' : 'ask-chip';
+      if (_askBusy) { chips[i].setAttribute('disabled','disabled'); }
+      else          { chips[i].removeAttribute('disabled'); }
+    }
+  }
+
+  window.askRun = function(key, force){
+    if (_askBusy) return;
+    var cid = _askCid();
+    if (!cid) { _fail('No property is selected, so there is nothing to ask about.'); return; }
+
+    _askCurrent = key;
+    _askBusy = true;
+    _markActive(key);
+
+    var label = key;
+    for (var i = 0; i < (_askQuestions || []).length; i++) {
+      if (_askQuestions[i].key === key) { label = _askQuestions[i].label; break; }
+    }
+    var t = document.getElementById('ask-pending-title');
+    if (t) t.textContent = label;
+    _panels('pending');
+
+    var url = _askApi() + '/api/ask/' + encodeURIComponent(key) + (force ? '?force=1' : '');
+    fetch(url, { method:'POST', headers:_askHead(), body: JSON.stringify({ company_id: cid }) })
+      .then(function(r){ return r.json().then(function(j){ return { status:r.status, body:j }; }); })
+      .then(function(res){
+        if (res.status === 202) { _pollAgain(key); return; }   // already generating
+        _askBusy = false;
+        _markActive(key);
+        if (res.status === 403) { _fail('You are not authorized to ask about this property.'); return; }
+        if (res.status === 404) { _fail((res.body && res.body.detail) || 'That question or property could not be found.'); return; }
+        if (res.status === 409) { _fail((res.body && res.body.detail) || 'That property name matches more than one record.'); return; }
+        if (res.status >= 400)  { _fail((res.body && res.body.error) || ('Request failed (' + res.status + ').')); return; }
+        _renderAnswer(res.body, label);
+      })
+      .catch(function(err){
+        _askBusy = false; _markActive(key);
+        _fail('Network error: ' + err.message);
+      });
+  };
+
+  /* A 202 means another request for the same property and question is already
+     in flight. Wait for it rather than paying for a second model call. */
+  function _pollAgain(key){
+    if (_askPoll) clearTimeout(_askPoll);
+    _askPoll = setTimeout(function(){
+      _askBusy = false;
+      if (_askCurrent === key) window.askRun(key);
+    }, 4000);
+  }
+
+  window.askRefresh = function(){
+    if (_askCurrent) window.askRun(_askCurrent, true);
+  };
+
+  function _renderAnswer(a, label){
+    a = a || {};
+    document.getElementById('ask-answer-q').textContent = label;
+    document.getElementById('ask-headline').textContent = a.headline || '';
+    document.getElementById('ask-summary').textContent  = a.summary  || '';
+
+    var findings = a.findings || [];
+    var html = '';
+    for (var i = 0; i < findings.length; i++) {
+      var f = findings[i] || {};
+      html += '<div class="ask-finding">'
+            +   '<div class="ask-finding-title">' + _e(f.title) + '</div>'
+            +   '<div class="ask-finding-detail">' + _e(f.detail) + '</div>';
+      var ev = f.evidence || [];
+      if (ev.length) {
+        html += '<div class="ask-evidence">';
+        for (var k = 0; k < ev.length; k++) {
+          html += '<span class="ask-evidence-item">' + _e(ev[k]) + '</span>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    document.getElementById('ask-findings').innerHTML = html;
+
+    /* Missing inputs are shown, never swallowed. A source that is dark and a
+       source that says zero mean completely different things, and the second
+       one is what makes a client stop trusting the page. */
+    var gaps = a.missing_inputs || [];
+    var g = '';
+    if (gaps.length) {
+      g = '<div class="ask-block"><div class="ask-block-title">Not included in this answer</div>';
+      for (var m = 0; m < gaps.length; m++) {
+        var gp = gaps[m] || {};
+        g += '<div class="ask-gap"><b>' + _e(gp.input || gp.source) + '</b> — ' + _e(gp.reason) + '</div>';
+      }
+      g += '</div>';
+    }
+    var caveats = a.caveats || [];
+    if (caveats.length) {
+      g += '<div class="ask-block"><div class="ask-block-title">Data quality</div>';
+      for (var c = 0; c < caveats.length; c++) {
+        g += '<div class="ask-gap">' + _e(caveats[c]) + '</div>';
+      }
+      g += '</div>';
+    }
+    document.getElementById('ask-gaps').innerHTML = g;
+
+    /* next_step is the "so what". An answer that names a problem and stops is
+       the reporting posture this surface exists to replace. */
+    var step = document.getElementById('ask-nextstep');
+    if (step) {
+      step.innerHTML = a.next_step
+        ? '<div class="ask-block ask-nextstep"><div class="ask-block-title">What to do next</div>'
+          + '<div class="ask-gap">' + _e(a.next_step) + '</div></div>'
+        : '';
+    }
+
+    var ne = a.not_evidenced || [];
+    document.getElementById('ask-notevidenced').innerHTML = ne.length
+      ? '<div class="ask-block"><div class="ask-block-title">Asked but not answerable from this data</div>'
+        + ne.map(function(x){ return '<div class="ask-gap">' + _e(x) + '</div>'; }).join('') + '</div>'
+      : '';
+
+    /* Say who wrote it. "rules" means the model call failed or its output was
+       unusable and this is the fallback narrator — a reader deserves to know
+       which one they are looking at. */
+    var bits = [];
+    if (a.narrator === 'rules') {
+      bits.push('Written from the data directly — the narrative model was unavailable for this answer.');
+    }
+    if (a.generated_at) { bits.push('Generated ' + _e(a.generated_at) + '.'); }
+    if (a.cached)       { bits.push('Served from cache — use Re-run for fresh numbers.'); }
+    document.getElementById('ask-provenance').innerHTML = bits.join(' ');
+
+    _panels('answer');
+  }
+})();
+</script>
+<style>
+/* Portal feedback widget. Uses the template's inline tokens, same as Ask. */
+#fb-launch{position:fixed;right:22px;bottom:22px;z-index:9000;display:none;
+  align-items:center;gap:8px;background:var(--j);color:#fff;border:0;
+  border-radius:999px;padding:12px 19px;font-size:13px;font-weight:600;
+  font-family:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(16,24,40,.18)}
+#fb-launch:hover{background:var(--jd)}
+#fb-launch svg{flex-shrink:0}
+#fb-modal{position:fixed;inset:0;z-index:9001;display:none;
+  align-items:center;justify-content:center;background:rgba(16,24,40,.42);
+  padding:20px}
+#fb-modal.open{display:flex}
+.fb-panel{background:var(--white);border-radius:14px;width:100%;max-width:520px;
+  max-height:90vh;overflow-y:auto;box-shadow:0 18px 48px rgba(16,24,40,.28)}
+.fb-head{padding:20px 24px 0}
+.fb-title{font-size:17px;font-weight:700;color:var(--tp)}
+.fb-sub{font-size:12.5px;color:var(--ts);margin-top:4px;line-height:1.55}
+.fb-body{padding:18px 24px 24px}
+.fb-label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--ts);margin:16px 0 7px}
+.fb-sev{display:flex;gap:8px;flex-wrap:wrap}
+.fb-sev button{flex:1;min-width:118px;border:1px solid var(--bd);
+  background:var(--white);color:var(--tp);border-radius:9px;padding:10px 12px;
+  font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
+.fb-sev button:hover{border-color:var(--j)}
+.fb-sev button.on{background:var(--j);border-color:var(--j);color:#fff}
+#fb-note{width:100%;min-height:104px;border:1px solid var(--bd);border-radius:9px;
+  padding:11px 13px;font-family:inherit;font-size:13.5px;color:var(--tp);
+  line-height:1.6;resize:vertical}
+#fb-note:focus{outline:2px solid var(--j);outline-offset:-1px}
+.fb-drop{border:1px dashed var(--bd);border-radius:9px;padding:15px;
+  text-align:center;font-size:12.5px;color:var(--ts);cursor:pointer}
+.fb-drop:hover,.fb-drop.hot{border-color:var(--j);background:var(--bg)}
+.fb-shots{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.fb-shot{position:relative;width:74px;height:56px;border-radius:7px;
+  overflow:hidden;border:1px solid var(--bd)}
+.fb-shot img{width:100%;height:100%;object-fit:cover;display:block}
+.fb-shot button{position:absolute;top:2px;right:2px;width:18px;height:18px;
+  border:0;border-radius:50%;background:rgba(16,24,40,.72);color:#fff;
+  font-size:12px;line-height:1;cursor:pointer;padding:0}
+.fb-ctx{margin-top:14px;padding:10px 12px;background:var(--bg);border-radius:8px;
+  font-size:11.5px;color:var(--tm);line-height:1.6}
+.fb-actions{display:flex;gap:9px;align-items:center;margin-top:20px}
+.fb-actions .grow{flex:1}
+#fb-msg{font-size:12.5px;line-height:1.5}
+#fb-msg.err{color:#B4443A}
+#fb-msg.ok{color:#3F6B4F}
+.fb-btn{border:1px solid var(--bd);background:var(--white);color:var(--tp);
+  border-radius:8px;padding:9px 15px;font-size:13px;font-weight:600;
+  font-family:inherit;cursor:pointer}
+.fb-btn.primary{background:var(--j);border-color:var(--j);color:#fff}
+.fb-btn[disabled]{opacity:.55;cursor:default}
+</style>
+
+<button id="fb-launch" onclick="fbOpen()" title="Report something that isn't working">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+  Report an issue
+</button>
+
+<div id="fb-modal" onclick="if(event.target===this)fbClose()">
+  <div class="fb-panel" role="dialog" aria-modal="true" aria-labelledby="fb-title">
+    <div class="fb-head">
+      <div class="fb-title" id="fb-title">Report an issue</div>
+      <div class="fb-sub">Goes straight to the QA list in ClickUp. The page,
+        property, browser and window size are captured automatically — just say
+        what happened.</div>
+    </div>
+    <div class="fb-body">
+      <label class="fb-label">How bad is it</label>
+      <div class="fb-sev" id="fb-sev"></div>
+
+      <label class="fb-label" for="fb-note">What happened</label>
+      <textarea id="fb-note" placeholder="What did you expect, and what did you get instead?"></textarea>
+
+      <label class="fb-label">Screenshot</label>
+      <div class="fb-drop" id="fb-drop" tabindex="0"
+           onclick="document.getElementById('fb-file').click()"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('fb-file').click();}">
+        Paste with <b>&#8984;V</b>, drop an image here, or click to choose
+      </div>
+      <input type="file" id="fb-file" accept="image/*" multiple style="display:none" onchange="fbPick(event)">
+      <div class="fb-shots" id="fb-shots"></div>
+
+      <div class="fb-ctx" id="fb-ctx"></div>
+
+      <div class="fb-actions">
+        <span class="grow" id="fb-msg"></span>
+        <button class="fb-btn" onclick="fbClose()">Cancel</button>
+        <button class="fb-btn primary" id="fb-send" onclick="fbSend()">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── Portal feedback widget ─────────────────────────────────────────────────
+   For the testing week: a tester should be able to file a finding without
+   leaving the page she found it on. Anything slower than that gets written in
+   an email instead, and an email is not a queue.
+
+   Everything about the moment is captured for her — page, property, URL,
+   viewport, browser. She supplies a sentence and, ideally, a paste.
+   ───────────────────────────────────────────────────────────────────────── */
+(function(){
+  var _sev = 'bug';
+  var _shots = [];          // {name, type, blob, url}
+  var _ready = false;
+  var _booting = false;
+  var _sending = false;
+
+  function _api()   { return window.__WEBHOOK_URL__ || window.__PORTAL_API_BASE || 'https://rpm-portal-server.onrender.com'; }
+  function _email() { return window.__PORTAL_EMAIL__ || ''; }
+  function _e(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+  function _currentPage(){
+    var active = document.querySelector('.nav-item.active');
+    return active ? active.textContent.trim() : (document.title || 'Portal');
+  }
+  function _propertyName(){
+    var d = (window.__PORTAL_PROP_DATA && window.__PORTAL_PROP_DATA.property) || {};
+    return d.name || d.property_name || '';
+  }
+
+  /* Ask the server whether reports have anywhere to land BEFORE showing the
+     button. Appearing, accepting a carefully written report and only then
+     admitting there is no list configured is the worst possible order.
+
+     Called from three places on purpose. window.__PORTAL_EMAIL__ is set by
+     HubL when the visitor is a known HubSpot contact, but Clerk ALSO sets it
+     from an async callback, so on a Clerk session it is still empty when this
+     script first runs. Checking once and giving up is why the button did not
+     appear on the first deploy. seoCheckEntitlement and contentCheckEntitlement
+     solve this the same way — DOMContentLoaded plus portal-data-ready — and the
+     timer covers a Clerk login that resolves without any property data being
+     fetched. */
+  function _boot(){
+    if (_ready || _booting) return;
+    if (!_email()) return;          // no identity yet — a later trigger retries
+    _booting = true;
+    fetch(_api() + '/api/feedback/health', { headers: { 'X-Portal-Email': _email() } })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        _booting = false;
+        if (!d || !d.ready) {
+          if (d && d.reason) console.warn('[feedback] widget hidden:', d.reason);
+          return;
+        }
+        _ready = true;
+        _renderSeverities(d.severities || []);
+        document.getElementById('fb-launch').style.display = 'inline-flex';
+      })
+      .catch(function(){ _booting = false; });
+  }
+
+  function _renderSeverities(list){
+    if (!list.length) {
+      list = [{key:'blocker',label:'Blocked me'},{key:'bug',label:'Wrong or broken'},
+              {key:'idea',label:'Works, but…'}];
+    }
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      html += '<button type="button" data-sev="' + _e(list[i].key) + '"'
+            + ' onclick="fbSeverity(\'' + _e(list[i].key) + '\')">'
+            + _e(list[i].label) + '</button>';
+    }
+    document.getElementById('fb-sev').innerHTML = html;
+    fbSeverity(_sev);
+  }
+
+  window.fbSeverity = function(key){
+    _sev = key;
+    var buttons = document.querySelectorAll('#fb-sev button');
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].className = buttons[i].getAttribute('data-sev') === key ? 'on' : '';
+    }
+  };
+
+  window.fbOpen = function(){
+    if (!_ready) return;
+    document.getElementById('fb-ctx').innerHTML =
+      'Attaching: <b>' + _e(_currentPage()) + '</b>'
+      + (_propertyName() ? ' · ' + _e(_propertyName()) : '')
+      + ' · ' + window.innerWidth + '×' + window.innerHeight;
+    document.getElementById('fb-modal').classList.add('open');
+    setTimeout(function(){ document.getElementById('fb-note').focus(); }, 40);
+  };
+
+  window.fbClose = function(){
+    document.getElementById('fb-modal').classList.remove('open');
+  };
+
+  function _addShot(file){
+    if (_shots.length >= 4) { _say('Four screenshots is the limit.', 'err'); return; }
+    if (file.size > 10 * 1024 * 1024) { _say(file.name + ' is over 10MB.', 'err'); return; }
+    var shot = { name: file.name || ('paste-' + (_shots.length + 1) + '.png'),
+                 type: file.type || 'image/png', blob: file,
+                 url: URL.createObjectURL(file) };
+    _shots.push(shot);
+    _renderShots();
+    _say('');
+  }
+
+  function _renderShots(){
+    var html = '';
+    for (var i = 0; i < _shots.length; i++) {
+      html += '<div class="fb-shot"><img src="' + _shots[i].url + '" alt="">'
+            + '<button type="button" title="Remove" onclick="fbDropShot(' + i + ')">&times;</button></div>';
+    }
+    document.getElementById('fb-shots').innerHTML = html;
+  }
+
+  window.fbDropShot = function(i){
+    if (_shots[i]) URL.revokeObjectURL(_shots[i].url);
+    _shots.splice(i, 1);
+    _renderShots();
+  };
+
+  window.fbPick = function(ev){
+    var files = ev.target.files || [];
+    for (var i = 0; i < files.length; i++) _addShot(files[i]);
+    ev.target.value = '';
+  };
+
+  function _say(text, kind){
+    var el = document.getElementById('fb-msg');
+    el.textContent = text || '';
+    el.className = kind || '';
+  }
+
+  window.fbSend = function(){
+    if (_sending) return;
+    var note = document.getElementById('fb-note').value.trim();
+    if (!note && !_shots.length) {
+      _say('Say what happened, or attach a screenshot.', 'err');
+      return;
+    }
+    _sending = true;
+    document.getElementById('fb-send').setAttribute('disabled', 'disabled');
+    _say('Sending…');
+
+    var fd = new FormData();
+    fd.append('note', note);
+    fd.append('severity', _sev);
+    fd.append('page', _currentPage());
+    fd.append('url', window.location.href);
+    fd.append('company_id', window.__PORTAL_COMPANY_ID__ || '');
+    fd.append('property_name', _propertyName());
+    fd.append('viewport', window.innerWidth + 'x' + window.innerHeight);
+    for (var i = 0; i < _shots.length; i++) {
+      fd.append('screenshot', _shots[i].blob, _shots[i].name);
+    }
+
+    fetch(_api() + '/api/feedback', {
+      method: 'POST', headers: { 'X-Portal-Email': _email() }, body: fd
+    })
+      .then(function(r){ return r.json().then(function(j){ return {ok: r.ok, body: j}; }); })
+      .then(function(res){
+        _sending = false;
+        document.getElementById('fb-send').removeAttribute('disabled');
+        if (!res.ok || !res.body.ok) {
+          _say((res.body && res.body.error) || 'That did not send. Nothing was saved.', 'err');
+          return;
+        }
+        var extra = (res.body.dropped && res.body.dropped.length)
+          ? ' (' + res.body.dropped.length + ' screenshot issue)' : '';
+        _say('Filed' + extra + '. Thank you.', 'ok');
+        document.getElementById('fb-note').value = '';
+        while (_shots.length) fbDropShot(0);
+        setTimeout(function(){ fbClose(); _say(''); }, 1400);
+      })
+      .catch(function(err){
+        _sending = false;
+        document.getElementById('fb-send').removeAttribute('disabled');
+        _say('Network error — nothing was saved. Try again.', 'err');
+      });
+  };
+
+  /* Paste anywhere while the panel is open. This is the fast path: screenshot
+     with the OS shortcut, Cmd-V, done. */
+  document.addEventListener('paste', function(ev){
+    if (!document.getElementById('fb-modal').classList.contains('open')) return;
+    var items = (ev.clipboardData && ev.clipboardData.items) || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.indexOf('image') === 0) {
+        var file = items[i].getAsFile();
+        if (file) { _addShot(file); ev.preventDefault(); }
+      }
+    }
+  });
+
+  var drop = document.getElementById('fb-drop');
+  ['dragenter','dragover'].forEach(function(t){
+    drop.addEventListener(t, function(e){ e.preventDefault(); drop.classList.add('hot'); });
+  });
+  ['dragleave','drop'].forEach(function(t){
+    drop.addEventListener(t, function(e){ e.preventDefault(); drop.classList.remove('hot'); });
+  });
+  drop.addEventListener('drop', function(e){
+    var files = (e.dataTransfer && e.dataTransfer.files) || [];
+    for (var i = 0; i < files.length; i++) _addShot(files[i]);
+  });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') fbClose();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _boot);
+  } else { _boot(); }
+  document.addEventListener('portal-data-ready', _boot);
+  // Bounded retry for a Clerk session that resolves late and fires no event.
+  var _tries = 0;
+  var _poll = setInterval(function(){
+    if (_ready || ++_tries > 8) { clearInterval(_poll); return; }
+    _boot();
+  }, 1500);
+})();
+</script>
   {{ standard_footer_includes }}
 </body>
 </html>
