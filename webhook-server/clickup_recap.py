@@ -138,6 +138,20 @@ def _emit_matched(task_id, company, method):
         logger.warning("clickup_recap: match event failed for %s: %s", task_id, e)
 
 
+def _emit_failed(task_id, company, ttype, reason):
+    """Best-effort funnel event — never let instrumentation break anything."""
+    try:
+        import loop_ticket_events
+        props = company.get("properties") or {}
+        loop_ticket_events.record_recap_failed(
+            (props.get("uuid") or "").strip() or None,
+            str(company.get("id") or "") or None,
+            task_id=str(task_id), ticket_type=ttype, reason=reason,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("clickup_recap: failure event failed for %s: %s", task_id, e)
+
+
 def _emit_unmatched(task_id, reason, portal_created):
     try:
         import loop_ticket_events
@@ -185,8 +199,13 @@ def match_company_for_ticket(task):
     return None, "no confident uuid match"
 
 
-def process_completed_task(task_id, dry_run=False):
-    """Full pipeline for one completed ticket. dry_run returns the draft without posting."""
+def process_completed_task(task_id, dry_run=False, backdate=False):
+    """Full pipeline for one completed ticket. dry_run returns the draft without posting.
+
+    `backdate` dates the note to the ticket's own completion time instead of
+    now — for replaying recaps that were missed while the pipeline was down.
+    See scripts/backfill_ticket_recaps.py.
+    """
     task = clickup_client.get_task(task_id)
     if not task:
         return {"skipped": "task not found"}
@@ -252,7 +271,17 @@ def process_completed_task(task_id, dry_run=False):
     if not (recap.get("note") or "").strip():
         # The profile proposals above stand on their own — a ticket can change
         # the property record even when it produces no client-facing recap.
-        return {"skipped": "empty recap", "reason": recap.get("review_reason"),
+        #
+        # This exit used to be the pipeline's blind spot: it leaves no note, no
+        # `recap-posted` tag and — until this event existed — no trace anywhere,
+        # so a total outage was indistinguishable from a quiet week. The ticket
+        # is NOT tagged, so a re-fire replays it once the cause is fixed.
+        reason = recap.get("review_reason") or "empty recap"
+        logger.error("clickup_recap: matched task %s (company %s) produced NO recap — %s",
+                     task_id, company_id, reason)
+        if not dry_run:
+            _emit_failed(task_id, company, ttype, reason)
+        return {"skipped": "empty recap", "reason": reason,
                 "type": ttype, "profile_proposals": len(profile_proposals)}
 
     if dry_run:
@@ -274,6 +303,7 @@ def process_completed_task(task_id, dry_run=False):
         company_id, recap["note"], name, ttype,
         needs_review=recap.get("needs_review"), review_reason=recap.get("review_reason"),
         pdf_bytes=pdf_bytes,
+        timestamp_ms=task.get("date_done") if backdate else None,
     )
     clickup_client.add_tag(task_id, PROCESSED_TAG)
     logger.info("clickup_recap: posted recap for task %s → company %s (%s)", task_id, company_id, method)

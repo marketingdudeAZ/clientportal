@@ -95,7 +95,7 @@ LOOP_EVENT_TYPES = {
     "r1_violation",
     # ops — portal ticketing funnel (see loop_ticket_events.py)
     "portal_ticket_filed", "portal_ticket_recap_matched",
-    "portal_ticket_unmatched",
+    "portal_ticket_unmatched", "portal_ticket_recap_failed",
     # operational job tracking
     "job",
 }

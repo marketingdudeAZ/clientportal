@@ -14,6 +14,16 @@ exactly where we need to read it.
                                  construction this should be impossible, so it
                                  is an alert, not a log line
 
+    portal_ticket_recap_failed   the task DID resolve to a company but the recap
+                                 came back empty, so no note was posted. This is
+                                 the hop that went dark for three days in August
+                                 2026: an unpinned SDK upgrade made every model
+                                 call throw, `generate_recap` swallowed it into
+                                 an empty note, and the ticket fell out of the
+                                 pipeline leaving no note, no tag, and no event.
+                                 Matching kept emitting, so the funnel looked
+                                 alive right up to the hop that was broken.
+
 Why these are `ops` and not `engage`/`convert`: a service request is platform
 workflow, not movement of a property's marketing funnel. Filing a ticket does
 not attract, engage, or convert a renter. Putting them in a Loop stage would
@@ -99,4 +109,34 @@ def record_recap_unmatched(
         status="error" if portal_created else "skipped",
         error_message=reason if portal_created else None,
         payload={"reason": reason, "portal_created": portal_created},
+    )
+
+
+def record_recap_failed(
+    property_uuid: str | None,
+    company_id: str | None,
+    *,
+    task_id: str,
+    ticket_type: str,
+    reason: str,
+) -> str:
+    """A matched task produced no recap, so nothing was posted to the company.
+
+    Always status="error". Unlike an unmatched ticket — which can legitimately
+    be a ticket we have no business writing about — a matched ticket with no
+    recap is always a defect: we know the company, we just failed to say
+    anything. `reason` carries `generate_recap`'s review_reason, which is where
+    a swallowed model exception ends up ("generation error: ...").
+    """
+    return loop_writer.record(
+        stage="ops",
+        event_type="portal_ticket_recap_failed",
+        property_uuid=property_uuid,
+        company_id=company_id,
+        source=_SOURCE,
+        source_id=str(task_id),
+        trigger="webhook",
+        status="error",
+        error_message=reason or "empty recap",
+        payload={"ticket_type": ticket_type, "reason": reason},
     )

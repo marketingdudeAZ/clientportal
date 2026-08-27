@@ -4,7 +4,12 @@ waitress==3.0.2
 requests==2.32.3
 python-dotenv==1.0.1
 PyJWT==2.9.0
-anthropic>=0.40.0
+# Pinned, not floated: anthropic 1.0.0 (2026-08-20) is a major release that
+# moves the SDK to httpx 2. A redeploy on 2026-08-24 picked it up from the
+# old `>=0.40.0` and every ticket recap went silently empty for three days
+# (ticket_recap.generate_recap swallows the exception into an empty note).
+# 0.125.0 is the last 0.x and is verified against the live recap path.
+anthropic==0.125.0
 Pillow>=10.0.0
 gspread==6.1.2
 google-auth==2.29.0
