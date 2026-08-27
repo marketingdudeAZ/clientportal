@@ -199,8 +199,13 @@ def match_company_for_ticket(task):
     return None, "no confident uuid match"
 
 
-def process_completed_task(task_id, dry_run=False):
-    """Full pipeline for one completed ticket. dry_run returns the draft without posting."""
+def process_completed_task(task_id, dry_run=False, backdate=False):
+    """Full pipeline for one completed ticket. dry_run returns the draft without posting.
+
+    `backdate` dates the note to the ticket's own completion time instead of
+    now — for replaying recaps that were missed while the pipeline was down.
+    See scripts/backfill_ticket_recaps.py.
+    """
     task = clickup_client.get_task(task_id)
     if not task:
         return {"skipped": "task not found"}
@@ -298,6 +303,7 @@ def process_completed_task(task_id, dry_run=False):
         company_id, recap["note"], name, ttype,
         needs_review=recap.get("needs_review"), review_reason=recap.get("review_reason"),
         pdf_bytes=pdf_bytes,
+        timestamp_ms=task.get("date_done") if backdate else None,
     )
     clickup_client.add_tag(task_id, PROCESSED_TAG)
     logger.info("clickup_recap: posted recap for task %s → company %s (%s)", task_id, company_id, method)

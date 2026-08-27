@@ -66,18 +66,28 @@ def _company_owner_id(company_id: str) -> str | None:
 
 def post_recap_to_company(company_id: str, note_text: str, property_name: str,
                           ticket_type: str = "general", needs_review: bool = False,
-                          review_reason: str = "", pdf_bytes: bytes = None) -> dict:
+                          review_reason: str = "", pdf_bytes: bytes = None,
+                          timestamp_ms: int = None) -> dict:
     """Create the recap note (owner-authored) + an AM close-out task. Returns ids.
 
     If pdf_bytes is given, upload it to HubSpot Files (permanent URL) and attach
     it to the note (the detailed internal recap).
+
+    `timestamp_ms` dates the note. It defaults to now, which is right for the
+    live path — the ticket just completed. A backfill must pass the ticket's
+    completion time instead: replaying a month of missed recaps with today's
+    timestamp stacks a dozen notes on one record all dated the same minute, and
+    the activity timeline stops matching when the work actually happened. The
+    AM close-out task keeps a real due date either way — it is work to do now,
+    not then.
     """
     out = {"note_id": None, "task_id": None, "owner_id": None, "pdf_url": None}
     if not (HUBSPOT_API_KEY and company_id and (note_text or "").strip()):
         return out
     owner_id = _company_owner_id(company_id)
     out["owner_id"] = owner_id
-    ts = int(time.time() * 1000)
+    now = int(time.time() * 1000)
+    ts = int(timestamp_ms) if timestamp_ms else now
 
     # 0. Detailed recap PDF → HubSpot Files (permanent), attached to the note.
     file_id = None
@@ -120,7 +130,7 @@ def post_recap_to_company(company_id: str, note_text: str, property_name: str,
         "hs_task_body": task_body,
         "hs_task_status": "NOT_STARTED",
         "hs_task_priority": "HIGH" if needs_review else "MEDIUM",
-        "hs_timestamp": ts,
+        "hs_timestamp": now,
     }
     if owner_id:
         task_props["hubspot_owner_id"] = owner_id
