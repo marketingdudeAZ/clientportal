@@ -61,6 +61,7 @@ from flask import Blueprint, jsonify, request
 import asset_index
 import asset_resizer
 import drive_client
+import asset_naming
 import gcs_client
 import hubspot_client
 from _route_utils import current_portal_email, preflight_response
@@ -172,7 +173,7 @@ def _kind_for(filename: str, requested: str) -> str:
 
 
 def _upload_one(file_storage, folder_name: str, property_uuid: str,
-                kind_hint: str, display_name: str) -> dict:
+                kind_hint: str, display_name: str, subcategory: str = "") -> dict:
     """Validate → resize → Drive → one index row for a single file.
 
     Raises asset_resizer.ValidationError for user-fixable problems (the caller
@@ -198,9 +199,15 @@ def _upload_one(file_storage, folder_name: str, property_uuid: str,
     )
 
     file_ids, variants = {}, {}
-    for variant, (payload, mime, drive_filename) in payloads.items():
+    for variant, (payload, mime, variant_filename) in payloads.items():
+        # Fold what the picture actually shows into the filename. The variant
+        # token is preserved exactly — asset_index and the ad platforms key on
+        # it — and the name degrades to the bare variant when there is nothing
+        # useful to say.
+        stored_filename = asset_naming.build_filename(
+            variant_filename, description=name, subcategory=subcategory)
         created = _store().upload_file(
-            asset_folder_id, drive_filename, payload, mime,
+            asset_folder_id, stored_filename, payload, mime,
             description=name,
             app_properties={
                 "asset_id": asset_id,
@@ -227,7 +234,8 @@ def _upload_one(file_storage, folder_name: str, property_uuid: str,
 
 @assets_bp.route("/api/assets/upload", methods=["POST", "OPTIONS"])
 def upload():
-    """Multipart upload: `uuid`, `files` (repeated), optional `names`, `kinds`, `kind`.
+    """Multipart upload: `uuid`, `files` (repeated), optional `names`, `kinds`,
+    `subcategories`, `kind`.
 
     `names` and `kinds` are JSON lists positional to `files` — the same
     convention the existing batch-upload UI uses for `metadata`. `kind` is a
@@ -254,6 +262,9 @@ def upload():
 
     names = _positional_list(request.form.get("names", ""))
     kinds = _positional_list(request.form.get("kinds", ""))
+    # The analyzer's subcategory, positional like the others. Optional: the
+    # filename is still descriptive without it, just less grouped.
+    subcategories = _positional_list(request.form.get("subcategories", ""))
     batch_kind = request.form.get("kind", "")
 
     rows, rejected, unwired = [], [], None
@@ -264,6 +275,7 @@ def upload():
                 file_storage, folder_name, property_uuid,
                 (kinds[i] if i < len(kinds) else "") or batch_kind,
                 names[i] if i < len(names) else "",
+                subcategories[i] if i < len(subcategories) else "",
             ))
         except asset_resizer.ValidationError as e:
             rejected.append({"index": i, "filename": filename, "reason": e.message})
