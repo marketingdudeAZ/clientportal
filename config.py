@@ -38,6 +38,12 @@ KEYWORD_DIFFICULTY_BATCH_MAX = 1000
 TRENDS_DEFAULT_TIMEFRAME = "past_12_months"
 
 # --- Phase 2: Content Planner (iPullRank / GEO) ---
+# Identity-linked API keys are not bound to one workspace, so every request
+# must name the workspace it acts in. Without this header such a key returns
+# 400 invalid_request_error on EVERY call — which is how the platform's Claude
+# calls went down in August 2026. Empty is correct for an ordinary
+# workspace-scoped key; the header is simply omitted.
+ANTHROPIC_WORKSPACE_ID = os.getenv("ANTHROPIC_WORKSPACE_ID", "")
 CLAUDE_BRIEF_MODEL = "claude-haiku-4-5-20251001"
 CLAUDE_BRIEF_MAX_TOKENS = 2000
 CONTENT_DECAY_RANK_THRESHOLD = 5      # positions dropped to count as decay

@@ -35,6 +35,20 @@ logger = logging.getLogger(__name__)
 from services.fluency_ingestion.apt_iq_reader import AMENITY_COLS
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+
+
+def _workspace_headers() -> dict:
+    """Same workspace header the SDK path sends — see skills.llm_gateway.
+
+    This module bypasses the SDK, so it does not get the fix for free.
+    """
+    try:
+        from skills.llm_gateway import workspace_headers
+        return workspace_headers()
+    except Exception:  # noqa: BLE001 — never let auth plumbing break a scrape
+        return {}
+
+
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = "claude-sonnet-4-5"
 TEMPERATURE = 0.2
@@ -161,6 +175,7 @@ def scrape_property(property_url: str) -> dict | None:
                 "x-api-key":         ANTHROPIC_API_KEY,
                 "anthropic-version": "2023-06-01",
                 "Content-Type":      "application/json",
+                **_workspace_headers(),
             },
             json=body,
             timeout=60,

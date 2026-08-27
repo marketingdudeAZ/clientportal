@@ -15,7 +15,7 @@ import json
 import logging
 import re
 
-import anthropic
+from skills import llm_gateway
 
 from config import ANTHROPIC_API_KEY, CLAUDE_AGENT_MODEL
 from video_pipeline_config import validate_scene_plan
@@ -141,7 +141,7 @@ def plan_scenes(
     user_message = "\n".join(p for p in user_parts if p is not None)
 
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = llm_gateway.anthropic_client()
         message = client.messages.create(
             model=CLAUDE_AGENT_MODEL,
             max_tokens=1500,

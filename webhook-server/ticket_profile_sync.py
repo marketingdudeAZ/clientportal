@@ -225,7 +225,7 @@ def _extract_with_ai(task: dict, comments: list, ticket_type: str) -> list[tuple
         if not ANTHROPIC_API_KEY:
             logger.info("ticket_profile_sync: AI extract on but no ANTHROPIC_API_KEY")
             return []
-        import anthropic
+        from skills import llm_gateway
 
         narrative = ticket_recap._internal_narrative(task, comments)
         if not narrative.strip():
@@ -242,7 +242,7 @@ def _extract_with_ai(task: dict, comments: list, ticket_type: str) -> list[tuple
         if not catalog:
             return []
 
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = llm_gateway.anthropic_client()
         msg = client.messages.create(
             model=CLAUDE_DIGEST_MODEL, max_tokens=800, temperature=0,
             system=_AI_SYSTEM,

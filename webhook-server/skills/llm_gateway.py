@@ -142,9 +142,37 @@ def _get_client():
             return _client
         if not is_configured():
             raise LLMNotConfigured("ANTHROPIC_API_KEY is not set")
-        import anthropic
-        _client = anthropic.Anthropic(timeout=_TIMEOUT, max_retries=_MAX_RETRIES)
+        _client = anthropic_client(timeout=_TIMEOUT, max_retries=_MAX_RETRIES)
         return _client
+
+
+def workspace_headers() -> dict:
+    """The headers an identity-linked API key needs, or {} for a normal key.
+
+    An identity-linked key is not bound to a single workspace, so the API
+    refuses to guess which one a request acts in — it returns 400 on every
+    call until told. A workspace-scoped key needs nothing, and sending the
+    header anyway would be wrong, so this is empty unless configured.
+    """
+    from config import ANTHROPIC_WORKSPACE_ID
+    ws = (ANTHROPIC_WORKSPACE_ID or "").strip()
+    return {"anthropic-workspace-id": ws} if ws else {}
+
+
+def anthropic_client(**kwargs):
+    """The one place an Anthropic SDK client is constructed.
+
+    Nineteen modules used to each build their own, which is exactly why a key
+    swap could take down every Claude call on the platform at once with no
+    single place to fix it. This is the narrow version of CLAUDE.md Key Rule 2:
+    callers keep their own prompts and models — only the client construction
+    moves here, so auth is configured once and correctly.
+    """
+    import anthropic
+    from config import ANTHROPIC_API_KEY
+    headers = {**workspace_headers(), **(kwargs.pop("default_headers", None) or {})}
+    kwargs.setdefault("api_key", ANTHROPIC_API_KEY)
+    return anthropic.Anthropic(default_headers=headers or None, **kwargs)
 
 
 def _emit_usage(resp: Response, purpose: str, elapsed_ms: int) -> None:

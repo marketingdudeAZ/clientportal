@@ -140,8 +140,8 @@ def _assemble_context(company_id):
 
 
 def _call_claude(ctx):
-    import anthropic
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    from skills import llm_gateway
+    client = llm_gateway.anthropic_client()
     user = ("Property marketing data (one month):\n" + json.dumps(ctx, indent=2) +
             "\n\nProduce the channel-aware SWOT as JSON now.")
     msg = client.messages.create(

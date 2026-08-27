@@ -5210,8 +5210,8 @@ def _generate_callprep_payload(company_id: str, company_props: dict, brief: dict
     payload = None
     if ANTHROPIC_API_KEY:
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            from skills import llm_gateway
+            client = llm_gateway.anthropic_client()
             msg = client.messages.create(
                 model=CLAUDE_AGENT_MODEL,
                 max_tokens=1500,

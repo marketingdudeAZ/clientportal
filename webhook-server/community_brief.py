@@ -831,7 +831,7 @@ def _llm_call(*, company_props: dict, property_name: str,
               system: str, max_tokens: int) -> str:
     """Shared LLM invocation for both summary and full prose preview."""
     try:
-        import anthropic
+        from skills import llm_gateway
         from config import ANTHROPIC_API_KEY, CLAUDE_AGENT_MODEL
     except ImportError:
         return "Preview unavailable in this environment."
@@ -859,7 +859,7 @@ def _llm_call(*, company_props: dict, property_name: str,
     user_input = f"PROPERTY: {property_name}\n\n" + "\n".join(facts)
 
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = llm_gateway.anthropic_client()
         message = client.messages.create(
             model=CLAUDE_AGENT_MODEL,
             max_tokens=max_tokens,

@@ -168,7 +168,7 @@ Style rules:
 
 def _refine_reasons(classified: list[dict]) -> None:
     """Batch a single Claude Haiku call to rewrite reasons in-place."""
-    import anthropic
+    from skills import llm_gateway
     from config import ANTHROPIC_API_KEY, CLAUDE_BRIEF_MODEL
 
     if not ANTHROPIC_API_KEY:
@@ -188,7 +188,7 @@ def _refine_reasons(classified: list[dict]) -> None:
         for r in classified
     ]
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = llm_gateway.anthropic_client()
     message = client.messages.create(
         model=CLAUDE_BRIEF_MODEL,
         max_tokens=4000,

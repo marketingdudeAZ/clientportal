@@ -130,8 +130,8 @@ def analyze_image(file_bytes: bytes, filename: str) -> dict:
         return _sanitize_result({}, filename)
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        from skills import llm_gateway
+        client = llm_gateway.anthropic_client()
         message = client.messages.create(
             model=CLAUDE_AGENT_MODEL,
             max_tokens=250,

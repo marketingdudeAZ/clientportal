@@ -75,7 +75,7 @@ def generate_brief(cluster_data: dict) -> dict:
 
     Returns validated brief dict. Raises ValueError if Claude returns invalid JSON.
     """
-    import anthropic
+    from skills import llm_gateway
     from config import ANTHROPIC_API_KEY
 
     if not ANTHROPIC_API_KEY:
@@ -83,7 +83,7 @@ def generate_brief(cluster_data: dict) -> dict:
 
     user_message = _build_user_message(cluster_data)
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = llm_gateway.anthropic_client()
     logger.info("Generating brief for hub keyword: %s", cluster_data.get("hub_keyword"))
     message = client.messages.create(
         model=CLAUDE_BRIEF_MODEL,

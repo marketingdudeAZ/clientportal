@@ -165,13 +165,13 @@ def score_slop(field_name: str, text: str) -> dict[str, Any]:
         return {"slop_score": 0.0, "reason": "text too short to classify"}
 
     try:
-        import anthropic
+        from skills import llm_gateway
         from config import ANTHROPIC_API_KEY, CLAUDE_BRIEF_MODEL
 
         if not ANTHROPIC_API_KEY:
             return {"slop_score": 0.5, "reason": "ANTHROPIC_API_KEY not set"}
 
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = llm_gateway.anthropic_client()
         message = client.messages.create(
             model=CLAUDE_BRIEF_MODEL,
             max_tokens=200,

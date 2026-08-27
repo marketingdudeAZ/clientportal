@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import requests
-import anthropic
+from skills import llm_gateway
 
 from config import (
     ANTHROPIC_API_KEY,
@@ -151,7 +151,7 @@ def generate_script_with_assets(
 
     logger.info("Generating script for %s (%d assets available)", property_name, len(assets or []))
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = llm_gateway.anthropic_client()
     message = client.messages.create(
         model=CLAUDE_AGENT_MODEL,
         max_tokens=1000,
