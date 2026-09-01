@@ -123,6 +123,14 @@ def _match_is_weak(task_name: str, company_name: str, method: str) -> str:
     looking for a property that is nothing like the one on the ticket, not for
     a tidy string match.
     """
+    # Only opaque identifiers need corroborating. A domain names the property
+    # out loud — "olmstedsavannah.com" cannot be silently confused with another
+    # property the way a mistyped Yardi code can — and matching already refuses
+    # anything that resolves to more than one uuid-bearing company. The portal
+    # mapping is exact by construction. A Yardi code is the one route where a
+    # wrong value looks exactly like a right one.
+    if method in ("portal_mapping", "url:domain", "url:website"):
+        return ""
     ticket, company = _tokens(task_name), _tokens(company_name)
     if not (ticket and company) or (ticket & company):
         return ""
@@ -131,6 +139,38 @@ def _match_is_weak(task_name: str, company_name: str, method: str) -> str:
         return ""
     return (f"no name overlap ({method}): ticket {sorted(ticket)} "
             f"vs company {sorted(company)}")
+
+
+def preflight() -> str:
+    """Empty string if a replay can actually produce a recap, else why not.
+
+    Without this, `--post` walks the whole backlog calling the model, gets a
+    400 on every one, writes no note and no tag, and emits a failure event per
+    ticket — a thousand-ticket no-op that looks like work. That is exactly the
+    shape of the August 2026 outage, which is what created this backlog in the
+    first place. One cheap call up front turns it into one clear error.
+    """
+    try:
+        from skills import llm_gateway
+    except Exception as e:  # noqa: BLE001
+        return f"cannot import the LLM gateway: {e}"
+    try:
+        client = llm_gateway.anthropic_client()
+        client.messages.create(
+            model=llm_gateway.resolve_model(None),
+            max_tokens=8,
+            messages=[{"role": "user", "content": "reply with the single word: ok"}],
+        )
+    except Exception as e:  # noqa: BLE001
+        msg = str(e)
+        if "anthropic-workspace-id" in msg:
+            return ("ANTHROPIC_WORKSPACE_ID is not set. The key is identity-linked, so every "
+                    "model call returns 400 until the workspace id is configured. Set it in the "
+                    "environment this script runs in (and in Render for the live path), then re-run.")
+        if "authentication_error" in msg or "401" in msg:
+            return f"ANTHROPIC_API_KEY is not valid here: {msg[:160]}"
+        return f"model call failed: {msg[:200]}"
+    return ""
 
 
 def classify(task) -> dict:
@@ -160,6 +200,10 @@ def main() -> int:
     ap.add_argument("--since", default="2026-08-01", help="UTC date, inclusive (YYYY-MM-DD)")
     ap.add_argument("--post", action="store_true",
                     help="replay the MISSED tickets for real (posts client-visible notes)")
+    ap.add_argument("--limit", type=int, default=0,
+                    help="with --post, replay at most N tickets (0 = no limit). Start small.")
+    ap.add_argument("--skip-preflight", action="store_true",
+                    help="do not verify the model path before posting (not recommended)")
     args = ap.parse_args()
 
     since = datetime.datetime.strptime(args.since, "%Y-%m-%d")
@@ -199,6 +243,17 @@ def main() -> int:
           f"{len(buckets.get('REVIEW', []))} held for review, "
           f"{len(buckets.get('UNMATCHED', []))} not replayable.")
         return 0
+
+    if not args.skip_preflight:
+        why = preflight()
+        if why:
+            print(f"\nPREFLIGHT FAILED — nothing was posted.\n  {why}", file=sys.stderr)
+            return 2
+        print("\npreflight ok: the model path answers.", file=sys.stderr)
+
+    if args.limit and args.limit < len(missed):
+        print(f"\n--limit {args.limit}: replaying the {args.limit} oldest of {len(missed)}.")
+        missed = missed[:args.limit]
 
     print(f"\nReplaying {len(missed)} ticket(s) through the production path…")
     ok = failed = 0
