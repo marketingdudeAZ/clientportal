@@ -26,6 +26,18 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
+def _workspace_headers() -> dict:
+    """Same workspace header the SDK path sends — see skills.llm_gateway.
+
+    This module bypasses the SDK, so it does not get the fix for free.
+    """
+    try:
+        from skills.llm_gateway import workspace_headers
+        return workspace_headers()
+    except Exception:  # noqa: BLE001 — never let auth plumbing break a write
+        return {}
+
 # ── Config ─────────────────────────────────────────────────────────────────────
 KB_DRAFT_FOLDER_ID = os.getenv("KB_DRAFT_FOLDER_ID", "12Af-DJNd0OqZ4a2GlfMnkSoi5aeKHfJS")
 KB_LOG_SHEET_ID    = os.getenv("KB_LOG_SHEET_ID",    "18oIx_CmBcTPDsG44YY3mFy2CfKhSjcTshfWYsa3gheI")
@@ -160,6 +172,7 @@ def _call_claude(title: str, description: str, thread_messages, category: str, r
                 "x-api-key": ANTHROPIC_API_KEY,
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
+                **_workspace_headers(),
             },
             json={
                 "model": CLAUDE_MODEL,

@@ -94,8 +94,8 @@ def _call_claude(user_message):
     if not ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
-    import anthropic
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    from skills import llm_gateway
+    client = llm_gateway.anthropic_client()
     message = client.messages.create(
         model=CLAUDE_DIGEST_MODEL,
         max_tokens=CLAUDE_DIGEST_MAX_TOKENS,

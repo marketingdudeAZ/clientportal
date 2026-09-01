@@ -195,12 +195,12 @@ Text content:
 def _claude_extract(provider: str, url: str, jsonld: list[dict], text: str) -> dict[str, Any]:
     """Send sanitized page to Claude Haiku for structured extraction."""
     try:
-        import anthropic
+        from skills import llm_gateway
 
         from config import ANTHROPIC_API_KEY, CLAUDE_BRIEF_MODEL
         if not ANTHROPIC_API_KEY:
             return {}
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = llm_gateway.anthropic_client()
         prompt = _EXTRACTION_PROMPT.format(
             provider=provider,
             url=url[:500],

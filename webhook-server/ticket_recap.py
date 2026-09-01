@@ -187,8 +187,8 @@ def generate_recap(task: dict, comments: list, ticket_type: str = "general") -> 
         if not ANTHROPIC_API_KEY:
             result["review_reason"] = "LLM unavailable"
             return result
-        import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        from skills import llm_gateway
+        client = llm_gateway.anthropic_client()
         extra = ""
         if ticket_type in ("budget_update", "new_account_build"):
             extra = ("\n\nThis is a " + ("budget update" if ticket_type == "budget_update"

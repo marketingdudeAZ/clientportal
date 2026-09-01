@@ -88,8 +88,8 @@ def check_fair_housing(items):
     try:
         from config import ANTHROPIC_API_KEY, CLAUDE_BRIEF_MODEL
         if ANTHROPIC_API_KEY:
-            import anthropic
-            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            from skills import llm_gateway
+            client = llm_gateway.anthropic_client()
             blob = "\n\n".join(f"[{it.get('field', 'text')}]\n{it['text']}" for it in items)
             msg = client.messages.create(
                 model=CLAUDE_BRIEF_MODEL, max_tokens=900, temperature=0,

@@ -267,7 +267,7 @@ def draft_brief(
     Returns a dict keyed by DRAFTABLE_FIELDS with {value, confidence} entries.
     Raises BriefDrafterError if Sonnet returns unparseable JSON.
     """
-    import anthropic
+    from skills import llm_gateway
     import base64
     from config import ANTHROPIC_API_KEY, CLAUDE_AGENT_MODEL
 
@@ -349,7 +349,7 @@ def draft_brief(
         "text": "Draft the client brief JSON now. Return ONLY the JSON object.",
     })
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = llm_gateway.anthropic_client()
     logger.info("brief_ai_drafter: drafting for domain=%s (deck=%s rfp=%s site_chars=%d)",
                 domain, bool(deck_pdf_bytes), bool(rfp_pdf_bytes), len(site_text or ""))
 
@@ -627,7 +627,7 @@ def draft_community_brief_overrides(*, domain: str, property_name: str,
     Costs one Anthropic round-trip (~$0.02 with caching). Falls back to {}
     on any error so the caller's main flow continues.
     """
-    import anthropic
+    from skills import llm_gateway
     from config import ANTHROPIC_API_KEY, CLAUDE_AGENT_MODEL
 
     if not ANTHROPIC_API_KEY:
@@ -652,7 +652,7 @@ def draft_community_brief_overrides(*, domain: str, property_name: str,
     ]
 
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = llm_gateway.anthropic_client()
         resp = client.messages.create(
             model=CLAUDE_AGENT_MODEL,
             max_tokens=2200,

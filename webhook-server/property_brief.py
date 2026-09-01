@@ -1171,7 +1171,7 @@ def _call_llm_for_brief(*, prompt: str, site_text: str, domain: str) -> str:
     Kept narrow on purpose: callers shouldn't reach into Anthropic plumbing
     and this function is the only natural mock point in tests.
     """
-    import anthropic
+    from skills import llm_gateway
     from config import ANTHROPIC_API_KEY, CLAUDE_AGENT_MODEL
 
     if not ANTHROPIC_API_KEY:
@@ -1201,7 +1201,7 @@ def _call_llm_for_brief(*, prompt: str, site_text: str, domain: str) -> str:
     user_content.append({"type": "text", "text": prompt})
     user_content.append({"type": "text", "text": "Write the full brief now in markdown."})
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = llm_gateway.anthropic_client()
     message = client.messages.create(
         model=CLAUDE_AGENT_MODEL,
         max_tokens=2500,
