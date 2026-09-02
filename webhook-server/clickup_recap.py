@@ -299,6 +299,19 @@ def process_completed_task(task_id, dry_run=False, backdate=False):
     except Exception as e:
         logger.warning("clickup_recap: PDF build failed for %s: %s", task_id, e)
 
+    # Re-check the tag immediately before writing. The check at the top of this
+    # function is ~15s stale by now — recap generation, the profile proposals and
+    # the PDF all sit in between — and the receiver runs each fire in its own
+    # background thread. ClickUp re-fires taskStatusUpdated for the same task
+    # (three fires on one ticket is normal in the observed data), so without this
+    # two threads both pass the first check and both post a client-visible note.
+    # This does not make the claim atomic; it closes the expensive part of the
+    # window, which is where the duplicates actually happen.
+    fresh = clickup_client.get_task(task_id) or {}
+    if PROCESSED_TAG in [(t.get("name") or "").lower() for t in (fresh.get("tags") or [])]:
+        logger.info("clickup_recap: task %s was tagged while we were generating — not posting twice", task_id)
+        return {"skipped": "already processed (raced)", "type": ttype, "company_id": company_id}
+
     res = ticket_recap_writer.post_recap_to_company(
         company_id, recap["note"], name, ttype,
         needs_review=recap.get("needs_review"), review_reason=recap.get("review_reason"),
