@@ -8,6 +8,7 @@ from .ask import ask_bp
 from .attention import attention_bp
 from .feedback import feedback_bp
 from .ils import ils_bp
+from .leadership import leadership_bp
 from .budget_sync_api import budget_sync_api_bp
 from .clickup import clickup_bp
 from .loop import loop_bp
@@ -39,6 +40,9 @@ def register_all(app):
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(property_brief_bp)
     app.register_blueprint(loop_bp)
+    # Portfolio-wide revenue and delivery. Internal-only — see
+    # routes/leadership._authorize; there is no client path.
+    app.register_blueprint(leadership_bp)
     # Portal QA feedback -> ClickUp. Internal-only; the widget
     # hides itself unless CLICKUP_LIST_PORTAL_FEEDBACK is set.
     app.register_blueprint(feedback_bp)
