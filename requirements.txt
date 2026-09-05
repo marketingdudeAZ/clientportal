@@ -3,3 +3,4 @@
 # root (e.g. for local dev or scripts/) while production on Railway builds
 # from webhook-server/ directly.
 -r webhook-server/requirements.txt
+google-cloud-storage==2.18.2

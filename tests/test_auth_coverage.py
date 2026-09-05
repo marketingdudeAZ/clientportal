@@ -46,6 +46,7 @@ AUTH_MARKERS = (
     "_resolve_seo_context",        # PORTAL_EMAIL (SEO context helper)
     "_resolve_paid_context",       # PORTAL_EMAIL (paid context helper)
     "_resolve_onboarding_context", # PORTAL_EMAIL (onboarding context helper)
+    "_require_caller",             # PORTAL_EMAIL (assets blueprint helper)
     "_is_authorized",              # INTERNAL_KEY/PORTAL_EMAIL (loop blueprint helper)
     "_is_internal",                # INTERNAL_KEY (loop blueprint internal-only helper)
     "_gate",                       # PILOT_ROSTER (portal-tickets blueprint)

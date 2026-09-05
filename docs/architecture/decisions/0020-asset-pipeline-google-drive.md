@@ -1,6 +1,8 @@
 # ADR 0020 — Asset pipeline: Client Portal → Google Drive → Fluency
 
-**Status:** Proposed
+**Status:** Accepted — **Stages 1 + 2 built, flag-gated OFF** (`ASSETS_DRIVE_ENABLED`).
+Stages 3 (Fluency wiring) and 4 (backfill) not started; both blocked on the
+paid team confirming the folder convention. See "Implementation status" below.
 **Date:** 2026-07-15 (supersedes the R2 draft — paid team prefers Google Drive)
 **Authors:** Kyle Shipp, Claude
 
@@ -203,6 +205,58 @@ binding constraint later, R2-for-video + Drive-for-images is a fallback.)
 4. **Backfill** — migrate existing HubSpot-Files assets → Drive + BQ index;
    retire the HubDB asset table (repoint ADR 0017 video-approve writes).
 
+## Implementation status
+
+**Shipped (flag-gated OFF behind `ASSETS_DRIVE_ENABLED`, default false).**
+While the flag is off every `/api/assets/*` route 404s and the existing
+HubSpot-Files + HubDB path (`/api/asset-upload`, `/api/property-assets`,
+`asset_uploader.py`, `HUBDB_ASSET_TABLE_ID`) runs exactly as before. The portal
+Files section feature-detects the new API and falls back to the old library on
+a 404, so the template and the env var don't have to ship in lockstep.
+
+| Stage | State | Where |
+|---|---|---|
+| 1 — Drive client + resize on new uploads | built | `webhook-server/drive_client.py`, `asset_resizer.py`, `asset_index.py`, `migrations/0016_assets_table.py`, `POST /api/assets/upload` |
+| 2 — Portal CRUD | built | `webhook-server/routes/assets.py`, Files section of `hubspot-cms/templates/client-portal.html` |
+| 3 — Fluency wiring | **not started** — blocked on action item #2 | — |
+| 4 — Backfill + retire the HubDB asset table | **not started** — depends on Stage 3 | — |
+
+**Decisions taken during the build that this ADR didn't settle:**
+
+- **Rename writes metadata, never a Drive *name*.** The ADR says rename edits
+  "the Drive file name" while also requiring that paths don't change. Those
+  conflict: a Drive file's name *is* its path segment, and the variant
+  filenames are what Fluency reads. Rename therefore updates BQ `name` (the
+  portal's authority) plus the asset folder's Drive `description` /
+  `appProperties.display_name`. No path moves, so no ad churn.
+- **The index is written with DML, not streaming inserts.** Rows in BigQuery's
+  streaming buffer reject `UPDATE` for up to ~90 minutes, which would break
+  "upload a photo, rename it immediately". An upload batch is written as one
+  multi-row `INSERT` so the per-table DML quota isn't burned per file.
+- **Drive scope defaults to full `drive`, not `drive.file`.** `drive.file` is
+  scoped to app-created files, which doesn't reliably cover folder discovery or
+  creating children under a human-made `RPM_ASSETS_ROOT_FOLDER_ID`. The real
+  boundary is Shared Drive membership — the service account is a Content
+  Manager on one dedicated Drive and can see nothing else in the org.
+  Overridable via `RPM_ASSETS_DRIVE_SCOPE`.
+- **Variants may upscale.** A 1400×400 panorama can't fill 1200×1200 without
+  it. The ADR's rule is auto-fix rather than reject, and the 1200px long-edge
+  floor keeps the upscale modest.
+- **Per-file rejection, not per-batch.** Dropping twelve photos where one is a
+  400px screenshot uploads eleven and reports the twelfth with a reason.
+
+**Open — per-property write scoping is NOT enforced.** The "Upload flow &
+permissions" section above says the portal's existing auth resolves user →
+company → uuid. It does not: `portfolio.fetch_portfolio` returns every active
+RPM property to any authenticated portal member, and `routes/self_checkout.py`
+carries the same open seam. What the asset routes enforce today is that the
+caller is authenticated, that the target uuid resolves to a real addressable
+company, that the Drive folder name is derived from that company record rather
+than from request input, and that mutations are uuid-scoped so a guessed
+`asset_id` from another property is a no-op. Which of the 700+ properties a
+given PM may write to needs a real user→property grant, which the portal
+doesn't have. That's an auth-model decision, not an asset-pipeline task.
+
 ## Kyle / paid-team action items (unblock Stage 1)
 
 1. Create/designate the **Shared Drive** ("RPM Creative Assets") and add the
@@ -214,3 +268,74 @@ binding constraint later, R2-for-video + Drive-for-images is a fallback.)
    the Drive** (which Google identity gets read access).
 3. Confirm the **ad-size set** (1.91:1, 1:1, 4:5, display) — add/drop any.
 ```
+
+---
+
+## Addendum, 2026-08-26 — the Shared Drive does not exist and cannot
+
+**Status of the original decision: superseded in its storage choice, upheld in
+everything else.**
+
+This ADR specified a Google Shared Drive. That was never checked against what
+the organisation actually has.
+
+What we found:
+
+* RPM Living's mail runs on **Microsoft 365**
+  (`rpmliving-com.mail.protection.outlook.com`). There is no Google Workspace on
+  the corporate domain. The `google-site-verification` TXT record on
+  rpmliving.com is for a Google product like Search Console, not Workspace.
+* The digital team works from **personal Gmail accounts**
+  (`rpmdigitalteam@gmail.com`, `rpmdigitalreports@gmail.com`).
+* **A Shared Drive cannot exist on a `@gmail.com` account at any storage tier.**
+  Shared drives are a Workspace feature and require a domain the customer
+  controls. A Google One upgrade — which was purchased while investigating
+  this — is consumer storage and does not provide them.
+* The documented fallback of "a normal folder shared with the service account"
+  does not work either: a service account has **no storage quota** and cannot
+  own My Drive files, so it cannot be the owner of files it creates. That
+  constraint is the reason this ADR called for a Shared Drive in the first
+  place.
+
+### What changed
+
+Storage moves to **Google Cloud Storage** in the existing `rpm-portal-492523`
+project, where the platform service account already lives.
+`webhook-server/gcs_client.py` mirrors `drive_client`'s public surface exactly,
+and `routes/assets.py` selects between them:
+
+    ASSETS_BACKEND=gcs      (default) bucket
+    ASSETS_BACKEND=drive    the original path, if a Workspace seat ever lands
+
+The Drive connector is **kept, not deleted**. The reason it was chosen —
+Fluency ingests natively from Drive (Method 2) — remains true, and a Workspace
+seat would make it preferable again.
+
+### What did NOT change
+
+Both lifecycle policies survive intact, because they are about Fluency's reads
+and have nothing to do with the vendor:
+
+* **Never overwrite** — a replacement is a new `asset_id` prefix.
+* **Archive, never hard-delete** — objects are copied under `_archive/` and only
+  then deleted. GCS has no move, so the copy of every object completes before
+  any delete: a half-archived asset that still has its originals is
+  recoverable, one that deleted first is not.
+
+### The open question this creates
+
+Drive was chosen for **Fluency's native ingestion**. A bucket is not on that
+list, so Fluency needs a URL:
+
+* `ASSETS_URL_MODE=signed` (default) — objects stay private, V4 signed URLs,
+  **seven-day maximum lifetime**. Correct if a platform fetches once at ingest;
+  wrong if it re-reads later, which is exactly what "never overwrite" was
+  designed to keep valid.
+* `ASSETS_URL_MODE=public` — stable URLs that never expire, at the cost of the
+  objects being readable by anyone holding the link.
+
+Signed is the default because publishing client creative should be a decision
+someone made deliberately. **Which mode Fluency actually needs is unresolved and
+is a conversation with Fluency, not a code change.** Until it is settled, treat
+the asset pipeline as unproven at the Fluency handoff even though the upload,
+resize, index and archive paths are covered by tests.
