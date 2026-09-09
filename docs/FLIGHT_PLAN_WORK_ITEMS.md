@@ -63,7 +63,13 @@ already used to derive lifecycle state
 (`services/fluency_ingestion/lifecycle_rules.py`). 705/887 RPM-Managed
 properties carry an `aptiq_property_id`.
 
-**But the proposal's central mechanic has no data behind it.** See §5.1.
+**And the dated anchor the whole proposal needs already exists, one report
+over.** AptIQ's `report_type=unit` feed carries **`Date Available`,
+`Date Leased`, `Unit Status`, `Floorplan Name`, `Rent`, `NER`, `Concessions`
+and `Days On Market` per unit, refreshed daily.** That is exactly "which units
+come open, when, on which floorplan." See §2 Tier A and §5.1 — this is the
+single most important finding in the document and it replaces most of what the
+first draft of this doc said was missing.
 
 ---
 
@@ -151,7 +157,100 @@ types), which `loop_writer.record()` already supports via its `status`,
 Format: what it reads → what it produces → what it schedules backwards from.
 Fill rates are measured against the 887 RPM-Managed companies on 2026-09-08.
 
+### The AptIQ unit feed — the anchor everything else was missing
+
+Before the individual triggers, the source they rest on.
+
+`https://data.apartmentiq.io/.../data_sync/data.csv?key=…&report_type=unit`
+— same account and key as `APT_IQ_DAILY_SHEET_URL`, which the repo already
+polls daily; `report_type` is just a query param. `apartmentiq_client.py:338`
+also exposes it through the bulk job API (`report_type="units"`), which accepts
+a `property_ids` filter.
+
+41 columns, one row per listing observation. The ones that matter:
+`Property ID`, `Unit`, `Unit Status` (Available / Leased / Applied),
+**`Date Available`**, `Date Leased`, `Floorplan Name`, `Beds`, `Baths`,
+`Sq Ft`, `Rent`, `NER`, `Concessions`, `Concession Details`,
+**`Days On Market`**, `Last Change Date`.
+
+**Measured on 2026-09-08 against the 700 RPM properties carrying an
+`aptiq_property_id`:**
+
+| | |
+|---|---|
+| Rows matching an RPM property | 147,102 across **694 properties** |
+| Rows with a **future** `Date Available` | 53,581 (36.4%) |
+| Properties with ≥5 units coming open in 90 days | **631 of 694** |
+| Whole-file size | 1.1 GB / 1.64M rows (the full market universe, comps included) |
+
+**It is a change log, not a snapshot — dedup is mandatory.** 75.8% of
+`(Property ID, Unit)` keys appear more than once: the same unit re-listed at a
+new price shows up again. Raw counts are nonsense (Solis Hapeville: "984 units
+coming open" against 305 total units).
+
+**Deduped on the newest `Last Change Date` per `(Property ID, Unit)`, it
+reconciles exactly.** Across 667 properties, deduped `Unit Status = Available`
+against HubSpot's `atr__ × totalunits` gives a **median ratio of 1.00**
+(p25 0.93, p75 1.00). LYV Broadway: 44 available, 44 expected. Skye Reserve:
+165 available, 172 expected. Two independent AptIQ surfaces agreeing to the
+unit is about as good a validation as this stack offers.
+
+Three limits to build against:
+
+1. **It is scraped listing data, not the rent roll.** A unit on notice that
+   hasn't been advertised yet does not appear. So the forward curve is dense
+   for roughly **5–6 weeks and thin after** — LYV Broadway has 17 of its 23
+   next-90-day units inside the first five weeks; Skye Reserve, 55 of 63. That
+   comfortably supports a 7-day SLA plus a 14-day creative chain (~21 days). It
+   does **not** reliably support a 21-day paid ramp stacked on top (~42 days).
+   Size lead times to the horizon the data actually has.
+2. **1.15% of future dates are garbage** — 2050, 2051, 2099, 2100. Cap at
+   `today + 18 months` on ingest.
+3. **Volume.** Don't pull 1.1 GB daily. Use the bulk job API with
+   `property_ids`, or filter on ingest and store only RPM rows.
+
 ### Tier A — build these. Data present, fresh, and `known`.
+
+#### A0 · `availability.floorplan_wave` — **the trigger the proposal was reaching for**
+- **Reads:** the deduped AptIQ unit feed. Group future `Date Available` by
+  ISO week × `Floorplan Name` per property.
+- **Produces:** *"7 units come available the week of Oct 5, 5 of them 1-bed
+  (A1, A3). Flight paid spend onto 1-bed inventory."*
+- **Anchor:** the Monday of the availability week. **Not a calendar constant —
+  a real market date, per property, per floorplan.** This is the fixed point
+  `PROPERTY_FLIGHT_PLAN.md` line 29 says everything else is computed from.
+- **Lead time:** 15 business days (7 specialist SLA + 5 creative + 3 flight
+  ramp), sized to the ~5–6 week horizon the data actually has. A 42-day chain
+  would outrun the signal.
+- **Confidence:** `known` — observed listings, no renewal rate anywhere in it.
+- **This is also the exposure math, done better.** Counting future
+  `Date Available` per week per floorplan *is* the observed exposure curve. It
+  needs no `expirations × (1 − renewal rate)` and therefore imports none of
+  that formula's sensitivity. H1/H2 stay held back not because we lack a
+  substitute but because we now have a better one.
+- Fires for **631 of 694** covered properties. Rate-limit hard (§5.2) — one
+  item per property per wave, biggest wave first.
+
+#### A0b · `availability.stale_inventory`
+- **Reads:** deduped unit rows where `Unit Status = Available` and
+  `Days On Market >= 90`.
+- **Produces:** *"108 of 165 available units have sat 90+ days. Diagnose
+  pricing, listing quality and photos on B5 and A4 first."*
+- **Anchor:** the day a unit crosses the DOM threshold — dated, per unit.
+- **Lead time:** 5 business days.
+- **Confidence:** `known`.
+- Skye Reserve is the case in point: **108 of 165** available units are stale.
+  Nothing in the portal surfaces that today, and it is a much louder signal
+  than the occupancy number the AM already knows.
+
+#### A0c · `availability.concession_drift`
+- **Reads:** `Concessions`, `Concession Details`, `NER` vs `Rent` per unit,
+  compared across units of the same floorplan.
+- **Produces:** a flag where advertised concessions diverge inside a floorplan,
+  or where NER has moved without a rent change.
+- **Confidence:** `known` (advertised values), but the *interpretation* is
+  `derived` — file it Assisted and let the AM judge.
+- Lower priority than A0/A0b; listed because the columns are already in hand.
 
 #### A1 · `seasonal.budget_lock`
 - **Reads:** calendar constant (budgets lock end of October). For content only:
@@ -240,13 +339,13 @@ Fill rates are measured against the 887 RPM-Managed companies on 2026-09-08.
 - **Reads:** AptIQ `Exposure % (Next 90d)`
   (`services/fluency_ingestion/apt_iq_reader.py:87`), available for the 705/887
   properties with an `aptiq_property_id`, refreshed daily.
-- **Why it's promising:** this is the closest thing we have to the kyle-brain
-  exposure math *without* a renewal rate — AptIQ computes it forward from
-  vacant + notice-to-vacate + scheduled move-outs.
-- **Blocked on one question:** does AptIQ's exposure apply a renewal assumption
-  of its own? If it does, it is `modeled` and belongs with the held-back set. If
-  it doesn't, it is the single best magnitude signal available and it goes
-  straight into Tier A. **Ask AptIQ; do not infer it from the numbers.**
+- **Largely superseded by A0.** The unit feed gives the same forward window at
+  unit and floorplan grain, dated, so the rolled-up percentage is a summary
+  rather than a source. Keep it as a cheap portfolio-level sort; do not schedule
+  from it.
+- Still worth one question to AptIQ: does their `Exposure %` apply a renewal
+  assumption? If it does, the rollup is `modeled` even though the unit rows
+  underneath it are not — and the two must not be mixed in the same item.
 
 #### B2 · `expiration.window_120d`
 - **Reads:** `trending_120_days_lease_expiration` (832/887, refreshed daily).
@@ -269,7 +368,7 @@ Per `PROPERTY_FLIGHT_PLAN.md` line 124-128 — generate from what we know first.
 | **H2 · 12-month exposure via `expirations × (1 − renewal rate)`** | Same input as H1, plus there is no per-month expiration distribution to spread the result over. A 12-month exposure number with no month attached cannot produce a date, which is the only thing this system exists to produce. |
 | **H3 · `forecasting.py` `shift_budget` recommendations** | The channel CPLs they rest on come from pseudo-attribution — *"channel's share of total spend × total leases"* (`forecasting.py:166`). That assumes spend and leases are proportional, which is the proposition the recommendation is supposed to test. Fine as a card an AM reads. Not fine as a dated work item with an SLA behind it. |
 | **H4 · `funnel_forecast.py` goal-backwards plans** | `DEFAULT_LEADS_PER_LEASE = 32.0` (`funnel_forecast.py:27`) is a portfolio constant. Per-property it is the second most sensitive input after renewal rate. Hold until it's measured per property from Hyly — which is 47/887 properties today. |
-| **H5 · anything anchored on a unit-delivery date** | Held back not for sensitivity but because **the data does not exist**. See §5.1. |
+| **H5 · anything anchored on a NEW-CONSTRUCTION delivery date** | Still held back — no field holds a construction delivery date (§5.1). Note this is now a narrow gap affecting lease-ups only: **turnover availability is fully dated** via A0, and for a stabilized property that is the date that actually matters. |
 | **H6 · `loop_autopilot` auto-approvals** | `loop_mode` is populated on **0 of 887** properties, so the module cannot fire today. Leave it that way until §3's graduation rule has data. The Auto lane being empty is currently enforced by accident; make it enforced on purpose. |
 
 ---
@@ -325,6 +424,9 @@ AMs never see the matrix. Render exactly the proposal's three chips:
 
 | Trigger | decision | executor | Why |
 |---|---|---|---|
+| `availability.floorplan_wave` | approved | am | It moves paid budget onto specific floorplans. Highest-value trigger on the board and therefore the last one to automate. Agent drafts the wave and the proposed shift; the AM commits the money. |
+| `availability.stale_inventory` | approved | agent | Agent assembles the stale list and the pricing/listing diagnosis; AM approves before anything is changed. Graduates to `auto` fast if the diagnosis holds up — it publishes nothing. |
+| `availability.concession_drift` | approved | am | Advertised values are known; what they mean is a judgment call. |
 | `seasonal.budget_lock` | approved | am | The number is the AM's judgment and the client's money. Agent drafts the comparison; the AM owns the figure. Never auto. |
 | `seasonal.renewal_push_open` | **auto** | specialist_team | Filing the ticket is the whole action, it happens every year regardless, and the ticket path is proven. Nothing is decided by filing it. |
 | `seasonal.peak_leasing_ramp` | approved | specialist_team | Same mechanics as above, but it carries a paid flight and a budget behind it, so a human confirms before the chain starts. |
@@ -355,38 +457,65 @@ See `docs/FLIGHT_PLAN_AM_TEST.md` for the version to hand an account manager.
 The short version, and why it's the finding:
 
 **LYV Broadway** (Carrollton TX, Dallas market, uuid `21598594106`, 390 units,
-occupancy 91.79% vs 95% target, ATR 11.28% ≈ 44 units available, SEO Standard
+occupancy 91.79% vs 95% target, ATR 11.28% = 44 units available, SEO Standard
 $800/mo, paid media $2,839.46/mo, total $4,638/mo, RPM-managed since 2024-07-01)
-generates **three items** in the 90 days from 2026-09-08:
+generates **six items** in the 90 days from 2026-09-08 — three from the
+calendar and three from its own availability curve:
 
 | must_start_by | Action | Anchor | Chip |
 |---|---|---|---|
+| 2026-09-14 | Flight paid onto 1-bed inventory — 7 units open the week of 10/05, 4 of them A1/A3 | 2026-10-05 availability wave | Ready for your OK |
 | 2026-09-15 | File the renewal-season creative set | 2026-10-01 renewal push opens | With the creative team |
+| 2026-09-08 (now) | Diagnose 10 stale units (Available, 90+ days on market; one at 306) | DOM threshold, crossed long ago | Ready for your OK |
 | 2026-09-18 | Draft the 2027 budget recommendation | 2026-10-30 budget lock | Ready for your OK |
+| 2026-10-05 | Second wave — 4 units open the week of 10/26, 2 of them B1 (2-bed) | 2026-10-26 availability wave | Ready for your OK |
 | 2026-10-06 | Kick off the Q4 creative refresh | 2026-10-29 (last cycle 07-31 + 90d) | With the creative team |
 
-**And here is the thing to take to the AM.** Run the same generator on **Skye
-Reserve** — 982 units, occupancy **76.07%**, ATR 17.52% (≈172 units available),
-186 units short of target, $16,730/mo — and it produces **the same three items**,
-on dates within a week of LYV Broadway's. The only difference between the two
-boards comes from `quarterly_creative_refresh_end_date` being stamped 2026-07-23
-instead of 2026-07-31, which is an artifact of a bulk data migration, not a fact
-about either property.
+Its full 90-day curve: **23 units** coming available, 17 of them in the first
+five weeks, concentrated in one-bedrooms (A1 ×7, A3 ×6 = 13 of 23).
 
-A 982-unit property at 76% occupancy and a 390-unit property at 92% get
-identical work. That is the sharpest statement of what's missing:
-**magnitude has no dated trigger.** Every signal that knows one property is in
-trouble — occupancy, ATR, exposure — is either undated (§5.2) or held back as
-modeled (H1–H4).
+**Now the two properties diverge, which is the point.** **Skye Reserve** —
+982 units, occupancy 76.07%, ATR 17.52% (165 units available against 172
+expected), $16,730/mo — generates the same three calendar items *and*:
+
+- **63 units** coming available in 90 days, 55 of them inside five weeks,
+  peaking at 17 units the week of 09/21 — concentrated in B5 and A4.
+- **108 of its 165 available units have sat 90+ days on market.** Two-thirds of
+  its live inventory is stale. That is the single loudest fact about this
+  property and nothing in the portal says it today.
+
+An earlier draft of this document concluded that both properties would generate
+identical boards, because magnitude had no dated trigger. **That was wrong** —
+it was based on HubSpot company fields alone. With the unit feed, a 982-unit
+property at 76% occupancy generates roughly triple the work of a 390-unit
+property at 92%, dated by week and pointed at named floorplans, which is what
+the flight plan was supposed to do all along.
+
+**And Skye Reserve immediately shows the horizon limit biting.** Its largest
+wave — 17 units the week of 2026-09-21 — has a `must_start_by` of
+**2026-08-31, eight days in the past.** On a 15-business-day chain that wave is
+already un-actionable. That is not a flaw in the arithmetic; it is the
+arithmetic doing its job, and it is the first thing worth showing an AM. Two
+honest responses, and the AM should pick: shorten the chain for availability
+items (they are mostly a bid and budget change, not a creative build), or accept
+that the first ~15 business days of the curve arrive as "too late to fully
+work" and rank them as partial.
 
 ---
 
 ## 5. What breaks
 
-### 5.1 The proposal's central mechanic has no data source
+### 5.1 The anchor exists — but not where the first draft looked
 
-`PROPERTY_FLIGHT_PLAN.md` line 31: *"Mar 1 — 40 units hit the market ← the only
-fixed date."* Measured against 887 RPM-Managed companies:
+**Correction.** An earlier version of this section concluded that the
+proposal's central mechanic had no data behind it. That was based on searching
+the 848 HubSpot company properties and finding nothing, which was the wrong
+place to look. **AptIQ's `report_type=unit` feed carries dated per-unit
+availability for 694 of the 700 covered RPM properties, refreshed daily.** See
+§2. The rest of this section is what remains true after that correction.
+
+**What genuinely does not exist is a NEW-CONSTRUCTION delivery date.**
+Measured against 887 RPM-Managed companies:
 
 | Field | Populated |
 |---|---|
@@ -396,15 +525,17 @@ fixed date."* Measured against 887 RPM-Managed companies:
 | `lease_up_ramp_months` | **0 / 887** |
 | `managementstart` | 883 / 887 |
 
-There is no scheduled-unit-delivery date in HubSpot, and neither AptIQ nor Hyly
-carries one — AptIQ gives current-state occupancy and forward exposure, Hyly
-gives lead-to-lease funnel milestones. **The only fixed forward date we actually
-have is the fixed annual calendar**, plus contract dates.
+Nothing holds a construction delivery date. AptIQ tracks what is advertised, so
+a building that has not started listing is invisible to it; Hyly gives
+lead-to-lease funnel milestones, not inventory.
 
-This does not sink the design; it changes what it is. The flight plan as built
-today is a **contract-and-calendar** generator, not a **unit-delivery**
-generator. If unit deliveries are the point, the first build step is a place to
-put a delivery date, not a board.
+**This is now a narrow gap, not a foundational one.** It affects lease-ups and
+new phases only. For a stabilized property — which is nearly the whole
+portfolio, since `occupancy_status` is populated on 29/887 and everything else
+scores as stabilized — the date that matters is when a unit turns, and that is
+fully dated via A0. If lease-up scheduling is wanted, the fix is a field to hold
+a delivery date plus someone to maintain it, which is a data-operations task,
+not a build.
 
 Related: `lease_up_start_date` is 0% populated but is the *preferred* takeover
 source in `portfolio.py:554` and `server.py:418`, which silently fall back to
@@ -475,26 +606,45 @@ The mass sits on a handful of bulk-stamp dates — 2025-01-29, 2025-12-17/18/19,
    family of genuinely known forward dates we have. It is worth more than any
    code in this document.
 
-### 5.5 It misses work that matters
+### 5.5 New failure modes the unit feed introduces
 
-Everything on the board is contractual or seasonal. Nothing on it responds to a
-property being in trouble — because every trouble signal is either undated
-(occupancy, ATR, exposure are states, not dates) or held back as modeled. §4's
-LYV-vs-Skye contrast is this failure made concrete.
+The earlier version of this section said the board misses urgency because every
+trouble signal was undated. A0 fixes that. What it introduces instead:
 
-The honest framing for the AM conversation: **this board tells you what is due.
-It does not tell you what is urgent.** `attention.py` covers reactive urgency
-today. If the flight plan is supposed to replace that judgment rather than
-schedule around it, it needs a dated magnitude trigger, and B1 (AptIQ 90-day
-exposure) is the only credible candidate we have.
+- **Volume.** 631 of 694 properties have ≥5 units coming open in 90 days, and
+  most have several waves. Ungoverned, A0 alone produces thousands of items.
+  The cap has to be per property per week, ranked by units in the wave, with a
+  floor (ignore waves under ~4 units, or under ~1% of the property) so the board
+  doesn't fill with two-unit noise.
+- **Dedup is load-bearing, and silently so.** Skip it and every count is roughly
+  2–3× too high while still looking plausible — Solis Hapeville reads "984 units
+  coming open" against 305 total. Any change to the dedup key (unit-number
+  formatting varies: `1-1216`, `#1216`, `1140` all appear at LYV Broadway)
+  silently reinflates the numbers. Assert the reconciliation against
+  `atr__ × totalunits` on every run and alarm when the median ratio drifts off
+  1.00.
+- **The horizon is shorter than the chain.** §4's Skye example: its biggest wave
+  was already past its start date. Lead times must be sized to a ~5–6 week
+  signal, not to an ideal 42-day flight plan.
+- **Scraped data will disagree with the on-site team.** A unit AptIQ shows
+  available may be held, down for renovation, or already leased offline. The
+  first time an AM is told to spend against a unit the CM knows is unavailable,
+  the board loses credibility. Show `Days On Market` and `Last Change Date` on
+  every item so the AM can see how fresh the observation is, and make
+  "dismissed — not actually available" a first-class dismissal reason feeding
+  back into the trigger.
+- **We still can't see units on notice that aren't listed yet.** So the board
+  reflects *marketing* exposure, not *lease* exposure. That distinction should
+  be stated on the surface, or someone will read the curve as a rent roll.
 
-### 5.6 Three items a quarter may be the real finding
+### 5.6 The volume question flipped
 
-The known-data calendar yields roughly **three items per property per quarter**.
-If the AM says the real job is ten, the gap is data we don't have, not a
-generator we haven't built — and the build order changes accordingly. That
-question is the entire point of the one-pager, and it is answerable in one
-conversation.
+The earlier version of this section worried the calendar would yield only three
+items per property per quarter. With A0 the problem is the opposite: six for a
+healthy 390-unit property, more for a struggling one, times 694 properties. The
+question for the AM is no longer "is this enough?" but **"which of these six
+would you actually have done, and which is noise?"** — which is a better
+question and the one the one-pager now asks.
 
 ### 5.7 Identity edge cases
 
@@ -513,21 +663,26 @@ conversation.
 
 Mostly the proposal's order (lines 136-150), with the data reality folded in.
 
-0. **Roll the SKU end dates forward.** Not code. Largest return in the document
-   (§5.4).
-1. **One property on paper, then an AM.** `docs/FLIGHT_PLAN_AM_TEST.md` is ready
-   to use. The question that matters is §5.6's, not "is the format right."
-2. **Confirm two field definitions** — AptIQ's exposure (B1) and what
-   `quarterly_creative_refresh_end_date` means (A5). Two emails; each one moves
-   a trigger from blocked to buildable.
-3. **`work_items` as a table, read in Slack.** Migration `0016`, copying
-   `0015_ticket_profile_proposals.py`. Triggers A1, A2, A5. No UI.
-4. **Wire the specialist executor to `creative_transition.py`'s pattern**,
+1. **Ingest the AptIQ unit feed, deduped, into BigQuery.** Daily, filtered to
+   RPM `aptiq_property_id`s via the bulk job API, with the
+   `atr__ × totalunits` reconciliation asserted on every run. This is now the
+   foundation — A0, A0b and A0c all sit on it, and it is the only genuinely new
+   plumbing in the plan.
+2. **One property on paper, then an AM.** `docs/FLIGHT_PLAN_AM_TEST.md` is
+   ready. The question that matters is §5.6's: which of the six is noise.
+3. **Roll the SKU end dates forward.** Not code, still free, still lights up the
+   largest family of contract dates (§5.4).
+4. **`work_items` as a table, read in Slack.** Migration `0016`, copying
+   `0015_ticket_profile_proposals.py`. Triggers A0, A0b, A1, A2. No UI.
+5. **Wire the specialist executor to `creative_transition.py`'s pattern**,
    scheduled backwards through `launch_policy._add_business_days`. Existing code
    in both halves.
-5. **One `approved` + `agent` trigger, logging `was_edited` on every approval.**
-   That log is the only thing that ever earns a trigger its way to `auto`.
-6. **Then the board UI.**
+6. **Log `was_edited` on every approval** from the first day items exist. That
+   log is the only thing that ever earns a trigger its way to `auto`.
+7. **Then the board UI.**
+
+One field definition still worth an email: what
+`quarterly_creative_refresh_end_date` actually means (A5).
 
 ---
 
@@ -539,3 +694,16 @@ read-only HubSpot Search API call on 2026-09-08 over all 887 companies with
 company property schema (848 properties). No writes were made; per R1 nothing
 touched `uuid`. Property-level figures for LYV Broadway and Skye Reserve are
 verbatim HubSpot values as of `hs_lastmodifieddate` 2026-09-08.
+
+Unit-level figures come from a read-only pull of the AptIQ `data_sync`
+`report_type=unit` CSV on 2026-09-08 (1.64M rows; 147,102 matching an RPM
+`aptiq_property_id`), deduped to the newest `Last Change Date` per
+`(Property ID, Unit)` giving 40,577 current unit records across 694 properties.
+The deduped `Unit Status = Available` count was reconciled against HubSpot
+`atr__ × totalunits` across 667 properties: median ratio 1.00, p25 0.93,
+p75 1.00.
+
+**Revision note.** §5.1, §5.5, §5.6 and §4 were rewritten after Kyle pointed out
+that AptIQ carries availability data the first pass had not checked. The
+original conclusion — that no dated inventory signal existed — was wrong, and
+was reached by searching HubSpot company properties alone.

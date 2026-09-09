@@ -1,6 +1,7 @@
 # Is this what you would have done?
 
-**One property. The next 90 days. Generated from the calendar, not from a ticket.**
+**One property. The next 90 days. Generated from the leasing calendar and the
+unit availability feed, not from a ticket.**
 
 Date generated: 2026-09-08 · Design doc: `docs/FLIGHT_PLAN_WORK_ITEMS.md`
 
@@ -14,15 +15,19 @@ RPM-managed since 2024-07-01
 | | |
 |---|---|
 | Units | 390 |
-| Occupancy | 91.79% (≈358 occupied, 32 vacant) |
+| Occupancy | 91.79% (≈358 occupied) |
 | Target occupancy | 95% — about **12 units short** |
-| Available to rent (ATR) | 11.28% — about **44 units** |
-| Leases in the 120-day expiration trend | 19 |
+| Available to rent | **44 units** (11.28%) |
+| Of those, sitting 90+ days | **10 units** (one at 306 days) |
+| Coming available in the next 90 days | **23 units**, 17 of them within 5 weeks |
+| Concentrated in | one-bedrooms — A1 ×7, A3 ×6 (13 of 23) |
 | SEO package | Standard, $800/mo |
 | Paid media | $2,839/mo |
 | Total monthly plan | $4,638/mo |
 
-All figures are live HubSpot values as of 2026-09-08.
+Occupancy and budget are live HubSpot values. Unit-level availability is the
+AptIQ daily unit feed, deduped to one current record per unit — its available
+count (44) matches HubSpot's availability figure exactly.
 
 ---
 
@@ -31,84 +36,117 @@ All figures are live HubSpot values as of 2026-09-08.
 Sorted by **must start by** — the date after which the work can no longer land
 on time. Not a due date. The date the clock runs out on starting.
 
-### 1 · File the renewal-season creative set
+### 1 · Diagnose the stale units — **overdue**
+
+| | |
+|---|---|
+| **Must start by** | **now** — the threshold was crossed weeks ago |
+| Why now | 10 of the 44 available units have sat 90+ days on market. One has been listed **306 days**. |
+| Backwards from | nothing — this is already late, which is the point of showing it |
+| Who | **Ready for your OK** — the system assembles the unit list, rents and days on market; you decide whether it's price, photos, or the unit |
+| Signal behind it | AptIQ unit feed: `Unit Status = Available` and `Days On Market ≥ 90` |
+
+### 2 · Flight paid onto one-bedroom inventory
+
+| | |
+|---|---|
+| **Must start by** | **Mon 2026-09-14** — 6 days from now |
+| Why now | **7 units come available the week of October 5** — the biggest wave in the quarter. Four are A1/A3 one-bedrooms. |
+| Backwards from | 10/05 units hit the market → bid and budget change live 09/28 → approved 09/21 → drafted 09/14 |
+| Who | **Ready for your OK** — the system drafts the shift; **you commit the money** |
+| Signal behind it | AptIQ unit feed: future `Date Available` grouped by week and floorplan |
+
+### 3 · File the renewal-season creative set
 
 | | |
 |---|---|
 | **Must start by** | **Tue 2026-09-15** — 7 days from now |
-| Why now | Renewal season opens **Thu 2026-10-01**. 19 leases sit in the 120-day expiration trend. |
-| Backwards from | 10/01 season opens → creative in hand 09/24 (5 business days to build) → ticket filed 09/15 (7 business day specialist SLA) |
-| Who | **With the creative team** — ticket files automatically, no approval needed |
-| Signal behind it | Fixed annual calendar (renewal push Oct–Feb). The count of 19 sizes the request; it does not set the date. |
+| Why now | Renewal season opens **Thu 2026-10-01**. |
+| Backwards from | 10/01 season opens → creative in hand 09/24 → ticket filed 09/15 (7 business day specialist SLA) |
+| Who | **With the creative team** — files automatically, no approval needed |
+| Signal behind it | Fixed annual calendar (renewal push Oct–Feb) |
 
-### 2 · Draft the 2027 marketing budget recommendation
+### 4 · Draft the 2027 marketing budget recommendation
 
 | | |
 |---|---|
 | **Must start by** | **Fri 2026-09-18** — 10 days from now |
-| Why now | Budgets lock end of October. Current plan is $4,638/mo ($2,839 paid media, $800 SEO) against 91.8% occupancy and a 95% target. |
-| Backwards from | 10/30 budget lock → client review opens 10/16 → AM review opens 10/02 → drafting starts 09/18 |
-| Who | **Ready for your OK** — the system drafts the comparison; **you set the number** |
-| Signal behind it | Fixed annual calendar (budget season Aug–Oct, locks Oct/Nov) + the property's current spend |
+| Why now | Budgets lock end of October. Current plan $4,638/mo against 91.8% occupancy and a 95% target. |
+| Backwards from | 10/30 budget lock → client review 10/16 → AM review 10/02 → drafting starts 09/18 |
+| Who | **Ready for your OK** — system drafts the comparison, **you set the number** |
+| Signal behind it | Fixed annual calendar + the property's current spend |
 
-### 3 · Kick off the Q4 creative refresh
+### 5 · Second availability wave — two-bedrooms
+
+| | |
+|---|---|
+| **Must start by** | **Mon 2026-10-05** — 4 weeks from now |
+| Why now | 4 units come available the week of October 26, two of them B1 two-bedrooms. |
+| Backwards from | 10/26 units hit the market → live 10/19 → approved 10/12 → drafted 10/05 |
+| Who | **Ready for your OK** |
+| Signal behind it | AptIQ unit feed |
+
+### 6 · Kick off the Q4 creative refresh
 
 | | |
 |---|---|
 | **Must start by** | **Tue 2026-10-06** — 4 weeks from now |
-| Why now | The last quarterly creative refresh cycle ended 2026-07-31. Quarterly cadence puts the next one at **2026-10-29**. |
-| Backwards from | 10/29 cycle due → assets due 10/22 (10 business days production) → ticket filed 10/06 (7 business day specialist SLA) |
-| Who | **With the creative team** — contracted and already paid for; filing it isn't a decision |
+| Why now | Last quarterly creative cycle ended 2026-07-31; next is due **2026-10-29**. |
+| Backwards from | 10/29 due → assets due 10/22 → ticket filed 10/06 |
+| Who | **With the creative team** |
 | Signal behind it | The `quarterly_creative_refresh_end_date` on the property record |
 
 ---
 
-## What the board deliberately did *not* generate
-
-Being explicit about this matters as much as the three items above.
+## What the board did *not* generate, and why
 
 | Not generated | Why |
 |---|---|
-| Anything about the **44 available units** or the **12-unit gap to target** | Occupancy and ATR describe today. Neither carries a future date, so neither can schedule anything backwards. |
-| Anything from the **renewal rate** | The renewal figure on the property record turns out to be a flat 30% assumption applied to expirations, not counted renewals. We're holding it back until it's stress-tested. |
-| **Contract renewal decisions** (SEO, social posting, review response, landing page) | Those service end dates are all stamped in the past — the newest is 2026-07-31. The rule is built and gated; it fires the day the dates are current. |
-| **Peak-season paid flight prep** | Correctly outside the window. It surfaces 2027-01-19 and must start 2027-02-02, working backwards from April 1. |
-| **Onboarding / takeover checks** | Managed since 2024; all 30/60/90 checkpoints long past. |
+| Waves smaller than about 4 units | Otherwise the board fills with two-unit noise. **Is 4 the right floor?** |
+| Anything from a renewal rate | The renewal figure on the property record is a flat 30% assumption applied to expirations, not counted renewals. Held back until it's tested. |
+| Contract renewal decisions (SEO, social, review response, landing page) | Those service end dates are all stamped in the past — the newest is 2026-07-31. The rule is built and gated; it fires the day the dates are current. |
+| Peak-season paid flight prep | Correctly outside the window — it starts 2027-02-02, working backwards from April 1. |
+| Units on notice that aren't advertised yet | We see what's listed, not the rent roll. So this is **marketing exposure, not lease exposure**. |
 
 ---
 
 ## The questions
 
-**1. Are these three the right three?**
-Would you have done all three? Any of them?
+**1. Are these six the right six? Which one is noise?**
+If you'd have done four of them, which two would you drop — and why?
 
-**2. Are the dates right?**
-Every lead time here is a placeholder — 7 business days for a creative ticket,
-5 days to build, 10 days production, 30 business days for a budget cycle. If a
-creative ticket really takes 12 days, item 1 is already late and nobody knows it.
-**What are the real numbers?**
+**2. Item 1 says ten units have sat 90+ days, one for 306 days. Did you know?**
+If yes, where did you see it? If no, is that the most useful thing on this page?
 
-**3. Is three items a quarter the actual job, or a tenth of it?**
-This is the one that decides what gets built next. If the real quarter is ten
-items, the seven we're missing tell us exactly which data we don't have yet.
-**What's on your list for this property between now and December that isn't
-here?**
+**3. Are the lead times right?**
+Every one is a placeholder — 7 business days for a creative ticket, 15 for an
+availability wave, 30 for a budget cycle. If a bid change really takes 3 days,
+item 2 could start a week later. If a creative ticket really takes 12 days,
+item 3 is already late. **What are the real numbers?**
 
-**4. Does the routing feel right?**
-Item 1 files a creative ticket without asking you. Item 3 does too. Item 2 waits
-for you. Is that the right split — and is there anything here you'd want to see
-before it goes out?
+**4. Item 2 says flight spend onto one-bedrooms because 7 units open Oct 5.**
+Is that how you'd actually respond to a wave — or would you do something else
+entirely, like adjust pricing or push the ILS?
+
+**5. Does the routing feel right?**
+Item 3 files a creative ticket without asking you. Item 6 does too. Everything
+else waits for you. Is that the right split?
 
 ---
 
-## One more thing, if there's time
+## The one that shows the limit
 
-The same generator, run on **Skye Reserve** — 982 units, **76% occupied**,
-172 units available to rent, 186 units short of target, $16,730/mo — produces
-**the same three items**, within a week of the same dates.
+Run the same generator on **Skye Reserve** — 982 units, 76% occupied, 165 units
+available, **108 of them sitting 90+ days**, 63 units coming open in 90 days.
 
-A property in real trouble and a property doing fine get an identical board.
-That's not a bug in the schedule; it's the honest edge of what the calendar
-alone can see. **Would you have treated those two properties the same this
-quarter?** If not, what would have told you to treat them differently — and
-when would you have needed to know it?
+Its biggest wave is **17 units the week of September 21**. On our lead times,
+that item needed to start **August 31 — nine days ago**. It arrives already too
+late to fully work.
+
+That's real: the availability feed shows what's advertised, and things get
+advertised roughly 5–6 weeks out, not 12. So either the chain for these items
+has to be shorter than we assumed, or the first two weeks of every curve arrive
+as "partly too late."
+
+**Which is it? How much notice do you actually need to move spend onto a
+floorplan?** That number sets the whole design.
