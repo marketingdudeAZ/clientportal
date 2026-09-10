@@ -1,1 +1,332 @@
-{"question": "whats_not_working", "label": "What's not working?", "company_id": "30912193455", "property_uuid": "30912193455", "property_name": "The Atwood at Rivulon", "viz": {"kind": "line", "pull": "performance_trend", "x": "month", "series": ["sessions", "leads"], "title": "Sessions and leads by month", "note": "Plot both series on one chart \u2014 the story is usually the gap between them."}, "viz_data": {"months": [{"nid": "10320682", "month": "2025-07", "sessions": 3712, "leads": 51, "paid_conversions": 22, "paid_impressions": 36248, "paid_clicks": 1635, "spend": 4166.3084}, {"nid": "10320682", "month": "2025-08", "sessions": 4152, "leads": 139, "paid_conversions": 53, "paid_impressions": 98452, "paid_clicks": 3196, "spend": 7339.6146}, {"nid": "10320682", "month": "2025-09", "sessions": 3453, "leads": 90, "paid_conversions": 58, "paid_impressions": 74353, "paid_clicks": 2237, "spend": 7164.8012}, {"nid": "10320682", "month": "2025-10", "sessions": 3284, "leads": 68, "paid_conversions": 46, "paid_impressions": 91279, "paid_clicks": 2139, "spend": 7328.9081}, {"nid": "10320682", "month": "2025-11", "sessions": 2775, "leads": 43, "paid_conversions": 35, "paid_impressions": 83494, "paid_clicks": 2037, "spend": 7251.8492}, {"nid": "10320682", "month": "2025-12", "sessions": 2518, "leads": 57, "paid_conversions": 35, "paid_impressions": 84745, "paid_clicks": 1708, "spend": 7302.8377}, {"nid": "10320682", "month": "2026-01", "sessions": 3585, "leads": 76, "paid_conversions": 54, "paid_impressions": 100136, "paid_clicks": 2474, "spend": 7278.9392}, {"nid": "10320682", "month": "2026-02", "sessions": 3427, "leads": 84, "paid_conversions": 38, "paid_impressions": 58301, "paid_clicks": 1885, "spend": 6475.6709}, {"nid": "10320682", "month": "2026-03", "sessions": 3937, "leads": 114, "paid_conversions": 84, "paid_impressions": 46328, "paid_clicks": 1854, "spend": 6830.0211}, {"nid": "10320682", "month": "2026-04", "sessions": 3904, "leads": 136, "paid_conversions": 66, "paid_impressions": 44321, "paid_clicks": 1775, "spend": 6785.9139}, {"nid": "10320682", "month": "2026-05", "sessions": 4138, "leads": 170, "paid_conversions": 56, "paid_impressions": 57390, "paid_clicks": 2045, "spend": 6933.674}, {"nid": "10320682", "month": "2026-06", "sessions": 5698, "leads": 107, "paid_conversions": 57, "paid_impressions": 39837, "paid_clicks": 1990, "spend": 6856.3205}, {"nid": "10320682", "month": "2026-07", "sessions": 6148, "leads": 114, "paid_conversions": 66, "paid_impressions": 40316, "paid_clicks": 2050, "spend": 7519.3321}], "window": "Jul 2025 to Jul 2026", "months_without_total_row": []}, "evidence": ["leads 170 \u2192 107 (\u221237.1%) from May 2026 to Jun 2026 [BigQuery ninjacat_metrics] while sessions 4,138 \u2192 5,698 (+37.7%) from May 2026 to Jun 2026 [BigQuery ninjacat_metrics]", "leads 170 \u2192 114 (\u221232.9%) from May 2026 to Jul 2026 [BigQuery ninjacat_metrics] while sessions 4,138 \u2192 6,148 (+48.6%) from May 2026 to Jul 2026 [BigQuery ninjacat_metrics]", "spend $6,856 \u2192 $7,519 (+9.7%) from Jun 2026 to Jul 2026 [BigQuery ninjacat_metrics]", "sessions 5,698 \u2192 6,148 (+7.9%) from Jun 2026 to Jul 2026 [BigQuery ninjacat_metrics]", "leads 107 \u2192 114 (+6.5%) from Jun 2026 to Jul 2026 [BigQuery ninjacat_metrics]", "conversion rate: 107 leads / 5,698 sessions = 1.88% in Jun 2026 [BigQuery ninjacat_metrics]", "conversion rate: 114 leads / 6,148 sessions = 1.85% in Jul 2026 [BigQuery ninjacat_metrics]", "Paid Search / Google Ads: 66 leads in Jul 2026, measured as Google Ads conversions \u2014 a different system from the 114 site-wide leads Google Analytics 4 recorded, so no share of the total can be stated [BigQuery ninjacat_metrics]", "Organic Search (SEO) / Google Analytics 4: 41 of 114 leads (36.0%) in Jul 2026 [BigQuery ninjacat_metrics]", "Organic Search (SEO) / Google Analytics 4: 1,571 of 6,148 sessions (25.6%) in Jul 2026 [BigQuery ninjacat_metrics]", "Organic Search (SEO) / Google Analytics 4 conversion rate: 41 leads / 1,571 sessions = 2.61% in Jul 2026 [BigQuery ninjacat_metrics]", "site-wide conversion rate (Google Analytics 4): 114 leads / 6,148 sessions = 1.85% in Jul 2026 [BigQuery ninjacat_metrics]", "Paid Search / Google Ads cost per lead: $7,519 spend / 66 leads = $114 in Jul 2026 [BigQuery ninjacat_metrics]", "Paid Search / Google Ads leads 57 \u2192 66 (+15.8%) from Jun 2026 to Jul 2026 [BigQuery ninjacat_metrics]", "Organic Search (SEO) / Google Analytics 4 leads 43 \u2192 41 (\u22124.7%) from Jun 2026 to Jul 2026 [BigQuery ninjacat_metrics]", "occupancy: 55.7% as of today [ApartmentIQ daily CSV]", "leased: 56.8% as of today [ApartmentIQ daily CSV]", "exposure: 41.8% as of today [ApartmentIQ daily CSV]", "units available to rent: 154 as of today [ApartmentIQ daily CSV]", "contracted monthly spend: $10,700 across 6 service line(s) [HubSpot deal line items (spend sheet)]", "search: $5,500 of $10,700 monthly spend (51.4%) [HubSpot deal line items (spend sheet)]", "pmax: $2,000 of $10,700 monthly spend (18.7%) [HubSpot deal line items (spend sheet)]", "mgmt_fee: $1,700 of $10,700 monthly spend (15.9%) [HubSpot deal line items (spend sheet)]", "seo: $500 of $10,700 monthly spend (4.7%) [HubSpot deal line items (spend sheet)]", "paid_social: $500 of $10,700 monthly spend (4.7%) [HubSpot deal line items (spend sheet)]", "geofence: $500 of $10,700 monthly spend (4.7%) [HubSpot deal line items (spend sheet)]"], "caveats": ["ApartmentIQ figures came from the daily CSV fallback, which can lag the live API by up to 24 hours."], "missing_inputs": [{"input": "impression_share_lost", "source": "Google Ads API", "reason": "Google Ads is not configured for this property (Google Ads API not configured: add the `google-ads` library + GOOGLE_ADS_DEVELOPER_TOKEN / OAuth / login-customer-id, then implement _run_gaql.), so impression share lost to budget and to rank is dark \u2014 we cannot say whether more budget would buy more traffic."}, {"input": "tour_sources", "source": "BigQuery hyly_daily_activity_v1 (Hyly)", "reason": "This property has no hyly_property_id on its HubSpot company record. Hyly is a 15-property beta, so tour-stage attribution (lead \u2192 tour \u2192 application \u2192 lease) is not available here \u2014 tour counts by source cannot be answered from lead data alone."}, {"input": "reputation", "source": "SOCi", "reason": "SOCi has no connector on this platform yet, so review volume, star rating and response-time are not part of this answer. Anything about reputation here would be a guess."}], "inputs": {"performance_trend": {"available": true, "source": "BigQuery ninjacat_metrics", "caveat": null, "missing_reason": null, "quality": {"clean_rows": 13, "duplicates_removed": 0, "excluded": 0, "caveat": null, "exceptions": []}}, "lead_sources": {"available": true, "source": "BigQuery ninjacat_metrics", "caveat": null, "missing_reason": null, "quality": null}, "occupancy": {"available": true, "source": "ApartmentIQ", "caveat": "ApartmentIQ figures came from the daily CSV fallback, which can lag the live API by up to 24 hours.", "missing_reason": null, "quality": null}, "spend": {"available": true, "source": "HubSpot deal line items (spend sheet)", "caveat": null, "missing_reason": null, "quality": null}, "impression_share_lost": {"available": false, "source": "Google Ads API", "caveat": null, "missing_reason": "Google Ads is not configured for this property (Google Ads API not configured: add the `google-ads` library + GOOGLE_ADS_DEVELOPER_TOKEN / OAuth / login-customer-id, then implement _run_gaql.), so impression share lost to budget and to rank is dark \u2014 we cannot say whether more budget would buy more traffic.", "quality": null}, "tour_sources": {"available": false, "source": "BigQuery hyly_daily_activity_v1 (Hyly)", "caveat": null, "missing_reason": "This property has no hyly_property_id on its HubSpot company record. Hyly is a 15-property beta, so tour-stage attribution (lead \u2192 tour \u2192 application \u2192 lease) is not available here \u2014 tour counts by source cannot be answered from lead data alone.", "quality": null}, "reputation": {"available": false, "source": "SOCi", "caveat": null, "missing_reason": "SOCi has no connector on this platform yet, so review volume, star rating and response-time are not part of this answer. Anything about reputation here would be a guess.", "quality": null}}, "generated_at": 1787606091.5002801, "cached": false, "cache": {"durable": true, "property": "portal_ask_cache", "reason": null}, "headline": "Leads fell sharply while site traffic rose, and July's small rebound still leaves lead volume well below May's peak.", "summary": "From May to July, sessions climbed 4,138 to 6,148 (+48.6%) but leads dropped 170 to 114 (\u221232.9%), and the site-wide conversion rate slipped from 1.88% in June to 1.85% in July even as spend rose 9.7%. More visitors are reaching the site without converting at the same rate, which points at the site or the form rather than the media buy.", "findings": [{"title": "Traffic up, leads down \u2014 opposite directions", "detail": "Sessions rose 4,138 to 6,148 (+48.6%) from May to Jul 2026 while leads fell 170 to 114 (\u221232.9%) over the same window. The June-to-July uptick in leads (107 to 114, +6.5%) does not offset the May collapse (170 to 107, \u221237.1%), so July is still a bad month relative to the window's best month.", "evidence": ["leads 170 \u2192 107 (\u221237.1%) from May 2026 to Jun 2026 [BigQuery ninjacat_metrics] while sessions 4,138 \u2192 5,698 (+37.7%) from May 2026 to Jun 2026 [BigQuery ninjacat_metrics]", "leads 170 \u2192 114 (\u221232.9%) from May 2026 to Jul 2026 [BigQuery ninjacat_metrics] while sessions 4,138 \u2192 6,148 (+48.6%) from May 2026 to Jul 2026 [BigQuery ninjacat_metrics]", "leads 107 \u2192 114 (+6.5%) from Jun 2026 to Jul 2026 [BigQuery ninjacat_metrics]"]}, {"title": "Conversion rate is drifting down, not recovering", "detail": "Site-wide conversion rate went from 1.88% in June to 1.85% in July, even with more sessions and more spend. Growing traffic isn't translating into proportionally more inquiries.", "evidence": ["spend $6,856 \u2192 $7,519 (+9.7%) from Jun 2026 to Jul 2026 [BigQuery ninjacat_metrics]", "conversion rate: 107 leads / 5,698 sessions = 1.88% in Jun 2026 [BigQuery ninjacat_metrics]", "conversion rate: 114 leads / 6,148 sessions = 1.85% in Jul 2026 [BigQuery ninjacat_metrics]", "site-wide conversion rate (Google Analytics 4): 114 leads / 6,148 sessions = 1.85% in Jul 2026 [BigQuery ninjacat_metrics]"]}, {"title": "Paid search cost per lead is high and organic is softening", "detail": "Paid Search cost per lead sits at $114 in July on $7,519 spend for 66 leads, and Organic Search leads slipped 43 to 41 (\u22124.7%) from June to July even though paid search leads grew 57 to 66 (+15.8%). The mix is shifting toward the more expensive channel while the free channel weakens.", "evidence": ["Paid Search / Google Ads cost per lead: $7,519 spend / 66 leads = $114 in Jul 2026 [BigQuery ninjacat_metrics]", "Paid Search / Google Ads leads 57 \u2192 66 (+15.8%) from Jun 2026 to Jul 2026 [BigQuery ninjacat_metrics]", "Organic Search (SEO) / Google Analytics 4 leads 43 \u2192 41 (\u22124.7%) from Jun 2026 to Jul 2026 [BigQuery ninjacat_metrics]"]}, {"title": "Lease-up fundamentals are still thin", "detail": "Occupancy sits at 55.7%, leased at 56.8%, and exposure at 41.8%, with 154 units still available to rent. None of the recent traffic or spend changes have moved these numbers meaningfully based on what's in front of you.", "evidence": ["occupancy: 55.7% as of today [ApartmentIQ daily CSV]", "leased: 56.8% as of today [ApartmentIQ daily CSV]", "exposure: 41.8% as of today [ApartmentIQ daily CSV]", "units available to rent: 154 as of today [ApartmentIQ daily CSV]"]}], "next_step": "Audit the lead capture form and on-site conversion funnel for July sessions given the conversion-rate slippage (1.88% to 1.85%) despite a 48.6% session increase since May.", "not_evidenced": ["Impression share lost to budget or rank: Google Ads API is not configured for this property, so we cannot say whether more budget would buy more paid search traffic.", "Tour-stage attribution (lead to tour to application to lease): this property has no Hyly ID on record, so we cannot see where in the funnel leads are being lost.", "Reputation data (review volume, star rating, response time): no SOCi connector exists on this platform yet, so nothing here reflects reputation's effect on leads.", "impression_share_lost: Google Ads is not configured for this property (Google Ads API not configured: add the `google-ads` library + GOOGLE_ADS_DEVELOPER_TOKEN / OAuth / login-customer-id, then implement _run_gaql.), so impression share lost to budget and to rank is dark \u2014 we cannot say whether more budget would buy more traffic.", "tour_sources: This property has no hyly_property_id on its HubSpot company record. Hyly is a 15-property beta, so tour-stage attribution (lead \u2192 tour \u2192 application \u2192 lease) is not available here \u2014 tour counts by source cannot be answered from lead data alone.", "reputation: SOCi has no connector on this platform yet, so review volume, star rating and response-time are not part of this answer. Anything about reputation here would be a guess."], "answered": true, "narrator": "claude", "signals": [{"key": "largest_mom_drop", "metric": "leads", "from_period": "2026-05", "to_period": "2026-06", "from_value": 170, "to_value": 107, "pct_change": -37.1, "direction": "down", "source": "BigQuery ninjacat_metrics", "evidence": "leads 170 \u2192 107 (\u221237.1%) from May 2026 to Jun 2026 [BigQuery ninjacat_metrics] while sessions 4,138 \u2192 5,698 (+37.7%) from May 2026 to Jun 2026 [BigQuery ninjacat_metrics]", "paired_evidence": "sessions 4,138 \u2192 5,698 (+37.7%) from May 2026 to Jun 2026 [BigQuery ninjacat_metrics]", "sentiment": "negative"}, {"key": "peak_decline_leads", "metric": "leads", "from_period": "2026-05", "to_period": "2026-07", "from_value": 170, "to_value": 114, "pct_change": -32.9, "direction": "down", "source": "BigQuery ninjacat_metrics", "evidence": "leads 170 \u2192 114 (\u221232.9%) from May 2026 to Jul 2026 [BigQuery ninjacat_metrics] while sessions 4,138 \u2192 6,148 (+48.6%) from May 2026 to Jul 2026 [BigQuery ninjacat_metrics]", "paired_evidence": "sessions 4,138 \u2192 6,148 (+48.6%) from May 2026 to Jul 2026 [BigQuery ninjacat_metrics]", "sentiment": "negative"}]}
+{
+ "question": "whats_not_working",
+ "label": "What's not working?",
+ "company_id": "30912193455",
+ "property_uuid": "30912193455",
+ "property_name": "The Atwood at Rivulon",
+ "viz": {
+  "kind": "line",
+  "pull": "performance_trend",
+  "x": "month",
+  "series": [
+   "sessions",
+   "leads"
+  ],
+  "title": "Sessions and leads by month",
+  "note": "Plot both series on one chart \u2014 the story is usually the gap between them."
+ },
+ "viz_data": {
+  "months": [
+   {
+    "nid": "10320682",
+    "month": "2025-07",
+    "sessions": 3712,
+    "leads": 51,
+    "paid_conversions": 22,
+    "paid_impressions": 36248,
+    "paid_clicks": 1635,
+    "spend": 4166.3084
+   },
+   {
+    "nid": "10320682",
+    "month": "2025-08",
+    "sessions": 4152,
+    "leads": 139,
+    "paid_conversions": 53,
+    "paid_impressions": 98452,
+    "paid_clicks": 3196,
+    "spend": 7339.6146
+   },
+   {
+    "nid": "10320682",
+    "month": "2025-09",
+    "sessions": 3453,
+    "leads": 90,
+    "paid_conversions": 58,
+    "paid_impressions": 74353,
+    "paid_clicks": 2237,
+    "spend": 7164.8012
+   },
+   {
+    "nid": "10320682",
+    "month": "2025-10",
+    "sessions": 3284,
+    "leads": 68,
+    "paid_conversions": 46,
+    "paid_impressions": 91279,
+    "paid_clicks": 2139,
+    "spend": 7328.9081
+   },
+   {
+    "nid": "10320682",
+    "month": "2025-11",
+    "sessions": 2775,
+    "leads": 43,
+    "paid_conversions": 35,
+    "paid_impressions": 83494,
+    "paid_clicks": 2037,
+    "spend": 7251.8492
+   },
+   {
+    "nid": "10320682",
+    "month": "2025-12",
+    "sessions": 2518,
+    "leads": 57,
+    "paid_conversions": 35,
+    "paid_impressions": 84745,
+    "paid_clicks": 1708,
+    "spend": 7302.8377
+   },
+   {
+    "nid": "10320682",
+    "month": "2026-01",
+    "sessions": 3585,
+    "leads": 76,
+    "paid_conversions": 54,
+    "paid_impressions": 100136,
+    "paid_clicks": 2474,
+    "spend": 7278.9392
+   },
+   {
+    "nid": "10320682",
+    "month": "2026-02",
+    "sessions": 3427,
+    "leads": 84,
+    "paid_conversions": 38,
+    "paid_impressions": 58301,
+    "paid_clicks": 1885,
+    "spend": 6475.6709
+   },
+   {
+    "nid": "10320682",
+    "month": "2026-03",
+    "sessions": 3937,
+    "leads": 114,
+    "paid_conversions": 84,
+    "paid_impressions": 46328,
+    "paid_clicks": 1854,
+    "spend": 6830.0211
+   },
+   {
+    "nid": "10320682",
+    "month": "2026-04",
+    "sessions": 3904,
+    "leads": 136,
+    "paid_conversions": 66,
+    "paid_impressions": 44321,
+    "paid_clicks": 1775,
+    "spend": 6785.9139
+   },
+   {
+    "nid": "10320682",
+    "month": "2026-05",
+    "sessions": 4138,
+    "leads": 170,
+    "paid_conversions": 56,
+    "paid_impressions": 57390,
+    "paid_clicks": 2045,
+    "spend": 6933.674
+   },
+   {
+    "nid": "10320682",
+    "month": "2026-06",
+    "sessions": 5698,
+    "leads": 107,
+    "paid_conversions": 57,
+    "paid_impressions": 39837,
+    "paid_clicks": 1990,
+    "spend": 6856.3205
+   },
+   {
+    "nid": "10320682",
+    "month": "2026-07",
+    "sessions": 6148,
+    "leads": 114,
+    "paid_conversions": 66,
+    "paid_impressions": 40316,
+    "paid_clicks": 2050,
+    "spend": 7519.3321
+   }
+  ],
+  "window": "Jul 2025 to Jul 2026",
+  "months_without_total_row": []
+ },
+ "evidence": [
+  "leads 170 \u2192 107 (\u221237.1%) from May 2026 to Jun 2026 [Google Analytics + Google Ads] while sessions 4,138 \u2192 5,698 (+37.7%) from May 2026 to Jun 2026 [Google Analytics + Google Ads]",
+  "leads 170 \u2192 114 (\u221232.9%) from May 2026 to Jul 2026 [Google Analytics + Google Ads] while sessions 4,138 \u2192 6,148 (+48.6%) from May 2026 to Jul 2026 [Google Analytics + Google Ads]",
+  "spend $6,856 \u2192 $7,519 (+9.7%) from Jun 2026 to Jul 2026 [Google Analytics + Google Ads]",
+  "sessions 5,698 \u2192 6,148 (+7.9%) from Jun 2026 to Jul 2026 [Google Analytics + Google Ads]",
+  "leads 107 \u2192 114 (+6.5%) from Jun 2026 to Jul 2026 [Google Analytics + Google Ads]",
+  "conversion rate: 107 leads / 5,698 sessions = 1.88% in Jun 2026 [Google Analytics + Google Ads]",
+  "conversion rate: 114 leads / 6,148 sessions = 1.85% in Jul 2026 [Google Analytics + Google Ads]",
+  "Paid Search / Google Ads: 66 leads in Jul 2026, measured as Google Ads conversions \u2014 a different system from the 114 site-wide leads Google Analytics 4 recorded, so no share of the total can be stated [Google Analytics + Google Ads]",
+  "Organic Search (SEO) / Google Analytics 4: 41 of 114 leads (36.0%) in Jul 2026 [Google Analytics + Google Ads]",
+  "Organic Search (SEO) / Google Analytics 4: 1,571 of 6,148 sessions (25.6%) in Jul 2026 [Google Analytics + Google Ads]",
+  "Organic Search (SEO) / Google Analytics 4 conversion rate: 41 leads / 1,571 sessions = 2.61% in Jul 2026 [Google Analytics + Google Ads]",
+  "site-wide conversion rate (Google Analytics 4): 114 leads / 6,148 sessions = 1.85% in Jul 2026 [Google Analytics + Google Ads]",
+  "Paid Search / Google Ads cost per lead: $7,519 spend / 66 leads = $114 in Jul 2026 [Google Analytics + Google Ads]",
+  "Paid Search / Google Ads leads 57 \u2192 66 (+15.8%) from Jun 2026 to Jul 2026 [Google Analytics + Google Ads]",
+  "Organic Search (SEO) / Google Analytics 4 leads 43 \u2192 41 (\u22124.7%) from Jun 2026 to Jul 2026 [Google Analytics + Google Ads]",
+  "occupancy: 55.7% as of today [ApartmentIQ daily CSV]",
+  "leased: 57.1% as of today [ApartmentIQ daily CSV]",
+  "exposure: 41.2% as of today [ApartmentIQ daily CSV]",
+  "units available to rent: 152 as of today [ApartmentIQ daily CSV]",
+  "contracted monthly spend: $10,700 across 6 service line(s) [HubSpot deal line items (spend sheet)]",
+  "search: $5,500 of $10,700 monthly spend (51.4%) [HubSpot deal line items (spend sheet)]",
+  "pmax: $2,000 of $10,700 monthly spend (18.7%) [HubSpot deal line items (spend sheet)]",
+  "mgmt_fee: $1,700 of $10,700 monthly spend (15.9%) [HubSpot deal line items (spend sheet)]",
+  "seo: $500 of $10,700 monthly spend (4.7%) [HubSpot deal line items (spend sheet)]",
+  "paid_social: $500 of $10,700 monthly spend (4.7%) [HubSpot deal line items (spend sheet)]",
+  "geofence: $500 of $10,700 monthly spend (4.7%) [HubSpot deal line items (spend sheet)]"
+ ],
+ "caveats": [
+  "ApartmentIQ figures came from the daily CSV fallback, which can lag the live API by up to 24 hours."
+ ],
+ "missing_inputs": [
+  {
+   "input": "impression_share_lost",
+   "label": "Paid search visibility",
+   "source": "Google Ads",
+   "reason": "This property's Google Ads account isn't connected to the portal yet, so we can't tell you whether more budget would buy more traffic, or whether you're already reaching everyone searching."
+  },
+  {
+   "input": "tour_sources",
+   "label": "Tours by source",
+   "source": "Tour tracking",
+   "reason": "We don't track tours at this property yet. Tour tracking is live at a small number of communities and this isn't one of them, so we can't say which sources produced tours or leases here \u2014 only how many leads each source produced."
+  },
+  {
+   "input": "reputation",
+   "label": "Reviews and ratings",
+   "source": "Reviews",
+   "reason": "Reviews and ratings aren't connected to the portal yet, so nothing in this answer reflects your reputation. Anything said about it here would be a guess."
+  }
+ ],
+ "inputs": {
+  "performance_trend": {
+   "available": true,
+   "label": "Traffic and leads",
+   "source": "Google Analytics + Google Ads",
+   "caveat": null,
+   "missing_reason": "",
+   "quality": {
+    "clean_rows": 13,
+    "duplicates_removed": 0,
+    "excluded": 0,
+    "caveat": null,
+    "exceptions": []
+   }
+  },
+  "lead_sources": {
+   "available": true,
+   "label": "Lead sources",
+   "source": "Google Analytics + Google Ads",
+   "caveat": null,
+   "missing_reason": "",
+   "quality": null
+  },
+  "occupancy": {
+   "available": true,
+   "label": "Occupancy and availability",
+   "source": "ApartmentIQ",
+   "caveat": "ApartmentIQ figures came from the daily CSV fallback, which can lag the live API by up to 24 hours.",
+   "missing_reason": "",
+   "quality": null
+  },
+  "spend": {
+   "available": true,
+   "label": "Budget",
+   "source": "HubSpot deal line items (spend sheet",
+   "caveat": null,
+   "missing_reason": "",
+   "quality": null
+  },
+  "impression_share_lost": {
+   "available": false,
+   "label": "Paid search visibility",
+   "source": "Google Ads",
+   "caveat": null,
+   "missing_reason": "This property's Google Ads account isn't connected to the portal yet, so we can't tell you whether more budget would buy more traffic, or whether you're already reaching everyone searching.",
+   "quality": null
+  },
+  "tour_sources": {
+   "available": false,
+   "label": "Tours by source",
+   "source": "Tour tracking",
+   "caveat": null,
+   "missing_reason": "We don't track tours at this property yet. Tour tracking is live at a small number of communities and this isn't one of them, so we can't say which sources produced tours or leases here \u2014 only how many leads each source produced.",
+   "quality": null
+  },
+  "reputation": {
+   "available": false,
+   "label": "Reviews and ratings",
+   "source": "Reviews",
+   "caveat": null,
+   "missing_reason": "Reviews and ratings aren't connected to the portal yet, so nothing in this answer reflects your reputation. Anything said about it here would be a guess.",
+   "quality": null
+  }
+ },
+ "generated_at": "2026-08-25 23:23 UTC",
+ "cached": false,
+ "cache": {
+  "durable": true,
+  "property": "portal_ask_cache",
+  "reason": null
+ },
+ "headline": "leads 170 \u2192 107 (\u221237.1%) from May 2026 to Jun 2026 [Google Analytics + Google Ads] while sessions 4,138 \u2192 5,698 (+37.7%) from May 2026 to Jun 2026 [Google Analytics + Google Ads]",
+ "summary": "Answered from the property's own figures without a written narrative. 2 measured change(s) are listed below, each with its own numbers.",
+ "findings": [
+  {
+   "title": "Leads fell",
+   "detail": "leads 170 \u2192 107 (\u221237.1%) from May 2026 to Jun 2026 [Google Analytics + Google Ads] while sessions 4,138 \u2192 5,698 (+37.7%) from May 2026 to Jun 2026 [Google Analytics + Google Ads]",
+   "evidence": [
+    "leads 170 \u2192 107 (\u221237.1%) from May 2026 to Jun 2026 [Google Analytics + Google Ads] while sessions 4,138 \u2192 5,698 (+37.7%) from May 2026 to Jun 2026 [Google Analytics + Google Ads]"
+   ]
+  },
+  {
+   "title": "Leads fell",
+   "detail": "leads 170 \u2192 114 (\u221232.9%) from May 2026 to Jul 2026 [Google Analytics + Google Ads] while sessions 4,138 \u2192 6,148 (+48.6%) from May 2026 to Jul 2026 [Google Analytics + Google Ads]",
+   "evidence": [
+    "leads 170 \u2192 114 (\u221232.9%) from May 2026 to Jul 2026 [Google Analytics + Google Ads] while sessions 4,138 \u2192 6,148 (+48.6%) from May 2026 to Jul 2026 [Google Analytics + Google Ads]"
+   ]
+  }
+ ],
+ "next_step": null,
+ "not_evidenced": [
+  "impression_share_lost: This property's Google Ads account isn't connected to the portal yet, so we can't tell you whether more budget would buy more traffic, or whether you're already reaching everyone searching.",
+  "tour_sources: We don't track tours at this property yet. Tour tracking is live at a small number of communities and this isn't one of them, so we can't say which sources produced tours or leases here \u2014 only how many leads each source produced.",
+  "reputation: Reviews and ratings aren't connected to the portal yet, so nothing in this answer reflects your reputation. Anything said about it here would be a guess."
+ ],
+ "answered": true,
+ "narrator": "rules",
+ "signals": [
+  {
+   "key": "largest_mom_drop",
+   "metric": "leads",
+   "from_period": "2026-05",
+   "to_period": "2026-06",
+   "from_value": 170,
+   "to_value": 107,
+   "pct_change": -37.1,
+   "direction": "down",
+   "source": "Google Analytics + Google Ads",
+   "evidence": "leads 170 \u2192 107 (\u221237.1%) from May 2026 to Jun 2026 [Google Analytics + Google Ads] while sessions 4,138 \u2192 5,698 (+37.7%) from May 2026 to Jun 2026 [Google Analytics + Google Ads]",
+   "paired_evidence": "sessions 4,138 \u2192 5,698 (+37.7%) from May 2026 to Jun 2026 [Google Analytics + Google Ads]",
+   "sentiment": "negative"
+  },
+  {
+   "key": "peak_decline_leads",
+   "metric": "leads",
+   "from_period": "2026-05",
+   "to_period": "2026-07",
+   "from_value": 170,
+   "to_value": 114,
+   "pct_change": -32.9,
+   "direction": "down",
+   "source": "Google Analytics + Google Ads",
+   "evidence": "leads 170 \u2192 114 (\u221232.9%) from May 2026 to Jul 2026 [Google Analytics + Google Ads] while sessions 4,138 \u2192 6,148 (+48.6%) from May 2026 to Jul 2026 [Google Analytics + Google Ads]",
+   "paired_evidence": "sessions 4,138 \u2192 6,148 (+48.6%) from May 2026 to Jul 2026 [Google Analytics + Google Ads]",
+   "sentiment": "negative"
+  }
+ ]
+}

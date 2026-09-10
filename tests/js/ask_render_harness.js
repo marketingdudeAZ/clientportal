@@ -94,11 +94,27 @@ setImmediate(() => {
     check('a dark source names its reason',
           gaps.indexOf('SOCi') !== -1 || gaps.indexOf('Google Ads') !== -1 || gaps.indexOf('Hyly') !== -1);
 
-    check('next_step rendered', nodes['ask-nextstep'].innerHTML.indexOf('What to do next') !== -1);
+    // The fixture is a real captured response, so whether it carries a
+    // next_step or a model narrative depends on what production returned that
+    // day. Assert what the payload actually contains rather than assuming the
+    // richer shape — a harness that only passes on a good day is not a test.
+    if (answer.next_step) {
+      check('next_step rendered', nodes['ask-nextstep'].innerHTML.indexOf('What to do next') !== -1);
+    } else {
+      check('no next_step in fixture -> nothing rendered',
+            nodes['ask-nextstep'].innerHTML === '');
+    }
     check('provenance mentions generation time',
           nodes['ask-provenance'].innerHTML.length > 0);
-    check('claude-narrated answer does NOT claim the fallback narrator',
-          nodes['ask-provenance'].innerHTML.indexOf('narrative model was unavailable') === -1);
+    const saysFallback = nodes['ask-provenance'].innerHTML
+                           .indexOf('narrative model was unavailable') !== -1;
+    if (answer.narrator === 'rules') {
+      check('a rules-narrated answer SAYS so rather than passing as analysis',
+            saysFallback);
+    } else {
+      check('a model-narrated answer does not claim the fallback narrator',
+            !saysFallback);
+    }
 
     console.log('\n--- panel state ---');
     check('answer panel visible',  nodes['ask-answer'].style.display === '');
