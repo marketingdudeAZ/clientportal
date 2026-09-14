@@ -761,3 +761,31 @@ def workspace_fair_housing_review_run():
                          daemon=True).start()
         return jsonify({"status": "started", "scope": "all", "limit": limit}), 202
     return jsonify({"error": "company_id or all: true is required"}), 400
+
+
+@workspace_bp.route("/api/workspace/creative/upload", methods=["POST", "OPTIONS"])
+def workspace_creative_upload():
+    """Multipart upload into the property's asset library. Verified identity.
+
+    Form fields: company_id, files (one or more), optional metadata (JSON list of
+    {category, subcategory, description} per file) and category. Reuses the
+    existing asset upload path.
+    """
+    gate = _write_gate()
+    if gate:
+        return gate
+    company_id = (request.form.get("company_id") or "").strip()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_common, workspace_creative as wcre
+    try:
+        return jsonify(wcre.upload(ctx, request.files.getlist("files"), request.form.get("metadata"),
+                                   request.form.get("category"))), 201
+    except workspace_common.WorkspaceError as exc:
+        return _refused(exc)
+    except Exception as exc:  # noqa: BLE001
+        return _failed("creative upload", exc)

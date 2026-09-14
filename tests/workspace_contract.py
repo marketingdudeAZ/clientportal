@@ -357,7 +357,14 @@ FAIR_HOUSING_REVIEW = {
 }
 FAIR_HOUSING_RUN_ALL = {"status": enum("started"), "scope": enum("all"), "limit": opt(INT)}
 
+CREATIVE_UPLOAD = {
+    "uploaded": [{"filename": STR, "file_url": STR, "thumbnail_url": opt(STR), "asset_name": STR,
+                  "category": STR, "subcategory": opt(STR)}],
+    "skipped": [{"filename": STR, "reason": STR}],
+}
+
 SHAPES.update({
+    "creative_upload": CREATIVE_UPLOAD,
     "fair_housing_review": FAIR_HOUSING_REVIEW, "fair_housing_run_all": FAIR_HOUSING_RUN_ALL,
     "dashboard": DASHBOARD, "approvals": APPROVALS, "property_overview": PROPERTY_OVERVIEW,
     "media_plan": MEDIA_PLAN, "visibility": VISIBILITY_SCREEN, "create_brief": CREATE_BRIEF,
