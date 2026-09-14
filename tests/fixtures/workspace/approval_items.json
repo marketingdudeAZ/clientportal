@@ -558,7 +558,7 @@
         {
           "label": "42 pages, 118 images checked",
           "source": "fair_housing_review",
-          "as_of": "2026-09-01T06:00:00Z"
+          "as_of": "2026-09-01T14:00:00Z"
         }
       ],
       "evidence": null,
@@ -579,7 +579,7 @@
       "steps": [],
       "trail": [
         {
-          "at": "2026-09-01T06:00:00Z",
+          "at": "2026-09-01T14:00:00Z",
           "actor": "monthly Fair Housing review",
           "text": "Found 2 items on Skye Reserve",
           "visibility": "client"
@@ -600,9 +600,9 @@
         "text": "The monthly review of Skye Reserve's website, listings and images found wording and an image that need a person's call.",
         "receipts": [
           {
-            "label": "Run 2026-09-01",
+            "label": "Monthly review, Sep 1",
             "source": "fair_housing_review",
-            "as_of": "2026-09-01T06:00:00Z"
+            "as_of": "2026-09-01T14:00:00Z"
           }
         ]
       },
@@ -634,8 +634,8 @@
           "company_id": "18234410087",
           "name": "Skye Reserve"
         },
-        "run_at": "2026-09-01T06:00:00Z",
-        "next_run": "2026-10-01T06:00:00Z",
+        "run_at": "2026-09-01T14:00:00Z",
+        "next_run": "2026-10-01T14:00:00Z",
         "pages_checked": 42,
         "assets_checked": 118,
         "findings": [

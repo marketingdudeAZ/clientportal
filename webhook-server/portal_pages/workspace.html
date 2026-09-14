@@ -381,7 +381,7 @@ body.drawer-open{overflow:hidden}
 .fh-find p{font-size:13px;line-height:20px;color:var(--color-fg-2)}
 .fh-find .k{display:block;font-size:12px;line-height:16px;font-weight:600;color:var(--gray-ink-strong)}
 button.link{text-align:left;align-self:flex-start;min-height:24px}
-.btn.wide{width:100%}
+.btn.wide{width:100%;height:auto;min-height:40px;padding-block:9px;white-space:normal;text-align:center}
 
 /* ── Approved ───────────────────────────────────────────────────────── */
 .banner{display:flex;align-items:center;gap:14px;padding:18px 32px;background:var(--healthy-soft);border-bottom:1px solid var(--color-border)}
@@ -691,6 +691,15 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   .hero .r{width:auto}
   .btn,.chip,.rchip,.textbtn{min-height:44px}
   .intr{flex-direction:column}
+  /* Approvals and Content rows stack as cards so Review is always in reach. */
+  .tscroll .tbl.cards-sm{min-width:0;border:0;background:none}
+  .tbl.cards-sm thead{display:none}
+  .tbl.cards-sm,.tbl.cards-sm tbody,.tbl.cards-sm tr,.tbl.cards-sm td{display:block;width:100%}
+  .tbl.cards-sm tr{padding:12px 0;border-bottom:1px solid var(--color-line)}
+  .tscroll .tbl.cards-sm td{border:0;padding:2px 0;white-space:normal}
+  .tscroll .tbl.cards-sm td.acts{text-align:left;padding-top:10px}
+  .tscroll .tbl.cards-sm td.acts .btn{width:100%}
+  .tscroll .tbl.cards-sm td.sav:has(.empty-dash){display:none}
   .drawer{width:100%;border-left:0;box-shadow:none}
   .drawer-head{padding-left:16px}
   .drawer-body{padding:20px 16px}
@@ -1299,7 +1308,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     if (has(st.auto_approve_candidates)) stats.push('Candidates for auto-approve: ' + st.auto_approve_candidates.join(', '));
     return '<div class="page narrow">' + head + chips + (intr ? '<div class="interrupts">' + intr + '</div>' : '') +
       '<section class="sec"><h2 class="h-rail">' + esc(d.batch && d.batch.label || 'Waiting') + '</h2>' +
-      (body ? '<div class="tscroll"><table class="tbl batch"><thead><tr><th scope="col">Property</th><th scope="col">Action</th><th scope="col">Category</th><th scope="col">Savings</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>' + body + '</tbody></table></div>'
+      (body ? '<div class="tscroll"><table class="tbl batch cards-sm"><thead><tr><th scope="col">Property</th><th scope="col">Action</th><th scope="col">Category</th><th scope="col">Savings</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>' + body + '</tbody></table></div>'
         : '<p class="support">Nothing in this category.</p>') + '<p class="inline-err" role="alert" hidden data-approvals-err></p></section>' +
       '<a class="link" href="#/value">View approved history →</a>' + (stats.length ? '<p class="statline">' + esc(stats.join(' · ')) + '</p>' : '') + gapsLine(d.gaps) + '</div>';
   }
@@ -1904,7 +1913,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       setView('<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Content engine</h1><p class="support">' +
         esc(num(k.recommendations) + ' ' + plural(k.recommendations, 'draft') + ' ready · ' + num(k.in_review) + ' in review · ' + num(k.published) + ' published') + '</p>' +
         '<p class="support">Every row has a draft. Review shows why we wrote it, who it’s for, what approving does and the draft itself.</p></div></div>' +
-        (rows ? '<div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Priority</th><th scope="col">Type</th><th scope="col">Title</th><th scope="col">Gap source</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Review</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="support">No drafts yet. A row appears here once its draft exists.</p>') +
+        (rows ? '<div class="tscroll"><table class="tbl boxed cards-sm"><thead><tr><th scope="col">Priority</th><th scope="col">Type</th><th scope="col">Title</th><th scope="col">Gap source</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Review</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="support">No drafts yet. A row appears here once its draft exists.</p>') +
         (has(d.impact) ? '<section class="sec"><h2 class="h-sec">Published content impact</h2>' + d.impact.map(function (i) { return '<p>' + esc(i.text) + '</p>'; }).join('') + '</section>' : '') +
         gapsLine(d.gaps) + '</div>');
     });

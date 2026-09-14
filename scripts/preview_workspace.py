@@ -227,7 +227,7 @@ def _items_for(p: dict) -> list:
                  "reason": "The image is AI-edited and has no disclosure. A state disclosure rule may apply; this check is flagged pending confirmation.",
                  "severity": "low", "suggested_fix": "Add the 'Image digitally enhanced' caption wherever this photo runs, or use the unedited original."},
             ]
-            review = {"property": {"company_id": p["company_id"], "name": n}, "run_at": "2026-09-01T06:00:00Z", "next_run": "2026-10-01T06:00:00Z", "pages_checked": 42, "assets_checked": 118, "findings": findings}
+            review = {"property": {"company_id": p["company_id"], "name": n}, "run_at": "2026-09-01T14:00:00Z", "next_run": "2026-10-01T14:00:00Z", "pages_checked": 42, "assets_checked": 118, "findings": findings}
             out.append(_base_item(
                 p, "fair_housing_review", f"{tail}-2026-09", category="compliance", lens="tailor", channels=["website", "listing"], owner="Dana R.",
                 title=f"Your monthly Fair Housing review for {n} found {len(findings)} items",
@@ -235,7 +235,7 @@ def _items_for(p: dict) -> list:
                 expect=f"Suggested copy fixes go to the web team as drafts for {n}; nothing publishes automatically.",
                 if_skip=f"The flagged copy and image stay live on {n}'s site until someone changes them.",
                 receipts=[{"label": f"{review['pages_checked']} pages, {review['assets_checked']} images checked", "source": "fair_housing_review", "as_of": review["run_at"]}],
-                why={"text": f"The monthly review of {n}'s website, listings and images found wording and an image that need a person's call.", "receipts": [{"label": f"Run {review['run_at'][:10]}", "source": "fair_housing_review", "as_of": review["run_at"]}]},
+                why={"text": f"The monthly review of {n}'s website, listings and images found wording and an image that need a person's call.", "receipts": [{"label": "Monthly review, Sep 1", "source": "fair_housing_review", "as_of": review["run_at"]}]},
                 for_whom={"text": f"Everyone who reads {n}'s website and listings. Fair Housing rules apply to all of it, including edits made on site.", "questions": []},
                 approving_does=[{"label": f"RPM Digital drafts the suggested copy fixes for {n}'s web team", "owner": "RPM Digital", "when": "Within 2 business days"},
                                 {"label": "The web team reviews and publishes the fixes; nothing publishes automatically", "owner": "RPM Digital", "when": "Within 5 business days"},
