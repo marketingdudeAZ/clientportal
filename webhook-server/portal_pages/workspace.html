@@ -462,6 +462,18 @@ a{color:inherit;text-decoration:none}
 .banner.undone .btxt b{color:var(--ink)}
 .banner.undone .btxt span{color:var(--text-2)}
 
+/* Search results */
+.search-wrap{position:relative}
+.sresults{position:absolute;right:0;top:calc(100% + 6px);width:380px;max-height:420px;overflow-y:auto;background:var(--white);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(40,45,39,.12);z-index:20;padding:6px}
+.sgrp + .sgrp{border-top:1px solid var(--line-2);margin-top:4px;padding-top:4px}
+.sgl{font-size:11px;line-height:14px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);padding:8px 10px 4px}
+.sopt{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:8px 10px;border-radius:6px;cursor:pointer;min-height:44px}
+.sopt b{font-size:14px;line-height:18px;font-weight:500;color:var(--ink)}
+.sopt span{font-size:12px;line-height:16px;color:var(--muted)}
+.sopt:hover,.sopt[aria-selected="true"]{background:var(--surface)}
+.sopt[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--copper)}
+.sempty{padding:10px;font-size:13px;line-height:18px;color:var(--muted)}
+
 /* Mobile (Paper artboard L, 390px) */
 @media (max-width:760px){
   .app{flex-direction:column}
@@ -550,6 +562,9 @@ a{color:inherit;text-decoration:none}
   .req-r{order:5;border-left:0;border-block:1px solid var(--line);padding:20px 16px}
   .req-l > .send,.req-l > .signin-row{order:6}
   .req-recent{order:7;border-top:0;padding-top:0}
+  .search-wrap{flex:1;min-width:0}
+  .search-wrap .search{width:100%}
+  .sresults{left:0;right:auto;width:100%}
 }
 
 </style>
@@ -962,7 +977,7 @@ a{color:inherit;text-decoration:none}
       : '';
     return '<div class="topbar"><div class="stack"><h1 class="h1">Work</h1>' +
       (sub.length ? '<p class="lede">' + esc(sub.join(' · ')) + '</p>' : '') + '</div>' +
-      '<div class="tools"><label class="search">' + SEARCH_ICON + '<span class="sr-only">Search this list</span><input type="search" placeholder="Search" data-search></label>' +
+      '<div class="tools"><div class="search-wrap"><label class="search">' + SEARCH_ICON + '<span class="sr-only">Search properties, work, reports and questions</span><input type="search" placeholder="Search" data-search role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="search-results" autocomplete="off"></label><div class="sresults" id="search-results" role="listbox" aria-label="Search results" hidden></div></div>' +
       '<a class="btn primary" href="#/request">' + PLUS_ICON + 'New request</a></div></div>' +
       '<div class="filters"><div class="chips" role="group" aria-label="Filter by status">' + chips + '</div>' +
       '<div class="legend"><span class="sw" aria-hidden="true"></span>Internal only — the client never sees these' +
@@ -1026,10 +1041,7 @@ a{color:inherit;text-decoration:none}
       list.hidden = open; later.setAttribute('aria-expanded', String(!open)); later.textContent = open ? 'Show' : 'Hide';
     });
     var search = main.querySelector('[data-search]');
-    if (search) search.addEventListener('input', function () {
-      var q = search.value.trim().toLowerCase();
-      main.querySelectorAll('.card').forEach(function (c) { c.hidden = q && c.getAttribute('data-title').indexOf(q) === -1; });
-    });
+    if (search) bindSearch(search);
     main.querySelectorAll('[data-approve]').forEach(function (b) {
       b.addEventListener('click', function () { approve(b, b.getAttribute('data-approve'), b.closest('.card').querySelector('.inline-err')); });
     });
@@ -1046,6 +1058,68 @@ a{color:inherit;text-decoration:none}
       if (err && err.status === 401) return;
       if (errEl) { errEl.hidden = false; errEl.textContent = 'That didn’t go through: ' + (err && err.message || 'try again') + '.'; }
     });
+  }
+
+  /* ── Search ──────────────────────────────────────────────────────── */
+  var SEARCH_TYPES = [['property', 'Properties'], ['work_item', 'Work'], ['report', 'Reports'], ['question', 'Questions']];
+  function bindSearch(input) {
+    var box = document.getElementById('search-results'), timer = null, seq = 0, opts = [], active = -1;
+    function close() { box.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; }
+    function open() { box.hidden = false; input.setAttribute('aria-expanded', 'true'); }
+    function setActive(i) {
+      opts.forEach(function (o, j) { o.el.setAttribute('aria-selected', String(j === i)); });
+      active = i;
+      if (i >= 0) { input.setAttribute('aria-activedescendant', opts[i].el.id); opts[i].el.scrollIntoView({ block: 'nearest' }); }
+      else input.removeAttribute('aria-activedescendant');
+    }
+    function go(r) {
+      if (!r || typeof r.href !== 'string' || r.href.indexOf('#/') !== 0) return;
+      close();
+      if (r.company_id && String(r.company_id) !== String(state.companyId)) setCompany(String(r.company_id));
+      if (location.hash === r.href) route(); else location.hash = r.href;
+    }
+    function render(q, results) {
+      var known = SEARCH_TYPES.map(function (t) { return t[0]; });
+      var groups = SEARCH_TYPES.concat([['__other', 'Other']]);
+      var ordered = [], html = '';
+      groups.forEach(function (g) {
+        var rows = results.filter(function (r) { return g[0] === '__other' ? known.indexOf(r.type) === -1 : r.type === g[0]; });
+        if (!rows.length) return;
+        html += '<div class="sgrp" role="group" aria-labelledby="sg-' + g[0] + '"><p class="sgl" id="sg-' + g[0] + '">' + esc(g[1]) + '</p>' + rows.map(function (r) {
+          var i = ordered.push(r) - 1;
+          return '<div class="sopt" role="option" id="sr-' + i + '" aria-selected="false" data-i="' + i + '"><b>' + esc(r.title) + '</b>' +
+            (has(r.subtitle) ? '<span>' + esc(r.subtitle) + '</span>' : '') + '</div>';
+        }).join('') + '</div>';
+      });
+      box.innerHTML = ordered.length ? html : '<p class="sempty">No matches for “' + esc(q) + '”.</p>';
+      opts = ordered.map(function (r, i) { return { r: r, el: box.querySelector('#sr-' + i) }; });
+      active = -1;
+      open();
+    }
+    function run() {
+      var q = input.value.trim();
+      if (q.length < 2) { seq++; opts = []; box.innerHTML = ''; close(); return; }
+      var my = ++seq;
+      box.innerHTML = '<p class="sempty" role="status">Searching…</p>'; opts = []; open();
+      api('/api/workspace/search?q=' + encodeURIComponent(q)).then(function (r) {
+        if (my !== seq) return;
+        render(q, ((r.data || {}).results || []).slice(0, 20));
+      }).catch(function (e) {
+        if (my !== seq || (e && e.status === 401)) return;
+        box.innerHTML = '<p class="sempty">Search didn’t load. Try again.</p>';
+      });
+    }
+    input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(run, 180); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (box.hidden) run(); else if (opts.length) setActive((active + 1) % opts.length); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); if (opts.length) setActive(active <= 0 ? opts.length - 1 : active - 1); }
+      else if (e.key === 'Enter') { if (opts.length) { e.preventDefault(); go(opts[active >= 0 ? active : 0].r); } }
+      else if (e.key === 'Escape') { if (!box.hidden) { e.preventDefault(); close(); } }
+    });
+    box.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    box.addEventListener('click', function (e) { var o = e.target.closest('.sopt'); if (o) go(opts[+o.getAttribute('data-i')].r); });
+    input.addEventListener('blur', function () { setTimeout(close, 120); });
+    input.addEventListener('focus', function () { if (opts.length) open(); });
   }
 
   /* ── Item detail ─────────────────────────────────────────────────── */
