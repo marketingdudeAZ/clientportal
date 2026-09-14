@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPM Digital | Workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
+<script>window.__CLERK_PK__ = 'pk_test_YW11c2VkLXRpZ2VyLTc0LmNsZXJrLmFjY291bnRzLmRldiQ';</script>
+<style>
+/* Design tokens — values from the Paper file "RPM Portal — PMM Workspace".
+   Text greys and copper-on-white are darkened to the nearest AA-passing tone. */
+:root{
+  --font-display:"Montserrat",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --ink:#282D27; --text:#3C4240; --text-2:#5A5E5C; --muted:#616566; --faint:#6F7372; --rule-text:#C6CCCA;
+  --side:#444E4C; --side-deep:#3B4442; --side-active:#525C5A; --side-text:#D3DAD8; --side-icon:#B4BFBC; --side-muted:#B5BEBC;
+  --copper:#AB784A; --copper-fill:#97693F; --copper-ink:#8A6A3F; --copper-2:#C09A6E; --copper-bg:#FBF3EA;
+  --sage:#8BA395; --sage-2:#A9BCB1; --sage-ink:#637C6D; --green:#4F6B5C; --green-ink:#28402F; --green-bg:#EDF3F0; --green-line:#D7E4DE; --green-border:#C6D8CF;
+  --internal:#BDDDD9; --internal-ink:#2E4B48; --teal-ink:#3D5A55; --panel:#F2F7F6; --panel-line:#E1EAE8; --chip-on:#EFF4F3; --chip-on-line:#C9D8D5; --panel-card-line:#DFE7E5;
+  --red:#C94444; --red-ink:#B23A3A; --red-bg:#FBEAEA; --red-line:#EFE0E0; --amber:#D4910A;
+  --line:#E8ECEA; --line-2:#F2F4F3; --line-3:#EFF2F1; --border:#D9DEDC; --border-2:#E2E6E4; --bar:#D6DEDB; --track:#E5E9E7;
+  --tag:#F2F4F3; --surface:#F7F8F8; --surface-2:#FAFBFB; --white:#FFFFFF;
+  --r-xs:2px; --r-sm:4px; --r-md:6px; --r-lg:8px; --r-xl:9px; --r-pill:20px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--font-body);color:var(--text);background:var(--white);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-wrap:anywhere;font-size:14px;line-height:18px}
+button,input,select{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--copper-fill);outline-offset:2px;border-radius:4px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.skip{position:absolute;left:-999px;top:8px;z-index:50;background:var(--white);padding:8px 12px;border-radius:6px}
+.skip:focus{left:8px}
+
+/* Shell */
+.app{display:flex;min-height:100vh}
+.side{background:var(--side);width:216px;flex-shrink:0;display:flex;flex-direction:column;gap:30px;padding:26px 0 22px}
+.mark{display:flex;flex-direction:column;gap:3px;padding-inline:22px}
+.mark b{font-family:var(--font-display);font-weight:700;font-size:16px;line-height:20px;letter-spacing:.16em;color:var(--white)}
+.mark span{font-size:12px;line-height:16px;letter-spacing:.04em;color:var(--side-muted)}
+.switcher{position:relative;background:var(--side-deep);border-left:3px solid var(--copper);display:flex;flex-direction:column;gap:5px;padding:14px 22px}
+.switcher:focus-within{outline:2px solid var(--white);outline-offset:-2px}
+.switcher .lbl{font-size:11px;line-height:14px;font-weight:600;letter-spacing:.14em;color:var(--side-muted);text-transform:uppercase}
+.switcher .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.switcher .name{font-family:var(--font-display);font-weight:600;font-size:16px;line-height:20px;letter-spacing:-.01em;color:var(--white)}
+.switcher .sub{font-size:12px;line-height:16px;color:var(--side-muted)}
+.switcher select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;appearance:none}
+.nav{display:flex;flex-direction:column;gap:1px;padding-inline:12px}
+.nav a{display:flex;align-items:center;gap:11px;padding:10px;border-radius:5px;color:var(--side-text);font-size:14px;line-height:18px}
+.nav a:hover{background:rgba(255,255,255,.05)}
+.nav a[aria-current="page"]{background:var(--side-active);color:var(--white);font-weight:600}
+.nav .ico{width:16px;display:flex;justify-content:center;flex-shrink:0}
+.nav .ico svg{stroke:var(--side-icon)}
+.nav a[aria-current="page"] .ico svg{stroke:var(--white)}
+.nav .t{flex:1}
+.nav .slot{min-width:22px;display:flex;justify-content:flex-end;flex-shrink:0}
+.badge{background:var(--copper-fill);color:var(--white);border-radius:9px;padding:2px 7px;font-size:11px;line-height:14px;font-weight:600}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--white)}
+.page{display:flex;flex-direction:column;gap:24px;padding:30px 40px 40px}
+
+/* Type */
+.h1{font-family:var(--font-display);font-weight:600;font-size:30px;line-height:36px;letter-spacing:-.02em;color:var(--ink)}
+.h1.lg{font-size:34px;line-height:42px}
+.h1.md{font-size:28px;line-height:36px}
+.h1.sm{font-size:26px;line-height:32px}
+.lede{font-size:14px;line-height:18px;color:var(--muted)}
+.eyebrow{font-size:12px;line-height:16px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.eyebrow.dark{color:var(--side)}
+.caption{font-size:13px;line-height:16px;color:var(--faint)}
+.receipt{font-size:12px;line-height:16px;color:var(--faint)}
+.gaps{font-size:13px;line-height:19px;color:var(--faint)}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.head .stack{display:flex;flex-direction:column;gap:5px}
+
+/* Controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:6px;padding:6px 13px;font-size:13px;line-height:16px;font-weight:500;border:1px solid var(--border);color:var(--text-2);background:var(--white);min-height:30px}
+.btn:hover{background:var(--surface)}
+.btn.primary{background:var(--copper-fill);border-color:var(--copper-fill);color:var(--white);font-weight:600;padding-inline:15px}
+.btn.primary:hover{background:#86592F}
+.btn[disabled],.btn[aria-disabled="true"]{cursor:not-allowed;opacity:.6}
+.btn.big{width:100%;padding:13px;border-radius:7px;font-size:14px;line-height:18px;font-weight:600}
+.chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.chip{border:1px solid var(--border);border-radius:var(--r-pill);padding:6px 13px;font-size:13px;line-height:16px;color:var(--text-2);min-height:30px}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--white);font-weight:500}
+.link{color:var(--copper-ink);font-size:13px;line-height:16px;font-weight:500}
+.link:hover{text-decoration:underline}
+.tag{background:var(--tag);border-radius:4px;padding:3px 9px;font-size:12px;line-height:16px;font-weight:500;color:var(--side)}
+.pill{border-radius:4px;padding:3px 10px;font-size:12px;line-height:16px;font-weight:600;display:inline-block}
+.pill.amber{background:var(--copper-bg);color:var(--copper-ink)}
+.pill.red{background:var(--red-bg);color:var(--red-ink)}
+.pill.green{background:var(--green-bg);color:var(--green)}
+.pill.grey{background:var(--tag);color:var(--side);font-weight:500}
+.vr{width:1px;height:13px;background:var(--border-2);flex-shrink:0}
+
+/* States */
+.state{padding:48px 40px;display:flex;flex-direction:column;gap:10px;max-width:560px}
+.state h2{font-family:var(--font-display);font-weight:600;font-size:20px;line-height:26px;color:var(--ink)}
+.state p{font-size:14px;line-height:21px;color:var(--text-2)}
+.loading{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:13px}
+.spinner{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--copper);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation:none}}
+.gate{position:fixed;inset:0;background:var(--side);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px}
+.gate-card{background:var(--white);border-radius:12px;padding:32px;max-width:420px;display:flex;flex-direction:column;gap:12px}
+/*@SCREEN_CSS@*/
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+  <nav class="side" id="side" aria-label="Workspace"></nav>
+  <main class="main" id="main" tabindex="-1" aria-live="polite"></main>
+</div>
+<script>
+(function () {
+  'use strict';
+
+  /* ── Identity ────────────────────────────────────────────────────────
+     Two ways in, never an email in the URL:
+     1. A signed preview link: ?t=<token>. Stored in sessionStorage, stripped
+        from the address bar, sent on every API call as X-Workspace-Link.
+     2. Clerk (same approach as client-portal.html): API calls wait for the
+        Clerk session, then carry Authorization: Bearer <session JWT>. */
+  var LINK_KEY = 'ws.link';
+  var linkToken = null;
+  try {
+    var qs = new URLSearchParams(window.location.search);
+    var t = qs.get('t');
+    if (t) {
+      sessionStorage.setItem(LINK_KEY, t);
+      qs.delete('t');
+      var rest = qs.toString();
+      history.replaceState(null, '', window.location.pathname + (rest ? '?' + rest : '') + window.location.hash);
+    }
+    linkToken = sessionStorage.getItem(LINK_KEY);
+  } catch (e) { linkToken = null; }
+
+  var CLERK_PK = window.__CLERK_PK__ || '';
+  var useClerk = !linkToken && CLERK_PK.indexOf('pk_') === 0;
+  var clerkReadyResolve, clerkReady = new Promise(function (res) { clerkReadyResolve = res; });
+  if (!useClerk) clerkReadyResolve(false);
+
+  function loadClerk() {
+    var key = CLERK_PK.split('_').pop(), domain = '';
+    try { domain = atob(key + '='.repeat((4 - key.length % 4) % 4)).replace(/\$$/, ''); } catch (e) {}
+    var s = document.createElement('script');
+    s.src = domain ? 'https://' + domain + '/npm/@clerk/clerk-js@5/dist/clerk.browser.js'
+                   : 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+    s.async = true; s.crossOrigin = 'anonymous';
+    s.setAttribute('data-clerk-publishable-key', CLERK_PK);
+    s.onerror = function () { showSignIn('We could not reach the sign-in service. Check your connection and reload.'); };
+    document.head.appendChild(s);
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      var C = window.Clerk;
+      var boot = null;
+      if (C && typeof C.load === 'function') boot = function () { return C.load({ publishableKey: CLERK_PK }).then(function () { return C; }); };
+      else if (C && typeof C === 'function') boot = function () { var inst = new C(CLERK_PK); window.Clerk = inst; return inst.load().then(function () { return inst; }); };
+      if (boot) {
+        clearInterval(timer);
+        boot().then(function (inst) {
+          if (inst.user) { clerkReadyResolve(true); return; }
+          mountClerkGate(inst);
+        }).catch(function () { showSignIn('Sign-in did not load. Reload the page to try again.'); });
+      } else if (tries > 100) {
+        clearInterval(timer);
+        showSignIn('Sign-in did not load. Reload the page to try again.');
+      }
+    }, 150);
+  }
+
+  function mountClerkGate(inst) {
+    var d = document.createElement('div');
+    d.className = 'gate'; d.id = 'clerk-gate';
+    var m = document.createElement('div'); d.appendChild(m);
+    document.body.appendChild(d);
+    var here = window.location.href;
+    inst.mountSignIn(m, { forceRedirectUrl: here, fallbackRedirectUrl: here, afterSignInUrl: here, afterSignUpUrl: here });
+    inst.addListener(function (r) {
+      if (r.user) { var g = document.getElementById('clerk-gate'); if (g) g.remove(); clerkReadyResolve(true); }
+    });
+  }
+
+  function authHeaders() {
+    return clerkReady.then(function (signedIn) {
+      var h = { 'Accept': 'application/json' };
+      if (linkToken) h['X-Workspace-Link'] = linkToken;
+      if (!signedIn || !window.Clerk || !window.Clerk.session) return h;
+      return window.Clerk.session.getToken().then(function (tok) {
+        if (tok) h['Authorization'] = 'Bearer ' + tok;
+        return h;
+      });
+    });
+  }
+
+  /* ── API ─────────────────────────────────────────────────────────── */
+  function ApiError(status, body) {
+    this.status = status;
+    this.message = (body && (body.detail || body.error)) || ('Request failed (' + status + ')');
+  }
+
+  function api(path, opts) {
+    opts = opts || {};
+    if (path.charAt(0) !== '/' || path.indexOf('//') === 0) throw new Error('same-origin paths only');
+    return authHeaders().then(function (h) {
+      var init = { method: opts.method || 'GET', headers: h, credentials: 'same-origin' };
+      if (opts.body !== undefined) { h['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
+      return fetch(path, init);
+    }).then(function (res) {
+      return res.text().then(function (txt) {
+        var body = null;
+        try { body = txt ? JSON.parse(txt) : null; } catch (e) { body = null; }
+        if (res.status === 401) {
+          if (linkToken) { try { sessionStorage.removeItem(LINK_KEY); } catch (e) {} }
+          showSignIn(linkToken ? 'This preview link has expired or is not valid.' : null);
+          throw new ApiError(401, body);
+        }
+        if (!res.ok) throw new ApiError(res.status, body);
+        return { status: res.status, data: body };
+      });
+    });
+  }
+
+  /* ── Helpers ─────────────────────────────────────────────────────── */
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function has(v) {
+    if (v == null) return false;
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === 'string') return v.trim().length > 0;
+    return true;
+  }
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var DOW_LONG = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  function parseDay(s) {                     /* "2026-09-14" as a local date */
+    if (!s) return null;
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s).slice(0, 10));
+    if (String(s).length > 10) { var d = new Date(s); return isNaN(d) ? null : d; }
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+  function startOfToday() { var n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
+  function daysFromToday(s) {
+    var d = parseDay(s); if (!d) return null;
+    var dd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    return Math.round((dd - startOfToday()) / 86400000);
+  }
+  function mdy(s) { var d = parseDay(s); return d ? MONTHS[d.getMonth()] + ' ' + d.getDate() : ''; }
+  function dowSlash(s) { var d = parseDay(s); return d ? DOW[d.getDay()] + ' ' + (d.getMonth() + 1) + '/' + d.getDate() : ''; }
+  function slash(s) { var d = parseDay(s); return d ? (d.getMonth() + 1) + '/' + d.getDate() : ''; }
+  function monthYear(s) {
+    var m = /^(\d{4})-(\d{2})/.exec(s || ''); return m ? MONTHS[+m[2] - 1] + ' ' + m[1] : esc(s);
+  }
+  function clock(iso) {
+    var d = new Date(iso); if (isNaN(d)) return '';
+    var h = d.getHours(), mm = d.getMinutes();
+    return ((h % 12) || 12) + ':' + (mm < 10 ? '0' : '') + mm + (h < 12 ? 'am' : 'pm');
+  }
+  function asOf(iso) {                       /* "8:04am", "yesterday 8:04am", "Sep 12" */
+    if (!iso) return '';
+    var n = daysFromToday(iso);
+    if (n === 0) return clock(iso);
+    if (n === -1) return 'yesterday ' + clock(iso);
+    return mdy(iso);
+  }
+  function relDay(s) {                        /* "Today", "Tue 9/15" */
+    var n = daysFromToday(s);
+    if (n === 0) return 'Today';
+    if (n === 1) return 'Tomorrow';
+    return dowSlash(s);
+  }
+  function money(v) { return v == null ? '' : '$' + Math.round(v).toLocaleString('en-US'); }
+  function num(v) { return v == null ? '' : Number(v).toLocaleString('en-US'); }
+  function pct(v, digits) { return v == null ? '' : (v * 100).toFixed(digits == null ? 0 : digits) + '%'; }
+  var WORDS = ['No','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve'];
+  function word(n, lower) { var w = (n >= 0 && n < WORDS.length) ? WORDS[n] : String(n); return lower ? w.toLowerCase() : w; }
+  function plural(n, one, many) { return n === 1 ? one : (many || one + 's'); }
+  var SOURCES = { aptiq: 'ApartmentIQ', hubspot: 'HubSpot', hubspot_line_items: 'HubSpot line items', ga4: 'GA4',
+    google_ads: 'Google Ads', hyly: 'Hyly', fluency: 'Fluency', yardi: 'Yardi', bigquery: 'BigQuery', clickup: 'ClickUp' };
+  function sourceName(s) { return SOURCES[s] || s || ''; }
+  function receipt(obj) {
+    if (!obj || (!obj.source && !obj.as_of)) return '';
+    var parts = [];
+    if (obj.source) parts.push(esc(sourceName(obj.source)));
+    if (obj.as_of) parts.push(esc(asOf(obj.as_of)));
+    return parts.join(' · ');
+  }
+  function gapsLine(gaps) {
+    if (!has(gaps)) return '';
+    var txt = gaps.map(function (g) {
+      if (typeof g === 'string') return g;
+      return g.message || g.detail || g.reason || [g.field, g.source].filter(Boolean).join(' · ');
+    }).filter(Boolean).join(' ');
+    return txt ? '<p class="gaps">' + esc(txt) + '</p>' : '';
+  }
+  var CHANNELS = { paid_search: 'Paid search', pmax: 'PMax', ils: 'ILS', listing: 'Listing', creative: 'Creative', email: 'Email',
+    seo: 'SEO', social: 'Social', website: 'Website', video: 'Video', reputation: 'Reputation', paid: 'Paid' };
+  function channelName(c) { return CHANNELS[c] || (c ? c.replace(/_/g, ' ').replace(/^./, function (x) { return x.toUpperCase(); }) : ''); }
+  function initials(nameOrEmail) {
+    var s = String(nameOrEmail || '').split('@')[0].replace(/[._-]+/g, ' ').trim();
+    var p = s.split(/\s+/);
+    return ((p[0] || '').charAt(0) + (p[1] || '').charAt(0)).toUpperCase() || '?';
+  }
+  function shortName(email) {
+    var s = String(email || '').split('@')[0].split(/[._-]/)[0];
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+  }
+
+  /* ── State ───────────────────────────────────────────────────────── */
+  var state = { me: null, companyId: null, workCount: null, portfolioCount: null, lastDecision: {}, askCache: {} };
+  var COMPANY_KEY = 'ws.company';
+  function company() {
+    var list = (state.me && state.me.companies) || [];
+    for (var i = 0; i < list.length; i++) if (String(list[i].company_id) === String(state.companyId)) return list[i];
+    return list[0] || null;
+  }
+  function isInternal() { return state.me && state.me.role === 'internal'; }
+  function cq() { return 'company_id=' + encodeURIComponent(state.companyId || ''); }
+
+  /* ── Icons (paths from the Paper file) ───────────────────────────── */
+  var ICON = {
+    work: '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke-width="1.3" aria-hidden="true"><rect x="1.6" y="2.4" width="11.8" height="10.2" rx="1.6"/><path d="M4.6 6.2h5.8M4.6 9.1h3.6" stroke-linecap="round"/></svg>',
+    property: '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke-width="1.3" aria-hidden="true"><path d="M2.2 6.4L7.5 2.2l5.3 4.2v6.1a.9.9 0 0 1-.9.9H3.1a.9.9 0 0 1-.9-.9V6.4z" stroke-linejoin="round"/></svg>',
+    performance: '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke-width="1.3" aria-hidden="true"><path d="M2 11.4l3.4-3.9 2.6 2.2 4.9-5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    plan: '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke-width="1.3" aria-hidden="true"><circle cx="7.5" cy="7.5" r="5.4"/><path d="M7.5 4.4v3.1l2.1 1.5" stroke-linecap="round"/></svg>',
+    ask: '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke-width="1.3" aria-hidden="true"><path d="M2.3 3.6a1.2 1.2 0 0 1 1.2-1.2h8a1.2 1.2 0 0 1 1.2 1.2v5a1.2 1.2 0 0 1-1.2 1.2H6.1L3.4 12.4V9.8h-1.1V3.6z" stroke-linejoin="round"/></svg>',
+    reports: '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke-width="1.3" aria-hidden="true"><path d="M3.6 1.9h5l3 3v8.2a.8.8 0 0 1-.8.8H3.6a.8.8 0 0 1-.8-.8V2.7a.8.8 0 0 1 .8-.8z" stroke-linejoin="round"/><path d="M8.4 2v3.1h3" stroke-linejoin="round"/></svg>',
+    chevron: '<svg width="10" height="6" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1L5 5L9 1" fill="none" stroke="#B5BEBC" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    check: '<svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"><path d="M3 7.8l3 3 6-6.6" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    comment: '<svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M1.9 3.2a1 1 0 0 1 1-1h7.2a1 1 0 0 1 1 1v4.6a1 1 0 0 1-1 1H5.2L2.9 11V8.8h-1V3.2z" fill="none" stroke="#6F7372" stroke-width="1.2" stroke-linejoin="round"/></svg>',
+    eye: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1.4 7s2-3.6 5.6-3.6S12.6 7 12.6 7s-2 3.6-5.6 3.6S1.4 7 1.4 7z" fill="none" stroke="#637C6D" stroke-width="1.2"/><circle cx="7" cy="7" r="1.6" fill="none" stroke="#637C6D" stroke-width="1.2"/></svg>',
+    lock: '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.3 5.2V3.8a2.7 2.7 0 0 1 5.4 0v1.4" fill="none" stroke="#2E4B48" stroke-width="1.3"/><rect x="2.3" y="5.2" width="7.4" height="5" rx="1.2" fill="none" stroke="#2E4B48" stroke-width="1.3"/></svg>',
+    info: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="#616566" stroke-width="1.3"/><path d="M8 4.6v4.2M8 11v.1" fill="none" stroke="#616566" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    lockGrey: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.4 6.9V5a3.6 3.6 0 0 1 7.2 0v1.9" fill="none" stroke="#6F7372" stroke-width="1.3"/><rect x="3.1" y="6.9" width="9.8" height="6.6" rx="1.5" fill="none" stroke="#6F7372" stroke-width="1.3"/></svg>',
+    refuse: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="#6F7372" stroke-width="1.3"/><path d="M5.6 8h4.8" fill="none" stroke="#6F7372" stroke-width="1.4" stroke-linecap="round"/></svg>'
+  };
+
+  /* ── Sidebar ─────────────────────────────────────────────────────── */
+  var NAV = [
+    { key: 'work', href: '#/work', label: 'Work', icon: 'work' },
+    { key: 'property', href: '#/property', label: 'Property', icon: 'property' },
+    { key: 'performance', href: '#/performance', label: 'Performance', icon: 'performance' },
+    { key: 'plan', href: '#/plan', label: 'Plan & Spend', icon: 'plan' },
+    { key: 'ask', href: '#/ask', label: 'Ask', icon: 'ask' },
+    { key: 'reports', href: '#/reports', label: 'Reports', icon: 'reports' }
+  ];
+  var PORTFOLIO_NAV = [
+    { key: 'portfolio', href: '#/portfolio', label: 'Work', icon: 'work' },
+    { key: 'reports', href: '#/reports', label: 'Reports', icon: 'reports' }
+  ];
+
+  function renderSide(active) {
+    var side = document.getElementById('side');
+    if (!state.me) { side.innerHTML = markHtml(); return; }
+    var portfolio = active === 'portfolio';
+    var list = state.me.companies || [];
+    var c = company();
+    var sw;
+    if (portfolio) {
+      sw = '<div class="switcher"><span class="lbl" id="sw-lbl">Scope</span>' +
+        '<div class="row"><span class="name">My properties</span>' + ICON.chevron + '</div>' +
+        '<span class="sub">' + esc(list.length) + ' ' + plural(list.length, 'property', 'properties') + '</span>' +
+        selectHtml(list, '__portfolio__') + '</div>';
+    } else if (c) {
+      sw = '<div class="switcher"><span class="lbl" id="sw-lbl">Property</span>' +
+        '<div class="row"><span class="name">' + esc(c.name) + '</span>' + (list.length > 1 || isInternal() ? ICON.chevron : '') + '</div>' +
+        '<span class="sub">' + esc([c.city && c.state ? c.city + ', ' + c.state : (c.city || c.state), c.units != null ? num(c.units) + ' units' : ''].filter(Boolean).join(' · ')) + '</span>' +
+        (list.length > 1 || isInternal() ? selectHtml(list, c.company_id) : '') + '</div>';
+    } else {
+      sw = '<div class="switcher"><span class="lbl">Property</span><span class="sub">No properties on your account yet</span></div>';
+    }
+    var items = portfolio ? PORTFOLIO_NAV : NAV;
+    var navHtml = items.map(function (n) {
+      var count = n.key === 'work' ? state.workCount : (n.key === 'portfolio' ? state.portfolioCount : null);
+      var cur = (n.key === active) || (active === 'item' && n.key === 'work') || (active === 'client' && n.key === 'work');
+      return '<a href="' + n.href + '"' + (cur ? ' aria-current="page"' : '') + '>' +
+        '<span class="ico">' + ICON[n.icon] + '</span><span class="t">' + esc(n.label) + '</span>' +
+        '<span class="slot">' + (count ? '<span class="badge"><span class="sr-only">, </span>' + esc(count) + '<span class="sr-only"> to do</span></span>' : '') + '</span></a>';
+    }).join('');
+    side.innerHTML = markHtml() + sw + '<div class="nav">' + navHtml + '</div>';
+    var sel = side.querySelector('select');
+    if (sel) sel.addEventListener('change', function () {
+      if (sel.value === '__portfolio__') { location.hash = '#/portfolio'; return; }
+      setCompany(sel.value);
+      if (portfolio || /^#\/item\//.test(location.hash)) location.hash = '#/work'; else route();
+    });
+  }
+  function markHtml() { return '<div class="mark"><b>RPM</b><span>Digital</span></div>'; }
+  function selectHtml(list, current) {
+    var opts = '';
+    if (isInternal()) opts += '<option value="__portfolio__"' + (current === '__portfolio__' ? ' selected' : '') + '>All my properties</option>';
+    opts += list.map(function (x) {
+      return '<option value="' + esc(x.company_id) + '"' + (String(x.company_id) === String(current) ? ' selected' : '') + '>' + esc(x.name) + '</option>';
+    }).join('');
+    return '<select aria-labelledby="sw-lbl" aria-label="Switch property">' + opts + '</select>';
+  }
+  function setCompany(id) {
+    state.companyId = id; state.workCount = null;
+    try { localStorage.setItem(COMPANY_KEY, id); } catch (e) {}
+  }
+
+  /* ── Page states ─────────────────────────────────────────────────── */
+  var main = document.getElementById('main');
+  function setMain(html) { main.innerHTML = html; }
+  function loadingHtml(what) {
+    return '<div class="state"><div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading ' + esc(what || '') + '…</div></div>';
+  }
+  function errorHtml(err) {
+    var title = 'Something went wrong loading this.', body = err && err.message ? err.message : '';
+    if (err && err.status === 403) { title = 'You don’t have access to this.'; body = 'Ask your account manager to add this property to your account.'; }
+    if (err && err.status === 404) { title = 'We couldn’t find that.'; body = 'It may have been closed or moved.'; }
+    return '<div class="state" role="alert"><h2>' + esc(title) + '</h2>' + (body ? '<p>' + esc(body) + '</p>' : '') +
+      '<div><button class="btn" type="button" data-retry>Try again</button></div></div>';
+  }
+  function showSignIn(note) {
+    document.getElementById('side').innerHTML = markHtml();
+    setMain('<div class="state"><h2>Sign in to see your workspace</h2>' +
+      '<p>' + esc(note || 'Your session has ended or you are not signed in.') + '</p>' +
+      '<div><button class="btn primary" type="button" id="signin-btn">Sign in</button></div></div>');
+    var b = document.getElementById('signin-btn');
+    if (b) b.addEventListener('click', function () {
+      try { sessionStorage.removeItem(LINK_KEY); } catch (e) {}
+      window.location.replace(window.location.pathname + window.location.hash);
+    });
+  }
+  main.addEventListener('click', function (e) {
+    if (e.target.closest('[data-retry]')) route();
+  });
+  function guard(p, what) {
+    setMain(loadingHtml(what));
+    return p.catch(function (err) {
+      if (err && err.status === 401) return null;
+      setMain(errorHtml(err));
+      return null;
+    });
+  }
+
+  /*@STUBS@*/
+  function comingHtml(t){ return '<div class="page"><h1 class="h1">'+esc(t)+'</h1><p class="lede">This screen is being built.</p></div>'; }
+  function screenPortfolio(){ setMain(comingHtml('Portfolio')); }
+  function screenWork(){ setMain(comingHtml('Work')); }
+  function screenItem(){ setMain(comingHtml('Item')); }
+  function screenApproved(){ setMain(comingHtml('Approved')); }
+  function screenProperty(){ setMain(comingHtml('Property')); }
+  function screenPerformance(){ setMain(comingHtml('Performance')); }
+  function screenPlan(){ setMain(comingHtml('Plan & Spend')); }
+  function screenAsk(){ setMain(comingHtml('Ask')); }
+  function screenClient(){ setMain(comingHtml('Client view')); }
+  function screenReports(){ setMain(comingHtml('Reports')); }
+  /*@/STUBS@*/
+  /*@SCREENS@*/
+
+  /* ── Router ──────────────────────────────────────────────────────── */
+  function route() {
+    var h = (location.hash || '').replace(/^#\/?/, '');
+    var parts = h.split('?')[0].split('/');
+    var name = parts[0] || (isInternal() ? 'portfolio' : 'work');
+    if (name === 'portfolio' && !isInternal()) name = 'work';
+    if (!state.companyId && name !== 'portfolio' && name !== 'reports') {
+      setMain('<div class="state"><h2>No property selected</h2><p>There are no properties on this account yet.</p></div>');
+      renderSide(name); return;
+    }
+    var screens = {
+      portfolio: screenPortfolio, work: screenWork, item: screenItem, approved: screenApproved,
+      property: screenProperty, performance: screenPerformance, plan: screenPlan, ask: screenAsk,
+      client: screenClient, reports: screenReports
+    };
+    var fn = screens[name] || screenWork;
+    renderSide(fn === screenItem || fn === screenApproved ? 'item' : name);
+    window.scrollTo(0, 0);
+    fn(decodeURIComponent(parts[1] || ''));
+  }
+
+  function boot() {
+    if (useClerk) loadClerk();
+    setMain(loadingHtml('your workspace'));
+    api('/api/workspace/me').then(function (r) {
+      state.me = r.data || {};
+      var list = state.me.companies || [];
+      var saved = null;
+      try { saved = localStorage.getItem(COMPANY_KEY); } catch (e) {}
+      var ok = list.some(function (x) { return String(x.company_id) === String(saved); });
+      state.companyId = ok ? saved : (list[0] ? String(list[0].company_id) : null);
+      window.addEventListener('hashchange', route);
+      route();
+    }).catch(function (err) {
+      if (err && err.status === 401) return;
+      setMain(errorHtml(err));
+      main.querySelector('[data-retry]').addEventListener('click', function () { window.location.reload(); });
+    });
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
