@@ -324,6 +324,17 @@ def content_briefs():
     if not hub_keyword:
         return jsonify({"error": "cluster_hub_keyword is required"}), 400
 
+    start_content_brief(company_id, property_uuid, hub_keyword, payload)
+    return jsonify({"status": "generating", "hub_keyword": hub_keyword}), 202
+
+def start_content_brief(company_id, property_uuid, hub_keyword, payload):
+    """Generate and persist a content brief on a background thread.
+
+    Module-callable brief path: /api/content/briefs and the workspace
+    create-brief action both use it. The SEO-tier gate stays with each caller.
+    """
+    payload = payload or {}
+
     # Kick off generation in a background thread so the HTTP request returns fast.
     def _generate():
         try:
@@ -388,7 +399,6 @@ def content_briefs():
             logger.error("brief generation failed: %s", exc, exc_info=True)
 
     threading.Thread(target=_generate, daemon=True).start()
-    return jsonify({"status": "generating", "hub_keyword": hub_keyword}), 202
 
 
 @seo_bp.route("/api/content/briefs/<brief_id>", methods=["GET", "OPTIONS"])

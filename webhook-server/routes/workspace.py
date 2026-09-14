@@ -591,3 +591,44 @@ def workspace_property_overview():
         return jsonify(wpo.build_property_overview(ctx, internal=_is_internal()))
     except Exception as exc:  # noqa: BLE001
         return _failed("property overview", exc)
+
+
+# ── v3: AI visibility ────────────────────────────────────────────────────────
+
+@workspace_bp.route("/api/workspace/visibility", methods=["GET", "OPTIONS"])
+def workspace_visibility():
+    company_id = _company_id()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_visibility as wvis
+    try:
+        return jsonify(wvis.build_visibility(ctx, internal=_is_internal()))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("visibility", exc)
+
+
+@workspace_bp.route("/api/workspace/visibility/create-brief", methods=["POST", "OPTIONS"])
+def workspace_create_brief():
+    """Start a content brief through the existing brief path. Verified identity."""
+    gate = _write_gate()
+    if gate:
+        return gate
+    body = request.get_json(silent=True) or {}
+    company_id = str(body.get("company_id") or "").strip()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_common, workspace_visibility as wvis
+    try:
+        return jsonify(wvis.create_brief(ctx, body.get("hub_keyword") or "", current_portal_email())), 202
+    except workspace_common.WorkspaceError as exc:
+        return _refused(exc)
+    except Exception as exc:  # noqa: BLE001
+        return _failed("create brief", exc)

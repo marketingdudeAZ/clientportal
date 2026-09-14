@@ -369,3 +369,94 @@ class TestPropertyOverview:
         _allowlist_client(monkeypatch, [CID2])
         assert client.get(f"/api/workspace/property-overview?company_id={CID}",
                           headers=_h(CLIENT)).status_code == 403
+
+
+# ── 4. visibility ────────────────────────────────────────────────────────────
+
+class TestVisibility:
+    @pytest.fixture
+    def snapshot(self, monkeypatch, scope):
+        import ai_mentions
+        import bigquery_client
+        import config
+        monkeypatch.setattr(config, "HUBDB_AI_MENTIONS_TABLE_ID", "t-ai", raising=False)
+        monkeypatch.setattr(bigquery_client, "is_bigquery_configured", lambda: False)
+        monkeypatch.setattr(ai_mentions, "get_latest_snapshot", lambda uuid: {
+            "composite_index": 62, "scanned_at": "2026-09-10T00:00:00Z",
+            "by_engine": {"chatgpt": {"cited_rate": 0.8}, "perplexity": {"cited_rate": 0.0},
+                          "gemini": {"cited_rate": 0.4}, "google_aio": {"cited_rate": None}},
+            "history": [{"composite": 62}, {"composite": 58}]})
+
+    def test_ai_mentions_fallback(self, client, snapshot):
+        body = client.get(f"/api/workspace/visibility?company_id={CID}", headers=_h()).get_json()
+        _ok(body, "visibility")
+        assert body["score"]["value"] == 62 and body["score"]["source"] == "ai_mentions"
+        assert body["change"] == {"value": 4, "window": "previous audit", "source": "ai_mentions"}
+        assert [e["engine"] for e in body["engines"]] == ["ChatGPT", "Perplexity", "Gemini", "Google AI Overviews"]
+        assert body["engines"][3]["score"] is None and body["engines"][0]["queries_hit"] is None
+        assert [r["action"]["engine"] for r in body["recommendations"]] == ["Perplexity"]
+        assert body["comp_stack"] is None and body["citation_sources"] == []
+        assert {"comp_stack", "citation_sources", "next_audit"} <= {g.get("field") for g in body["gaps"]}
+
+    def test_geo_tables_win_when_they_have_rows(self, client, snapshot, monkeypatch):
+        import bigquery_client
+        monkeypatch.setattr(bigquery_client, "is_bigquery_configured", lambda: True)
+        monkeypatch.setattr(bigquery_client, "_dataset", lambda: "ds")
+        results = [
+            [{"engine": "chatgpt", "total": 20, "hit": 12, "last_at": "2026-09-13T00:00:00Z"},
+             {"engine": "perplexity", "total": 20, "hit": 0, "last_at": "2026-09-13T00:00:00Z"}],
+            [{"domain": "apartments.com", "n": 34}, {"domain": "parkline.com", "n": 66}],
+            [{"brand_name": "Parkline", "is_self": True, "n": 12}, {"brand_name": "The Reserve", "is_self": False, "n": 16}],
+        ]
+        monkeypatch.setattr(bigquery_client, "query", mock.Mock(side_effect=results))
+        body = client.get(f"/api/workspace/visibility?company_id={CID}", headers=_h()).get_json()
+        _ok(body, "visibility")
+        assert body["score"] == {"value": 30, "source": "geo_brand_mentions", "as_of": "2026-09-13T00:00:00Z"}
+        assert (body["engines"][0]["queries_hit"], body["engines"][0]["queries_total"]) == (12, 20)
+        assert body["citation_sources"][0] == {"source": "apartments.com", "share": 0.34,
+                                               "share_source": "geo_sources"}
+        assert body["comp_stack"]["competitors"] == ["The Reserve"]
+        assert body["comp_stack"]["rows"][0]["values"] == {"self": 30, "The Reserve": 40}
+
+    def test_missing_geo_tables_fall_back(self, client, snapshot, monkeypatch):
+        import bigquery_client
+        monkeypatch.setattr(bigquery_client, "is_bigquery_configured", lambda: True)
+        monkeypatch.setattr(bigquery_client, "_dataset", lambda: "ds")
+        monkeypatch.setattr(bigquery_client, "query", mock.Mock(side_effect=RuntimeError("Not found: geo_responses")))
+        body = client.get(f"/api/workspace/visibility?company_id={CID}", headers=_h()).get_json()
+        assert body["score"]["source"] == "ai_mentions"
+
+    def test_create_brief_needs_verified_identity(self, client, snapshot):
+        with mock.patch("routes.seo.start_content_brief") as start:
+            r = client.post("/api/workspace/visibility/create-brief", headers=_h(),
+                            json={"company_id": CID, "hub_keyword": "parking faq"})
+        assert r.status_code == 401
+        start.assert_not_called()
+
+    def test_create_brief_uses_the_existing_path(self, client, snapshot, monkeypatch):
+        import seo_entitlement
+        monkeypatch.setattr(seo_entitlement, "has_feature", lambda tier, f: True)
+        with mock.patch("routes.seo.start_content_brief") as start:
+            r = client.post("/api/workspace/visibility/create-brief", headers=_h(), environ_overrides=VERIFIED,
+                            json={"company_id": CID, "hub_keyword": "parking faq"})
+        assert r.status_code == 202
+        _ok(r.get_json(), "create_brief")
+        start.assert_called_once_with(CID, "u-123", "parking faq", {})
+
+    def test_create_brief_refusals(self, client, snapshot, monkeypatch):
+        import seo_entitlement
+        monkeypatch.setattr(seo_entitlement, "has_feature", lambda tier, f: False)
+        post = lambda kw, **h: client.post("/api/workspace/visibility/create-brief", headers=_h(**h),
+                                           environ_overrides=VERIFIED, json={"company_id": CID, "hub_keyword": kw})
+        with mock.patch("routes.seo.start_content_brief") as start:
+            assert post("parking faq").status_code == 403
+            monkeypatch.setattr(seo_entitlement, "has_feature", lambda tier, f: True)
+            assert post("adults only community").status_code == 400
+            assert post("x").status_code == 400
+            assert post("parking faq", **{"X-Workspace-Preview-Role": "client"}).status_code == 403
+        start.assert_not_called()
+
+    def test_seo_route_still_uses_the_same_function(self):
+        import inspect
+        from routes import seo
+        assert "start_content_brief(company_id, property_uuid, hub_keyword, payload)" in inspect.getsource(seo.content_briefs)
