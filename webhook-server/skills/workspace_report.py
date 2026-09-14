@@ -246,6 +246,11 @@ def article(text: str) -> str:
     return "an" if t[:1] == "8" or re.match(r"1[18](?:\D|$)", t) else "a"
 
 
+def fmt_count(n, singular, plural=None):
+    """A count with its noun agreeing: "1 lease", "8 leases"."""
+    return f"{fmt_int(n)} {singular if n == 1 else (plural or singular + 's')}"
+
+
 def fmt_int(v: float) -> str:
     n = int(_half_up(v))
     return f"{MINUS}{abs(n):,}" if n < 0 else f"{n:,}"
@@ -499,7 +504,7 @@ def _occupancy(c: _Ctx) -> dict:
     if val(leased_rate) is not None and val(occupied_rate) is not None:
         parts = [f"{fmt_pct(val(leased_rate))} leased and {fmt_pct(val(occupied_rate))} occupied"]
         if val(v("leased_future")) is not None:
-            parts.append(f"with {fmt_int(val(v('leased_future')))} signed residents moving in")
+            parts.append(f"with {fmt_count(val(v('leased_future')), 'signed resident')} moving in")
         takeaway = ", ".join(parts)
         if val(net) is not None:
             takeaway += f"; net move-ins were {fmt_int(val(net))}."
@@ -556,7 +561,7 @@ def _funnel(c: _Ctx) -> dict:
 
     created, leased = val(c.get("created")), val(c.get("leased"))
     if created is not None and leased is not None:
-        takeaway = f"{fmt_int(created)} leads became {fmt_int(leased)} leases"
+        takeaway = f"{fmt_count(created, 'lead')} became {fmt_count(leased, 'lease')}"
         takeaway += f"; lead to lease took {fmt_days(val(l2l))} days." if val(l2l) is not None else f" in {c.mname}."
     else:
         takeaway = f"Leasing activity isn't available for {c.label} yet."
@@ -705,7 +710,7 @@ def _attribution(c: _Ctx) -> dict:
     if ft_created and created_total:
         top = max(ft_created, key=lambda r: val(r["count"]) or 0)
         takeaway = (f"{source_display(top['name'])} was the first source for {fmt_int(val(top['count']))} of "
-                    f"{fmt_int(created_total)} new leads")
+                    f"{fmt_count(created_total, 'new lead')}")
         if prospects and val(prospects.get("created")) is not None:
             takeaway += f"; {fmt_int(val(prospects['created']))} prospects were influenced across all touches."
         else:
@@ -776,7 +781,7 @@ def _website(c: _Ctx) -> dict:
         notes.append(f"Average engagement time was {fmt_int(val(v('ga_avg_engagement_seconds')))} seconds.")
     for r in rows:
         if r["label"]:
-            conv = f" and {fmt_int(val(r['conversions']))} conversions" if val(r["conversions"]) is not None else ""
+            conv = f" and {fmt_count(val(r['conversions']), 'conversion')}" if val(r["conversions"]) is not None else ""
             bounce = fmt_pct(val(r["bounce_rate"]))
             notes.append(f"{r['name']} sent {fmt_int(val(r['sessions']))} sessions with {article(bounce)} "
                          f"{bounce} bounce rate{conv}; we're reviewing where those "
@@ -820,16 +825,16 @@ def _paid_search(c: _Ctx) -> dict:
         takeaway = (f"{fmt_pct(val(ctr), 2)} click-through rate, {where} the {fmt_int(lo * 100)}–"
                     f"{fmt_pct(hi, 0)} benchmark")
         if val(conv) is not None and val(leads) is not None:
-            takeaway += (f"; we're aligning {fmt_int(val(conv))} ad conversions with the "
-                         f"{fmt_int(val(leads))} leads in the CRM.")
+            takeaway += (f"; we're aligning {fmt_count(val(conv), 'ad conversion')} with the "
+                         f"{fmt_count(val(leads), 'lead')} in the CRM.")
         else:
             takeaway += "."
     else:
         takeaway = f"Paid search results aren't connected for {c.label} yet."
     note = ""
     if val(conv) is not None and val(leads) is not None:
-        lease_txt = f", with {fmt_int(val(leases))} leases" if val(leases) is not None else ""
-        note = (f"Google Ads recorded {fmt_int(val(conv))} conversions, and {fmt_int(val(leads))} leads with Google "
+        lease_txt = f", with {fmt_count(val(leases), 'lease')}" if val(leases) is not None else ""
+        note = (f"Google Ads recorded {fmt_count(val(conv), 'conversion')}, and {fmt_count(val(leads), 'lead')} with Google "
                 f"Ads as their first source reached the CRM{lease_txt}. We're aligning the conversion definition "
                 "with CRM leads before the next budget cycle.")
     return {
@@ -884,7 +889,7 @@ def _listings(c: _Ctx) -> dict:
         c.need("listings", "placements", None, f"No listing placement data for {c.label}.")
     if placements:
         p = placements[0]
-        takeaway = f"{p['name']}: {fmt_int(val(p['impressions']) or 0)} impressions and {fmt_int(val(p['leads']) or 0)} leads."
+        takeaway = f"{p['name']}: {fmt_count(val(p['impressions']) or 0, 'impression')} and {fmt_count(val(p['leads']) or 0, 'lead')}."
         note = "Placement tiers and costs aren't in the listing feed yet."
     else:
         takeaway = f"No listing placement data for {c.label} yet."
@@ -905,12 +910,12 @@ def _actions(c: _Ctx, sec: dict) -> list[dict]:
             detail.append(f"The spend manager shows {fmt_money(val(diff[0]))} and the ad platform "
                           f"{fmt_money(val(diff[1]))}.")
         if conv is not None and leads is not None:
-            detail.append(f"The platform recorded {fmt_int(conv)} conversions, and {fmt_int(leads)} leads reached "
+            detail.append(f"The platform recorded {fmt_count(conv, 'conversion')}, and {fmt_count(leads, 'lead')} reached "
                           "the CRM.")
         detail.append("We'll align both before the next budget cycle.")
         out.append({"title": "Reconcile Google Ads spend and conversion tracking before renewal",
                     "detail": " ".join(detail),
-                    "stake_label": f"{fmt_money(val(diff[0]))} monthly budget" if diff else f"{fmt_int(conv)} conversions",
+                    "stake_label": f"{fmt_money(val(diff[0]))} monthly budget" if diff else f"{fmt_count(conv, 'conversion')}",
                     "lens": "evolve", "clause": "reconciling Google Ads spend and conversion tracking before renewal"})
 
     priced = [r for r in spend["vendors"] if val(r["cost_per_lead"]) is not None]
@@ -978,7 +983,7 @@ def _discrepancies(c: _Ctx, sec: dict) -> list[dict]:
         if val(vendor_leads) is not None and match and val(match["leads"]) != val(vendor_leads):
             pairs.append((vd["name"], vendor_leads, match["leads"]))
     if pairs:
-        bits = [f"{n} shows {fmt_int(val(a))} leads by vendor and {fmt_int(val(b))} by spend source" for n, a, b in pairs]
+        bits = [f"{n} shows {fmt_count(val(a), 'lead')} by vendor and {fmt_int(val(b))} by spend source" for n, a, b in pairs]
         out.append({"key": "lead_basis",
                     "text": "Lead counts depend on the basis: " + "; ".join(bits) + ". This report uses the vendor basis.",
                     "values": [r for _, a, b in pairs for r in (a, b)]})
@@ -987,8 +992,8 @@ def _discrepancies(c: _Ctx, sec: dict) -> list[dict]:
     if val(ps["ad_conversions"]) is not None and val(ps["leads"]) is not None and \
             val(ps["ad_conversions"]) > 3 * max(val(ps["leads"]), 1):
         out.append({"key": "ads_conversions_vs_leads",
-                    "text": (f"Google Ads recorded {fmt_int(val(ps['ad_conversions']))} conversions, while "
-                             f"{fmt_int(val(ps['leads']))} leads list Google Ads as their first source; we're aligning "
+                    "text": (f"Google Ads recorded {fmt_count(val(ps['ad_conversions']), 'conversion')}, while "
+                             f"{fmt_count(val(ps['leads']), 'lead')} {'lists' if val(ps['leads']) == 1 else 'list'} Google Ads as their first source; we're aligning "
                              "the conversion definition."),
                     "values": [ps["ad_conversions"], ps["leads"]]})
 
@@ -999,7 +1004,7 @@ def _discrepancies(c: _Ctx, sec: dict) -> list[dict]:
                     "text": (f"{fmt_int(val(med['cpc']['count']))} new lead is tagged paid search by medium, while "
                              f"{fmt_int(val(ppc))} list Google Ads as their source; we're reviewing the tags."
                              if val(med["cpc"]["count"]) == 1 else
-                             f"{fmt_int(val(med['cpc']['count']))} new leads are tagged paid search by medium, while "
+                             f"{fmt_count(val(med['cpc']['count']), 'new lead')} are tagged paid search by medium, while "
                              f"{fmt_int(val(ppc))} list Google Ads as their source; we're reviewing the tags."),
                     "values": [med["cpc"]["count"], ppc]})
 
@@ -1062,7 +1067,7 @@ def assemble(raw: dict) -> dict:
     if val(occ["leased_rate"]) is not None:
         s2 = f"{fmt_pct(val(occ['leased_rate']))} leased"
         if val(occ["future_leases"]) is not None:
-            s2 += f", with {fmt_int(val(occ['future_leases']))} signed residents moving in"
+            s2 += f", with {fmt_count(val(occ['future_leases']), 'signed resident')} moving in"
         if val(occ["net_move_ins"]) is not None and val(occ["net_move_ins"]) < 0:
             s2 += (f"; {fmt_int(val(occ['move_outs']))} move-outs and {fmt_int(val(occ['move_ins']))} move-ins put net "
                    f"move-ins at {fmt_int(val(occ['net_move_ins']))}.")
