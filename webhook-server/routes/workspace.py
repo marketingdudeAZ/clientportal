@@ -547,12 +547,9 @@ def workspace_dashboard():
     if gate:
         return gate
     from skills import workspace_dashboard as wdash
-    lens = (request.args.get("lens") or "").strip() or None
-    if lens and lens not in wdash.LENSES:
-        return jsonify({"error": "Invalid lens", "detail": "|".join(wdash.LENSES)}), 400
     try:
         return jsonify(wdash.build_dashboard(current_portal_email(), internal=_is_internal(),
-                                             scope_internal=_real_internal(), lens=lens))
+                                             scope_internal=_real_internal()))
     except Exception as exc:  # noqa: BLE001
         return _failed("dashboard", exc)
 

@@ -245,8 +245,10 @@ LOOP_LENS = enum("express", "tailor", "amplify", "evolve")
 
 DASHBOARD = {
     "greeting_name": opt(STR), "as_of": STR,
-    "kpis": {"ai_visibility": opt(METRIC), "portfolio_occupancy": opt(METRIC),
-             "identified_savings": opt(METRIC), "waiting_on_you": opt(METRIC)},
+    "lens": absent("lens"), "kpi_order": absent("kpi_order"),
+    "kpis": {"occupancy": opt(METRIC), "units_to_lease_90d": opt(METRIC), "leases_this_month": opt(METRIC),
+             "cost_per_lease": opt(METRIC), "ai_visibility": opt(METRIC), "actions_taken": opt(METRIC),
+             "waiting_on_you": opt(METRIC), "identified_savings": absent("identified_savings")},
     "health_tiles": [{"company_id": STR, "name": opt(STR), "score": opt(NUM), "band": BAND}],
     "properties": [{"company_id": STR, "name": opt(STR), "units": opt(INT), "to_lease_90d": opt(METRIC),
                     "overspend_per_year": opt(METRIC), "health": opt(NUM), "band": BAND}],
@@ -358,7 +360,7 @@ COUNT_KEYS = frozenset({
     "page", "page_size", "next_page", "high", "medium", "low", "more_count",
     "approved_unedited", "total", "pct", "threshold", "highlight_index",
     "waiting", "interrupts_count", "approved_this_month", "recommendations", "published", "in_review",
-    "assets", "tracked_in_ads", "changes",
+    "assets", "tracked_in_ads", "changes", "window_days", "autopilot_approvals", "fair_housing_reviews_clean",
 })
 
 

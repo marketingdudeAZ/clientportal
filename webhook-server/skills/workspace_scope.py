@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 SCOPE_FIELDS = ["name", "city", "state", "totalunits", "uuid", "aptiq_property_id",
                 "redlight_report_score", "red_light_report_score", "red_light_run_date",
                 "plestatus", "marketing_manager_email", "marketing_director_email",
-                "marketing_rvp_email"]
+                "marketing_rvp_email", "hyly_property_id"]
 
 # How many properties a portfolio screen reads work items for, worst health first.
 MAX_ITEM_PROPERTIES = 40

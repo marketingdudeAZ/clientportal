@@ -172,10 +172,16 @@ class TestDashboard:
         _ok(body, "dashboard")
         assert body["greeting_name"] == "Dana"
         k = body["kpis"]
+        from skills import workspace_dashboard as wdash
+        # JSON does not keep key order; the fixed strip order is KPI_ORDER.
+        assert wdash.KPI_ORDER == ("occupancy", "units_to_lease_90d", "leases_this_month", "cost_per_lease",
+                                   "ai_visibility", "actions_taken", "waiting_on_you")
+        assert set(k) == set(wdash.KPI_ORDER)
         assert k["ai_visibility"] == {"value": 60, "source": "ai_mentions", "as_of": "2026-09-12T00:00:00Z",
                                       "properties": 2}
-        assert k["portfolio_occupancy"]["value"] == round((0.91 * 138 + 0.80 * 200) / 338, 4)
-        assert k["waiting_on_you"]["value"] == 4 and k["identified_savings"] is None
+        assert k["occupancy"]["value"] == round((0.91 * 138 + 0.80 * 200) / 338, 4)
+        assert k["units_to_lease_90d"]["value"] == 14 + 24
+        assert k["waiting_on_you"]["value"] == 4 and k["leases_this_month"] is None
         assert [(t["name"], t["band"]) for t in body["health_tiles"]] == [("Arcadia West", "critical"),
                                                                            ("Parkline", "healthy")]
         parkline = next(p for p in body["properties"] if p["company_id"] == CID)
@@ -183,15 +189,13 @@ class TestDashboard:
         assert body["waiting"][0]["company_id"] == CID2
         assert {w["category"] for w in body["waiting"]} >= {"cost", "content", "creative"}
         fields = {g.get("field") for g in body["gaps"]}
-        assert {"kpis.identified_savings", "properties.overspend_per_year", "activity"} <= fields
+        assert {"kpis.leases_this_month", "kpis.actions_taken", "properties.overspend_per_year", "activity"} <= fields
         assert body["loop_status"] == {"running": None, "property_count": 2, "last_pass": None}
 
-    def test_lens_changes_only_the_kpi_order(self, client, scope, items, visibility):
-        am = client.get("/api/workspace/dashboard?lens=asset_manager", headers=_h()).get_json()
-        mm = client.get("/api/workspace/dashboard?lens=marketing_manager", headers=_h()).get_json()
-        assert am["kpi_order"][0] == "portfolio_occupancy" and mm["kpi_order"][0] == "ai_visibility"
-        assert am["kpis"] == mm["kpis"] or am["kpis"].keys() == mm["kpis"].keys()
-        assert client.get("/api/workspace/dashboard?lens=cfo", headers=_h()).status_code == 400
+    def test_no_lens_toggle(self, client, scope, items, visibility):
+        body = client.get("/api/workspace/dashboard?lens=asset_manager", headers=_h())
+        assert body.status_code == 200
+        assert "lens" not in body.get_json() and "kpi_order" not in body.get_json()
 
     def test_activity_from_loop_events_is_role_filtered(self, client, scope, items, visibility, monkeypatch):
         now = wc.utc_now()
