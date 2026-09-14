@@ -460,3 +460,39 @@ class TestVisibility:
         import inspect
         from routes import seo
         assert "start_content_brief(company_id, property_uuid, hub_keyword, payload)" in inspect.getsource(seo.content_briefs)
+
+
+# ── 5. content ───────────────────────────────────────────────────────────────
+
+class TestContent:
+    @pytest.fixture
+    def briefs(self, monkeypatch, scope):
+        import config
+        import hubdb_helpers
+        import seo_entitlement
+        monkeypatch.setattr(config, "HUBDB_CONTENT_BRIEFS_TABLE_ID", "t-b", raising=False)
+        monkeypatch.setattr(seo_entitlement, "has_feature", lambda tier, f: True)
+        monkeypatch.setattr(hubdb_helpers, "read_rows", lambda t, filters=None, limit=500: [
+            {"brief_id": "b1", "hub_keyword": "parking in tampa", "status": "generated", "h1": "Parking at Parkline",
+             "schema_types": "FAQPage", "generated_at": "2026-09-01T00:00:00Z"},
+            {"brief_id": "b2", "hub_keyword": "tampa lofts", "status": "published", "schema_types": "Article"},
+            {"brief_id": "b3", "hub_keyword": "pet policy", "status": "approved", "h1": "Top 10 pet perks",
+             "target_word_count": 1500}])
+
+    def test_rows_counts_and_gaps(self, client, briefs):
+        body = client.get(f"/api/workspace/content?company_id={CID}", headers=_h()).get_json()
+        _ok(body, "content")
+        assert body["counts"] == {"recommendations": 1, "published": 1, "in_review": 1}
+        rows = {r["id"]: r for r in body["rows"]}
+        assert (rows["b1"]["type"], rows["b1"]["status"], rows["b1"]["item_id"]) == \
+            ("FAQ page", "draft_ready", "content_brief:b1")
+        assert rows["b2"]["priority"] == "done" and rows["b2"]["item_id"] is None
+        assert rows["b3"]["title"] == "pet policy"          # an unverifiable number in the h1 falls back
+        assert body["impact"] == []
+        assert {"impact", "rows.gap_source", "rows.priority"} <= {g.get("field") for g in body["gaps"]}
+
+    def test_tier_without_briefs_is_a_gap(self, client, briefs, monkeypatch):
+        import seo_entitlement
+        monkeypatch.setattr(seo_entitlement, "has_feature", lambda tier, f: False)
+        body = client.get(f"/api/workspace/content?company_id={CID}", headers=_h()).get_json()
+        assert body["rows"] == [] and any("tier" in g["message"] for g in body["gaps"])
