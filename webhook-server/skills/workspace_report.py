@@ -356,15 +356,18 @@ def _numbers_in(text: str) -> list[tuple[str, float, int, str]]:
 
 def unsupported_numbers(text: str, allowed: Iterable[float]) -> list[str]:
     """Numbers in `text` that don't round (or truncate) from any allowed value."""
-    cands = set()
+    raw_cands, pct_cands = set(), set()
     for a in allowed:
         if a is None:
             continue
         a = abs(float(a))
-        cands.update({a, a * 100})
+        raw_cands.add(a)
+        pct_cands.add(a * 100)
     bad = []
     for tok, num, dp, kind in _numbers_in(text):
         target = num * 1000 if kind == "k" else num
+        # A percent may come from a stored fraction; a dollar or count may not.
+        cands = (pct_cands | raw_cands) if kind == "pct" else raw_cands
         ok = False
         for c in cands:
             if kind == "k":
