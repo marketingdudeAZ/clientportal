@@ -836,11 +836,10 @@ ol,ul{list-style:none}
     if (changed && state.me) loadBadge();
   }
   function loadBadge() {
-    if (!state.companyId) return;
-    var cid = state.companyId;
-    api('/api/workspace/work?' + cq() + '&status=to_do').then(function (r) {
-      if (cid !== state.companyId) return;
-      var n = ((r.data || {}).summary || {}).needs_approval;
+    // The badge sits on Approvals, which lists every property's waiting items,
+    // so it counts the same thing that screen shows.
+    api('/api/workspace/approvals').then(function (r) {
+      var n = (r.data || {}).waiting;
       state.waiting = n == null ? null : n;
       renderSide(state.active);
     }).catch(function () {});
