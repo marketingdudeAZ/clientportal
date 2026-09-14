@@ -541,3 +541,60 @@ class TestCreative:
         assert {a["id"] for a in body["assets"]} == {"asset:4", "video_variant:v9"}
         assert body["counts"]["assets"] == 4
         assert client.get(f"/api/workspace/creative?company_id={CID}&type=gifs", headers=_h()).status_code == 400
+
+
+# ── 7. media plan ────────────────────────────────────────────────────────────
+
+class TestMediaPlan:
+    @pytest.fixture
+    def plan(self, monkeypatch, scope):
+        monkeypatch.setattr(wcache, "monthly_spend", lambda cid: ({
+            "company_id": cid, "total": 5000.0, "deal_id": "d1", "zero_skus": [],
+            "by_sku": {"search": 2000.0, "pmax": 1000.0, "seo": 1500.0, "mgmt_fee": 500.0}}, TS))
+
+    def test_fiscal_year_channels_and_exposure(self, plan, scope):
+        from skills import workspace_media_plan as wmp
+        body = wmp.build_media_plan(scope[CID], today=TODAY)
+        _ok(body, "media_plan")
+        assert body["fiscal_year"] == "FY 2026-27"
+        assert [m["month"] for m in body["months"]][:3] == ["2026-07", "2026-08", "2026-09"]
+        assert body["months"][-1]["month"] == "2027-06"
+        assert {m["month"]: m["units_to_lease"] for m in body["months"] if m["units_to_lease"] is not None} == \
+            {"2026-09": 6, "2026-10": 4, "2026-11": 4}
+        search = next(c for c in body["channels"] if c["channel"] == "Paid search")
+        assert search["monthly"] == [3000.0] * 12 and search["annual"] == 36000.0 and search["share"] == 0.6
+        assert search["cpl_target"] is None
+        assert body["envelope"] == {"value": 60000.0, "source": "hubspot_line_items", "as_of": TS, "period": "annual"}
+        assert body["objective"] == "Grow mode" and body["notes"]
+        assert {"channels.monthly", "channels.cpl_target", "months.units_to_lease"} <= \
+            {g.get("field") for g in body["gaps"]}
+
+    def test_route_shape(self, client, plan):
+        _ok(client.get(f"/api/workspace/media-plan?company_id={CID}", headers=_h()).get_json(), "media_plan")
+
+    def test_regenerate_needs_verified_identity(self, client, plan):
+        import portal_tickets
+        with mock.patch.object(portal_tickets, "create_ticket") as create:
+            r = client.post("/api/workspace/media-plan/regenerate", headers=_h(), json={"company_id": CID})
+        assert r.status_code == 401
+        create.assert_not_called()
+
+    def test_regenerate_files_a_work_item_and_changes_no_budget(self, client, plan, monkeypatch):
+        import hubspot_client
+        import portal_tickets
+        rec = mock.Mock(return_value="e")
+        monkeypatch.setattr(loop_writer, "record", rec)
+        with mock.patch.object(portal_tickets, "create_ticket",
+                               return_value=({"ok": True, "ticket": {"id": "cu5"}}, 201)) as create, \
+                mock.patch.object(hubspot_client, "patch_deal") as patch_deal, \
+                mock.patch.object(hubspot_client, "patch_company") as patch_company:
+            r = client.post("/api/workspace/media-plan/regenerate", headers=_h(), environ_overrides=VERIFIED,
+                            json={"company_id": CID})
+        assert r.status_code == 201
+        assert r.get_json() == {"work_item_id": "portal_ticket:cu5", "clickup_task_id": "cu5",
+                                "status": "draft_requested"}
+        assert create.call_args.args == (CID, "campaign_review")
+        assert "Nothing changes in live budgets" in create.call_args.kwargs["fields"]["Details"]
+        patch_deal.assert_not_called()
+        patch_company.assert_not_called()
+        assert rec.call_args.args == ("ops", "workspace_request_filed")

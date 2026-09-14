@@ -671,3 +671,48 @@ def workspace_creative():
         return jsonify(wcre.build_creative(ctx, asset_type_filter=kind, internal=_is_internal()))
     except Exception as exc:  # noqa: BLE001
         return _failed("creative", exc)
+
+
+# ── v3: media plan ───────────────────────────────────────────────────────────
+
+@workspace_bp.route("/api/workspace/media-plan", methods=["GET", "OPTIONS"])
+def workspace_media_plan():
+    company_id = _company_id()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_media_plan as wmp
+    try:
+        return jsonify(wmp.build_media_plan(ctx, internal=_is_internal()))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("media plan", exc)
+
+
+@workspace_bp.route("/api/workspace/media-plan/regenerate", methods=["POST", "OPTIONS"])
+def workspace_media_plan_regenerate():
+    """File a work item for a person to draft a refreshed plan. Never changes a budget."""
+    gate = _write_gate()
+    if gate:
+        return gate
+    body = request.get_json(silent=True) or {}
+    company_id = str(body.get("company_id") or "").strip()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    from routes.portal_tickets import _gate as ticket_gate
+    ident, denied = ticket_gate(request)
+    if denied:
+        return denied
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_common, workspace_media_plan as wmp
+    try:
+        return jsonify(wmp.regenerate(ctx, current_portal_email(), ticket_internal=ident[1])), 201
+    except workspace_common.WorkspaceError as exc:
+        return _refused(exc)
+    except Exception as exc:  # noqa: BLE001
+        return _failed("media plan regenerate", exc)
