@@ -1,0 +1,40 @@
+{
+  "question": "whats_not_working",
+  "label": "What's not working?",
+  "company_id": "18234410021",
+  "property_uuid": "a41c2e7d-5b0f-4c6a-9d3e-7f1b82c0e915",
+  "property_name": "LYV Broadway",
+  "viz": {"kind": "line", "pull": "performance_trend", "x": "month", "series": ["sessions", "leads"], "title": "Sessions and leads by month", "note": "Plot both series on one chart — the story is usually the gap between them."},
+  "viz_data": {"months": [], "window": "Sep 2025 to Aug 2026", "months_without_total_row": []},
+  "evidence": [
+    "7 of 23 units coming open in the next 90 days are A1 [ApartmentIQ unit feed]",
+    "6 of 10 units listed 90+ days are A1 [ApartmentIQ unit feed]",
+    "A1 asking $1,385 vs $1,370 mean of 7 A1 listings [ApartmentIQ unit feed]",
+    "Unit #1321 (S1) first listed Nov 6, 2025 — 306 days [ApartmentIQ unit feed]"
+  ],
+  "caveats": [],
+  "missing_inputs": [
+    {"input": "impression_share_lost", "source": "Google Ads API", "reason": "Google Ads is not configured for this property."},
+    {"input": "reputation", "source": "SOCi", "reason": "SOCi has no connector on this platform yet."}
+  ],
+  "inputs": {
+    "occupancy": {"available": true, "source": "ApartmentIQ", "caveat": null, "missing_reason": null, "quality": null},
+    "impression_share_lost": {"available": false, "source": "Google Ads API", "caveat": null, "missing_reason": "Google Ads is not configured for this property.", "quality": null},
+    "reputation": {"available": false, "source": "SOCi", "caveat": null, "missing_reason": "SOCi has no connector on this platform yet.", "quality": null}
+  },
+  "generated_at": 1789391040.0,
+  "cached": false,
+  "cache": {"durable": true, "property": "portal_ask_cache", "reason": null},
+  "headline": "The A1 is the floorplan hurting us most: it makes up most of what is stale and most of what is about to open, and it is priced above our own average.",
+  "summary": "Seven of the 23 units coming open in the next 90 days are A1s, six of the ten stale units are A1s, and A1 asks $1,385 against a $1,370 plan average — we are the most expensive A1 on our own website.",
+  "findings": [
+    {"title": "A1 is most of the stale inventory", "detail": "Six of the ten units listed 90 days or more are A1 one-bedrooms, and seven more A1s open in the next 90 days.", "evidence": ["6 of 10 units listed 90+ days are A1 [ApartmentIQ unit feed]", "7 of 23 units coming open in the next 90 days are A1 [ApartmentIQ unit feed]"]},
+    {"title": "A1 is priced above its own plan average", "detail": "A1 asks $1,385 against a $1,370 average across its seven listings.", "evidence": ["A1 asking $1,385 vs $1,370 mean of 7 A1 listings [ApartmentIQ unit feed]"]},
+    {"title": "S1 is a listing problem, not a pricing one", "detail": "S1 is worse per unit (306 days on one listing) but it is a single unit and it is the model.", "evidence": ["Unit #1321 (S1) first listed Nov 6, 2025 — 306 days [ApartmentIQ unit feed]"]}
+  ],
+  "next_step": "Open the stale-inventory item for LYV Broadway and review the A1 reprice.",
+  "not_evidenced": ["Whether more paid search budget would help: Google Ads is not configured for this property."],
+  "answered": true,
+  "narrator": "claude",
+  "signals": []
+}

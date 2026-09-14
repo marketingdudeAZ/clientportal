@@ -296,3 +296,354 @@ The default view shows the summary, one row of key numbers, the funnel and Next 
 - GA4 and the Google Ads API aren't wired on `main`; `/api/benchmarks` is seeded data.
 - Only portal tickets and Ask check `require_company_access` today; every other legacy endpoint checks email presence only.
 - `scripts/deploy_template.py` and the GitHub workflow only know `client-portal.html`.
+
+## Contract requests (UI)
+
+Nothing below was changed silently: the UI builds against the contract above as written and hides what isn't there. These are additions the Paper screens need to reach full parity. All are optional fields, so none of them break the current shapes.
+
+1. **`gaps[]` element shape.** The contract shows `gaps: []` but never an entry. The UI accepts either a plain string or `{message}` (it also reads `detail` / `reason`). Please settle on one; the fixtures use strings.
+2. **Item: the evidence table (artboard B, "The units").** Suggest `table: {columns: [...], rows: [[...]], source, as_of}` or null. Without it, the unit-by-unit table is not shown.
+3. **Item: the sparkline on the Work card (artboard A, "units coming available, by week").** Suggest `spark: {values: [..], highlight_index, label, source, as_of}` or null.
+4. **Decision: the trigger's record bar (artboard F, "17 of 19 … 89%").** Suggest `record: {approved_unedited, total, threshold_pct, threshold_items}`. Today only the `written_down` sentence is shown.
+5. **Decision: per-row caption and action in `in_motion[]`** (artboard F's "no spend, reversible" and the "Review the IO" button). Suggest `note` and `action: {label, href}`.
+6. **Undo.** Artboard F has Undo; there is no endpoint, so the button is rendered disabled. If it's wanted: `POST /work/<id>/undo` with a window in the decision response (`undo_until`).
+7. **Portfolio: scope and "All".** Artboard G's scope line ("Dallas + Austin") and the "Needs me / All 38" chips need `scope_label` and a `?scope=all` variant (or `quiet_properties`). Without them the UI shows the count only and no chips.
+8. **Portfolio: the "Automatic" state.** Suggest `top_item.needs_approval` so rows whose only item runs itself read "Automatic" instead of a date.
+9. **Property: action links.** "Open in HubSpot" and "Edit the brief" need `hubspot_url` and `brief_edit_url`; the buttons are omitted until then.
+10. **Plan: `channels[].status` values.** The UI treats `pending` as amber, anything matching `ended|expired|paused|stopped` as red, and everything else as plain text. An enum in the contract would stop that guess.
+11. **Work: which count the sidebar badge shows.** The UI uses `counts.to_do`. Paper's badge (4) matches neither `summary.open` (6) nor `counts.to_do` (3).
+12. **Client view: what `changing[].date` means.** The UI captions it "live" (go-live date), as Paper does.
+
+## Phase 2 contract
+
+# Workspace — Phase 2 contract (Kyle's decisions, 14 Sept 2026)
+
+Copy this whole section verbatim into `docs/handoffs/PORTAL_WORKSPACE_BUILD_PLAN.md` under a heading "Phase 2 contract". The API and UI branches both carry an identical copy so the merge is clean.
+
+## Decisions
+1. **Signals gets its own screen.** Internal role only, reached from the Portfolio sidebar.
+2. **New request, Search and Undo get built now.** No disabled or "coming soon" buttons.
+3. **Full client transparency.**
+   - Clients see ALL work items, including open items still on RPM's side, with status.
+   - Internal comments, call notes and internal trail entries stay private.
+   - The server filters these by role. Never rely on the page to hide them.
+   - `internal_only` on Items goes away. Visibility now lives on individual trail entries and notes.
+4. **One portal for clients and staff.**
+   - Clients sign in to the same Workspace.
+   - They see Work, Property, Performance, Plan & Spend, Ask and Reports. Portfolio and Signals are internal only.
+   - "Client view" is no longer a client destination. It becomes an internal "Preview as client" toggle that renders the same screens with client-role filtering.
+5. **Brand palette** (Paper file "RPM Templates" tokens):
+
+   | Token | Hex |
+   |---|---|
+   | Juniper | `#444E4C` |
+   | Black | `#282D27` |
+   | Gray | `#76797A` |
+   | Copper | `#AB784A` |
+   | Sage | `#8BA395` |
+   | Mint | `#BDDDD9` |
+   | Rule | `#D9DEDC` |
+   | Ink-on-dark | `#E7EBE9` |
+
+   - Large fills, charts, borders and accents use these exact hexes.
+   - Small text and button fills use darker shades of the SAME hues for AA contrast: copper button `#97693F`, copper text `#8A6A3F`, muted grey `#6F7372`.
+   - No new hues, except semantic status colors. Derive those so they sit with the palette, and document them.
+
+## Item changes
+- Remove `internal_only`.
+- Add `trail[].visibility` (`"client" | "internal"`) and `notes[]` (`{at, actor, text, visibility}`).
+- For client-role callers, the server omits every `visibility: "internal"` entry. `comments_count` counts only what the caller can see.
+- `client_visible` stays, and is `true` for every work item.
+
+## `GET /api/workspace/signals?company_id=` (omit `company_id` for the portfolio)
+Internal role only; clients get 403. Signals are what changed across properties that has not yet become work. They're computed by deterministic rules from existing data; no LLM writes a number.
+
+```json
+{"as_of": "…", "counts": {"high": 3, "medium": 7, "low": 12},
+ "signals": [{"id": "occupancy_drop:123:2026-09-14", "company_id": "123", "property_name": "Skye Reserve",
+   "kind": "occupancy_drop", "severity": "high",
+   "title": "Occupancy down 3.1 points in 30 days",
+   "detail": "76.0% today against 79.1% on Aug 15.",
+   "metric": {"value": 0.76, "source": "aptiq", "as_of": "…"},
+   "change": {"from": 0.791, "to": 0.76, "window_days": 30},
+   "detected_at": "…", "work_item_id": null}],
+ "gaps": [{"message": "Lead signals need GA4, which is not connected.", "source": "ga4"}]}
+```
+
+- `kind` is one of `occupancy_drop | stale_inventory | lease_wave | lead_drop | spend_pacing | reputation_drop | tracking_break | data_stale`.
+- Wire every kind the portal has data for: Red Light scores, `aptiq_snapshots`, forecast / `ninjacat_metrics`, `data_quality.py` freshness. The rest are listed in `gaps`.
+- `POST /api/workspace/signals/<id>/start-work {company_id}` creates a work item through the existing portal ticket create path. It requires verified identity and returns `{work_item_id}`.
+
+## New request
+**`POST /api/workspace/requests/draft {company_id, text}`**
+- Turns plain words into proposed tickets through `skills/llm_gateway.py` with structured output.
+- `fair_housing.py` checks the text.
+- Draft only; nothing is filed.
+
+Response:
+```json
+{"tickets": [{"draft_id": "d1", "title": "Reshoot A1 photography — post-renovation", "category": "creative",
+   "team": "Creative Marketing Services", "needed_by": "2026-09-28", "needed_by_reason": "7 units open Oct 5",
+   "attached_context": ["Property address", "Market", "PM contact", "Brand kit"], "warnings": []}],
+ "gaps": []}
+```
+- `category` is one of `creative | web | paid | seo | listing | reputation | other`.
+- `warnings` example: "A wrong amenity is also wrong in the paid ads and ILS feeds. We'll flag those too."
+
+**`POST /api/workspace/requests {company_id, tickets:[…draft tickets, possibly edited…]}`**
+- Files each ticket through the existing portal ticket create path (ClickUp).
+- Requires verified identity.
+- Returns `{created: [{draft_id, work_item_id, clickup_task_id}], failed: [{draft_id, reason}]}`.
+
+**`GET /api/workspace/requests?company_id=`**
+```json
+{"recent": [{"title": "…", "status": "done" | "in_progress" | "new", "status_date": "…", "work_item_id": "…"}]}
+```
+
+## Search
+**`GET /api/workspace/search?q=&company_id=`** (`company_id` optional)
+
+Searches across the caller's accessible properties: property names via the property resolver, work item titles, report months, and Ask preset questions. At most 20 results, ranked.
+
+```json
+{"results": [{"type": "property" | "work_item" | "report" | "question", "id": "…", "title": "…", "subtitle": "…", "company_id": "…", "href": "#/item/hubdb_rec:991"}]}
+```
+
+## Undo
+- **`POST /api/workspace/work/<id>/decision`** responses gain `undo: {available, until, reason}`. The window is 10 minutes, and undo is available only while no in-motion step has executed an irreversible action.
+- **`POST /api/workspace/work/<id>/undo {company_id}`**
+  - Requires verified identity AND that the caller is the person who decided.
+  - Reverses through the source's handler where one exists (HubDB recommendation status back to pending; loop event `recommendation_undone`; content brief back to draft).
+  - Sources with no safe reverse return 409 `{error: "not_undoable", reason}`.
+  - Writes a `workspace_decision_undone` loop event.
+  - Returns `{item, undone: true}`.
+
+## UI contract requests — resolutions
+1. `gaps[]` entries are `{message, source?}` everywhere.
+2. The Item gains `evidence: {columns: [...], rows: [[...]], more_count}` when the source carries tabular evidence (e.g. the stale-units list); otherwise `null`.
+3. The Item gains `sparkline: {label, points: [{x, y}], highlight_index}` when real series data exists; otherwise `null`.
+4. The decision response gains `record: {label, approved_unedited, total, threshold, pct}` when the trigger has history; otherwise `null`.
+5. `in_motion[]` gains `note` and `action: {label, href}`, both nullable.
+6. Undo: see above.
+7. Portfolio gains `scope_label` and `?view=needs_me|all`.
+8. `top_item.needs_approval` (bool) is added; a `false` value renders as "Automatic".
+9. Property gains `hubspot_url` and `brief_edit_url`, both nullable.
+10. Plan `status` is one of `running | pending | ended | paused`, with `status_note` free text.
+11. The Work badge counts `summary.open` items that need the caller's approval.
+12. `changing[].date` is the planned go-live date.
+
+## Phase 2 amendments (after the API's live smoke test)
+Copy these into the plan doc too, directly under "Phase 2 contract".
+
+1. **One gap shape everywhere:** `{message, field?, source?}`. `message` is the human-readable reason (previously `reason`); `field` names the null field. Both the API and the UI use this shape.
+2. **Signed preview links are read-only.**
+   - A signed link lets an internal person see the Workspace. It does NOT satisfy the verified-identity check for decisions, requests, start-work or undo; those need a Clerk session.
+   - The API only sets `portal.identity_verified` from a link when `WORKSPACE_SIGNED_LINKS_CAN_DECIDE=true` (default false).
+   - Links are honored only for `@rpmliving.com` emails, in addition to the internal role.
+   - `/me` gains `can_decide` (bool). When it's false, the UI shows the decision panel with its buttons replaced by a quiet "Sign in to approve" link, not broken buttons.
+3. **Cold start.**
+   - Portfolio-wide reads (spend sheet, AptIQ exports) serve the last good copy immediately and refresh in the background. Every response carries `as_of` so staleness is visible.
+   - Add an internal `POST /api/internal/workspace/warm` (internal key) that pre-builds those caches, for use before a demo and from cron.
+   - Target: first request under 5 seconds after a warm.
+4. **LLM-authored text in existing sources.** Don't blanket-withhold text that contains digits. Show it when every number in it can be matched to the source record's structured fields. Otherwise replace only the unmatched sentence and add a gap. A generic title is the last resort.
+5. **Fair Housing filtering.**
+   - Use `fair_housing.py`'s own severity/context API if it has one.
+   - Hide copy from clients only on a high-severity or blocking result. Lower-severity matches are shown, and logged for internal review with a `fair_housing_review` flag on the item (visible to internal users only).
+   - Plain words like "single", "color", "age" or "white" in a normal sentence must not hide anything by themselves.
+6. **The brief paragraph.** Property `brief.text` uses the first non-empty value, override wins, from: `fluency_romance`, then a composed paragraph of `what_makes_this_property_unique_` + `property_voice_and_tone` + `additional_selling_points` (verbatim field text only, no LLM), then null with a gap.
+7. **Transparency.** Remove `hidden_open_count` from client view. Clients now see all work items.
+8. **Money guard.** Decisions on any budget or spend recommendation write `requires_signature: true` in the loop event payload. Add a test asserting that no workspace code path writes to Fluency, Google Ads or the spend sheet.
+9. **Portfolio for internal users with no assigned properties** defaults to `view=all` (every property, paged 50 at a time, ranked the same way) instead of an empty list.
+10. **Register `workspace_decision`, `workspace_decision_undone` and `workspace_request_filed`** as known event types in `loop_writer.py`.
+
+### Preview as client (UI mechanism)
+- An internal user can turn on "Preview as client" in the sidebar. The page then sends the request header `X-Workspace-Preview-Role: client` on every **read** (`GET`) under `/api/workspace/*` and `/api/ask/*`. Writes (decisions, requests, start-work, undo) never carry it; a write is always made as the real caller.
+- The server honors the header only when the verified caller is internal. From anyone else it is ignored.
+- When honored, a read returns exactly what a client-role caller with access to that `company_id` would get:
+  - no `visibility: "internal"` trail entries or notes;
+  - `comments_count` counted the client's way;
+  - no `fair_housing_review`;
+  - 403 on `/portfolio` and `/signals`.
+- `GET /me` ignores the header and always describes the real caller, so the page can keep showing the toggle and the preview banner.
+- The toggle lives in `sessionStorage` for the tab only. It never goes into the URL, and a shared link never opens in preview.
+
+## v3 rebuild
+
+# Workspace — v3 rebuild (Kyle's direction, 14 Sept 2026, evening)
+
+Copy this file verbatim into `docs/handoffs/PORTAL_WORKSPACE_BUILD_PLAN.md` under a heading "v3 rebuild". It supersedes the "Screens (v1)" table. Phase 2 features (search, New request, Undo, transparency, role-based nav, Signals, the decision flow) carry over into this structure.
+
+## What changed and why
+Kyle's verdict on the first build: "a straight-up copy of what we had on that separate portal." The Workspace must bring the **v3 product dashboards** to life, not just the "RPM Portal — PMM Workspace" board.
+
+## Source of truth for layout
+Paper file `01KX9VQE54KTEC2JT8BGP9FBVR` (read-only). Pass `fileId` explicitly; take exact structure and spacing from `get_jsx` / `get_computed_styles`.
+
+| Workspace screen | Primary artboard | Supporting artboard |
+|---|---|---|
+| Dashboard | `CXR-2` v3 Dashboard | `FYF-1` v4 Portfolio (home) for the "Needs you" hero and the "what we did on our own" feed |
+| Approvals | `DDE-0` v3 Approvals | `19O-0` Approvals Queue, `1HM-0` Approvals — Empty |
+| Approval detail | existing Workspace item detail + Approved screens (keep) | `G4K-1` v4 Approval detail for the Found / Expect / If you skip + Now → Proposed block |
+| Properties list | `GOO-0` v5 Properties | — |
+| Property detail | `D4I-2` v3 Property Detail | `G73-1` v4 Property (the loop story): the loop timeline, relabeled Express / Tailor / Amplify / Evolve |
+| Media Plan | `DM0-1` v3 Media Plan | `GJQ-1` v4 Media plan (flight calendar) |
+| AI Visibility | `E06-1` v3 AI Visibility | `1PT-0` AI Visibility Audit, `21U-0` Competitor Deep-Dive |
+| Content Engine | `E4U-1` v3 Content | `2AW-0` Content Library |
+| Creative Library | `E4S-1` v3 Creative | — |
+| Reports | the already-built monthly report page (Bromley format, calm tone), linked from property detail | `E4T-1` v3 Reporting ("Property Story") for the report header and forecast-accuracy block |
+| Value | `GC6-1` v4 Value | — |
+| Signals (internal) | the already-built Signals screen, restyled to v3 | — |
+
+**Deferred (not for the demo):** Vendor Hub, Operating Card, Connections, Settings, Sites, Site Editor, Lead Scoring, Onboarding. Leave no nav items for them.
+
+**Design system reference:** `7H-1` Design System and `EI-1` App Shell (spacing, radii, type ramp, component anatomy).
+
+## Look: v3 layouts in the RPM Living palette
+- **Keep v3's structure:** a light app shell with a left nav, a KPI strip, tables with quiet row lines, a right rail for the agent panel, findings and actions, status pills, and the small "loop running" status card at the bottom of the nav.
+- **Keep v3's type scale and spacing tokens** (`--text-*`, `--space-*`, `--radius-*`) and v3's font (Inter), unless the Paper tokens contradict.
+- **Replace v3's colors with the RPM Living palette** (Paper "RPM Templates"):
+
+  | v3 token | Brand token | Hex |
+  |---|---|---|
+  | `--color-brand` | Copper (large fills and accents) | `#AB784A` |
+  | Primary button fill | Copper, darker shade | `#97693F` |
+  | Links and small accent text | Copper, darker shade | `#8A6A3F` |
+  | `--color-brand-soft` | Mint tint | derived from `#BDDDD9` |
+  | `--color-fg` | Black | `#282D27` |
+  | `--color-fg-muted` | Gray, darker shade for AA | `#6F7372` |
+  | `--color-border` | Rule | `#D9DEDC` |
+  | Nav active state and dark surfaces | Juniper | `#444E4C` |
+  | Ink on dark | Ink-on-dark | `#E7EBE9` |
+
+- **Status colors** (healthy / attention / warning / critical / new) are harmonized with the palette: healthy derives from Sage `#8BA395` (darkened for text), and the others are warm, desaturated tones. Document the final values.
+- Every text / background pair must pass WCAG AA.
+- **No retired branding anywhere.** Rewrite all copy that names the retired product into first-person RPM voice: "We audited…", "RPM Digital drafted…", "Nothing changes until you approve."
+
+## Navigation
+- **Clients:** Dashboard · Approvals · Properties · Visibility · Content · Creative · Reports · Value
+- **Internal:** the same, plus Signals.
+- Property-scoped screens (Media Plan, Visibility, Content, Creative, Report) also open from Property detail with a "← Property name" back link, as in v3.
+- **Role lens toggle on the Dashboard:** "Asset manager | Marketing manager" (v3), which changes KPI emphasis only.
+
+## Data contract for the new screens (API)
+Every number is `{value, source, as_of}` or null plus a `gaps[]` entry `{message, field?, source?}`. Nothing is invented; no LLM writes a number. Money never moves on a click. The fixtures carry realistic demo values; the live API returns real data or gaps.
+
+### `GET /api/workspace/dashboard?lens=asset_manager|marketing_manager`
+```json
+{"greeting_name": "Dana", "as_of": "…",
+ "kpis": {"ai_visibility": {"value": 62, "source": "ai_mentions", "as_of": "…"}, "portfolio_occupancy": {…}, "identified_savings": {…}, "waiting_on_you": {"value": 3, "source": "workspace_inbox", "as_of": "…"}},
+ "health_tiles": [{"company_id": "…", "name": "Parkline", "score": 82, "band": "healthy|attention|warning|critical|new"}],
+ "properties": [{"company_id": "…", "name": "…", "units": 138, "to_lease_90d": {…}, "overspend_per_year": {…}, "health": 82, "band": "healthy"}],
+ "activity": [{"at": "…", "text": "Audited Apartments.com package — Parkline", "company_id": "…", "kind": "audit|draft|check|flag|forecast|decision|publish", "visibility": "client|internal"}],
+ "waiting": [{"item_id": "…", "title": "Step down Parkline ILS", "subtitle": "Reduce Apartments.com Premium to Standard", "category": "cost|vendor|negotiate|content|creative|compliance"}],
+ "loop_status": {"running": true, "property_count": 50, "last_pass": "…"},
+ "gaps": []}
+```
+**Sources:**
+- health: Red Light scores on HubSpot
+- occupancy: AptIQ
+- AI visibility: `ai_mentions` (HubDB), and `geo_*` tables when present
+- savings: savings fields on recommendations, otherwise a gap
+- activity: `loop_events`, workspace decisions, ticket recaps
+- waiting: `workspace_inbox`
+
+### `GET /api/workspace/approvals?category=`
+```json
+{"waiting": 3, "interrupts_count": 2, "approved_this_month": 12,
+ "interrupts": [{"id": "…", "kind": "compliance|pacing|tracking", "title": "Compliance review — Arcadia West", "detail": "…", "company_id": "…", "item_id": "…", "primary_action": {"label": "Review now"}, "secondary_action": {"label": "Dismiss"}}],
+ "batch": {"label": "Monthly batch — September 2026",
+   "rows": [{"item_id": "…", "company_id": "…", "property": "Parkline", "action": "Step down Apartments.com Premium → Standard", "category": "cost", "savings_per_year": {…} | null, "can_edit": true}]},
+ "stats": {"approval_rate": {…}, "edit_rate": {…}, "auto_approve_candidates": ["Visibility audits", "Content briefs"]},
+ "gaps": []}
+```
+- Approve / Reject from a row calls the existing decision endpoint. Reject is `not_now` and requires a reason chip, as in the detail view.
+- Edit and a row click open the item detail.
+- Pacing interrupts NEVER pause or change a campaign directly. "Pause campaign" creates a work item / Ad Updates ticket for a human (money rule).
+- `auto_approve_candidates` is computed from decision history (≥ 20 decisions, ≥ 90% approved unedited).
+
+### `GET /api/workspace/property-overview?company_id=`
+```json
+{"name": "…", "city": "…", "state": "…", "units": 138, "objective": "Stabilize" | null,
+ "health": {"score": 82, "band": "healthy", "source": "redlight", "as_of": "…"},
+ "kpis": {"ai_visibility": {…}, "renewal_rate": {…}, "units_to_lease": {…}, "lead_to_lease": {…}},
+ "exposure_forecast": {"months": [{"month": "2026-10", "units_to_lease": 42}], "source": "forecasting", "as_of": "…"} | null,
+ "vendor_audit": [{"vendor": "Apartments.com", "package": "Premium", "monthly": {…}, "verdict": "over|fair|under|unknown", "basis": "…"}],
+ "visibility_by_engine": [{"engine": "ChatGPT", "score": {…}}],
+ "findings": [{"text": "…", "receipts": [{"label": "…", "source": "…", "as_of": "…"}]}],
+ "recommended_action": {"item_id": "…", "label": "Step down Apartments.com"} | null,
+ "draft_email": {"subject": "…", "preview": "…", "item_id": "…"} | null,
+ "loop": [{"lens": "express|tailor|amplify|evolve", "status": "done|waiting|upcoming", "at": "…", "text": "…"}],
+ "links": {"media_plan": "#/property/<id>/media-plan", "visibility": "…", "content": "…", "creative": "…", "report": "…"},
+ "gaps": []}
+```
+A vendor `verdict` other than `unknown` requires a real market-rate source. There is none today, so return `unknown` with a gap.
+
+### `GET /api/workspace/media-plan?company_id=`
+```json
+{"fiscal_year": "FY 2026-27", "envelope": {…}, "objective": "…" | null, "generated_at": "…",
+ "months": [{"month": "2026-07", "units_to_lease": 47}],
+ "channels": [{"channel": "Apartments.com", "monthly": [2800, …12 values], "monthly_avg": 2800, "annual": 33600, "share": 0.40, "cpl_target": 45 | null}],
+ "allocated": {…}, "notes": ["Concentrated paid search in months 1–4 where 58% of exposure falls"],
+ "gaps": []}
+```
+**Sources:** `forecasting.py` / AptIQ exposure; budget line items for channels. "Regenerate plan" produces a DRAFT only (a work item); it never changes live budgets.
+
+### `GET /api/workspace/visibility?company_id=`
+```json
+{"score": {…}, "change": {"value": 4, "window": "month"} | null, "last_audit": "…", "next_audit": "…" | null,
+ "engines": [{"engine": "ChatGPT", "score": {…}, "queries_hit": 12, "queries_total": 20}],
+ "comp_stack": {"competitors": ["The Reserve", "Oakmont"], "rows": [{"surface": "AI visibility", "values": {"self": 71, "The Reserve": 65}}]} | null,
+ "citation_sources": [{"source": "Apartments.com", "share": 0.34}],
+ "recommendations": [{"text": "Write 3 FAQ pages targeting citation gaps in Perplexity", "action": {"type": "create_brief"}}],
+ "alerts": [{"kind": "exposure|competitor", "text": "…"}],
+ "gaps": []}
+```
+**Sources:**
+- engines: `ai_mentions.py` (HubDB) now; the GEO tables `geo_responses`, `geo_brand_mentions` and `geo_sources` once the pilot runs, with the metric definitions from `GEO_PROGRAM_BUILD_HANDOFF.md`
+- comp set: AptIQ
+
+"Create brief" creates a content brief through the existing content brief path; it requires verified identity.
+
+### `GET /api/workspace/content?company_id=`
+```json
+{"counts": {"recommendations": 3, "published": 1, "in_review": 2},
+ "rows": [{"id": "…", "priority": "high|med|low|done", "type": "FAQ page|Schema|Guide|Blog", "title": "…", "gap_source": "Perplexity (0 citations, 4 queries)", "status": "draft_ready|in_review|not_started|published", "published_at": "…" | null, "item_id": "…" | null}],
+ "impact": [{"text": "Parking FAQ: Perplexity citations 0→3 in 14 days."}],
+ "gaps": []}
+```
+**Sources:** content briefs (HubDB `rpm_content_briefs`), the SEO content planner, GEO plans when present. Impact lines only from measured before/after data.
+
+### `GET /api/workspace/creative?company_id=&type=photos|videos|ad_creative|floor_plans|documents`
+```json
+{"counts": {"assets": 142, "tracked_in_ads": 12},
+ "top": {"name": "…", "ctr": {…}} | null, "lowest": {…} | null,
+ "assets": [{"id": "…", "name": "parkline-pool-03", "thumbnail_url": "…" | null, "tags": ["amenity"], "origin": "generated|inherited|uploaded", "impressions": {…} | null, "ctr": {…} | null, "leads": {…} | null, "flag": "underperforming" | null}],
+ "gaps": []}
+```
+**Sources:** the HubDB asset table and HubSpot Files; video variants. Per-asset ad performance is a gap (no Google Ads connector on main). Upload uses the existing asset upload path; requires verified identity.
+
+### `GET /api/workspace/value?range=12m`
+```json
+{"period": "Sep 2025 – Aug 2026",
+ "headline": {"savings_captured": {…}, "savings_identified": {…}, "changes_shipped": {…}},
+ "rows": [{"change": "…", "company_id": "…", "property": "…", "annual_value": {…} | null, "decided_by": "you|automatic", "decided_at": "…"}],
+ "totals": {"annual_value": {…}, "changes": 214, "automatic_share": {…}},
+ "gaps": []}
+```
+**Source:** `workspace_decision` loop events plus savings recorded on the underlying recommendation. Do not show an "asset value at N× NOI" figure unless Kyle confirms the multiple; leave it out for now.
+
+## Carried over from Phase 2 (still required)
+Search, New request, Undo, full client transparency (server-side filtering of internal notes), role-based nav, Signals, read-only signed links with `can_decide`, visible `as_of` staleness, and the decision detail with Found / Expect / If you skip and the one-tap Not-now reasons.
+
+### Contract requests (UI) — v3 rebuild
+The v3 screens are built against the "v3 rebuild" contract above. These are the places the UI had to work around a missing piece; nothing in the contract was changed.
+
+1. **Properties list.** The Properties screen (v5 artboard) needs a list endpoint with per-property spend/month, cost per lead and leads per week. None exists, so the UI builds the list from `/me` companies plus `/dashboard` `properties` and `health_tiles`. Those columns show units, to-lease, overspend, health and status instead.
+2. **Create brief.** Visibility recommendations carry `action: {type: "create_brief"}` but no endpoint. The UI routes "Create brief" into New request, prefilled with the recommendation text, so it arrives as a ticket through the existing request path. A `POST /api/workspace/visibility/recommendations/<id>/brief` would make this one tap.
+3. **Regenerate media plan.** "Regenerate plan" is draft-only, but no endpoint is named. The UI files it as a New request ("Draft only — no live budget changes").
+4. **Interrupt actions.**
+   - Pacing "Open an Ad Updates ticket" goes through New request, prefilled.
+   - "Dismiss" only hides the interrupt for the browser session, because there is no dismiss endpoint. Please add `POST /api/workspace/approvals/interrupts/<id>/dismiss` if dismissals should persist.
+5. **Creative upload.** The contract notes an existing asset upload path but gives no Workspace endpoint. The dropzone links to New request for now.
+6. **Item `company_id`.** Approval rows span properties. The UI sets the company from the row before opening or deciding. Adding `company_id` to the Item shape would remove that coupling.
+7. **Health score bands.** The UI uses the band the API sends. It falls back to ≥70 healthy, 50–69 attention, 35–49 warning, below 35 critical only when `band` is missing. Engine scores use ≥70 / 60–69 / below 60, as in the v3 audit screen. Please confirm or send bands.

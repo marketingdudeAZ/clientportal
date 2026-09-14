@@ -1,0 +1,46 @@
+{
+  "greeting_name": "Dana",
+  "as_of": "2026-09-14T13:04:00Z",
+  "kpis": {
+    "ai_visibility": {"value": 62, "source": "ai_mentions", "as_of": "2026-09-14T08:14:00Z"},
+    "portfolio_occupancy": {"value": 0.912, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+    "identified_savings": {"value": 14800, "source": "hubdb_rec", "as_of": "2026-09-14T08:20:00Z"},
+    "waiting_on_you": {"value": 5, "source": "workspace_inbox", "as_of": "2026-09-14T13:04:00Z"}
+  },
+  "health_tiles": [
+    {"company_id": "18234410021", "name": "LYV Broadway", "score": 82, "band": "healthy"},
+    {"company_id": "26136316506", "name": "The Bromley", "score": 78, "band": "healthy"},
+    {"company_id": "18234410112", "name": "Remi West Dallas", "score": 74, "band": "healthy"},
+    {"company_id": "18234410087", "name": "Skye Reserve", "score": 58, "band": "attention"},
+    {"company_id": "18234410203", "name": "Arbor Hills Flats", "score": 55, "band": "attention"},
+    {"company_id": "18234410150", "name": "The Maddux", "score": 41, "band": "warning"},
+    {"company_id": "18234410241", "name": "Solana at Stone Oak", "score": 28, "band": "critical"},
+    {"company_id": "18234410266", "name": "Cedar Falls Commons", "score": null, "band": "new"}
+  ],
+  "properties": [
+    {"company_id": "18234410021", "name": "LYV Broadway", "units": 390, "to_lease_90d": {"value": 47, "source": "forecasting", "as_of": "2026-09-14T08:00:00Z"}, "overspend_per_year": {"value": 28800, "source": "hubdb_rec", "as_of": "2026-09-14T08:20:00Z"}, "health": 82, "band": "healthy"},
+    {"company_id": "26136316506", "name": "The Bromley at Brighton Crossing", "units": 299, "to_lease_90d": {"value": 18, "source": "forecasting", "as_of": "2026-09-14T08:00:00Z"}, "overspend_per_year": {"value": 3400, "source": "hubdb_rec", "as_of": "2026-09-14T08:20:00Z"}, "health": 78, "band": "healthy"},
+    {"company_id": "18234410112", "name": "Remi West Dallas", "units": 336, "to_lease_90d": {"value": 31, "source": "forecasting", "as_of": "2026-09-14T08:00:00Z"}, "overspend_per_year": null, "health": 74, "band": "healthy"},
+    {"company_id": "18234410087", "name": "Skye Reserve", "units": 982, "to_lease_90d": {"value": 52, "source": "forecasting", "as_of": "2026-09-14T08:00:00Z"}, "overspend_per_year": {"value": 4800, "source": "hubdb_rec", "as_of": "2026-09-14T08:20:00Z"}, "health": 58, "band": "attention"},
+    {"company_id": "18234410150", "name": "The Maddux at Shadowood", "units": 287, "to_lease_90d": {"value": 19, "source": "forecasting", "as_of": "2026-09-14T08:00:00Z"}, "overspend_per_year": {"value": 6084, "source": "hubdb_rec", "as_of": "2026-09-14T08:20:00Z"}, "health": 41, "band": "warning"}
+  ],
+  "activity": [
+    {"at": "2026-09-14T13:02:00Z", "text": "Audited the Apartments.com package — LYV Broadway", "company_id": "18234410021", "kind": "audit", "visibility": "client"},
+    {"at": "2026-09-14T12:46:00Z", "text": "Drafted a rate email to Apartments.com — Remi West Dallas", "company_id": "18234410112", "kind": "draft", "visibility": "client"},
+    {"at": "2026-09-14T12:04:00Z", "text": "Ran a visibility check — The Bromley at Brighton Crossing", "company_id": "26136316506", "kind": "check", "visibility": "client"},
+    {"at": "2026-09-14T10:04:00Z", "text": "Flagged Google Ads pacing — The Maddux at Shadowood", "company_id": "18234410150", "kind": "flag", "visibility": "client"},
+    {"at": "2026-09-14T09:30:00Z", "text": "Noted for the owner call: renewal concern at Skye Reserve", "company_id": "18234410087", "kind": "flag", "visibility": "internal"},
+    {"at": "2026-09-13T08:10:00Z", "text": "Updated the exposure forecast — Arbor Hills Flats", "company_id": "18234410203", "kind": "forecast", "visibility": "client"}
+  ],
+  "waiting": [
+    {"item_id": "hubdb_rec:1031", "title": "Step down LYV Broadway's ILS", "subtitle": "Reduce Apartments.com Premium to Standard", "category": "cost"},
+    {"item_id": "hubdb_rec:1032", "title": "Add Zillow at Skye Reserve", "subtitle": "Zillow Promoted, $480/mo", "category": "vendor"},
+    {"item_id": "call_prep:2231", "title": "Rate email for Remi West Dallas", "subtitle": "Negotiate the Apartments.com rate", "category": "negotiate"},
+    {"item_id": "content_brief:77", "title": "Three FAQ pages for The Bromley", "subtitle": "Close the citation gaps in Perplexity", "category": "content"},
+    {"item_id": "video_variant:14", "title": "Refresh amenity photos at The Maddux", "subtitle": "Six photos older than two years", "category": "creative"}
+  ],
+  "loop_status": {"running": true, "property_count": 50, "last_pass": "2026-09-14T08:00:00Z"},
+  "gaps": [
+    {"message": "Occupancy for Cedar Falls Commons starts after its first ApartmentIQ read.", "field": "health_tiles[7].score", "source": "aptiq"}
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "as_of": "2026-09-14T13:04:00Z",
+  "fiscal_year": "FY 2026-27",
+  "envelope": {"value": 38000, "source": "hubspot_line_items", "as_of": "2026-09-01T12:00:00Z"},
+  "objective": "Stabilize",
+  "generated_at": "2026-09-01T08:00:00Z",
+  "months": [
+    {"month": "2026-09", "units_to_lease": 47}, {"month": "2026-10", "units_to_lease": 42}, {"month": "2026-11", "units_to_lease": 38},
+    {"month": "2026-12", "units_to_lease": 35}, {"month": "2027-01", "units_to_lease": 33}, {"month": "2027-02", "units_to_lease": 30},
+    {"month": "2027-03", "units_to_lease": 28}, {"month": "2027-04", "units_to_lease": 25}, {"month": "2027-05", "units_to_lease": 22},
+    {"month": "2027-06", "units_to_lease": 20}, {"month": "2027-07", "units_to_lease": 18}, {"month": "2027-08", "units_to_lease": 15}
+  ],
+  "channels": [
+    {"channel": "Apartments.com", "monthly": [2800, 2800, 2400, 2400, 2000, 2000, 1800, 1800, 1400, 1400, 1200, 1200], "monthly_avg": 1933, "annual": 23200, "share": 0.653, "cpl_target": 45},
+    {"channel": "Google Ads", "monthly": [1200, 1200, 1000, 1000, 0, 0, 600, 400, 0, 0, 0, 0], "monthly_avg": 450, "annual": 5400, "share": 0.152, "cpl_target": 32},
+    {"channel": "Meta Ads", "monthly": [600, 600, 400, 400, 0, 0, 0, 0, 0, 0, 0, 0], "monthly_avg": 167, "annual": 2000, "share": 0.056, "cpl_target": 58},
+    {"channel": "Content/SEO", "monthly": [0, 450, 450, 450, 450, 450, 450, 450, 450, 450, 450, 450], "monthly_avg": 413, "annual": 4950, "share": 0.139, "cpl_target": null}
+  ],
+  "allocated": {"value": 35550, "source": "hubspot_line_items", "as_of": "2026-09-01T12:00:00Z"},
+  "notes": [
+    "Concentrated paid search in months 1–4, where 46% of the year's exposure falls.",
+    "Stopped Meta in months 5–12, when exposure drops below 35 units.",
+    "Kept Apartments.com running all year. ILS presence compounds."
+  ],
+  "gaps": [
+    {"message": "No cost-per-lead target is set for Content/SEO.", "field": "channels[3].cpl_target"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "as_of": "2026-09-14T14:02:00Z",
+  "results": [
+    {"type": "property", "id": "18234410021", "title": "LYV Broadway", "subtitle": "Carrollton, TX · 390 units", "company_id": "18234410021", "href": "#/property"},
+    {"type": "property", "id": "18234410087", "title": "Skye Reserve", "subtitle": "Tampa, FL · 982 units", "company_id": "18234410087", "href": "#/property"},
+    {"type": "work_item", "id": "hubdb_rec:1004", "title": "Ten units have sat 90+ days — one for 306 days", "subtitle": "LYV Broadway · Late", "company_id": "18234410021", "href": "#/item/hubdb_rec:1004"},
+    {"type": "work_item", "id": "hubdb_rec:991", "title": "Flight paid onto one-bedrooms before the October 5 wave", "subtitle": "LYV Broadway · Start Mon 9/14", "company_id": "18234410021", "href": "#/item/hubdb_rec:991"},
+    {"type": "work_item", "id": "service_ticket:5521", "title": "Renewal-season creative set", "subtitle": "LYV Broadway · In motion", "company_id": "18234410021", "href": "#/item/service_ticket:5521"},
+    {"type": "report", "id": "report:18234410021:2026-08", "title": "August 2026 report", "subtitle": "LYV Broadway", "company_id": "18234410021", "href": "#/reports"},
+    {"type": "question", "id": "whats_not_working", "title": "What's not working?", "subtitle": "Ask · LYV Broadway", "company_id": "18234410021", "href": "#/ask"},
+    {"type": "question", "id": "lead_sources", "title": "What sources are driving the most leads?", "subtitle": "Ask · LYV Broadway", "company_id": "18234410021", "href": "#/ask"}
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "as_of": "2026-09-14T13:04:00Z",
+  "name": "LYV Broadway", "city": "Carrollton", "state": "TX", "units": 390, "objective": "Stabilize",
+  "health": {"score": 82, "band": "healthy", "source": "redlight", "as_of": "2026-09-14T08:00:00Z"},
+  "kpis": {
+    "ai_visibility": {"value": 71, "source": "ai_mentions", "as_of": "2026-09-14T08:14:00Z"},
+    "renewal_rate": {"value": 0.52, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+    "units_to_lease": {"value": 47, "source": "forecasting", "as_of": "2026-09-14T08:00:00Z"},
+    "lead_to_lease": {"value": 0.082, "source": "hyly", "as_of": "2026-09-14T11:00:00Z"}
+  },
+  "exposure_forecast": {
+    "months": [
+      {"month": "2026-09", "units_to_lease": 47}, {"month": "2026-10", "units_to_lease": 42}, {"month": "2026-11", "units_to_lease": 38},
+      {"month": "2026-12", "units_to_lease": 35}, {"month": "2027-01", "units_to_lease": 33}, {"month": "2027-02", "units_to_lease": 30},
+      {"month": "2027-03", "units_to_lease": 28}, {"month": "2027-04", "units_to_lease": 25}, {"month": "2027-05", "units_to_lease": 22},
+      {"month": "2027-06", "units_to_lease": 20}, {"month": "2027-07", "units_to_lease": 18}, {"month": "2027-08", "units_to_lease": 15}
+    ],
+    "source": "forecasting", "as_of": "2026-09-14T08:00:00Z"
+  },
+  "vendor_audit": [
+    {"vendor": "Apartments.com", "package": "Premium", "monthly": {"value": 4300, "source": "hubspot_line_items", "as_of": "2026-09-14T12:30:00Z"}, "verdict": "unknown", "basis": null},
+    {"vendor": "Zillow Rental Manager", "package": "Standard", "monthly": {"value": 1200, "source": "hubspot_line_items", "as_of": "2026-09-14T12:30:00Z"}, "verdict": "unknown", "basis": null},
+    {"vendor": "Google Ads", "package": "Search", "monthly": {"value": 600, "source": "hubspot_line_items", "as_of": "2026-09-14T12:30:00Z"}, "verdict": "unknown", "basis": null}
+  ],
+  "visibility_by_engine": [
+    {"engine": "ChatGPT", "score": {"value": 74, "source": "ai_mentions", "as_of": "2026-09-14T08:14:00Z"}},
+    {"engine": "Claude", "score": {"value": 68, "source": "ai_mentions", "as_of": "2026-09-14T08:14:00Z"}},
+    {"engine": "Perplexity", "score": {"value": 52, "source": "ai_mentions", "as_of": "2026-09-14T08:14:00Z"}},
+    {"engine": "Google AI", "score": {"value": 81, "source": "ai_mentions", "as_of": "2026-09-14T08:14:00Z"}}
+  ],
+  "findings": [
+    {"text": "Apartments.com Premium costs $4,300 a month and Hyly attributes 2 leases to it in six months. Standard is $1,900.", "receipts": [{"label": "Package and invoice", "source": "hubspot_line_items", "as_of": "2026-09-14T12:30:00Z"}, {"label": "Lease source", "source": "hyly", "as_of": "2026-09-14T11:00:00Z"}]},
+    {"text": "Renewal rate is 52% against a 61% portfolio average, and 14 leases expire in months four to six.", "receipts": [{"label": "Renewals and expirations", "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"}]}
+  ],
+  "recommended_action": {"item_id": "hubdb_rec:1031", "label": "Step down Apartments.com"},
+  "draft_email": {"subject": "LYV Broadway — package review", "preview": "Hi [Rep], we've been reviewing ILS performance across our portfolio and want to talk about the LYV Broadway package before it renews on October 1…", "item_id": "call_prep:2231"},
+  "loop": [
+    {"lens": "express", "status": "done", "at": "2026-09-14T08:00:00Z", "text": "Read the website, the listings and four AI models. Visibility 71 out of 100."},
+    {"lens": "express", "status": "done", "at": "2026-09-14T08:02:00Z", "text": "Flagged the Apartments.com package against 47 units to lease in 90 days."},
+    {"lens": "tailor", "status": "done", "at": "2026-09-14T08:05:00Z", "text": "Checked the package against leases: 2 in six months."},
+    {"lens": "tailor", "status": "done", "at": "2026-09-14T08:08:00Z", "text": "Planned two changes: step down the package and email the rep."},
+    {"lens": "amplify", "status": "done", "at": "2026-09-14T08:12:00Z", "text": "Drafted the package change and the rep email. Fair Housing screened before anything could send."},
+    {"lens": "amplify", "status": "waiting", "at": "2026-09-14T08:36:00Z", "text": "The package change is staged and held. Nothing changes until you approve."},
+    {"lens": "evolve", "status": "upcoming", "at": null, "text": "60 days of before-and-after on leads and cost per lease, starting when the change goes live."},
+    {"lens": "evolve", "status": "upcoming", "at": "2026-11-14", "text": "What worked here feeds the next pass for every Carrollton property."}
+  ],
+  "links": {"media_plan": "#/property/<id>/media-plan", "visibility": "#/property/<id>/visibility", "content": "#/property/<id>/content", "creative": "#/property/<id>/creative", "report": "/workspace/report?company_id=<id>"},
+  "gaps": [
+    {"message": "We don't have a market-rate source for ILS packages yet, so no package is marked over or fair.", "field": "vendor_audit.verdict"}
+  ]
+}

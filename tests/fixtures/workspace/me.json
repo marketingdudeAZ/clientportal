@@ -1,0 +1,16 @@
+{
+  "email": "dana@rpmliving.com",
+  "role": "internal",
+  "verified": true,
+  "can_decide": true,
+  "companies": [
+    {"company_id": "18234410021", "uuid": "a41c2e7d-5b0f-4c6a-9d3e-7f1b82c0e915", "name": "LYV Broadway", "city": "Carrollton", "state": "TX", "units": 390},
+    {"company_id": "26136316506", "uuid": "3b9e61c4-7d20-4a8f-b5e3-0c72d91a4f68", "name": "The Bromley at Brighton Crossing", "city": "Brighton", "state": "CO", "units": 299},
+    {"company_id": "18234410112", "uuid": "5f2d8a96-1c3e-4b7d-a0e8-9b64c1d3f278", "name": "Remi West Dallas", "city": "Dallas", "state": "TX", "units": 336},
+    {"company_id": "18234410087", "uuid": "c9e07b31-2d84-4f19-8a6c-3e5d9f2b7a40", "name": "Skye Reserve", "city": "Tampa", "state": "FL", "units": 982},
+    {"company_id": "18234410203", "uuid": "8d41f0a2-6e5b-4c97-a3d8-1f07b6e2c954", "name": "Arbor Hills Flats", "city": "Plano", "state": "TX", "units": 204},
+    {"company_id": "18234410150", "uuid": "e17a4c02-8b9d-4e3f-b6a1-2c58d0f9e613", "name": "The Maddux at Shadowood", "city": "Atlanta", "state": "GA", "units": 287},
+    {"company_id": "18234410241", "uuid": "2a6c9e15-4f83-4b0d-9e27-6d5a1c8f3b70", "name": "Solana at Stone Oak", "city": "San Antonio", "state": "TX", "units": 156},
+    {"company_id": "18234410266", "uuid": "7e0b3d58-9a14-4c62-8f5e-4b1d2a6c9e03", "name": "Cedar Falls Commons", "city": "Round Rock", "state": "TX", "units": 160}
+  ]
+}

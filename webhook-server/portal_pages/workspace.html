@@ -1,0 +1,1937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<title>RPM Digital | Workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>window.__CLERK_PK__ = 'pk_test_YW11c2VkLXRpZ2VyLTc0LmNsZXJrLmFjY291bnRzLmRldiQ';</script>
+<style>
+/* ── Tokens ────────────────────────────────────────────────────────────
+   Structure, type scale, spacing and radii follow the v3 product design
+   system. Every color is the RPM Living palette ("RPM Templates"):
+   exact brand hexes for fills, rules, accents and charts; darker shades of
+   the same hues for small text and button fills so every pair passes AA.
+   Status colors are derived to sit with the palette (see the build plan). */
+:root{
+  --font-sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --text-fine:11px; --text-label:12px; --text-support:13px; --text-body:14px; --text-title:16px;
+  --text-page:24px; --text-metric:32px; --text-metric-lg:44px;
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-6:24px; --space-8:32px; --space-12:48px; --space-16:64px;
+  --radius-sm:6px; --radius-md:8px; --radius-lg:12px; --radius-full:999px;
+
+  /* Brand (exact) */
+  --juniper:#444E4C; --black:#282D27; --gray:#76797A; --copper:#AB784A; --sage:#8BA395; --mint:#BDDDD9; --rule:#D9DEDC; --ink-on-dark:#E7EBE9;
+  /* Brand shades for text and fills (same hues, darker for AA) */
+  --copper-fill:#97693F; --copper-fill-hover:#86592F; --copper-ink:#8A6A3F; --gray-ink:#6F7372; --gray-ink-strong:#5E6261;
+  /* Surfaces (tints of Ink-on-dark and Mint on white) */
+  --color-bg:#FBFCFC; --color-card:#FFFFFF; --color-muted:#F3F5F4; --color-brand-soft:#E8F3F2;
+  /* Roles */
+  --color-fg:var(--black); --color-fg-2:var(--juniper); --color-fg-muted:var(--gray-ink);
+  --color-border:var(--rule); --color-line:var(--ink-on-dark);
+  --color-brand:var(--copper);
+  /* Status: fill (dots, bars) · soft (backgrounds) · text (AA on white, bg and soft) */
+  --healthy:#8BA395;   --healthy-soft:#ECF0EE;   --healthy-text:#5B7265;
+  --attention:#C39A4B; --attention-soft:#F5EFE2; --attention-text:#86672D;
+  --warning:#BF7B52;   --warning-soft:#F5EAE3;   --warning-text:#975C38;
+  --critical:#B0544A;  --critical-soft:#F2E4E2;  --critical-text:#A34E45;
+  --new:#76797A;       --new-soft:#E9EAEA;       --new-text:#676A6A;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none !important}
+html,body{height:100%}
+body{font-family:var(--font-sans);font-size:var(--text-body);line-height:22px;color:var(--color-fg);background:var(--color-bg);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-wrap:anywhere;font-feature-settings:"tnum"}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+a{color:inherit;text-decoration:none}
+ol,ul{list-style:none}
+:focus-visible{outline:2px solid var(--copper-fill);outline-offset:2px;border-radius:4px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.skip{position:absolute;left:-999px;top:8px;z-index:60;background:var(--color-card);padding:8px 12px;border-radius:6px}
+.skip:focus{left:8px}
+.mono{font-family:var(--font-mono)}
+
+/* ── Shell (App Shell EI-1) ─────────────────────────────────────────── */
+.app{display:flex;min-height:100vh}
+.side{width:240px;flex-shrink:0;background:var(--color-card);border-right:1px solid var(--color-border);padding:12px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.logo{height:40px;display:flex;align-items:center;gap:10px;padding-inline:8px;margin-bottom:16px}
+.logo b{font-weight:700;font-size:16px;line-height:20px;letter-spacing:.16em;color:var(--color-fg)}
+.logo span{font-size:12px;line-height:16px;color:var(--color-fg-muted);letter-spacing:.04em}
+.logo i{width:20px;height:20px;border-radius:5px;background:var(--copper);display:block;flex-shrink:0}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav-label{padding:20px 10px 6px;font-size:11px;line-height:14px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--color-fg-muted)}
+.nav a{height:36px;display:flex;align-items:center;gap:10px;padding-inline:10px;border-radius:var(--radius-sm);font-size:13px;line-height:16px;font-weight:500;color:var(--color-fg-muted);transition:background-color .15s,color .15s}
+.nav a svg{width:16px;height:16px;flex-shrink:0;stroke:currentColor}
+.nav a .t{flex:1}
+.nav a .count{font-size:11px;line-height:14px;font-weight:500;color:var(--color-fg-muted)}
+.nav a .badge{height:18px;min-width:18px;padding-inline:5px;border-radius:var(--radius-full);background:var(--copper-fill);color:#fff;font-size:11px;line-height:18px;font-weight:600;text-align:center}
+@media (hover:hover){.nav a:not([aria-current="page"]):hover{background:var(--color-muted);color:var(--color-fg)}}
+.nav a[aria-current="page"]{background:var(--juniper);color:var(--ink-on-dark);font-weight:600}
+.nav a[aria-current="page"] .count{color:var(--ink-on-dark)}
+.side-grow{flex:1;min-height:12px}
+.loopcard{display:flex;align-items:center;gap:10px;background:var(--color-brand-soft);border-radius:var(--radius-sm);padding:10px;margin-bottom:12px}
+.loopcard i{width:8px;height:8px;border-radius:50%;background:var(--sage);flex-shrink:0;position:relative}
+@media (prefers-reduced-motion:no-preference){.loopcard i.on::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--sage);animation:ping 2s cubic-bezier(0,0,.2,1) infinite}}
+@keyframes ping{75%,100%{transform:scale(2.4);opacity:0}}
+.loopcard b{display:block;font-size:12px;line-height:16px;font-weight:600;color:var(--juniper)}
+.loopcard span{display:block;font-size:11px;line-height:14px;color:var(--gray-ink-strong);white-space:nowrap}
+.side-bottom{border-top:1px solid var(--color-border);padding-top:12px;display:flex;flex-direction:column;gap:6px}
+.userrow{display:flex;align-items:center;gap:10px;min-height:44px;padding-inline:10px}
+.avatar{width:24px;height:24px;border-radius:50%;background:var(--juniper);color:#fff;font-size:10px;line-height:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.userrow div b{display:block;font-size:12px;line-height:16px;font-weight:600}
+.userrow div span{display:block;font-size:11px;line-height:14px;color:var(--color-fg-muted)}
+.previewtoggle{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:6px 10px;border-radius:var(--radius-sm);font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-2);width:100%;text-align:left}
+.previewtoggle:hover{background:var(--color-muted)}
+.switch{width:28px;height:16px;border-radius:999px;background:var(--rule);position:relative;flex-shrink:0;transition:background-color .15s}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:transform .15s}
+.previewtoggle[aria-pressed="true"] .switch{background:var(--copper-fill)}
+.previewtoggle[aria-pressed="true"] .switch::after{transform:translateX(12px)}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{height:48px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding-inline:16px;background:var(--color-card);border-bottom:1px solid var(--color-border);position:sticky;top:0;z-index:20}
+.crumbs{display:flex;align-items:center;gap:8px;font-size:13px;line-height:16px;min-width:0;white-space:nowrap}
+.crumbs b{font-weight:600}
+.crumbs .sep{color:var(--color-fg-muted)}
+.crumbs .ctx{color:var(--color-fg-muted);overflow:hidden;text-overflow:ellipsis}
+.top-grow{flex:1}
+.search-wrap{position:relative}
+.search{width:280px;height:30px;display:flex;align-items:center;gap:8px;padding-inline:10px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-md)}
+.search:focus-within{outline:2px solid var(--copper-fill);outline-offset:1px}
+.search svg{flex-shrink:0}
+.search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:13px;line-height:16px}
+.search input::placeholder{color:var(--color-fg-muted)}
+.kbd{background:var(--color-muted);border:1px solid var(--color-border);border-radius:4px;padding:1px 5px;font-size:11px;line-height:14px;font-weight:500;color:var(--color-fg-muted)}
+.sresults{position:absolute;left:0;top:calc(100% + 6px);width:380px;max-height:420px;overflow-y:auto;background:var(--color-card);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(40,45,39,.12);z-index:30;padding:6px}
+.sgrp + .sgrp{border-top:1px solid var(--color-line);margin-top:4px;padding-top:4px}
+.sgl{font-size:11px;line-height:14px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--color-fg-muted);padding:8px 10px 4px}
+.sopt{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer;min-height:44px}
+.sopt b{font-size:13px;line-height:16px;font-weight:500}
+.sopt span{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.sopt:hover,.sopt[aria-selected="true"]{background:var(--color-muted)}
+.sopt[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--copper)}
+.sempty{padding:10px;font-size:13px;line-height:18px;color:var(--color-fg-muted)}
+.previewbar{display:flex;align-items:center;gap:12px;padding:8px 24px;background:var(--attention-soft);border-bottom:1px solid var(--color-border);font-size:13px;line-height:18px;color:var(--attention-text)}
+.previewbar b{font-weight:600}
+.previewbar .grow{flex:1}
+
+/* Content + right rail */
+.content{display:flex;flex:1;min-height:0;align-items:stretch}
+.page{flex:1;min-width:0;display:flex;flex-direction:column;gap:24px;padding:28px 32px 48px}
+.rail{width:340px;flex-shrink:0;background:var(--color-card);border-left:1px solid var(--color-border);padding:28px 24px;display:flex;flex-direction:column;gap:20px}
+.page.narrow{max-width:1140px}
+
+/* ── Type roles (Design System 7H-1) ─────────────────────────────────── */
+.h-page{font-size:24px;line-height:30px;font-weight:700;letter-spacing:-.02em}
+.h-greet{font-size:24px;line-height:30px;font-weight:500;letter-spacing:-.01em}
+.h-card{font-size:16px;line-height:20px;font-weight:600}
+.h-sec{font-size:16px;line-height:20px;font-weight:500}
+.h-rail{font-size:14px;line-height:18px;font-weight:600}
+.eyebrow{font-size:12px;line-height:16px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--color-fg-muted)}
+.support{font-size:13px;line-height:20px;color:var(--color-fg-muted)}
+.fine{font-size:11px;line-height:14px;color:var(--color-fg-muted)}
+.metric{font-size:32px;line-height:40px;font-weight:700;letter-spacing:-.02em}
+.back{font-size:13px;line-height:16px;font-weight:500;color:var(--copper-ink);display:inline-flex;align-items:center;gap:4px;min-height:24px}
+.back:hover,.link:hover{text-decoration:underline}
+.link{font-size:13px;line-height:16px;font-weight:500;color:var(--copper-ink)}
+.link.quiet{color:var(--color-fg-muted);font-weight:400}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.head .stack{display:flex;flex-direction:column;gap:4px;min-width:0}
+.asof{font-size:12px;line-height:16px;color:var(--color-fg-muted);white-space:nowrap}
+.gaps{font-size:13px;line-height:20px;color:var(--color-fg-muted)}
+.receipt{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+
+/* ── Controls ────────────────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding-inline:16px;border-radius:var(--radius-sm);font-size:14px;line-height:18px;font-weight:500;border:1px solid var(--color-border);background:var(--color-card);color:var(--color-fg);white-space:nowrap;transition:background-color .15s}
+.btn:hover{background:var(--color-muted)}
+.btn.primary{background:var(--copper-fill);border-color:var(--copper-fill);color:#fff;font-weight:600}
+.btn.primary:hover{background:var(--copper-fill-hover)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--color-fg-muted)}
+.btn.sm{height:30px;padding-inline:12px;font-size:13px;line-height:16px}
+.btn.xs{height:28px;padding-inline:12px;font-size:12px;line-height:16px}
+.btn.outline{border-color:var(--copper-fill);color:var(--copper-ink);background:var(--color-card)}
+.btn.outline:hover{background:var(--color-brand-soft)}
+.btn.big{height:46px;padding-inline:28px;font-size:15px;line-height:18px;font-weight:600}
+.btn[disabled]{opacity:.6;cursor:progress}
+.textbtn{font-size:12px;line-height:16px;color:var(--color-fg-muted);min-height:28px;padding-inline:4px}
+.textbtn:hover{color:var(--color-fg);text-decoration:underline}
+.textbtn.danger{color:var(--critical-text)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{height:28px;padding-inline:12px;border-radius:var(--radius-full);border:1px solid var(--color-border);background:var(--color-card);font-size:13px;line-height:16px;color:var(--color-fg-muted)}
+.chip:hover{background:var(--color-muted)}
+.chip[aria-pressed="true"]{background:var(--juniper);border-color:var(--juniper);color:var(--ink-on-dark);font-weight:500}
+.lens{display:flex;align-items:center;gap:4px;font-size:13px;line-height:16px}
+.lens button{color:var(--color-fg-muted);min-height:28px;padding-inline:2px}
+.lens button[aria-pressed="true"]{color:var(--copper-ink);font-weight:500;text-decoration:underline;text-underline-offset:4px}
+.lens .bar{color:var(--color-fg-muted);padding-inline:4px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding-inline:10px;border-radius:var(--radius-full);font-size:12px;line-height:16px;font-weight:500;white-space:nowrap}
+.pill i{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+.pill.healthy{background:var(--healthy-soft);color:var(--healthy-text)}
+.pill.attention{background:var(--attention-soft);color:var(--attention-text)}
+.pill.warning{background:var(--warning-soft);color:var(--warning-text)}
+.pill.critical{background:var(--critical-soft);color:var(--critical-text)}
+.pill.new{background:var(--new-soft);color:var(--new-text)}
+.pill.brand{background:var(--color-brand-soft);color:var(--juniper)}
+.pill.fh{background:var(--color-muted);color:var(--juniper);border:1px solid var(--color-border)}
+.tag{display:inline-flex;align-items:center;height:20px;padding-inline:8px;border-radius:4px;font-size:11px;line-height:14px;font-weight:500;white-space:nowrap}
+.tag.cost{background:var(--healthy-soft);color:var(--healthy-text)}
+.tag.vendor,.tag.content{background:var(--color-brand-soft);color:var(--juniper)}
+.tag.negotiate{background:var(--attention-soft);color:var(--attention-text)}
+.tag.creative{background:var(--color-muted);color:var(--gray-ink-strong)}
+.tag.compliance{background:var(--critical-soft);color:var(--critical-text)}
+.tag.internal{background:var(--color-muted);color:var(--gray-ink-strong);gap:4px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+.dot.healthy{background:var(--healthy)} .dot.attention{background:var(--attention)} .dot.warning{background:var(--warning)} .dot.critical{background:var(--critical)} .dot.new{background:var(--new)} .dot.brand{background:var(--copper)}
+.t-healthy{color:var(--healthy-text)} .t-attention{color:var(--attention-text)} .t-warning{color:var(--warning-text)} .t-critical{color:var(--critical-text)} .t-new{color:var(--new-text)} .t-brand{color:var(--copper-ink)}
+.card{background:var(--color-card);border:1px solid var(--color-border);border-radius:var(--radius-md)}
+.inline-err{font-size:13px;line-height:18px;color:var(--critical-text)}
+
+/* KPI strip */
+.kpis{display:flex;align-items:flex-start;border-bottom:1px solid var(--color-border);padding-bottom:20px;flex-wrap:wrap;row-gap:16px}
+.kpi{display:flex;flex-direction:column;gap:4px;padding-inline:24px;border-left:1px solid var(--color-border);min-width:0}
+.kpi:first-child{padding-left:0;border-left:0}
+.kpi .eyebrow{letter-spacing:.04em}
+.kpi .v{font-size:32px;line-height:40px;font-weight:700;letter-spacing:-.02em}
+.kpi.sm .v{font-size:24px;line-height:30px}
+.kpi .rc{font-size:11px;line-height:14px;color:var(--color-fg-muted)}
+.kpi.emph .eyebrow{color:var(--color-fg-2);font-weight:600}
+
+/* Tables (v3 pattern) */
+.tscroll{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;padding:8px 12px 8px 0;border-bottom:1px solid var(--color-border);font-size:12px;line-height:16px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--color-fg-muted);white-space:nowrap}
+.tbl td{padding:10px 12px 10px 0;border-bottom:1px solid var(--color-line);font-size:13px;line-height:16px;vertical-align:middle}
+.tbl td.name{font-size:14px;line-height:18px;font-weight:500}
+.tbl .num{text-align:right}
+.tbl tr.rowlink{cursor:pointer}
+.tbl tr.rowlink:hover td{background:var(--color-muted)}
+.tbl.boxed{border:1px solid var(--color-border);border-radius:var(--radius-md);border-collapse:separate;border-spacing:0;overflow:hidden;background:var(--color-card)}
+.tbl.boxed th{background:var(--color-bg);padding:10px 16px;font-size:11px;line-height:14px;font-weight:600;letter-spacing:.05em}
+.tbl.boxed td{padding:12px 16px}
+.tbl.boxed tr:last-child td{border-bottom:0}
+.tbl.boxed td:first-child,.tbl.boxed th{white-space:nowrap}
+.empty-dash{color:var(--color-fg-muted)}
+
+/* States */
+.state{padding:48px 32px;display:flex;flex-direction:column;gap:10px;max-width:560px}
+.state h2{font-size:18px;line-height:24px;font-weight:600}
+.state p{font-size:14px;line-height:21px;color:var(--color-fg-muted)}
+.loading{display:flex;align-items:center;gap:10px;color:var(--color-fg-muted);font-size:13px}
+.spinner{width:14px;height:14px;border:2px solid var(--color-line);border-top-color:var(--copper);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation:none}}
+.gate{position:fixed;inset:0;background:var(--juniper);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px}
+@media (prefers-reduced-motion:no-preference){.page{animation:rise .3s ease-out}}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* ── Dashboard (CXR-2, FYF-1 hero) ───────────────────────────────────── */
+.greet{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.greet .stack{display:flex;flex-direction:column;gap:2px}
+.hero{display:flex;align-items:center;gap:32px;background:var(--attention-soft);border:1px solid var(--rule);border-radius:var(--radius-sm);padding:22px 24px 22px 28px}
+.hero .l{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.hero .q{font-size:20px;line-height:28px;font-weight:600;letter-spacing:-.01em}
+.hero .body{font-size:14px;line-height:22px;color:var(--color-fg-2)}
+.hero .r{width:220px;flex-shrink:0;display:flex;flex-direction:column;gap:8px}
+.hero .r .btn{width:100%;height:40px}
+.hero .r .link{align-self:flex-start;padding-top:2px}
+.sec{display:flex;flex-direction:column;gap:10px}
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.tiles{display:flex;flex-wrap:wrap;gap:6px}
+.tile{width:104px;min-height:62px;padding:8px 10px;border-radius:4px;display:flex;flex-direction:column;gap:2px;text-align:left}
+.tile span{font-size:11px;line-height:14px;color:var(--color-fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile b{font-size:18px;line-height:22px;font-weight:700}
+.tile.healthy{background:var(--healthy-soft)} .tile.healthy b{color:var(--healthy-text)}
+.tile.attention{background:var(--attention-soft)} .tile.attention b{color:var(--attention-text)}
+.tile.warning{background:var(--warning-soft)} .tile.warning b{color:var(--warning-text)}
+.tile.critical{background:var(--critical-soft)} .tile.critical b{color:var(--critical-text)}
+.tile.new{background:var(--color-card);border:1px dashed var(--gray)} .tile.new b{font-size:14px;line-height:18px;font-weight:500;color:var(--new-text)}
+.tile:hover{outline:1px solid var(--color-border)}
+.healthcell{display:inline-flex;align-items:center;gap:6px;font-weight:500}
+.feed{display:flex;flex-direction:column;gap:10px}
+.feed li{display:flex;gap:8px;align-items:flex-start}
+.feed li .dot{width:6px;height:6px;margin-top:6px}
+.feed li b{display:block;font-size:13px;line-height:18px;font-weight:400}
+.feed li div>span{display:block;font-size:11px;line-height:14px;color:var(--color-fg-muted)}
+.feed li .tag{margin-left:6px;vertical-align:middle}
+.rail-sep{border-top:1px solid var(--color-border)}
+.wcard{border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.wcard .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.wcard .top b{font-size:13px;line-height:16px;font-weight:500}
+.wcard p{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.wcard .acts{display:flex;align-items:center;gap:8px}
+.countbadge{display:inline-flex;align-items:center;justify-content:center;height:18px;min-width:18px;padding-inline:6px;border-radius:999px;background:var(--copper-fill);color:#fff;font-size:11px;line-height:14px;font-weight:600;margin-left:6px}
+
+/* ── Approvals (DDE-0, 1HM-0) ───────────────────────────────────────── */
+.meta-line{font-size:14px;line-height:18px;color:var(--color-fg-muted)}
+.meta-line .warn{color:var(--attention-text);font-weight:500}
+.interrupts{display:flex;flex-direction:column;gap:8px}
+.intr{display:flex;align-items:flex-start;gap:12px;background:var(--color-card);border:1px solid var(--color-line);border-left:2px solid var(--attention);border-radius:0 var(--radius-sm) var(--radius-sm) 0;padding:14px 16px}
+.intr.compliance{border-left-color:var(--critical)}
+.intr .l{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.intr .l b{font-size:14px;line-height:18px;font-weight:600;color:var(--attention-text)}
+.intr.compliance .l b{color:var(--critical-text)}
+.intr .l p{font-size:13px;line-height:18px;color:var(--color-fg-muted)}
+.intr .r{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.intr .btn{border-color:var(--attention);color:var(--attention-text)}
+.intr.compliance .btn{border-color:var(--critical);color:var(--critical-text)}
+.batch td.acts{white-space:nowrap;text-align:right}
+.batch td.acts .btn{margin-right:6px}
+.batch td.sav{font-weight:500;color:var(--healthy-text)}
+.reasonrow td{background:var(--color-bg);padding:12px 16px}
+.reasons{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.reasons .q{font-size:13px;line-height:16px;font-weight:600;margin-right:4px}
+.rchip{height:30px;padding-inline:12px;border-radius:16px;border:1px solid var(--color-border);background:var(--color-card);font-size:13px;line-height:16px;color:var(--color-fg-2)}
+.rchip:hover{background:var(--color-muted)}
+.rchip[aria-pressed="true"]{background:var(--color-brand-soft);border-color:var(--mint);color:var(--juniper);font-weight:500}
+.statline{font-size:13px;line-height:18px;color:var(--color-fg-muted)}
+.emptybox{border:1.5px dashed var(--color-border);border-radius:var(--radius-lg);min-height:420px;padding:64px 40px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center}
+.emptybox .ic{width:48px;height:48px;border-radius:50%;background:var(--healthy-soft);display:flex;align-items:center;justify-content:center}
+.emptybox b{font-size:14px;line-height:18px;font-weight:600}
+.done-row{font-size:13px;line-height:16px;color:var(--healthy-text);font-weight:500}
+
+/* ── Item detail (existing screen, G4K-1 panel) ─────────────────────── */
+.stage{display:flex;flex-direction:column;align-items:center;padding:32px 32px 56px;gap:20px}
+.panel{width:100%;max-width:760px;background:var(--color-card);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:32px 36px;display:flex;flex-direction:column;gap:24px}
+.panel-head{display:flex;flex-direction:column;gap:10px}
+.panel-head .pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.qtitle{font-size:26px;line-height:34px;font-weight:600;letter-spacing:-.02em}
+.why{display:flex;flex-direction:column;gap:14px}
+.why .row{display:flex;gap:18px;align-items:flex-start}
+.why .k{width:100px;flex-shrink:0;border:1px solid var(--color-border);border-radius:4px;padding:4px 8px;text-align:center;font-size:11px;line-height:14px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--color-fg-muted)}
+.why .v{flex:1;min-width:0;font-size:14px;line-height:24px;color:var(--color-fg-2)}
+.why .rc{display:block;font-size:12px;line-height:18px;color:var(--color-fg-muted)}
+.compare{background:var(--color-muted);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 20px}
+.compare table{width:100%;border-collapse:collapse}
+.compare th{text-align:left;font-size:11px;line-height:14px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--gray-ink-strong);padding:10px 8px 6px 0}
+.compare td{padding:8px 8px 8px 0;font-size:14px;line-height:18px;border-top:1px solid var(--color-border)}
+.compare td.num{text-align:right}
+.compare th.num{text-align:right}
+.compare td .bar{display:inline-block;height:5px;border-radius:3px;background:var(--copper);vertical-align:middle;margin-right:8px}
+.compare td .bar.max{background:var(--critical)}
+.compare .more{font-size:12px;line-height:16px;color:var(--gray-ink-strong);padding:8px 0}
+.spark{display:flex;align-items:flex-end;gap:7px;height:78px}
+.spark .col{width:20px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;height:72px}
+.spark .col i{display:block;width:100%;border-radius:2px;background:var(--rule)}
+.spark .col.hi i{background:var(--copper)}
+.spark .col b{font-size:11px;line-height:14px;font-weight:600;color:var(--copper-ink)}
+.spark .lbl{align-self:flex-end;padding-left:10px;font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.steps li{display:flex;gap:14px;padding:12px 0;border-top:1px solid var(--color-line);align-items:flex-start}
+.steps li:first-child{border-top-color:var(--color-border)}
+.steps .d{width:86px;flex-shrink:0;font-size:13px;line-height:18px;font-weight:600}
+.steps .l{flex:1;min-width:0;font-size:14px;line-height:21px;color:var(--color-fg-2)}
+.steps .c{width:100px;flex-shrink:0;text-align:right;font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-muted)}
+.actions-row{display:flex;align-items:center;gap:14px;border-top:1px solid var(--color-border);padding-top:24px;flex-wrap:wrap}
+.actions-row .grow{flex:1}
+.reasonbox{display:flex;flex-direction:column;gap:10px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:14px 16px}
+.reasonbox .hint{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.trail li{display:flex;gap:10px;align-items:baseline;padding:4px 0}
+.trail .d{width:56px;flex-shrink:0;font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-muted)}
+.trail .x{flex:1;min-width:0;font-size:13px;line-height:19px;color:var(--color-fg-2)}
+.trail .who{color:var(--color-fg-muted)}
+.afternote{font-size:13px;line-height:16px;color:var(--color-fg-muted)}
+
+/* ── Approved ───────────────────────────────────────────────────────── */
+.banner{display:flex;align-items:center;gap:14px;padding:18px 32px;background:var(--healthy-soft);border-bottom:1px solid var(--color-border)}
+.banner .bcheck{width:30px;height:30px;border-radius:50%;background:var(--healthy-text);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.banner .btxt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.banner .btxt b{font-size:15px;line-height:18px;font-weight:600}
+.banner .btxt span{font-size:13px;line-height:16px;color:var(--color-fg-2)}
+.banner.undone{background:var(--color-muted)}
+.undo-wrap{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.undo-note{font-size:13px;line-height:16px;color:var(--healthy-text);max-width:360px;text-align:right}
+.motions li{display:flex;gap:18px;padding:18px 0;border-top:1px solid var(--color-line);align-items:flex-start}
+.motions li:first-child{border-top-color:var(--color-border)}
+.motions .mi{width:26px;flex-shrink:0;padding-top:1px}
+.motions .mb{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.motions .mb b{font-size:16px;line-height:20px;font-weight:600}
+.motions .mb p{font-size:14px;line-height:21px;color:var(--color-fg-2)}
+.motions .ms{width:200px;flex-shrink:0;text-align:right;display:flex;flex-direction:column;gap:3px}
+.motions .ms b{font-size:13px;line-height:16px;font-weight:600}
+.motions .ms span{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.panes{display:flex;gap:16px;align-items:stretch}
+.pane{background:var(--color-muted);border-radius:var(--radius-md);padding:18px 20px;display:flex;flex-direction:column;gap:9px}
+.pane.grow{flex:1;min-width:0}
+.pane.aside{width:360px;flex-shrink:0}
+.pane p{font-size:14px;line-height:22px;color:var(--color-fg-2)}
+.record{display:flex;align-items:center;gap:9px}
+.record .track{flex:1;height:6px;border-radius:3px;background:var(--rule)}
+.record .fill{height:6px;border-radius:3px;background:var(--sage)}
+.record b{font-size:13px;line-height:16px;font-weight:600;color:var(--healthy-text)}
+
+/* ── Properties (GOO-0) and Property detail (D4I-2, G73-1) ──────────── */
+.proptitle{display:flex;align-items:center;gap:16px}
+.ring{position:relative;width:56px;height:56px;flex-shrink:0}
+.ring b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:22px;font-weight:700}
+.forecast{display:flex;align-items:flex-end;gap:4px;height:150px}
+.forecast .col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;height:100%}
+.forecast .col span{font-size:10px;line-height:12px;font-weight:500;color:var(--color-fg-muted)}
+.forecast .col i{display:block;width:100%;border-radius:2px 2px 0 0}
+.forecast .col em{font-style:normal;font-size:11px;line-height:14px;color:var(--color-fg-muted)}
+.vrows li{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--color-line);font-size:13px;line-height:16px}
+.vrows li:last-child{border-bottom:0}
+.vrows .n{width:220px;flex-shrink:0;font-weight:500}
+.vrows .p{width:120px;flex-shrink:0}
+.vrows .verdict{color:var(--color-fg-muted)}
+.estats{display:flex;flex-wrap:wrap;row-gap:12px}
+.estats .kpi .v{font-size:20px;line-height:24px}
+.scoped-links{display:flex;flex-wrap:wrap;gap:8px}
+.loopcard2{padding:24px 28px 28px;display:flex;flex-direction:column}
+.loopcard2 .lh{display:flex;align-items:center;gap:10px;padding-bottom:20px}
+.loopcard2 .lh i{width:7px;height:7px;border-radius:50%;background:var(--copper)}
+.loopcard2 .lh b{flex:1;font-size:16px;line-height:20px;font-weight:600}
+.stagel li{display:flex;gap:16px}
+.stagel .rl{width:18px;flex-shrink:0;display:flex;flex-direction:column;align-items:center}
+.stagel .node{width:10px;height:10px;border-radius:50%;background:var(--healthy);margin-top:5px;flex-shrink:0}
+.stagel .node.waiting{width:12px;height:12px;background:var(--attention);box-shadow:0 0 0 3px var(--attention-soft)}
+.stagel .node.upcoming{background:var(--color-card);border:1.5px solid var(--color-border)}
+.stagel .conn{width:1px;flex:1;background:var(--color-border);margin-top:4px}
+.stagel li:last-child .conn{display:none}
+.stagel .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-bottom:20px}
+.stagel li:last-child .body{padding-bottom:0}
+.stagel .tl{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.stagel .tl b{font-size:14px;line-height:18px;font-weight:600}
+.stagel .tl span{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.stagel .tl span.wait{color:var(--attention-text);font-weight:500}
+.stagel p{font-size:13px;line-height:21px;color:var(--color-fg-muted)}
+.stagel li.upcoming .tl b{color:var(--color-fg-muted)}
+.stagel .body .btn{align-self:flex-start;margin-top:4px}
+.finding{background:var(--color-muted);border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.finding p{font-size:13px;line-height:20px}
+.emailcard{border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:12px;display:flex;flex-direction:column;gap:6px}
+.emailcard b{font-size:13px;line-height:16px;font-weight:500}
+.emailcard p{font-size:12px;line-height:18px;color:var(--color-fg-muted)}
+
+/* ── Media plan (DM0-1, GJQ-1) ──────────────────────────────────────── */
+.flight{padding:20px;display:flex;flex-direction:column;gap:10px;overflow-x:auto}
+.frow{display:flex;align-items:center;min-width:720px}
+.frow .fl{width:112px;flex-shrink:0;font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-muted)}
+.frow .cells{flex:1;display:grid;grid-template-columns:repeat(12,1fr)}
+.frow .cells>*{text-align:center;font-size:11px;line-height:14px;padding:5px 2px}
+.frow.mh .cells>*{font-weight:600;color:var(--color-fg-muted)}
+.frow.mh .cells>.peak{background:var(--color-brand-soft);color:var(--juniper)}
+.frow.bars{align-items:flex-end}
+.frow.bars .cells>*{height:64px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px;padding:0}
+.frow.bars i{display:block;width:80%;border-radius:2px}
+.frow.bars span{font-size:10px;line-height:12px;color:var(--color-fg-muted)}
+.frow.ch{border-top:1px solid var(--color-line)}
+.frow.ch .on{background:var(--color-brand-soft);color:var(--juniper)}
+.frow.ch .off{color:var(--color-fg-muted)}
+.frow.tot{border-top:1px solid var(--color-border)}
+.frow.tot .fl,.frow.tot .cells>*{font-weight:700;color:var(--color-fg)}
+.allocated{align-self:flex-end;font-size:13px;line-height:16px;font-weight:600;color:var(--healthy-text)}
+.notes li{display:flex;gap:8px;font-size:13px;line-height:20px}
+.notes li::before{content:"";width:3px;border-radius:2px;background:var(--copper);flex-shrink:0}
+.notes{display:flex;flex-direction:column;gap:12px}
+
+/* ── Visibility (E06-1) ─────────────────────────────────────────────── */
+.vhero{display:flex;align-items:center;gap:20px}
+.vhero .big{font-size:48px;line-height:56px;font-weight:700}
+.engines{display:flex;overflow:hidden}
+.engines .cell{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:16px 8px;border-right:1px solid var(--color-border)}
+.engines .cell:last-child{border-right:0}
+.engines .cell span{font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-muted)}
+.engines .cell b{font-size:24px;line-height:30px;font-weight:700}
+.engines .cell em{font-style:normal;font-size:11px;line-height:14px;color:var(--color-fg-muted)}
+.tbl .self{background:var(--color-brand-soft);font-weight:600}
+.citebar{display:flex;height:24px;border-radius:4px;overflow:hidden}
+.citebar i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;line-height:16px;color:var(--color-fg-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:2px;display:block}
+.callout{border-radius:var(--radius-sm);padding:12px;display:flex;flex-direction:column;gap:6px;border-left:3px solid var(--attention);background:var(--attention-soft)}
+.callout b{font-size:13px;line-height:16px;font-weight:600;color:var(--attention-text)}
+.callout p{font-size:12px;line-height:18px;color:var(--color-fg-2)}
+.callout.competitor{border-left-color:var(--critical);background:var(--critical-soft)}
+.callout.competitor b{color:var(--critical-text)}
+.recs li{display:flex;flex-direction:column;gap:6px;padding-bottom:12px;border-bottom:1px solid var(--color-border)}
+.recs li p{font-size:13px;line-height:18px}
+.recs{display:flex;flex-direction:column;gap:12px}
+
+/* ── Content (E4U-1) and Creative (E4S-1) ───────────────────────────── */
+.prio{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:16px;font-weight:500}
+.tbl tr.top td{background:var(--color-brand-soft)}
+.assets{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+.asset{display:flex;flex-direction:column;gap:8px;padding-left:12px;border-left:2px solid transparent}
+.asset.best{border-left-color:var(--healthy)}
+.asset.worst{border-left-color:var(--critical)}
+.asset .thumb{aspect-ratio:268/158;max-width:100%;border-radius:4px;display:flex;align-items:flex-end;padding:8px}
+.asset .thumb span{font-size:11px;line-height:14px;color:var(--juniper);background:rgba(255,255,255,.85);border-radius:4px;padding:1px 6px}
+.asset .fn{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-family:var(--font-mono);font-size:12px;line-height:16px}
+.asset .tags{display:flex;gap:6px;flex-wrap:wrap}
+.asset .tags span{height:20px;padding-inline:8px;border-radius:999px;font-size:11px;line-height:20px;background:var(--color-muted);color:var(--gray-ink-strong)}
+.asset .tags span.generated{background:var(--color-brand-soft);color:var(--juniper)}
+.asset .tags span.uploaded{background:var(--healthy-soft);color:var(--healthy-text)}
+.dropzone{border:2px dashed var(--color-border);border-radius:var(--radius-md);padding:24px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.dropzone:hover{background:var(--color-muted)}
+
+/* ── Value (GC6-1) ──────────────────────────────────────────────────── */
+.vhead{display:flex;flex-direction:column;gap:10px}
+.vhead h1{font-size:28px;line-height:34px;font-weight:600;letter-spacing:-.02em;max-width:760px}
+.figures{display:flex;align-items:flex-end;gap:72px;flex-wrap:wrap;row-gap:24px}
+.fig{display:flex;flex-direction:column;gap:4px}
+.fig .l{font-size:11px;line-height:14px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--color-fg-muted)}
+.fig .big{font-size:56px;line-height:60px;font-weight:700;letter-spacing:-.03em}
+.fig .mid{font-size:32px;line-height:40px;font-weight:700;letter-spacing:-.02em}
+.ledger td,.ledger th{padding-inline:4px 20px}
+.ledger tfoot td{border-top:2px solid var(--color-fg);border-bottom:0;padding-top:18px;font-weight:600}
+.who.you{color:var(--copper-ink);font-weight:500}
+.who.auto{color:var(--color-fg-muted);font-weight:500}
+
+/* ── Signals ─────────────────────────────────────────────────────────── */
+.sgroup{display:flex;flex-direction:column;gap:0}
+.grp{display:flex;align-items:center;gap:12px;padding:18px 0 10px}
+.grp .rule{flex:1;height:1px;background:var(--color-border)}
+.grp .eyebrow.high{color:var(--critical-text)} .grp .eyebrow.medium{color:var(--attention-text)}
+.srow{display:flex;align-items:center;gap:16px;padding:14px 16px;border-bottom:1px solid var(--color-line);border-left:3px solid var(--color-border);flex-wrap:wrap;background:var(--color-card)}
+.srow.sev-high{border-left-color:var(--critical)} .srow.sev-medium{border-left-color:var(--attention)}
+.sc.prop{width:220px;flex-shrink:0;display:flex;flex-direction:column;gap:2px}
+.sc.prop b{font-size:14px;line-height:18px;font-weight:600}
+.sc.prop span,.sc.chg span{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.sc.what{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13px;line-height:18px}
+.sc.what .dtl{color:var(--color-fg-muted)}
+.sc.chg{width:150px;flex-shrink:0;text-align:right;display:flex;flex-direction:column;gap:2px}
+.sc.chg b{font-size:15px;line-height:18px;font-weight:600}
+.sc.when{width:100px;flex-shrink:0;text-align:right;font-size:13px;line-height:16px;color:var(--color-fg-muted)}
+.sc.act{width:150px;flex-shrink:0;display:flex;justify-content:flex-end}
+.srow .inline-err{flex-basis:100%}
+
+/* ── Ask ─────────────────────────────────────────────────────────────── */
+.qlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.qbtn{text-align:left;border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 14px;display:flex;flex-direction:column;gap:4px;background:var(--color-card);min-height:44px}
+.qbtn:hover{background:var(--color-muted)}
+.qbtn b{font-size:14px;line-height:18px;font-weight:500}
+.qbtn span{font-size:12px;line-height:17px;color:var(--color-fg-muted)}
+.qa{display:flex;flex-direction:column;gap:16px;padding-bottom:20px;border-bottom:1px solid var(--color-border)}
+.qbubble{display:flex;align-items:center;gap:12px;background:var(--color-muted);border-radius:var(--radius-md);padding:12px 16px;font-size:15px;line-height:20px;font-weight:500}
+.answer{display:flex;gap:28px;align-items:flex-start}
+.acol{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px}
+.headline{font-size:18px;line-height:28px}
+.summary{font-size:14px;line-height:23px;color:var(--color-fg-2)}
+.findings{display:flex;flex-direction:column;gap:10px}
+.findings b{font-size:14px;line-height:20px;font-weight:600}
+.findings p{font-size:14px;line-height:22px;color:var(--color-fg-2)}
+.findings sup a{color:var(--copper-ink);font-weight:600;font-size:11px}
+.receipts{width:320px;flex-shrink:0;background:var(--color-muted);border-radius:var(--radius-md);padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.receipts li{display:flex;gap:9px;font-size:13px;line-height:20px}
+.receipts .n{width:14px;flex-shrink:0;color:var(--copper-ink);font-weight:600}
+.receipts li.flash{background:var(--attention-soft)}
+.refusal{display:flex;gap:12px;font-size:14px;line-height:22px;color:var(--color-fg-2)}
+
+/* ── New request (artboard E) ────────────────────────────────────────── */
+.req{display:flex;border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;min-height:680px;background:var(--color-card)}
+.req-l{width:540px;flex-shrink:0;display:flex;flex-direction:column;gap:20px;padding:32px 34px}
+.req-h{font-size:24px;line-height:30px;font-weight:600;letter-spacing:-.02em}
+.req-sub{font-size:14px;line-height:21px;color:var(--color-fg-muted)}
+.req-box{display:flex;background:var(--color-bg);border:1.5px solid var(--copper);border-radius:9px;padding:18px 19px;min-height:190px}
+.req-box:focus-within{outline:2px solid var(--copper-fill);outline-offset:2px}
+.req-box textarea{flex:1;border:0;outline:0;background:transparent;resize:vertical;font-size:15px;line-height:25px;caret-color:var(--copper);min-height:152px}
+.req-box textarea::placeholder{color:var(--color-fg-muted)}
+.req-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.req-row .grow{flex:1}
+.req-recent{border-top:1px solid var(--color-line);flex:1;display:flex;flex-direction:column;gap:11px;padding-top:22px}
+.recent{display:flex;flex-direction:column;gap:11px}
+.recent li{display:flex;align-items:center;gap:12px}
+.recent .rt{flex:1;min-width:0;font-size:14px;line-height:18px}
+.recent .rt a:hover{text-decoration:underline}
+.recent .rs{display:flex;align-items:center;gap:6px;min-width:84px;font-size:13px;line-height:16px;font-weight:500;color:var(--color-fg-2)}
+.recent .rs i{width:7px;height:7px;border-radius:50%;background:var(--juniper)}
+.recent .rs i.done{background:var(--sage)} .recent .rs i.prog{background:var(--copper)}
+.btn.send{width:100%;height:46px;border-radius:7px;font-size:14px}
+.signin-row{text-align:center;padding:12px;font-size:14px}
+.req-r{flex:1;min-width:0;background:var(--color-bg);border-left:1px solid var(--color-line);display:flex;flex-direction:column;gap:16px;padding:32px 34px}
+.tcard{background:var(--color-card);border:1px solid var(--color-border);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:11px;padding:16px 17px}
+.ttop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.ttitle{flex:1;min-width:0;font-size:15px;line-height:18px;font-weight:600;border:1px solid transparent;border-radius:4px;padding:2px 4px;margin:-3px -5px;background:transparent}
+.ttitle:hover{border-color:var(--color-border)}
+.tcat{appearance:none;-webkit-appearance:none;background:var(--color-muted);border:0;border-radius:4px;padding:3px 9px;font-size:11px;line-height:14px;font-weight:600;letter-spacing:.04em;color:var(--juniper);cursor:pointer}
+.tfields{display:flex;flex-direction:column;gap:7px}
+.tfields div{display:flex;align-items:center;gap:10px}
+.tfields dt{width:78px;flex-shrink:0;font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-muted)}
+.tfields dd{flex:1;min-width:0;font-size:13px;line-height:16px}
+.tfields dd.need{display:flex;align-items:center;gap:4px;flex-wrap:wrap;color:var(--color-fg-muted);font-weight:500}
+.need input{border:1px solid transparent;border-radius:4px;padding:1px 3px;margin:-2px -4px;font-size:13px;font-weight:500;color:var(--color-fg-2);background:transparent}
+.need input:hover{border-color:var(--color-border)}
+.twarn{display:flex;align-items:center;gap:8px;background:var(--attention-soft);border-radius:var(--radius-sm);padding:9px 11px;font-size:12px;line-height:18px;color:var(--attention-text)}
+.tact{display:flex;justify-content:flex-end;margin-top:-4px}
+.req-foot{border-top:1px solid var(--color-border);padding-top:14px;font-size:12px;line-height:18px;color:var(--color-fg-muted)}
+.spacer{flex:1;min-height:8px}
+
+/* AA on tinted surfaces: small muted text steps down to the strong gray shade */
+.pane .eyebrow,.pane .support,.finding .receipt,.receipts .support,.receipts .eyebrow,.tbl tr.top td.support,.tbl .self,
+.tbl tr.rowlink:hover .fine,.tbl tr.rowlink:hover .empty-dash,.kbd,.chip:hover,.sopt:hover span,.sopt[aria-selected="true"] span,.hero .support{color:var(--gray-ink-strong)}
+.hero .link{color:var(--attention-text)}
+
+/* ── Mobile (≤760px) ────────────────────────────────────────────────── */
+@media (max-width:760px){
+  .app{flex-direction:column}
+  .side{width:auto;height:auto;position:sticky;top:0;z-index:25;flex-direction:row;align-items:center;flex-wrap:wrap;padding:8px 12px;border-right:0;border-bottom:1px solid var(--color-border);overflow:visible}
+  .logo{margin:0;height:44px}
+  .nav{flex-direction:row;overflow-x:auto;flex-basis:100%;order:3;padding-bottom:4px;scrollbar-width:none}
+  .nav::-webkit-scrollbar{display:none}
+  .nav a{height:44px;flex-shrink:0}
+  .nav-label,.side-grow,.loopcard,.userrow{display:none}
+  .side-bottom{border:0;padding:0;margin-left:auto;order:2}
+  .topbar{position:static;height:auto;flex-wrap:wrap;padding:8px 12px}
+  .crumbs{display:none}
+  .top-grow{display:none}
+  .search-wrap{flex:1 1 100%;min-width:0;order:3}
+  .search{width:100%;height:44px}
+  .topbar .btn{flex:1}
+  .tscroll .tbl{min-width:640px}
+  .tbl.boxed td{white-space:nowrap}
+  .compare{overflow-x:auto}
+  .compare th{white-space:nowrap}
+  .steps li{flex-wrap:wrap;gap:4px 14px}
+  .steps .c{width:auto;text-align:left}
+  .loopcard2{padding:18px 16px}
+  .loopcard2 .lh{flex-wrap:wrap}
+  .greet{align-items:flex-start}
+  .sresults{width:100%}
+  .topbar .btn{height:44px}
+  .content{flex-direction:column}
+  .page{padding:20px 16px 32px;gap:20px}
+  .rail{width:auto;border-left:0;border-top:1px solid var(--color-border);padding:20px 16px}
+  .kpi{padding-inline:16px}
+  .kpi .v{font-size:26px;line-height:32px}
+  .kpis .kpi:nth-child(odd){padding-left:0;border-left:0}
+  .kpis .kpi{flex:1 1 45%}
+  .hero{flex-direction:column;align-items:stretch;gap:16px;padding:18px}
+  .hero .r{width:auto}
+  .btn,.chip,.rchip,.textbtn{min-height:44px}
+  .intr{flex-direction:column}
+  .stage{padding:16px}
+  .panel{padding:22px 18px}
+  .why .row{flex-direction:column;gap:6px}
+  .why .k{width:auto;align-self:flex-start}
+  .motions li{flex-wrap:wrap}
+  .motions .ms{width:100%;text-align:left;padding-left:44px}
+  .panes{flex-direction:column}
+  .pane.aside{width:auto}
+  .banner{padding:14px 16px;flex-wrap:wrap}
+  .vrows .n,.vrows .p{width:auto;flex:1}
+  .forecast .col em{font-size:9px}
+  .engines{flex-wrap:wrap}
+  .engines .cell{flex:1 1 33%;border-bottom:1px solid var(--color-border)}
+  .answer{flex-direction:column}
+  .receipts{width:100%}
+  .figures{gap:24px}
+  .fig .big{font-size:40px;line-height:44px}
+  .req{flex-direction:column;min-height:0}
+  .req-l{width:auto;padding:20px 16px}
+  .req-r{border-left:0;border-top:1px solid var(--color-line);padding:20px 16px}
+  .srow{gap:6px 16px}
+  .sc.prop,.sc.what{flex:1 1 100%;width:100%}
+  .sc.chg,.sc.when{width:auto;text-align:left}
+  .sc.act{width:100%;justify-content:flex-start}
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#view">Skip to content</a>
+<div class="app">
+  <nav class="side" id="side" aria-label="Workspace"></nav>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div id="previewbar" hidden></div>
+    <main id="view" class="content" tabindex="-1" aria-live="polite"></main>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+
+  /* ── Identity ────────────────────────────────────────────────────────
+     Never an email in the URL. Two ways in:
+     1. A signed preview link (?t=). It moves to sessionStorage, leaves the
+        address bar, and rides on every API call as X-Workspace-Link. Links
+        are read-only: writes need a Clerk session (/me says can_decide).
+     2. Clerk, as in client-portal.html: calls wait for the session, then
+        carry Authorization: Bearer <session JWT>. */
+  var LINK_KEY = 'ws.link', PREVIEW_KEY = 'ws.preview', COMPANY_KEY = 'ws.company';
+  var linkToken = null;
+  try {
+    var qs = new URLSearchParams(window.location.search);
+    var tok = qs.get('t');
+    if (tok) {
+      sessionStorage.setItem(LINK_KEY, tok);
+      qs.delete('t');
+      var rest = qs.toString();
+      history.replaceState(null, '', window.location.pathname + (rest ? '?' + rest : '') + window.location.hash);
+    }
+    linkToken = sessionStorage.getItem(LINK_KEY);
+  } catch (e) { linkToken = null; }
+
+  var CLERK_PK = window.__CLERK_PK__ || '';
+  var useClerk = !linkToken && CLERK_PK.indexOf('pk_') === 0;
+  var clerkReadyResolve, clerkReady = new Promise(function (res) { clerkReadyResolve = res; });
+  if (!useClerk) clerkReadyResolve(false);
+
+  function loadClerk() {
+    var key = CLERK_PK.split('_').pop(), domain = '';
+    try { domain = atob(key + '='.repeat((4 - key.length % 4) % 4)).replace(/\$$/, ''); } catch (e) {}
+    var s = document.createElement('script');
+    s.src = domain ? 'https://' + domain + '/npm/@clerk/clerk-js@5/dist/clerk.browser.js' : 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+    s.async = true; s.crossOrigin = 'anonymous';
+    s.setAttribute('data-clerk-publishable-key', CLERK_PK);
+    s.onerror = function () { showSignIn('We could not reach the sign-in service. Check your connection and reload.'); };
+    document.head.appendChild(s);
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      var C = window.Clerk, boot = null;
+      if (C && typeof C.load === 'function') boot = function () { return C.load({ publishableKey: CLERK_PK }).then(function () { return C; }); };
+      else if (C && typeof C === 'function') boot = function () { var inst = new C(CLERK_PK); window.Clerk = inst; return inst.load().then(function () { return inst; }); };
+      if (boot) {
+        clearInterval(timer);
+        boot().then(function (inst) {
+          if (inst.user) { clerkReadyResolve(true); return; }
+          var d = document.createElement('div'); d.className = 'gate'; d.id = 'clerk-gate';
+          var m = document.createElement('div'); d.appendChild(m); document.body.appendChild(d);
+          var here = window.location.href;
+          inst.mountSignIn(m, { forceRedirectUrl: here, fallbackRedirectUrl: here, afterSignInUrl: here, afterSignUpUrl: here });
+          inst.addListener(function (r) { if (r.user) { var g = document.getElementById('clerk-gate'); if (g) g.remove(); clerkReadyResolve(true); } });
+        }).catch(function () { showSignIn('Sign-in did not load. Reload the page to try again.'); });
+      } else if (tries > 100) { clearInterval(timer); showSignIn('Sign-in did not load. Reload the page to try again.'); }
+    }, 150);
+  }
+
+  /* ── API ─────────────────────────────────────────────────────────────
+     Same-origin only. While an internal user previews as a client, reads
+     carry X-Workspace-Preview-Role: client (see the build plan). Writes never do. */
+  function ApiError(status, body) {
+    this.status = status; this.body = body;
+    this.message = (body && (body.detail || body.reason || body.error)) || ('Request failed (' + status + ')');
+  }
+  function api(path, opts) {
+    opts = opts || {};
+    if (path.charAt(0) !== '/' || path.indexOf('//') === 0) throw new Error('same-origin paths only');
+    var method = opts.method || 'GET';
+    return clerkReady.then(function (signedIn) {
+      var h = { 'Accept': 'application/json' };
+      if (linkToken) h['X-Workspace-Link'] = linkToken;
+      if (method === 'GET' && state.preview && path.indexOf('/api/workspace/me') !== 0) h['X-Workspace-Preview-Role'] = 'client';
+      if (!signedIn || !window.Clerk || !window.Clerk.session) return h;
+      return window.Clerk.session.getToken().then(function (t) { if (t) h['Authorization'] = 'Bearer ' + t; return h; });
+    }).then(function (h) {
+      var init = { method: method, headers: h, credentials: 'same-origin' };
+      if (opts.body !== undefined) { h['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
+      return fetch(path, init);
+    }).then(function (res) {
+      return res.text().then(function (txt) {
+        var body = null;
+        try { body = txt ? JSON.parse(txt) : null; } catch (e) { body = null; }
+        if (res.status === 401) {
+          if (linkToken) { try { sessionStorage.removeItem(LINK_KEY); } catch (e) {} }
+          showSignIn(linkToken ? 'This preview link has expired or is not valid.' : null);
+          throw new ApiError(401, body);
+        }
+        if (!res.ok) throw new ApiError(res.status, body);
+        return { status: res.status, data: body };
+      });
+    });
+  }
+
+  /* ── Helpers ─────────────────────────────────────────────────────── */
+  function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function has(v) { if (v == null) return false; if (Array.isArray(v)) return v.length > 0; if (typeof v === 'string') return v.trim().length > 0; return true; }
+  function val(r) { return r && typeof r === 'object' && 'value' in r ? r.value : r; }
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  function parseDay(s) {
+    if (!s) return null;
+    s = String(s);
+    if (s.length > 10) { var d = new Date(s); return isNaN(d) ? null : d; }
+    var m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(s);
+    return m ? new Date(+m[1], +m[2] - 1, m[3] ? +m[3] : 1) : null;
+  }
+  function today0() { var n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
+  function daysFromToday(s) { var d = parseDay(s); if (!d) return null; return Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - today0()) / 86400000); }
+  function mdy(s) { var d = parseDay(s); return d ? MONTHS[d.getMonth()] + ' ' + d.getDate() : ''; }
+  function monthShort(s) { var d = parseDay(s); return d ? MONTHS[d.getMonth()] : ''; }
+  function monthYear(s) { var d = parseDay(s); return d ? MONTHS[d.getMonth()] + ' ' + d.getFullYear() : ''; }
+  function dowSlash(s) { var d = parseDay(s); return d ? DOW[d.getDay()] + ' ' + (d.getMonth() + 1) + '/' + d.getDate() : ''; }
+  function clock(iso) { var d = new Date(iso); if (isNaN(d)) return ''; var h = d.getHours(), m = d.getMinutes(); return ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + (h < 12 ? 'am' : 'pm'); }
+  function asOf(iso) { if (!iso) return ''; var n = daysFromToday(iso); if (n === 0) return clock(iso); if (n === -1) return 'yesterday ' + clock(iso); return mdy(iso); }
+  function ago(iso) {
+    var d = new Date(iso); if (isNaN(d)) return '';
+    var mins = Math.round((Date.now() - d) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + ' min ago';
+    if (mins < 60 * 24 && daysFromToday(iso) === 0) return Math.round(mins / 60) + ' hr ago';
+    if (daysFromToday(iso) === -1) return 'yesterday';
+    return mdy(iso);
+  }
+  function relDay(s) { var n = daysFromToday(s); if (n === 0) return 'Today'; if (n === 1) return 'Tomorrow'; return dowSlash(s); }
+  function money(v) { return v == null ? '' : '$' + Math.round(v).toLocaleString('en-US'); }
+  function moneyK(v) { if (v == null) return ''; var a = Math.abs(v); if (a >= 1e6) return '$' + (v / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M'; if (a >= 1e4) return '$' + (v / 1e3).toFixed(1).replace(/\.0$/, '') + 'k'; return money(v); }
+  function num(v) { return v == null ? '' : Number(v).toLocaleString('en-US'); }
+  function pct(v, d) { return v == null ? '' : (v * 100).toFixed(d == null ? 0 : d) + '%'; }
+  var WORDS = ['No','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve'];
+  function word(n, lower) { var w = (n >= 0 && n < WORDS.length) ? WORDS[n] : String(n); return lower ? w.toLowerCase() : w; }
+  function plural(n, one, many) { return n === 1 ? one : (many || one + 's'); }
+  var SOURCES = { aptiq: 'ApartmentIQ', hubspot: 'HubSpot', hubspot_line_items: 'HubSpot line items', ga4: 'GA4', google_ads: 'Google Ads',
+    hyly: 'Hyly', fluency: 'Fluency', yardi: 'Yardi', bigquery: 'BigQuery', clickup: 'ClickUp', ai_mentions: 'AI visibility audit',
+    redlight: 'Red Light', forecasting: 'Exposure forecast', workspace_inbox: 'Workspace', workspace_decisions: 'Workspace decisions',
+    hubdb_rec: 'Recommendations', soci: 'SOCi' };
+  function sourceName(s) { return SOURCES[s] || s || ''; }
+  function receipt(r) {
+    if (!r || typeof r !== 'object' || (!r.source && !r.as_of)) return '';
+    return [r.source ? esc(sourceName(r.source)) : '', r.as_of ? esc(asOf(r.as_of)) : ''].filter(Boolean).join(' · ');
+  }
+  function rtitle(r) { var t = receipt(r); return t ? ' title="' + t.replace(/&amp;/g, '&') + '"' : ''; }
+  function gapsLine(gaps) {
+    if (!has(gaps)) return '';
+    var txt = gaps.map(function (g) { return typeof g === 'string' ? g : (g && (g.message || g.detail || g.reason)) || ''; }).filter(Boolean).join(' ');
+    return txt ? '<p class="gaps">' + esc(txt) + '</p>' : '';
+  }
+  function staleLabel(iso) {
+    if (!iso) return '';
+    var d = new Date(iso); if (isNaN(d)) return '';
+    return '<span class="asof">as of ' + esc(asOf(iso)) + (Date.now() - d > 3600000 ? ' · refreshing' : '') + '</span>';
+  }
+  function initials(s) { var p = String(s || '').split('@')[0].replace(/[._-]+/g, ' ').trim().split(/\s+/); return ((p[0] || '').charAt(0) + (p[1] || '').charAt(0)).toUpperCase() || '?'; }
+  function shortName(email) { var s = String(email || '').split('@')[0].split(/[._-]/)[0]; return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+  function band(score) { if (score == null) return 'new'; if (score >= 70) return 'healthy'; if (score >= 50) return 'attention'; if (score >= 35) return 'warning'; return 'critical'; }
+  function engineBand(score) { if (score == null) return 'new'; if (score >= 70) return 'healthy'; if (score >= 60) return 'attention'; return 'critical'; }
+  var BAND_LABEL = { healthy: 'Healthy', attention: 'Attention', warning: 'Warning', critical: 'Critical', new: 'New' };
+  var CHANNELS = { paid_search: 'Paid search', pmax: 'PMax', ils: 'ILS', listing: 'Listing', creative: 'Creative', email: 'Email', seo: 'SEO', social: 'Social', website: 'Website', video: 'Video' };
+  function channelName(c) { return CHANNELS[c] || (c ? c.replace(/_/g, ' ').replace(/^./, function (x) { return x.toUpperCase(); }) : ''); }
+
+  /* ── State ───────────────────────────────────────────────────────── */
+  var state = { me: null, companyId: null, preview: false, lens: 'asset_manager', waiting: null, loop: null, lastDecision: {}, req: null, timer: null, hidden: {} };
+  try { state.preview = sessionStorage.getItem(PREVIEW_KEY) === '1'; } catch (e) {}
+  function realInternal() { return !!(state.me && state.me.role === 'internal'); }
+  function viewInternal() { return realInternal() && !state.preview; }
+  function canDecide() { return !state.me || state.me.can_decide !== false; }
+  function signInLink(label) { return '<a href="#" class="link" data-signin>' + esc(label) + '</a>'; }
+  function companies() { return (state.me && state.me.companies) || []; }
+  function companyById(id) { var l = companies(); for (var i = 0; i < l.length; i++) if (String(l[i].company_id) === String(id)) return l[i]; return null; }
+  function company() { return companyById(state.companyId) || companies()[0] || null; }
+  function setCompany(id) { if (!id) return; state.companyId = String(id); try { localStorage.setItem(COMPANY_KEY, state.companyId); } catch (e) {} }
+  function cq() { return 'company_id=' + encodeURIComponent(state.companyId || ''); }
+  function stopTimer() { if (state.timer) { clearInterval(state.timer); state.timer = null; } }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('[data-signin]');
+    if (!a) return;
+    e.preventDefault();
+    try { sessionStorage.removeItem(LINK_KEY); } catch (err) {}
+    window.location.replace(window.location.pathname + window.location.hash);
+  });
+
+  /* ── Icons (Lucide-style, 24 viewBox) ────────────────────────────── */
+  function ic(paths, size) { return '<svg width="' + (size || 16) + '" height="' + (size || 16) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>'; }
+  var I = {
+    dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+    inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+    building: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M10 9H8M16 13H8M16 17H8"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/>',
+    chart: '<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+    value: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+    signal: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    spark: '<path d="M9.94 14.06 7 21l-2.94-6.94L-2 11l6.94-2.94L7 1l2.94 7.06L17 11z" transform="translate(5 1) scale(.9)"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    arrowLeft: '<path d="m12 19-7-7 7-7M19 12H5"/>',
+    history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>'
+  };
+
+  /* ── Sidebar ─────────────────────────────────────────────────────── */
+  function reportHref() { return '/workspace/report?company_id=' + encodeURIComponent(state.companyId || ''); }
+  function navItems() {
+    var items = [
+      { key: 'dashboard', href: '#/dashboard', label: 'Dashboard', icon: 'dashboard' },
+      { key: 'approvals', href: '#/approvals', label: 'Approvals', icon: 'inbox', badge: state.waiting },
+      { key: 'properties', href: '#/properties', label: 'Properties', icon: 'building', count: companies().length || null },
+      { key: 'visibility', href: '#/visibility', label: 'Visibility', icon: 'eye' },
+      { key: 'content', href: '#/content', label: 'Content', icon: 'file' },
+      { key: 'creative', href: '#/creative', label: 'Creative', icon: 'image' },
+      { key: 'reports', href: reportHref(), label: 'Reports', icon: 'chart' },
+      { key: 'value', href: '#/value', label: 'Value', icon: 'value' }
+    ];
+    return items;
+  }
+  function renderSide(active) {
+    var side = document.getElementById('side');
+    var logo = '<div class="logo"><i aria-hidden="true"></i><b>RPM</b><span>Digital</span></div>';
+    if (!state.me) { side.innerHTML = logo; return; }
+    function link(n) {
+      var cur = n.key === active;
+      return '<a href="' + esc(n.href) + '"' + (cur ? ' aria-current="page"' : '') + '>' + ic(I[n.icon]) + '<span class="t">' + esc(n.label) + '</span>' +
+        (n.badge ? '<span class="badge"><span class="sr-only">, </span>' + esc(n.badge) + '<span class="sr-only"> waiting</span></span>' : '') +
+        (n.count ? '<span class="count">' + esc(n.count) + '</span>' : '') + '</a>';
+    }
+    var html = logo + '<div class="nav">' + navItems().map(link).join('');
+    if (viewInternal()) html += '<p class="nav-label">RPM only</p>' + link({ key: 'signals', href: '#/signals', label: 'Signals', icon: 'signal' });
+    html += '</div><div class="side-grow"></div>';
+    if (state.loop) {
+      html += '<div class="loopcard" role="status"><i class="' + (state.loop.running ? 'on' : '') + '" aria-hidden="true"></i><div><b>' + (state.loop.running ? 'Loop running' : 'Loop paused') + '</b>' +
+        '<span>' + esc(num(state.loop.property_count)) + ' properties' + (state.loop.last_pass ? ' · last pass ' + esc(clock(state.loop.last_pass)) : '') + '</span></div></div>';
+    }
+    var me = state.me;
+    html += '<div class="side-bottom">' +
+      (realInternal() ? '<button type="button" class="previewtoggle" aria-pressed="' + state.preview + '" data-preview>Preview as client<span class="switch" aria-hidden="true"></span></button>' : '') +
+      '<div class="userrow"><span class="avatar" aria-hidden="true">' + esc(initials(me.email)) + '</span><div><b>' + esc(shortName(me.email)) + '</b><span>' + (realInternal() ? 'RPM Living' : 'Owner') + '</span></div></div></div>';
+    side.innerHTML = html;
+    var pv = side.querySelector('[data-preview]');
+    if (pv) pv.addEventListener('click', function () {
+      state.preview = !state.preview;
+      try { sessionStorage.setItem(PREVIEW_KEY, state.preview ? '1' : '0'); } catch (e) {}
+      if (state.preview && /^#\/signals/.test(location.hash)) location.hash = '#/dashboard'; else route();
+    });
+  }
+
+  /* ── Top bar ─────────────────────────────────────────────────────── */
+  function renderTop(crumb, ctx) {
+    var top = document.getElementById('topbar');
+    top.innerHTML = '<div class="crumbs"><b>' + esc(crumb || '') + '</b>' + (ctx ? '<span class="sep">/</span><span class="ctx">' + esc(ctx) + '</span>' : '') + '</div>' +
+      '<div class="search-wrap"><label class="search">' + ic(I.search, 13) + '<span class="sr-only">Search properties, work, reports and questions</span>' +
+      '<input type="search" placeholder="Search properties, approvals…" data-search role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="search-results" autocomplete="off"><span class="kbd" aria-hidden="true">⌘K</span></label>' +
+      '<div class="sresults" id="search-results" role="listbox" aria-label="Search results" hidden></div></div>' +
+      '<span class="top-grow"></span>' +
+      '<a class="btn sm ghost" href="#/ask">' + ic(I.spark, 13) + 'Ask</a>' +
+      '<a class="btn sm primary" href="#/request">' + ic(I.plus, 13) + 'New request</a>';
+    bindSearch(top.querySelector('[data-search]'));
+    var bar = document.getElementById('previewbar');
+    if (state.preview) {
+      bar.hidden = false;
+      bar.className = 'previewbar';
+      bar.innerHTML = '<span><b>Previewing as a client.</b> Internal notes, internal trail entries and review flags are hidden, just as a client sees them.</span><span class="grow"></span><button type="button" class="link" data-stop-preview>Stop preview</button>';
+      bar.querySelector('[data-stop-preview]').addEventListener('click', function () {
+        state.preview = false; try { sessionStorage.setItem(PREVIEW_KEY, '0'); } catch (e) {} route();
+      });
+    } else { bar.hidden = true; bar.innerHTML = ''; }
+  }
+  document.addEventListener('keydown', function (e) {
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      var s = document.querySelector('[data-search]'); if (s) { e.preventDefault(); s.focus(); }
+    }
+  });
+
+  var SEARCH_TYPES = [['property', 'Properties'], ['work_item', 'Approvals and work'], ['report', 'Reports'], ['question', 'Questions']];
+  function bindSearch(input) {
+    var box = document.getElementById('search-results'), timer = null, seq = 0, opts = [], active = -1;
+    function close() { box.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; }
+    function open() { box.hidden = false; input.setAttribute('aria-expanded', 'true'); }
+    function setActive(i) {
+      opts.forEach(function (o, j) { o.el.setAttribute('aria-selected', String(j === i)); });
+      active = i;
+      if (i >= 0) { input.setAttribute('aria-activedescendant', opts[i].el.id); opts[i].el.scrollIntoView({ block: 'nearest' }); }
+    }
+    function go(r) {
+      if (!r || typeof r.href !== 'string') return;
+      var href = r.href;
+      if (r.type === 'property' && r.company_id) href = '#/property/' + encodeURIComponent(r.company_id);
+      if (r.type === 'report' && r.company_id) { window.location.href = '/workspace/report?company_id=' + encodeURIComponent(r.company_id); return; }
+      if (href.indexOf('#/') !== 0) return;
+      close();
+      if (r.company_id) setCompany(r.company_id);
+      if (location.hash === href) route(); else location.hash = href;
+    }
+    function render(q, results) {
+      var known = SEARCH_TYPES.map(function (t) { return t[0]; }), ordered = [], html = '';
+      SEARCH_TYPES.concat([['__other', 'Other']]).forEach(function (g) {
+        var rows = results.filter(function (r) { return g[0] === '__other' ? known.indexOf(r.type) === -1 : r.type === g[0]; });
+        if (!rows.length) return;
+        html += '<div class="sgrp" role="group" aria-labelledby="sg-' + g[0] + '"><p class="sgl" id="sg-' + g[0] + '">' + esc(g[1]) + '</p>' + rows.map(function (r) {
+          var i = ordered.push(r) - 1;
+          return '<div class="sopt" role="option" id="sr-' + i + '" aria-selected="false" data-i="' + i + '"><b>' + esc(r.title) + '</b>' + (has(r.subtitle) ? '<span>' + esc(r.subtitle) + '</span>' : '') + '</div>';
+        }).join('') + '</div>';
+      });
+      box.innerHTML = ordered.length ? html : '<p class="sempty">No matches for “' + esc(q) + '”.</p>';
+      opts = ordered.map(function (r, i) { return { r: r, el: box.querySelector('#sr-' + i) }; });
+      active = -1; open();
+    }
+    function run() {
+      var q = input.value.trim();
+      if (q.length < 2) { seq++; opts = []; box.innerHTML = ''; close(); return; }
+      var my = ++seq;
+      box.innerHTML = '<p class="sempty" role="status">Searching…</p>'; opts = []; open();
+      api('/api/workspace/search?q=' + encodeURIComponent(q)).then(function (r) {
+        if (my === seq) render(q, ((r.data || {}).results || []).slice(0, 20));
+      }).catch(function (e) { if (my !== seq || (e && e.status === 401)) return; box.innerHTML = '<p class="sempty">Search didn’t load. Try again.</p>'; });
+    }
+    input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(run, 180); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (box.hidden) run(); else if (opts.length) setActive((active + 1) % opts.length); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); if (opts.length) setActive(active <= 0 ? opts.length - 1 : active - 1); }
+      else if (e.key === 'Enter') { if (opts.length) { e.preventDefault(); go(opts[active >= 0 ? active : 0].r); } }
+      else if (e.key === 'Escape') { if (!box.hidden) { e.preventDefault(); close(); } }
+    });
+    box.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    box.addEventListener('click', function (e) { var o = e.target.closest('.sopt'); if (o) go(opts[+o.getAttribute('data-i')].r); });
+    input.addEventListener('blur', function () { setTimeout(close, 120); });
+    input.addEventListener('focus', function () { if (opts.length) open(); });
+  }
+
+  /* ── View states ─────────────────────────────────────────────────── */
+  var view = document.getElementById('view');
+  function setView(pageHtml, railHtml) {
+    view.innerHTML = pageHtml + (railHtml ? '<aside class="rail" aria-label="Details">' + railHtml + '</aside>' : '');
+  }
+  function loadingHtml(what) { return '<div class="page"><div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading ' + esc(what || '') + '…</div></div>'; }
+  function errorHtml(err) {
+    var title = 'Something went wrong loading this.', body = err && err.message ? err.message : '';
+    if (err && err.status === 403) { title = 'This isn’t available to you.'; body = 'Ask your RPM account manager if you think you should see it.'; }
+    if (err && err.status === 404) { title = 'We couldn’t find that.'; body = 'It may have been closed or moved.'; }
+    return '<div class="state" role="alert"><h2>' + esc(title) + '</h2>' + (body ? '<p>' + esc(body) + '</p>' : '') + '<div><button class="btn sm" type="button" data-retry>Try again</button></div></div>';
+  }
+  function showSignIn(note) {
+    document.getElementById('side').innerHTML = '<div class="logo"><i aria-hidden="true"></i><b>RPM</b><span>Digital</span></div>';
+    document.getElementById('topbar').innerHTML = '';
+    view.innerHTML = '<div class="state"><h2>Sign in to see your workspace</h2><p>' + esc(note || 'Your session has ended or you are not signed in.') + '</p><div><button class="btn primary" type="button" id="signin-btn">Sign in</button></div></div>';
+    document.getElementById('signin-btn').addEventListener('click', function () {
+      try { sessionStorage.removeItem(LINK_KEY); } catch (e) {}
+      window.location.replace(window.location.pathname + window.location.hash);
+    });
+  }
+  view.addEventListener('click', function (e) { if (e.target.closest('[data-retry]')) route(); });
+  function guard(p, what) {
+    setView(loadingHtml(what));
+    return p.catch(function (err) { if (err && err.status === 401) return null; setView(errorHtml(err)); return null; });
+  }
+  function decide(id, action, reason) {
+    return api('/api/workspace/work/' + encodeURIComponent(id) + '/decision', { method: 'POST', body: { company_id: state.companyId, action: action, reason: reason || null } });
+  }
+  function failText(e, what) { return what + ': ' + ((e && e.message) || 'try again') + '.'; }
+
+  /* ── Shared decision pieces ──────────────────────────────────────── */
+  var REASONS = [['wrong_data', 'Wrong read of the data'], ['already_handled', 'Already handled'], ['not_priority', 'Not a priority this month'], ['discuss_on_call', 'Discuss on our call']];
+  function reasonLabel(k) { for (var i = 0; i < REASONS.length; i++) if (REASONS[i][0] === k) return REASONS[i][1]; return k; }
+  var CAT_LABEL = { cost: 'Cost', vendor: 'Vendor', negotiate: 'Negotiate', content: 'Content', creative: 'Creative', compliance: 'Compliance' };
+  var SOURCE_LABEL = { hubdb_rec: 'Recommendation', loop_rec: 'Loop recommendation', call_prep: 'Call prep', content_brief: 'Content brief', video_variant: 'Creative', ticket_profile: 'Ticket profile', onboarding_gap: 'Onboarding', portal_ticket: 'Request', service_ticket: 'Service ticket' };
+  var STATUS_LABEL = { to_do: 'Needs you', in_motion: 'In motion', done: 'Done' };
+  function reasonChips(attr) { return REASONS.map(function (r) { return '<button type="button" class="rchip" aria-pressed="false" ' + attr + '="' + r[0] + '">' + esc(r[1]) + '</button>'; }).join(''); }
+  function approveFlow(btn, id, errEl) {
+    var label = btn.innerHTML;
+    btn.disabled = true; btn.textContent = 'Approving…';
+    decide(id, 'approve').then(function (r) {
+      state.lastDecision[id] = r.data || {};
+      if (state.waiting) state.waiting = Math.max(0, state.waiting - 1);
+      location.hash = '#/approved/' + encodeURIComponent(id);
+    }).catch(function (e) {
+      btn.disabled = false; btn.innerHTML = label;
+      if (e && e.status === 401) return;
+      if (errEl) { errEl.hidden = false; errEl.textContent = failText(e, 'That didn’t go through'); }
+    });
+  }
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest && e.target.closest('[data-set-company]');
+    if (el) setCompany(el.getAttribute('data-set-company'));
+    var row = e.target.closest && e.target.closest('tr[data-href]');
+    if (row && !e.target.closest('a,button')) location.hash = row.getAttribute('data-href');
+  });
+  function internalTag() { return viewInternal() ? ' <span class="tag internal">' + ic(I.lock, 10) + 'Internal</span>' : ''; }
+
+  /* ── Dashboard (CXR-2, FYF-1) ────────────────────────────────────── */
+  var KPI_DEFS = {
+    ai_visibility: { label: 'AI visibility', fmt: function (v) { return num(v); }, cls: '' },
+    portfolio_occupancy: { label: 'Portfolio occupancy', fmt: function (v) { return pct(v, 1); }, cls: '' },
+    identified_savings: { label: 'Identified savings', fmt: function (v) { return moneyK(v); }, cls: 't-healthy' },
+    waiting_on_you: { label: 'Waiting on you', fmt: function (v) { return num(v); }, cls: 't-brand' }
+  };
+  var LENS_ORDER = { asset_manager: ['portfolio_occupancy', 'identified_savings', 'waiting_on_you', 'ai_visibility'], marketing_manager: ['ai_visibility', 'waiting_on_you', 'identified_savings', 'portfolio_occupancy'] };
+  function greeting() { var h = new Date().getHours(); return h < 12 ? 'Good morning' : (h < 17 ? 'Good afternoon' : 'Good evening'); }
+  function kpiStrip(kpis, order, emphasize) {
+    return '<div class="kpis">' + order.map(function (k, i) {
+      var def = KPI_DEFS[k], r = kpis[k], v = val(r);
+      return '<div class="kpi' + (emphasize && i < 2 ? ' emph' : '') + '"' + rtitle(r) + '><span class="eyebrow">' + esc(def.label) + '</span>' +
+        '<span class="v ' + def.cls + '">' + (v == null ? '<span class="empty-dash">—</span>' : esc(def.fmt(v))) + '</span>' +
+        (receipt(r) ? '<span class="rc">' + receipt(r) + '</span>' : '') + '</div>';
+    }).join('') + '</div>';
+  }
+  function screenDashboard() {
+    renderTop('Dashboard', companies().length + ' properties');
+    guard(api('/api/workspace/dashboard?lens=' + state.lens), 'the dashboard').then(function (r) {
+      if (!r) return;
+      var d = r.data || {};
+      state.loop = d.loop_status || state.loop;
+      var w = val((d.kpis || {}).waiting_on_you); if (w != null) state.waiting = w;
+      renderSide('dashboard');
+      var h = dashboardHtml(d);
+      setView(h.page, h.rail);
+      view.querySelectorAll('[data-lens]').forEach(function (b) { b.addEventListener('click', function () { state.lens = b.getAttribute('data-lens'); screenDashboard(); }); });
+      view.querySelectorAll('[data-approve]').forEach(function (b) { b.addEventListener('click', function () { approveFlow(b, b.getAttribute('data-approve'), b.closest('[data-err-scope]').querySelector('.inline-err')); }); });
+    });
+  }
+  function dashboardHtml(d) {
+    var name = d.greeting_name ? ', ' + d.greeting_name : '';
+    var lens = '<div class="lens" role="group" aria-label="Show numbers for">' +
+      '<button type="button" data-lens="asset_manager" aria-pressed="' + (state.lens === 'asset_manager') + '">Asset manager</button><span class="bar" aria-hidden="true">|</span>' +
+      '<button type="button" data-lens="marketing_manager" aria-pressed="' + (state.lens === 'marketing_manager') + '">Marketing manager</button></div>';
+    var waiting = d.waiting || [];
+    var top = waiting[0];
+    var hero = '';
+    if (top) {
+      var acts = canDecide()
+        ? '<button type="button" class="btn primary" data-approve="' + esc(top.item_id) + '">Approve</button><a class="btn" href="#/item/' + encodeURIComponent(top.item_id) + '">Not now</a>'
+        : '<p class="support">' + signInLink('Sign in to approve') + '</p>';
+      hero = '<section class="sec" aria-labelledby="needs-h"><div class="sec-head"><h2 class="eyebrow" id="needs-h">Needs you</h2><span class="support">1 of ' + esc(num(waiting.length)) + ' waiting</span></div>' +
+        '<div class="hero" data-err-scope><div class="l"><span class="pill attention"><i></i>' + esc(CAT_LABEL[top.category] || top.category) + '</span>' +
+        '<p class="q">' + esc(top.title) + '</p>' + (has(top.subtitle) ? '<p class="body">' + esc(top.subtitle) + '. Nothing changes until you approve.</p>' : '') +
+        '<p class="inline-err" role="alert" hidden></p></div>' +
+        '<div class="r">' + acts + '<a class="link" href="#/item/' + encodeURIComponent(top.item_id) + '">See the full evidence</a></div></div></section>';
+    }
+    var tiles = (d.health_tiles || []).map(function (t) {
+      var b = t.band || band(t.score);
+      return '<a class="tile ' + esc(b) + '" href="#/property/' + encodeURIComponent(t.company_id) + '"><span>' + esc(t.name) + '</span><b>' + (t.score == null ? 'new' : esc(t.score)) + '</b><span class="sr-only">' + esc(BAND_LABEL[b]) + '</span></a>';
+    }).join('');
+    var rows = (d.properties || []).map(function (p) {
+      var b = p.band || band(p.health), href = '#/property/' + encodeURIComponent(p.company_id);
+      return '<tr class="rowlink" data-href="' + href + '"><td class="name"><a href="' + href + '">' + esc(p.name) + '</a></td>' +
+        '<td class="num">' + esc(num(p.units)) + '</td>' +
+        '<td class="num"' + rtitle(p.to_lease_90d) + '>' + (val(p.to_lease_90d) == null ? '<span class="empty-dash">—</span>' : esc(num(val(p.to_lease_90d)))) + '</td>' +
+        '<td class="num t-critical"' + rtitle(p.overspend_per_year) + '>' + (val(p.overspend_per_year) == null ? '<span class="empty-dash">—</span>' : esc(money(val(p.overspend_per_year)))) + '</td>' +
+        '<td><span class="healthcell t-' + esc(b) + '"><span class="dot ' + esc(b) + '" aria-hidden="true"></span>' + (p.health == null ? 'new' : esc(p.health)) + '</span></td></tr>';
+    }).join('');
+    var order = LENS_ORDER[state.lens] || LENS_ORDER.asset_manager;
+    var page = '<div class="page">' +
+      '<div class="greet"><div class="stack"><h1 class="h-greet">' + esc(greeting() + name) + '.</h1>' + staleLabel(d.as_of) + '</div>' + lens + '</div>' +
+      hero + kpiStrip(d.kpis || {}, order, true) +
+      (tiles ? '<section class="sec"><h2 class="h-sec">Portfolio health</h2><div class="tiles">' + tiles + '</div></section>' : '') +
+      (rows ? '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Overspend/yr</th><th scope="col">Health</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
+      gapsLine(d.gaps) + '</div>';
+    var feed = (d.activity || []).map(function (a) {
+      var dotc = { audit: 'healthy', check: 'healthy', forecast: 'healthy', publish: 'healthy', draft: 'brand', decision: 'brand', flag: 'attention' }[a.kind] || 'new';
+      return '<li><span class="dot ' + dotc + '" aria-hidden="true"></span><div><b>' + esc(a.text) + (a.visibility === 'internal' ? internalTag() : '') + '</b><span>' + esc(ago(a.at)) + '</span></div></li>';
+    }).join('');
+    var cards = waiting.slice(0, 3).map(function (w) {
+      var href = '#/item/' + encodeURIComponent(w.item_id);
+      return '<li class="wcard" data-err-scope><div class="top"><b>' + esc(w.title) + '</b><span class="tag ' + esc(w.category) + '">' + esc((CAT_LABEL[w.category] || w.category).toLowerCase()) + '</span></div>' +
+        (has(w.subtitle) ? '<p>' + esc(w.subtitle) + '</p>' : '') +
+        '<div class="acts">' + (canDecide() ? '<button type="button" class="btn xs outline" data-approve="' + esc(w.item_id) + '">Approve</button>' : signInLink('Sign in to approve')) +
+        '<a class="textbtn" href="' + href + '">Review</a></div><p class="inline-err" role="alert" hidden></p></li>';
+    }).join('');
+    var rail = '<section class="sec"><h2 class="h-rail"><span class="dot healthy" aria-hidden="true"></span> What we did on our own</h2><ol class="feed">' + (feed || '<li class="support">Nothing yet today.</li>') + '</ol></section>' +
+      '<div class="rail-sep"></div>' +
+      '<section class="sec"><h2 class="h-rail">Waiting on you' + (waiting.length ? '<span class="countbadge">' + esc(waiting.length) + '</span>' : '') + '</h2>' +
+      (cards ? '<ul class="sec">' + cards + '</ul>' : '<p class="support">Nothing is waiting on you.</p>') +
+      (waiting.length > 3 ? '<a class="link" href="#/approvals">All ' + esc(waiting.length) + ' in Approvals</a>' : '') + '</section>';
+    return { page: page, rail: rail };
+  }
+
+  /* ── Approvals (DDE-0, 1HM-0) ────────────────────────────────────── */
+  var CATS = [['', 'All'], ['cost', 'Cost'], ['vendor', 'Vendor'], ['negotiate', 'Negotiate'], ['content', 'Content'], ['creative', 'Creative'], ['compliance', 'Compliance']];
+  function screenApprovals() {
+    renderTop('Approvals', '');
+    var cat = state.approvalCat || '';
+    guard(api('/api/workspace/approvals' + (cat ? '?category=' + encodeURIComponent(cat) : '')), 'approvals').then(function (r) {
+      if (!r) return;
+      var d = r.data || {};
+      if (!cat && d.waiting != null) state.waiting = d.waiting;
+      renderSide('approvals');
+      renderTop('Approvals', num(d.waiting) + ' waiting');
+      setView(approvalsHtml(d, cat));
+      bindApprovals();
+    });
+  }
+  function approvalsHtml(d, cat) {
+    var head = '<div class="head"><div class="stack"><h1 class="h-page">Approvals</h1>' +
+      '<p class="meta-line">' + esc(num(d.waiting)) + ' waiting · <span class="warn">' + esc(num(d.interrupts_count)) + ' ' + plural(d.interrupts_count, 'interrupt') + '</span> · ' + esc(num(d.approved_this_month)) + ' approved this month</p>' +
+      '<p class="support">RPM Digital drafted these. Nothing changes until you approve.</p></div>' + staleLabel(d.as_of) + '</div>';
+    var interrupts = (d.interrupts || []).filter(function (i) { return !state.hidden[i.id]; });
+    var rows = (d.batch && d.batch.rows) || [];
+    if (!cat && !rows.length && !interrupts.length) {
+      return '<div class="page">' + head + '<div class="emptybox"><span class="ic">' + ic(I.check, 24).replace('currentColor', '#5B7265') + '</span><b>All caught up</b>' +
+        '<p class="support">Nothing is waiting on you. New drafts land here before anything changes.</p><a class="btn sm ghost" href="#/value">' + ic(I.history, 14) + 'See what changed this year</a></div>' + gapsLine(d.gaps) + '</div>';
+    }
+    var chips = '<div class="chips" role="group" aria-label="Filter by category">' + CATS.map(function (c) {
+      return '<button type="button" class="chip" data-cat="' + c[0] + '" aria-pressed="' + (c[0] === cat) + '">' + esc(c[1]) + '</button>';
+    }).join('') + '</div>';
+    var intr = interrupts.map(function (i) {
+      var primary = i.kind === 'compliance' && i.item_id
+        ? '<a class="btn sm" href="#/item/' + encodeURIComponent(i.item_id) + '" data-set-company="' + esc(i.company_id) + '">' + esc(i.primary_action && i.primary_action.label || 'Review now') + '</a>'
+        : '<button type="button" class="btn sm" data-intr-request="' + esc(i.id) + '">' + esc(i.primary_action && i.primary_action.label || 'Open a ticket') + '</button>';
+      return '<div class="intr ' + esc(i.kind) + '"><div class="l"><b>' + esc(i.title) + '</b>' + (has(i.detail) ? '<p>' + esc(i.detail) + '</p>' : '') + '</div>' +
+        '<div class="r">' + primary + (i.secondary_action ? '<button type="button" class="textbtn" data-dismiss="' + esc(i.id) + '">' + esc(i.secondary_action.label) + '</button>' : '') + '</div></div>';
+    }).join('');
+    var body = rows.map(function (row) {
+      var href = '#/item/' + encodeURIComponent(row.item_id), sv = val(row.savings_per_year);
+      var acts = canDecide()
+        ? '<button type="button" class="btn xs outline" data-row-approve="' + esc(row.item_id) + '" data-company="' + esc(row.company_id) + '">Approve</button>' +
+          '<a class="textbtn" href="' + href + '" data-set-company="' + esc(row.company_id) + '">' + (row.can_edit ? 'Edit' : 'Review') + '</a>' +
+          '<button type="button" class="textbtn danger" data-row-reject="' + esc(row.item_id) + '" data-company="' + esc(row.company_id) + '" aria-expanded="false">Reject</button>'
+        : signInLink('Sign in to approve') + ' <a class="textbtn" href="' + href + '" data-set-company="' + esc(row.company_id) + '">Review</a>';
+      return '<tr data-row="' + esc(row.item_id) + '"><td class="name"><a href="' + href + '" data-set-company="' + esc(row.company_id) + '">' + esc(row.property) + '</a></td>' +
+        '<td>' + esc(row.action) + '</td><td><span class="tag ' + esc(row.category) + '">' + esc((CAT_LABEL[row.category] || row.category).toLowerCase()) + '</span></td>' +
+        '<td class="sav"' + rtitle(row.savings_per_year) + '>' + (sv == null ? '<span class="empty-dash">—</span>' : esc(money(sv)) + '/yr') + '</td>' +
+        '<td class="acts">' + acts + '</td></tr>';
+    }).join('');
+    var st = d.stats || {};
+    var stats = [];
+    if (val(st.approval_rate) != null) stats.push('Approval rate: ' + pct(val(st.approval_rate)));
+    if (val(st.edit_rate) != null) stats.push('Average edit rate: ' + pct(val(st.edit_rate)));
+    if (has(st.auto_approve_candidates)) stats.push('Candidates for auto-approve: ' + st.auto_approve_candidates.join(', '));
+    return '<div class="page narrow">' + head + chips + (intr ? '<div class="interrupts">' + intr + '</div>' : '') +
+      '<section class="sec"><h2 class="h-rail">' + esc(d.batch && d.batch.label || 'Waiting') + '</h2>' +
+      (body ? '<div class="tscroll"><table class="tbl batch"><thead><tr><th scope="col">Property</th><th scope="col">Action</th><th scope="col">Category</th><th scope="col">Savings</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>' + body + '</tbody></table></div>'
+        : '<p class="support">Nothing in this category.</p>') + '<p class="inline-err" role="alert" hidden data-approvals-err></p></section>' +
+      '<a class="link" href="#/value">View approved history →</a>' + (stats.length ? '<p class="statline">' + esc(stats.join(' · ')) + '</p>' : '') + gapsLine(d.gaps) + '</div>';
+  }
+  function bindApprovals() {
+    var err = view.querySelector('[data-approvals-err]');
+    view.querySelectorAll('[data-cat]').forEach(function (b) { b.addEventListener('click', function () { state.approvalCat = b.getAttribute('data-cat'); screenApprovals(); }); });
+    view.querySelectorAll('[data-dismiss]').forEach(function (b) { b.addEventListener('click', function () { state.hidden[b.getAttribute('data-dismiss')] = true; b.closest('.intr').remove(); }); });
+    view.querySelectorAll('[data-intr-request]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var box = b.closest('.intr');
+        startRequest(box.querySelector('b').textContent + '. ' + (box.querySelector('p') ? box.querySelector('p').textContent : '') + ' Please open an Ad Updates ticket for a person to review.');
+      });
+    });
+    view.querySelectorAll('[data-row-approve]').forEach(function (b) {
+      b.addEventListener('click', function () { setCompany(b.getAttribute('data-company')); approveFlow(b, b.getAttribute('data-row-approve'), err); });
+    });
+    view.querySelectorAll('[data-row-reject]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var tr = b.closest('tr'), next = tr.nextElementSibling;
+        if (next && next.classList.contains('reasonrow')) { next.remove(); b.setAttribute('aria-expanded', 'false'); return; }
+        b.setAttribute('aria-expanded', 'true');
+        var rr = document.createElement('tr'); rr.className = 'reasonrow';
+        rr.innerHTML = '<td colspan="5"><div class="reasons" role="group" aria-label="Why not now"><span class="q">Not now — which is it?</span>' + reasonChips('data-reason') + '</div><p class="inline-err" role="alert" hidden></p></td>';
+        tr.parentNode.insertBefore(rr, tr.nextSibling);
+        rr.querySelector('[data-reason]').focus();
+        rr.querySelectorAll('[data-reason]').forEach(function (c) {
+          c.addEventListener('click', function () {
+            var reason = c.getAttribute('data-reason'), e2 = rr.querySelector('.inline-err');
+            setCompany(b.getAttribute('data-company'));
+            c.setAttribute('aria-pressed', 'true');
+            decide(b.getAttribute('data-row-reject'), 'not_now', reason).then(function () {
+              if (state.waiting) state.waiting = Math.max(0, state.waiting - 1);
+              rr.remove();
+              tr.querySelector('.acts').innerHTML = '<span class="done-row" role="status">Set aside — ' + esc(reasonLabel(reason).toLowerCase()) + '</span>';
+              renderSide('approvals');
+            }).catch(function (e) { c.setAttribute('aria-pressed', 'false'); if (e && e.status === 401) return; e2.hidden = false; e2.textContent = failText(e, 'That didn’t go through'); });
+          });
+        });
+      });
+    });
+  }
+
+  /* ── Item detail (existing screen, restyled) ─────────────────────── */
+  function screenItem(id) {
+    renderTop('Approvals', '');
+    guard(api('/api/workspace/work/' + encodeURIComponent(id) + '?' + cq()), 'this item').then(function (r) {
+      if (!r) return;
+      var it = r.data || {};
+      renderTop('Approvals', it.title);
+      setView(itemHtml(it));
+      bindItem(it);
+    });
+  }
+  function isNumeric(s) { return /^[\$+\-−]?[\d,.]+%?$/.test(String(s).trim()); }
+  function evidenceHtml(ev) {
+    if (!ev || !has(ev.columns)) return '';
+    var barCol = -1, max = 0;
+    ev.columns.forEach(function (c, i) { if (/days/i.test(c)) barCol = i; });
+    if (barCol >= 0) ev.rows.forEach(function (r) { max = Math.max(max, parseFloat(String(r[barCol]).replace(/,/g, '')) || 0); });
+    var head = '<tr>' + ev.columns.map(function (c, i) { return '<th scope="col"' + (i && ev.rows.every(function (r) { return isNumeric(r[i]) || r[i] === '—'; }) && i !== barCol ? ' class="num"' : '') + '>' + esc(c) + '</th>'; }).join('') + '</tr>';
+    var body = ev.rows.map(function (r) {
+      return '<tr>' + r.map(function (cell, i) {
+        if (i === 0) return '<td><b>' + esc(cell) + '</b></td>';
+        if (i === barCol && max) {
+          var n = parseFloat(String(cell).replace(/,/g, '')) || 0;
+          return '<td><span class="bar' + (n === max ? ' max' : '') + '" style="width:' + Math.max(4, Math.round(n / max * 120)) + 'px" aria-hidden="true"></span>' + esc(cell) + '</td>';
+        }
+        return '<td' + (isNumeric(cell) || cell === '—' ? ' class="num"' : '') + '>' + esc(cell) + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+    return '<div class="compare"><table><thead>' + head + '</thead><tbody>' + body + '</tbody></table>' +
+      (ev.more_count ? '<p class="more">+' + esc(ev.more_count) + ' more not shown</p>' : '') + '</div>';
+  }
+  function sparkHtml(sp) {
+    if (!sp || !has(sp.points)) return '';
+    var max = Math.max.apply(null, sp.points.map(function (p) { return p.y; })) || 1;
+    return '<div class="spark" role="img" aria-label="' + esc(sp.label + ': ' + sp.points.map(function (p) { return p.y; }).join(', ')) + '">' +
+      sp.points.map(function (p, i) {
+        var hi = i === sp.highlight_index;
+        return '<span class="col' + (hi ? ' hi' : '') + '">' + (hi ? '<b>' + esc(p.y) + '</b>' : '') + '<i style="height:' + Math.max(3, Math.round(p.y / max * 56)) + 'px"></i></span>';
+      }).join('') + '<span class="lbl">' + esc(sp.label) + '</span></div>';
+  }
+  function entriesHtml(title, list) {
+    if (!has(list)) return '';
+    return '<section class="sec"><h2 class="eyebrow">' + esc(title) + '</h2><ol class="trail">' + list.map(function (t) {
+      return '<li><span class="d">' + esc(mdy(t.at)) + '</span><span class="x">' + esc(t.text) + (t.actor ? ' <span class="who">· ' + esc(t.actor) + '</span>' : '') + (t.visibility === 'internal' ? internalTag() : '') + '</span></li>';
+    }).join('') + '</ol></section>';
+  }
+  function itemHtml(it) {
+    var opened = (it.trail || [])[0], meta = [];
+    if (it.company_id || company()) meta.push((companyById(it.company_id) || company()).name);
+    if (opened) meta.push('opened ' + mdy(opened.at) + (opened.actor ? ' by the ' + opened.actor : ''));
+    if (it.owner) meta.push('owner ' + it.owner);
+    if (it.cost_note) meta.push(it.cost_note);
+    var why = '';
+    function row(k, v, extra) { return '<div class="row"><span class="k">' + esc(k) + '</span><div class="v">' + esc(v) + (extra || '') + '</div></div>'; }
+    if (has(it.found) || has(it.receipts)) why += row('Found', it.found || '', (it.receipts || []).map(function (rc) { return '<span class="rc">' + esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : '') + '</span>'; }).join(''));
+    if (has(it.expect)) why += row('Expect', it.expect);
+    if (has(it.if_skip)) why += row('If you skip', it.if_skip);
+    var steps = has(it.steps) ? '<section class="sec"><h2 class="eyebrow">If approved</h2><ol class="steps">' + it.steps.map(function (s) {
+      return '<li><span class="d">' + esc(relDay(s.when)) + '</span><span class="l">' + esc(s.label) + '</span><span class="c">' + esc(channelName(s.channel)) + '</span></li>';
+    }).join('') + '</ol></section>' : '';
+    var acts = it.actions || {}, call;
+    if (!acts.approve && !acts.not_now) call = '<div class="actions-row"><p class="support">Nothing to decide here — this is ' + esc((STATUS_LABEL[it.status] || 'in motion').toLowerCase()) + '.</p></div>';
+    else if (!canDecide()) call = '<div class="actions-row"><p class="support">Approving needs a signed-in account.</p><span class="grow"></span>' + signInLink('Sign in to approve') + '</div>';
+    else call = '<div class="actions-row" data-call>' +
+      (acts.approve ? '<button type="button" class="btn big primary" data-item-approve>' + ic(I.check, 15) + 'Approve</button>' : '') +
+      (acts.not_now ? '<button type="button" class="btn big" data-item-notnow aria-expanded="false" aria-controls="reasonbox">Not now</button>' : '') +
+      '<span class="grow"></span><a class="link quiet" href="#/approvals">Back to approvals</a></div>' +
+      (acts.not_now ? '<div class="reasonbox" id="reasonbox" hidden><p class="h-rail">If not now, which is it?</p><div class="reasons" role="group" aria-label="Why not now">' + reasonChips('data-reason') + '</div><p class="hint">One tap, no typing.</p></div>' : '') +
+      '<p class="inline-err" role="alert" hidden data-item-err></p>';
+    return '<div class="page stage"><article class="panel"><div class="panel-head"><div class="pills">' +
+      '<span class="pill brand"><i></i>' + esc(SOURCE_LABEL[it.source] || 'Item') + '</span>' +
+      (it.status && it.status !== 'to_do' ? '<span class="pill new">' + esc(STATUS_LABEL[it.status] || it.status) + '</span>' : '') +
+      (viewInternal() && it.fair_housing_review ? '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review</span>' : '') + '</div>' +
+      '<h1 class="qtitle">' + esc(it.title) + '</h1>' + (meta.length ? '<p class="support">' + esc(meta.join(' · ')) + '</p>' : '') + '</div>' +
+      (why ? '<div class="why">' + why + '</div>' : '') + evidenceHtml(it.evidence) + sparkHtml(it.sparkline) + steps +
+      (!why && !steps && !it.evidence ? '<p class="support">No detail came with this item yet.</p>' : '') +
+      '<div data-call-wrap>' + call + '</div>' + entriesHtml('Notes', it.notes) + '<div data-trail>' + entriesHtml('Trail', it.trail) + '</div></article>' +
+      '<p class="afternote">Nothing changes until you approve. <a class="link" href="#/approvals">See everything waiting</a></p></div>';
+  }
+  function bindItem(it) {
+    var wrap = view.querySelector('[data-call-wrap]'); if (!wrap) return;
+    var err = wrap.querySelector('[data-item-err]');
+    var ap = wrap.querySelector('[data-item-approve]');
+    if (ap) ap.addEventListener('click', function () { approveFlow(ap, it.id, err); });
+    var nn = wrap.querySelector('[data-item-notnow]'), box = wrap.querySelector('#reasonbox');
+    if (nn) nn.addEventListener('click', function () {
+      box.hidden = !box.hidden; nn.setAttribute('aria-expanded', String(!box.hidden));
+      if (!box.hidden) box.querySelector('[data-reason]').focus();
+    });
+    wrap.querySelectorAll('[data-reason]').forEach(function (c) {
+      c.addEventListener('click', function () {
+        var reason = c.getAttribute('data-reason');
+        wrap.querySelectorAll('[data-reason]').forEach(function (o) { o.setAttribute('aria-pressed', String(o === c)); o.disabled = true; });
+        decide(it.id, 'not_now', reason).then(function (r) {
+          var d = r.data || {}, next = d.item || it;
+          if (state.waiting) state.waiting = Math.max(0, state.waiting - 1);
+          wrap.innerHTML = '<div class="actions-row"><p class="h-rail" role="status">Set aside — ' + esc(reasonLabel(reason).toLowerCase()) + '.</p><span class="grow"></span><a class="link" href="#/approvals">Back to approvals</a></div>' +
+            (d.check_back && d.check_back.text ? '<p class="support">' + esc(d.check_back.text) + '</p>' : '');
+          var t = view.querySelector('[data-trail]'); if (t) t.innerHTML = entriesHtml('Trail', next.trail);
+        }).catch(function (e) {
+          wrap.querySelectorAll('[data-reason]').forEach(function (o) { o.disabled = false; o.setAttribute('aria-pressed', 'false'); });
+          if (e && e.status === 401) return;
+          err.hidden = false; err.textContent = failText(e, 'That didn’t go through');
+        });
+      });
+    });
+  }
+
+  /* ── Approved + Undo ─────────────────────────────────────────────── */
+  function screenApproved(id) {
+    var d = state.lastDecision[id];
+    if (!d) { location.replace('#/item/' + encodeURIComponent(id)); return; }
+    renderTop('Approvals', 'Approved');
+    setView(approvedHtml(d));
+    bindUndo(id, d);
+  }
+  function motionIcon(m) {
+    if (m.status === 'done') return '<svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="10" fill="#5B7265"/><path d="M6.6 11.3l3 3 5.8-6.2" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    if (m.kind === 'person') return '<svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="9.2" fill="none" stroke="#6F7372" stroke-width="1.6"/><circle cx="11" cy="11" r="3" fill="#6F7372"/></svg>';
+    return '<svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="9.2" fill="none" stroke="#AB784A" stroke-width="1.6"/><path d="M11 6.2v5l3.2 2" fill="none" stroke="#AB784A" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  }
+  function motionStatus(m) {
+    var kind = { auto: 'automatic', queued: 'queued', person: 'by a person' }[m.kind] || '';
+    if (m.status === 'done') return '<b class="t-healthy">Done' + (kind ? ' · ' + kind : '') + '</b>';
+    if (m.kind === 'person') return '<b>Waiting on a person</b>';
+    if (m.kind === 'queued') return '<b class="t-brand">Queued</b>';
+    return '<b class="t-brand">Running automatically</b>';
+  }
+  function actionLink(a) {
+    if (!a || !a.href) return '';
+    if (a.href.indexOf('#/') === 0) return '<a class="btn xs primary" href="' + esc(a.href) + '">' + esc(a.label) + '</a>';
+    if (/^https:\/\//.test(a.href)) return '<a class="btn xs primary" href="' + esc(a.href) + '" target="_blank" rel="noopener noreferrer">' + esc(a.label) + '<span class="sr-only"> (opens in a new tab)</span></a>';
+    return '';
+  }
+  function approvedHtml(d) {
+    var it = d.item || {}, im = d.in_motion || [], cnt = { auto: 0, queued: 0, person: 0 };
+    im.forEach(function (m) { if (cnt[m.kind] != null) cnt[m.kind]++; });
+    var parts = [];
+    if (cnt.auto) parts.push(word(cnt.auto) + ' ' + (cnt.auto === 1 ? 'runs itself' : 'run themselves'));
+    if (cnt.queued) parts.push(word(cnt.queued, !!parts.length) + ' ' + (cnt.queued === 1 ? 'is' : 'are') + ' queued');
+    if (cnt.person) parts.push(word(cnt.person, !!parts.length) + ' ' + (cnt.person === 1 ? 'is' : 'are') + ' with a person');
+    var n = im.length, sub = n ? word(n) + ' ' + plural(n, 'change') + ' ' + (n === 1 ? 'is' : 'are') + ' in motion.' + (parts.length ? ' ' + parts.join('; ') + '.' : '') : '';
+    var rows = im.map(function (m) {
+      return '<li><span class="mi">' + motionIcon(m) + '</span><div class="mb"><b>' + esc(m.label) + '</b>' + (has(m.detail) ? '<p>' + esc(m.detail) + '</p>' : '') +
+        (m.action ? '<div>' + actionLink(m.action) + '</div>' : '') + '</div><div class="ms">' + motionStatus(m) + (has(m.note) ? '<span>' + esc(m.note) + '</span>' : '') + '</div></li>';
+    }).join('');
+    var rec = d.record, recHtml = '';
+    if (rec && rec.total) {
+      var p = rec.pct != null ? (rec.pct > 1 ? rec.pct / 100 : rec.pct) : rec.approved_unedited / rec.total;
+      var thr = rec.threshold != null ? (rec.threshold > 1 ? rec.threshold : rec.threshold * 100) : null;
+      recHtml = '<div class="record"><span class="track" role="img" aria-label="' + esc(pct(p)) + ' approved without changes"><span class="fill" style="display:block;width:' + Math.round(p * 100) + '%"></span></span><b>' + esc(pct(p)) + '</b></div>' +
+        '<p class="support">' + esc(num(rec.approved_unedited) + ' of ' + num(rec.total) + ' ' + (rec.label || 'decisions') + ' approved without changes') + (thr != null ? esc(' · this kind of change can run without asking at ' + Math.round(thr) + '%') : '') + '</p>';
+    }
+    var panes = '';
+    if (has(d.written_down) || recHtml) panes += '<section class="pane grow"><h2 class="eyebrow">What got written down</h2>' + (has(d.written_down) ? '<p>' + esc(d.written_down) + '</p>' : '') + recHtml + '</section>';
+    if (d.check_back && has(d.check_back.text)) panes += '<section class="pane aside"><h2 class="eyebrow">When we’ll know</h2><p>' + esc(d.check_back.text) + '</p>' + (d.check_back.date ? '<span class="support">Check-back ' + esc(mdy(d.check_back.date)) + '</span>' : '') + '</section>';
+    var who = shortName(d.decided_by);
+    return '<div style="flex:1;min-width:0;display:flex;flex-direction:column"><div class="banner" role="status"><span class="bcheck" aria-hidden="true">' + ic(I.check, 15).replace('currentColor', '#FFFFFF') + '</span>' +
+      '<div class="btxt"><b>Approved' + (who ? ' by ' + esc(who) : '') + (d.decided_at ? ' · ' + esc(clock(d.decided_at)) : '') + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '') + '</div>' + undoHtml(d) + '</div>' +
+      '<div class="page narrow"><div class="head"><div class="stack"><h1 class="h-page">' + esc(it.title) + '</h1><p class="support"><span class="pill healthy"><i></i>' + esc(STATUS_LABEL[it.status] || 'In motion') + '</span> Moved out of your queue</p></div></div>' +
+      (rows ? '<ol class="motions">' + rows + '</ol>' : '') + (panes ? '<div class="panes">' + panes + '</div>' : '') +
+      '<p><a class="link" href="#/approvals">Back to approvals</a></p></div></div>';
+  }
+  function undoLive(u) { return !!(u && u.available && (!u.until || new Date(u.until) > new Date())); }
+  function undoHtml(d) {
+    var u = d.undo;
+    if (!undoLive(u)) return u && has(u.reason) ? '<span class="undo-note">' + esc(u.reason) + '</span>' : '';
+    if (!canDecide()) return '<span class="undo-note">' + signInLink('Sign in to undo') + '</span>';
+    return '<span class="undo-wrap"><span class="undo-note" data-undo-left></span><button type="button" class="btn sm" data-undo>Undo</button></span>';
+  }
+  function fmtLeft(ms) { var s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+  function bindUndo(id, d) {
+    var btn = view.querySelector('[data-undo]'), left = view.querySelector('[data-undo-left]');
+    if (!btn) return;
+    var until = d.undo && d.undo.until ? new Date(d.undo.until) : null;
+    function tick() {
+      if (!until) return;
+      var ms = until - new Date();
+      if (ms <= 0) { stopTimer(); var w = btn.closest('.undo-wrap'); if (w) w.outerHTML = '<span class="undo-note">Undo window closed</span>'; return; }
+      left.textContent = 'Undo for ' + fmtLeft(ms);
+    }
+    stopTimer(); tick();
+    if (until) state.timer = setInterval(tick, 1000);
+    btn.addEventListener('click', function () {
+      btn.disabled = true; btn.textContent = 'Undoing…';
+      api('/api/workspace/work/' + encodeURIComponent(id) + '/undo', { method: 'POST', body: { company_id: state.companyId } }).then(function (r) {
+        stopTimer(); delete state.lastDecision[id];
+        var it = (r.data || {}).item || d.item || {};
+        var banner = view.querySelector('.banner');
+        banner.classList.add('undone');
+        banner.innerHTML = '<div class="btxt"><b>Undone</b><span>' + esc(it.title || 'This item') + ' is back in your approvals.</span></div><a class="btn sm" href="#/item/' + encodeURIComponent(id) + '">Open it</a>';
+        view.querySelectorAll('.motions, .panes').forEach(function (x) { x.remove(); });
+      }).catch(function (e) {
+        if (e && e.status === 401) return;
+        stopTimer();
+        var reason = (e && e.body && (e.body.reason || e.body.detail)) || (e && e.status === 409 ? 'This one can’t be undone.' : 'Undo didn’t go through.');
+        var w = btn.closest('.undo-wrap'); if (w) w.outerHTML = '<span class="undo-note">' + esc(reason) + '</span>';
+      });
+    });
+  }
+
+  /* ── Properties (GOO-0) ──────────────────────────────────────────── */
+  function screenProperties() {
+    renderTop('Properties', companies().length + ' properties');
+    guard(api('/api/workspace/dashboard?lens=' + state.lens), 'properties').then(function (r) {
+      if (!r) return;
+      var d = r.data || {};
+      state.loop = d.loop_status || state.loop;
+      renderSide('properties');
+      setView(propertiesHtml(d));
+    });
+  }
+  function propertiesHtml(d) {
+    var list = companies(), k = d.kpis || {};
+    var units = list.reduce(function (s, c) { return s + (c.units || 0); }, 0);
+    var strip = '<div class="kpis">' +
+      '<div class="kpi"><span class="eyebrow">Properties</span><span class="v">' + esc(num(list.length)) + '</span></div>' +
+      '<div class="kpi"><span class="eyebrow">Total units</span><span class="v">' + esc(num(units)) + '</span></div>' +
+      [['portfolio_occupancy', 'Avg occupancy', function (v) { return pct(v, 1); }, ''], ['identified_savings', 'Identified savings', moneyK, 't-healthy'], ['waiting_on_you', 'Waiting on you', num, 't-brand']].map(function (x) {
+        var r = k[x[0]], v = val(r);
+        return '<div class="kpi"' + rtitle(r) + '><span class="eyebrow">' + x[1] + '</span><span class="v ' + x[3] + '">' + (v == null ? '<span class="empty-dash">—</span>' : esc(x[2](v))) + '</span>' + (receipt(r) ? '<span class="rc">' + receipt(r) + '</span>' : '') + '</div>';
+      }).join('') + '</div>';
+    var rows = list.map(function (c) {
+      var p = (d.properties || []).filter(function (x) { return x.company_id === c.company_id; })[0] || {};
+      var t = (d.health_tiles || []).filter(function (x) { return x.company_id === c.company_id; })[0] || {};
+      var score = p.health != null ? p.health : t.score, b = p.band || t.band || band(score), href = '#/property/' + encodeURIComponent(c.company_id);
+      function cell(r, fmt, cls) { var v = val(r); return '<td class="num ' + (cls || '') + '"' + rtitle(r) + '>' + (v == null ? '<span class="empty-dash">—</span>' : esc(fmt(v))) + '</td>'; }
+      return '<tr class="rowlink" data-href="' + href + '"><td class="name"><a href="' + href + '">' + esc(c.name) + '</a><span class="fine" style="display:block">' + esc([c.city, c.state].filter(Boolean).join(', ')) + '</span></td>' +
+        '<td class="num">' + esc(num(c.units)) + '</td>' + cell(p.to_lease_90d, num) + cell(p.overspend_per_year, money, 't-critical') +
+        '<td class="num"><span class="healthcell t-' + esc(b) + '">' + (score == null ? '—' : esc(score)) + '</span></td>' +
+        '<td class="num"><span class="pill ' + esc(b) + '"><i></i>' + esc(BAND_LABEL[b]) + '</span></td></tr>';
+    }).join('');
+    return '<div class="page"><div class="head"><div class="stack"><h1 class="h-page">Properties</h1><p class="support">Every property you can see, sorted as your account lists them.</p></div>' + staleLabel(d.as_of) + '</div>' + strip +
+      '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Overspend/yr</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      gapsLine(d.gaps) + '</div>';
+  }
+
+  /* ── Property detail (D4I-2, G73-1) ──────────────────────────────── */
+  var LENS_LABEL = { express: 'Express', tailor: 'Tailor', amplify: 'Amplify', evolve: 'Evolve' };
+  function scopedBack() { var c = company(); return '<a class="back" href="#/property/' + encodeURIComponent(state.companyId) + '">' + ic(I.arrowLeft, 13) + esc(c ? c.name : 'Property') + '</a>'; }
+  function screenProperty() {
+    var c = company();
+    renderTop('Properties', c ? c.name : '');
+    guard(api('/api/workspace/property-overview?' + cq()), 'the property').then(function (r) {
+      if (!r) return;
+      var d = r.data || {};
+      renderTop('Properties', d.name);
+      var h = propertyHtml(d);
+      setView(h.page, h.rail);
+    });
+  }
+  function ring(score, b) {
+    var c = 150.8, dash = score == null ? 0 : Math.max(0, Math.min(100, score)) / 100 * c;
+    var col = { healthy: '#5B7265', attention: '#86672D', warning: '#975C38', critical: '#A34E45', new: '#676A6A' }[b] || '#676A6A';
+    return '<span class="ring" role="img" aria-label="Health ' + (score == null ? 'not scored yet' : esc(score) + ' of 100, ' + esc(BAND_LABEL[b])) + '"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="28" r="24" fill="none" stroke="#D9DEDC" stroke-width="4"/>' +
+      '<circle cx="28" cy="28" r="24" fill="none" stroke="' + col + '" stroke-width="4" stroke-linecap="round" stroke-dasharray="' + dash.toFixed(1) + ' ' + c + '" transform="rotate(-90 28 28)"/></svg><b style="color:' + col + '">' + (score == null ? '—' : esc(score)) + '</b></span>';
+  }
+  function linkFor(d, key) { var l = (d.links || {})[key]; return l ? l.replace('<id>', encodeURIComponent(state.companyId)) : null; }
+  function propertyHtml(d) {
+    var hb = (d.health && d.health.band) || band(d.health && d.health.score);
+    var sub = [[d.city, d.state].filter(Boolean).join(', '), d.units != null ? num(d.units) + ' units' : '', d.objective ? 'Objective: ' + d.objective : ''].filter(Boolean).join(' · ');
+    var k = d.kpis || {};
+    var kp = [['ai_visibility', 'AI visibility', num], ['renewal_rate', 'Renewal rate', function (v) { return pct(v); }], ['units_to_lease', 'Units to lease', num], ['lead_to_lease', 'Lead-to-lease', function (v) { return pct(v, 1); }]].map(function (x) {
+      var r = k[x[0]], v = val(r);
+      return '<div class="kpi sm"' + rtitle(r) + '><span class="eyebrow">' + x[1] + '</span><span class="v">' + (v == null ? '<span class="empty-dash">—</span>' : esc(x[2](v))) + '</span>' + (receipt(r) ? '<span class="rc">' + receipt(r) + '</span>' : '') + '</div>';
+    }).join('');
+    var links = [['media_plan', 'Media plan'], ['visibility', 'Visibility'], ['content', 'Content'], ['creative', 'Creative'], ['report', 'Monthly report']].map(function (x) {
+      var h = linkFor(d, x[0]); return h ? '<a class="btn sm" href="' + esc(h) + '">' + x[1] + '</a>' : '';
+    }).join('');
+    var fc = d.exposure_forecast, fHtml = '';
+    if (fc && has(fc.months)) {
+      var max = Math.max.apply(null, fc.months.map(function (m) { return m.units_to_lease; })) || 1;
+      fHtml = '<section class="sec"><div class="sec-head"><h2 class="h-sec">Exposure forecast</h2><span class="receipt">' + receipt(fc) + '</span></div>' +
+        '<div class="forecast" role="img" aria-label="' + esc('Units to lease by month: ' + fc.months.map(function (m) { return monthShort(m.month) + ' ' + m.units_to_lease; }).join(', ')) + '">' +
+        fc.months.map(function (m) {
+          var r = m.units_to_lease / max, col = r >= .75 ? 'var(--copper)' : (r >= .5 ? 'var(--sage)' : 'var(--juniper)');
+          return '<span class="col"><span>' + esc(m.units_to_lease) + '</span><i style="height:' + Math.max(3, Math.round(r * 104)) + 'px;background:' + col + '"></i><em>' + esc(monthShort(m.month)) + '</em></span>';
+        }).join('') + '</div></section>';
+    }
+    var vend = has(d.vendor_audit) ? '<section class="sec"><h2 class="h-sec">Vendor audit</h2><ul class="vrows">' + d.vendor_audit.map(function (v) {
+      var verdict = { over: '<span class="t-critical" style="font-weight:600">Over market</span>', fair: '<span class="t-healthy">Fair</span>', under: '<span class="t-healthy">Under market</span>' }[v.verdict] || '<span class="verdict">No market rate yet</span>';
+      return '<li><span class="n">' + esc(v.vendor) + (v.package ? ' (' + esc(v.package) + ')' : '') + '</span><span class="p"' + rtitle(v.monthly) + '>' + (val(v.monthly) == null ? '—' : esc(money(val(v.monthly))) + '/mo') + '</span>' + verdict + (v.basis ? '<span class="fine">' + esc(v.basis) + '</span>' : '') + '</li>';
+    }).join('') + '</ul></section>' : '';
+    var eng = has(d.visibility_by_engine) ? '<section class="sec"><h2 class="h-sec">AI mentions by engine</h2><div class="estats kpis" style="border:0;padding:0">' + d.visibility_by_engine.map(function (e) {
+      var v = val(e.score); return '<div class="kpi"' + rtitle(e.score) + '><span class="support">' + esc(e.engine) + '</span><span class="v t-' + engineBand(v) + '">' + (v == null ? '—' : esc(v)) + '</span></div>';
+    }).join('') + '</div></section>' : '';
+    var ra = d.recommended_action;
+    var loop = has(d.loop) ? '<section class="card loopcard2" aria-labelledby="loop-h"><div class="lh"><i aria-hidden="true"></i><b id="loop-h">The loop on this property</b><span class="support">Express · Tailor · Amplify · Evolve</span></div><ol class="stagel">' + d.loop.map(function (s) {
+      var when = s.status === 'waiting' ? '<span class="wait">waiting on you' + (s.at ? ' since ' + esc(clock(s.at)) : '') + '</span>' : (s.at ? '<span>' + esc(s.status === 'upcoming' ? 'planned ' + mdy(s.at) : asOf(s.at)) + '</span>' : '<span>upcoming</span>');
+      return '<li class="' + esc(s.status) + '"><span class="rl"><span class="node ' + esc(s.status) + '" aria-hidden="true"></span><span class="conn" aria-hidden="true"></span></span><div class="body"><div class="tl"><b>' + esc(LENS_LABEL[s.lens] || s.lens) + '</b>' + when + '</div><p>' + esc(s.text) + '</p>' +
+        (s.status === 'waiting' && ra ? '<a class="btn sm primary" href="#/item/' + encodeURIComponent(ra.item_id) + '">Review the one decision</a>' : '') + '</div></li>';
+    }).join('') + '</ol></section>' : '';
+    var page = '<div class="page"><a class="back" href="#/properties">' + ic(I.arrowLeft, 13) + 'All properties</a>' +
+      '<div class="proptitle">' + ring(d.health && d.health.score, hb) + '<div class="stack" style="display:flex;flex-direction:column;gap:2px;min-width:0"><h1 class="h-page">' + esc(d.name) + '</h1><p class="support">' + esc(sub) + '</p>' +
+      (d.health ? '<span class="receipt">Health ' + receipt(d.health) + '</span>' : '') + '</div></div>' +
+      (links ? '<div class="scoped-links">' + links + '</div>' : '') +
+      '<div class="kpis">' + kp + '</div>' + fHtml + vend + eng + loop + gapsLine(d.gaps) + '</div>';
+    var rail = '';
+    if (has(d.findings)) rail += '<section class="sec"><h2 class="h-rail">Findings</h2>' + d.findings.map(function (f) {
+      return '<div class="finding"><p>' + esc(f.text) + '</p>' + (has(f.receipts) ? '<span class="receipt">' + f.receipts.map(function (rc) { return esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : ''); }).join('<br>') + '</span>' : '') + '</div>';
+    }).join('') + '</section>';
+    if (ra || d.draft_email) {
+      rail += '<div class="rail-sep"></div><section class="sec"><h2 class="h-rail">Recommended action</h2>' +
+        (ra ? '<a class="btn primary" style="width:100%" href="#/item/' + encodeURIComponent(ra.item_id) + '">' + esc(ra.label) + '</a>' : '') +
+        (d.draft_email ? '<div class="emailcard"><span class="fine">Email preview</span><b>Subject: ' + esc(d.draft_email.subject) + '</b><p>' + esc(d.draft_email.preview) + '</p>' +
+          (d.draft_email.item_id ? '<a class="link" href="#/item/' + encodeURIComponent(d.draft_email.item_id) + '">View full draft →</a>' : '') + '</div>' : '') + '</section>';
+    }
+    return { page: page, rail: rail || null };
+  }
+
+  /* ── Media plan (DM0-1, GJQ-1) ───────────────────────────────────── */
+  function kfmt(v) { return v >= 1000 ? (v / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(v); }
+  function screenMediaPlan() {
+    var c = company();
+    renderTop('Properties', c ? c.name : '');
+    guard(api('/api/workspace/media-plan?' + cq()), 'the media plan').then(function (r) {
+      if (!r) return;
+      var h = mediaPlanHtml(r.data || {});
+      setView(h.page, h.rail);
+      var regen = view.querySelector('[data-regen]');
+      if (regen) regen.addEventListener('click', function () { startRequest('Regenerate the ' + ((r.data || {}).fiscal_year || '') + ' media plan for ' + (company() || {}).name + '. Draft only — no live budget changes.'); });
+      var pdf = view.querySelector('[data-print]'); if (pdf) pdf.addEventListener('click', function () { window.print(); });
+    });
+  }
+  function mediaPlanHtml(d) {
+    var months = d.months || [], max = Math.max.apply(null, months.map(function (m) { return m.units_to_lease; }).concat([1]));
+    var head = '<div class="frow mh"><span class="fl"></span><div class="cells">' + months.map(function (m) { return '<span class="' + (m.units_to_lease >= max * .7 ? 'peak' : '') + '">' + esc(monthShort(m.month)) + '</span>'; }).join('') + '</div></div>';
+    var bars = '<div class="frow bars"><span class="fl">Units to lease</span><div class="cells">' + months.map(function (m) {
+      var r = m.units_to_lease / max; return '<span><i style="height:' + Math.max(3, Math.round(r * 44)) + 'px;background:' + (r >= .7 ? 'var(--copper)' : 'var(--sage)') + '"></i><span>' + esc(m.units_to_lease) + '</span></span>';
+    }).join('') + '</div></div>';
+    var chans = d.channels || [];
+    var crow = chans.map(function (c) {
+      return '<div class="frow ch"><span class="fl">' + esc(c.channel) + '</span><div class="cells">' + c.monthly.map(function (v) { return v ? '<span class="on">' + esc(kfmt(v)) + '</span>' : '<span class="off" aria-label="none">—</span>'; }).join('') + '</div></div>';
+    }).join('');
+    var totals = months.map(function (_, i) { return chans.reduce(function (s, c) { return s + (c.monthly[i] || 0); }, 0); });
+    var tot = chans.length ? '<div class="frow tot"><span class="fl">Total</span><div class="cells">' + totals.map(function (t) { return '<span>' + esc(kfmt(t)) + '</span>'; }).join('') + '</div></div>' : '';
+    var alloc = val(d.allocated), env = val(d.envelope);
+    var breakdown = chans.length ? '<section class="sec"><h2 class="h-rail">Channel breakdown</h2><div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Channel</th><th scope="col" class="num">Monthly avg</th><th scope="col" class="num">Annual</th><th scope="col" class="num">% of budget</th><th scope="col" class="num">CPL target</th></tr></thead><tbody>' +
+      chans.map(function (c) { return '<tr><td class="name">' + esc(c.channel) + '</td><td class="num">' + esc(money(c.monthly_avg)) + '</td><td class="num">' + esc(money(c.annual)) + '</td><td class="num">' + esc(pct(c.share)) + '</td><td class="num">' + (c.cpl_target == null ? '<span class="empty-dash">—</span>' : esc(money(c.cpl_target))) + '</td></tr>'; }).join('') +
+      '</tbody></table></div></section>' : '';
+    var page = '<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Media plan</h1><p class="support">' +
+      esc([d.fiscal_year, env != null ? money(env) + ' envelope' : '', d.objective ? 'Objective: ' + d.objective : ''].filter(Boolean).join(' · ')) + '</p></div>' + staleLabel(d.as_of) + '</div>' +
+      (months.length ? '<section class="card flight" aria-label="Exposure forecast and flighting"><h2 class="h-rail">Exposure forecast</h2>' + head + bars + crow + tot +
+        (alloc != null && env != null ? '<span class="allocated"' + rtitle(d.allocated) + '>' + esc(money(alloc) + ' of ' + money(env) + ' allocated') + '</span>' : '') + '</section>' : '') +
+      breakdown + gapsLine(d.gaps) + '</div>';
+    var rail = (d.generated_at ? '<p class="fine">Plan generated ' + esc(mdy(d.generated_at)) + '</p>' : '') +
+      (has(d.notes) ? '<section class="sec"><h2 class="h-rail">Plan notes</h2><ol class="notes">' + d.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ol></section>' : '') +
+      '<div class="rail-sep"></div><section class="sec">' + (canDecide() ? '<button type="button" class="btn outline" style="width:100%" data-regen>Regenerate plan</button><p class="fine">Creates a draft for review. Live budgets don’t change.</p>' : signInLink('Sign in to regenerate the plan')) +
+      '<button type="button" class="link" data-print>Export PDF</button></section>';
+    return { page: page, rail: rail };
+  }
+
+  /* ── Visibility (E06-1) ──────────────────────────────────────────── */
+  function screenVisibility() {
+    var c = company();
+    renderTop('Visibility', c ? c.name : '');
+    guard(api('/api/workspace/visibility?' + cq()), 'visibility').then(function (r) {
+      if (!r) return;
+      var h = visibilityHtml(r.data || {});
+      setView(h.page, h.rail);
+      view.querySelectorAll('[data-brief]').forEach(function (b) { b.addEventListener('click', function () { startRequest('Create a content brief for ' + (company() || {}).name + ': ' + b.getAttribute('data-brief')); }); });
+    });
+  }
+  var CITE_FILLS = ['var(--copper)', 'var(--juniper)', 'var(--sage)', 'var(--mint)', 'var(--rule)'];
+  function visibilityHtml(d) {
+    var c = company() || {}, sv = val(d.score), sb = engineBand(sv);
+    var engines = d.engines || [];
+    var hits = engines.reduce(function (s, e) { return s + (e.queries_hit || 0); }, 0), total = engines.reduce(function (s, e) { return s + (e.queries_total || 0); }, 0);
+    var hero = '<div class="vhero"><div style="display:flex;flex-direction:column;align-items:center"' + rtitle(d.score) + '><span class="big t-' + sb + '">' + (sv == null ? '—' : esc(sv)) + '</span><span class="support">AI visibility score</span></div>' +
+      '<div class="stack" style="display:flex;flex-direction:column;gap:4px">' + (d.change ? '<b class="' + (d.change.value >= 0 ? 't-healthy' : 't-critical') + '" style="font-size:13px;font-weight:500">' + esc((d.change.value >= 0 ? '+' : '') + d.change.value + ' from last ' + (d.change.window || 'month')) + '</b>' : '') +
+      (total ? '<p class="support">Named in ' + esc(hits) + ' of ' + esc(total) + ' prospect questions across ' + esc(engines.length) + ' AI engines.</p>' : '') + (receipt(d.score) ? '<span class="receipt">' + receipt(d.score) + '</span>' : '') + '</div></div>';
+    var strip = engines.length ? '<div class="card engines">' + engines.map(function (e) {
+      var v = val(e.score); return '<div class="cell"' + rtitle(e.score) + '><span>' + esc(e.engine) + '</span><b class="t-' + engineBand(v) + '">' + (v == null ? '—' : esc(v)) + '</b><em>' + esc(e.queries_hit + '/' + e.queries_total) + ' questions</em></div>';
+    }).join('') + '</div>' : '';
+    var cs = d.comp_stack, comp = '';
+    if (cs && has(cs.rows)) {
+      comp = '<section class="sec"><h2 class="h-sec">Comp stack — position vs competitors</h2><div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Surface</th><th scope="col" class="self">' + esc(c.name || 'You') + '</th>' +
+        cs.competitors.map(function (n) { return '<th scope="col">' + esc(n) + '</th>'; }).join('') + '</tr></thead><tbody>' + cs.rows.map(function (row) {
+          function cell(v, self) { return '<td class="' + (self ? 'self' : '') + '">' + (v == null ? '<span class="empty-dash">—</span>' : esc(v)) + '</td>'; }
+          return '<tr><td>' + esc(row.surface) + '</td>' + cell(row.values.self, true) + cs.competitors.map(function (n) { return cell(row.values[n], false); }).join('') + '</tr>';
+        }).join('') + '</tbody></table></div></section>';
+    }
+    var cites = has(d.citation_sources) ? '<section class="sec"><h2 class="h-sec">Citation sources</h2><div class="citebar" role="img" aria-label="' + esc(d.citation_sources.map(function (s) { return s.source + ' ' + pct(s.share); }).join(', ')) + '">' +
+      d.citation_sources.map(function (s, i) { return '<i style="width:' + (s.share * 100).toFixed(1) + '%;background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>'; }).join('') + '</div>' +
+      '<div class="legend">' + d.citation_sources.map(function (s, i) { return '<span><i style="background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>' + esc(s.source) + ' ' + esc(pct(s.share)) + '</span>'; }).join('') + '</div></section>' : '';
+    var page = '<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Visibility audit</h1><p class="support">' +
+      esc([d.last_audit ? 'Last audit: ' + mdy(d.last_audit) : '', d.next_audit ? 'Next scheduled: ' + mdy(d.next_audit) : ''].filter(Boolean).join(' · ')) + '</p></div></div>' +
+      hero + strip + comp + cites + gapsLine(d.gaps) + '</div>';
+    var rail = (d.alerts || []).filter(function (a) { return a.kind === 'exposure'; }).map(function (a) { return '<div class="callout"><b>Exposure</b><p>' + esc(a.text) + '</p></div>'; }).join('') +
+      (has(d.recommendations) ? '<section class="sec"><h2 class="h-rail">Content recommendations</h2><ul class="recs">' + d.recommendations.map(function (rc) {
+        var act = rc.action && rc.action.type === 'create_brief' ? (canDecide() ? '<button type="button" class="link" style="align-self:flex-start" data-brief="' + esc(rc.text) + '">Create brief</button>' : signInLink('Sign in to create a brief')) : '';
+        return '<li><p>' + esc(rc.text) + '</p>' + act + '</li>';
+      }).join('') + '</ul></section>' : '') +
+      (d.alerts || []).filter(function (a) { return a.kind === 'competitor'; }).map(function (a) { return '<div class="callout competitor"><b>Competitor alert</b><p>' + esc(a.text) + '</p></div>'; }).join('');
+    return { page: page, rail: rail || null };
+  }
+
+  /* ── Content (E4U-1) ─────────────────────────────────────────────── */
+  var PRIO = { high: ['High', 'critical'], med: ['Med', 'attention'], low: ['Low', 'healthy'] };
+  var CSTATUS = { draft_ready: ['Draft ready', 'brand'], in_review: ['In review', 'attention'], not_started: ['Not started', 'new'], published: ['Published', 'healthy'] };
+  function screenContent() {
+    var c = company();
+    renderTop('Content', c ? c.name : '');
+    guard(api('/api/workspace/content?' + cq()), 'content').then(function (r) {
+      if (!r) return;
+      var d = r.data || {}, k = d.counts || {};
+      var firstHigh = (d.rows || []).map(function (x) { return x.priority; }).indexOf('high');
+      var rows = (d.rows || []).map(function (x, i) {
+        var p = PRIO[x.priority], s = CSTATUS[x.status] || [x.status, 'new'];
+        var prio = x.priority === 'done' ? '<span class="prio t-healthy">' + ic(I.check, 14) + '<span class="sr-only">Done</span></span>' : '<span class="prio t-' + p[1] + '"><span class="dot ' + p[1] + '" aria-hidden="true"></span>' + p[0] + '</span>';
+        var href = x.item_id ? '#/item/' + encodeURIComponent(x.item_id) : null;
+        return '<tr class="' + (i === firstHigh ? 'top ' : '') + (href ? 'rowlink' : '') + '"' + (href ? ' data-href="' + href + '"' : '') + '><td>' + prio + '</td><td class="support">' + esc(x.type) + '</td>' +
+          '<td class="name">' + (href ? '<a href="' + href + '">' + esc(x.title) + '</a>' : esc(x.title)) + '</td><td class="support">' + esc(x.gap_source || '') + '</td>' +
+          '<td><span class="pill ' + s[1] + '">' + esc(s[0] + (x.status === 'published' && x.published_at ? ' ' + mdy(x.published_at) : '')) + '</span></td></tr>';
+      }).join('');
+      setView('<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Content engine</h1><p class="support">' +
+        esc(num(k.recommendations) + ' recommendations · ' + num(k.published) + ' published · ' + num(k.in_review) + ' in review') + '</p></div></div>' +
+        (rows ? '<div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Priority</th><th scope="col">Type</th><th scope="col">Title</th><th scope="col">Gap source</th><th scope="col">Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="support">No content recommendations yet.</p>') +
+        (has(d.impact) ? '<section class="sec"><h2 class="h-sec">Published content impact</h2>' + d.impact.map(function (i) { return '<p>' + esc(i.text) + '</p>'; }).join('') + '</section>' : '') +
+        gapsLine(d.gaps) + '</div>');
+    });
+  }
+
+  /* ── Creative (E4S-1) ────────────────────────────────────────────── */
+  var CTYPES = [['', 'All'], ['photos', 'Photos'], ['videos', 'Videos'], ['ad_creative', 'Ad creative'], ['floor_plans', 'Floor plans'], ['documents', 'Documents']];
+  var THUMBS = ['#E7EBE9', '#D9DEDC', '#BDDDD9', '#E8F3F2'];
+  function screenCreative() {
+    var c = company(), type = state.creativeType || '';
+    renderTop('Creative', c ? c.name : '');
+    guard(api('/api/workspace/creative?' + cq() + (type ? '&type=' + type : '')), 'creative').then(function (r) {
+      if (!r) return;
+      var d = r.data || {}, k = d.counts || {};
+      var summary = esc(num(k.assets) + ' assets · ' + num(k.tracked_in_ads) + ' tracked in ads') +
+        (d.top ? ' · Top creative: <span class="mono t-healthy">' + esc(d.top.name) + (val(d.top.ctr) != null ? ' (' + esc(pct(val(d.top.ctr), 1)) + ' CTR)' : '') + '</span>' : '') +
+        (d.lowest ? ' · Lowest: <span class="mono t-critical">' + esc(d.lowest.name) + (val(d.lowest.ctr) != null ? ' (' + esc(pct(val(d.lowest.ctr), 1)) + ' CTR)' : '') + '</span>' : '');
+      var chips = '<div class="chips" role="group" aria-label="Asset type">' + CTYPES.map(function (t) { return '<button type="button" class="chip" data-ctype="' + t[0] + '" aria-pressed="' + (t[0] === type) + '">' + t[1] + '</button>'; }).join('') + '</div>';
+      var assets = (d.assets || []).map(function (a, i) {
+        var best = d.top && a.name === d.top.name, worst = a.flag === 'underperforming';
+        var metrics = val(a.impressions) != null ? num(val(a.impressions)) + ' imp · ' + pct(val(a.ctr), 1) + ' CTR · ' + num(val(a.leads)) + ' leads' : 'No ad results yet';
+        return '<li class="asset' + (best ? ' best' : '') + (worst ? ' worst' : '') + '"><div class="thumb" style="background:' + THUMBS[i % THUMBS.length] + '" role="img" aria-label="' + esc(a.name) + ' (no preview available)"><span>' + esc(a.tags[0] || '') + '</span></div>' +
+          '<div class="fn">' + esc(a.name) + (worst ? '<span class="pill critical">Underperforming</span>' : '') + '</div>' +
+          '<div class="tags">' + a.tags.slice(1).map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '<span class="' + esc(a.origin) + '">' + esc(a.origin) + '</span></div>' +
+          '<span class="fine"' + rtitle(a.ctr) + '>' + esc(metrics) + '</span></li>';
+      }).join('');
+      setView('<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Creative library</h1><p class="support">' + esc(c ? c.name : '') + '</p></div></div>' +
+        '<p class="support">' + summary + '</p>' + chips +
+        (assets ? '<ul class="assets">' + assets + '</ul>' : '<p class="support">No assets of this type yet.</p>') +
+        '<a class="dropzone" href="#/request"><span class="h-rail">Add photos or video</span><span class="support">Send them with a New request. We’ll name and tag them for you.</span></a>' +
+        gapsLine(d.gaps) + '</div>');
+      view.querySelectorAll('[data-ctype]').forEach(function (b) { b.addEventListener('click', function () { state.creativeType = b.getAttribute('data-ctype'); screenCreative(); }); });
+    });
+  }
+
+  /* ── Value (GC6-1) ───────────────────────────────────────────────── */
+  function screenValue() {
+    renderTop('Value', 'Trailing 12 months');
+    guard(api('/api/workspace/value?range=12m'), 'value').then(function (r) {
+      if (!r) return;
+      var d = r.data || {}, h = d.headline || {}, t = d.totals || {};
+      var cap = val(h.savings_captured), found = val(h.savings_identified), ships = val(h.changes_shipped), auto = val(t.automatic_share);
+      var rows = (d.rows || []).map(function (x) {
+        var prop = x.company_id ? '<a class="link quiet" href="#/property/' + encodeURIComponent(x.company_id) + '">' + esc(x.property) + '</a>' : esc(x.property);
+        return '<tr><td>' + esc(x.change) + '</td><td class="support">' + prop + '</td><td class="num"' + rtitle(x.annual_value) + '><b>' + (val(x.annual_value) == null ? '<span class="empty-dash">—</span>' : esc(moneyK(val(x.annual_value)))) + '</b></td>' +
+          '<td class="num">' + (x.decided_by === 'you' ? '<span class="who you">You approved</span>' : '<span class="who auto">RPM Digital, automatic</span>') + '<span class="fine" style="display:block">' + esc(mdy(x.decided_at)) + '</span></td></tr>';
+      }).join('');
+      setView('<div class="page narrow" style="gap:40px"><div class="vhead"><div class="head"><p class="eyebrow">Trailing 12 months · ' + esc(d.period || '') + '</p>' + staleLabel(d.as_of) + '</div>' +
+        '<h1>What we changed this year, and what it saved.</h1></div>' +
+        '<div class="figures">' +
+        '<div class="fig"' + rtitle(h.savings_captured) + '><span class="l">Savings captured</span><span class="big t-healthy">' + (cap == null ? '—' : esc(moneyK(cap)) + '/yr') + '</span>' + (found != null ? '<span class="support">of ' + esc(moneyK(found)) + '/yr we found</span>' : '') + '</div>' +
+        '<div class="fig"' + rtitle(h.changes_shipped) + '><span class="l">Changes shipped</span><span class="mid">' + (ships == null ? '—' : esc(num(ships))) + '</span>' + (auto != null ? '<span class="support">' + esc(pct(auto)) + ' needed nothing from you</span>' : '') + '</div></div>' +
+        '<section class="sec"><div class="sec-head"><h2 class="eyebrow">What created it</h2><button type="button" class="link quiet" data-print>Export for owners</button></div>' +
+        '<div class="tscroll"><table class="tbl ledger"><thead><tr><th scope="col">Change</th><th scope="col">Property</th><th scope="col" class="num">Annual value</th><th scope="col" class="num">Who decided</th></tr></thead><tbody>' + rows + '</tbody>' +
+        '<tfoot><tr><td>Everything we changed this year</td><td class="support">' + esc(num(t.changes)) + ' changes</td><td class="num t-healthy"' + rtitle(t.annual_value) + '>' + (val(t.annual_value) == null ? '—' : esc(moneyK(val(t.annual_value)))) + '</td><td class="num support">' + (auto != null ? esc(pct(auto)) + ' automatic' : '') + '</td></tr></tfoot></table></div></section>' +
+        gapsLine(d.gaps) + '</div>');
+      var p = view.querySelector('[data-print]'); if (p) p.addEventListener('click', function () { window.print(); });
+    });
+  }
+
+  /* ── Signals (internal) ──────────────────────────────────────────── */
+  var SIGNAL_KIND = { occupancy_drop: 'Occupancy', stale_inventory: 'Stale inventory', lease_wave: 'Lease wave', lead_drop: 'Leads', spend_pacing: 'Spend pacing', reputation_drop: 'Reputation', tracking_break: 'Tracking', data_stale: 'Data freshness' };
+  function screenSignals() {
+    var scoped = state.signalScope === 'property' && state.companyId;
+    renderTop('Signals', scoped ? (company() || {}).name : 'All properties');
+    guard(api('/api/workspace/signals' + (scoped ? '?' + cq() : '')), 'signals').then(function (r) {
+      if (!r) return;
+      var d = r.data || {}, list = d.signals || [], counts = d.counts || {};
+      var total = (counts.high || 0) + (counts.medium || 0) + (counts.low || 0), c = company();
+      function fig(s) {
+        var ch = s.change || {}; if (ch.from == null || ch.to == null) return '';
+        var ratio = Math.abs(ch.from) <= 1 && Math.abs(ch.to) <= 1 && (ch.from % 1 !== 0 || ch.to % 1 !== 0);
+        function f(v) { return ratio ? (v * 100).toFixed(1).replace(/\.0$/, '') + '%' : (s.kind === 'spend_pacing' ? money(v) : num(v)); }
+        return f(ch.from) + ' → ' + f(ch.to);
+      }
+      var groups = [['high', 'High'], ['medium', 'Medium'], ['low', 'Low']].map(function (sv) {
+        var rows = list.filter(function (s) { return s.severity === sv[0]; });
+        if (!rows.length) return '';
+        return '<section class="sgroup"><h2 class="grp"><span class="eyebrow ' + sv[0] + '">' + sv[1] + ' · ' + rows.length + '</span><span class="rule" aria-hidden="true"></span></h2><ol>' + rows.map(function (s) {
+          var f = fig(s), win = s.change && s.change.window_days;
+          var act = s.work_item_id ? '<a class="btn sm" href="#/item/' + encodeURIComponent(s.work_item_id) + '" data-set-company="' + esc(s.company_id) + '">Open work item</a>'
+            : (canDecide() ? '<button type="button" class="btn sm primary" data-start="' + esc(s.id) + '" data-company="' + esc(s.company_id) + '">Start work</button>' : signInLink('Sign in to start work'));
+          return '<li class="srow sev-' + esc(s.severity) + '"><div class="sc prop"><b>' + esc(s.property_name) + '</b><span>' + esc(SIGNAL_KIND[s.kind] || s.kind) + '</span></div>' +
+            '<div class="sc what"><span>' + esc(s.title) + '</span>' + (has(s.detail) ? '<span class="dtl">' + esc(s.detail) + '</span>' : '') + (receipt(s.metric) ? '<span class="receipt">' + receipt(s.metric) + '</span>' : '') + '</div>' +
+            '<div class="sc chg">' + (f ? '<b>' + esc(f) + '</b>' + (win ? '<span>over ' + esc(win) + ' ' + plural(win, 'day') + '</span>' : '') : '') + '</div>' +
+            '<div class="sc when">' + esc(asOf(s.detected_at)) + '</div><div class="sc act">' + act + '</div><p class="inline-err" role="alert" hidden></p></li>';
+        }).join('') + '</ol></section>';
+      }).join('');
+      setView('<div class="page narrow" style="gap:12px"><div class="head"><div class="stack"><h1 class="h-page">Signals</h1><p class="support">' +
+        esc(total ? word(total) + ' ' + plural(total, 'change') + ' that ' + (total === 1 ? 'hasn’t' : 'haven’t') + ' become work yet.' : 'Nothing has changed that isn’t already work.') + '</p>' + staleLabel(d.as_of) + '</div>' +
+        '<div class="chips" role="group" aria-label="Which properties"><button type="button" class="chip" data-sscope="all" aria-pressed="' + !scoped + '">All properties</button>' +
+        (c ? '<button type="button" class="chip" data-sscope="property" aria-pressed="' + !!scoped + '">' + esc(c.name) + '</button>' : '') + '</div></div>' +
+        groups + '<p class="support" style="padding-top:12px">Signals come from fixed rules over the data we already read. Nothing here is estimated.</p>' + gapsLine(d.gaps) + '</div>');
+      view.querySelectorAll('[data-sscope]').forEach(function (b) { b.addEventListener('click', function () { state.signalScope = b.getAttribute('data-sscope'); screenSignals(); }); });
+      view.querySelectorAll('[data-start]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var row = b.closest('.srow'), err = row.querySelector('.inline-err'), cid = b.getAttribute('data-company');
+          b.disabled = true; b.textContent = 'Starting…';
+          api('/api/workspace/signals/' + encodeURIComponent(b.getAttribute('data-start')) + '/start-work', { method: 'POST', body: { company_id: cid } }).then(function (res) {
+            var id = (res.data || {}).work_item_id;
+            row.querySelector('.sc.act').innerHTML = id ? '<a class="btn sm" href="#/item/' + encodeURIComponent(id) + '" data-set-company="' + esc(cid) + '">Open work item</a>' : '<span class="support">Started</span>';
+          }).catch(function (e) { b.disabled = false; b.textContent = 'Start work'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'That didn’t go through'); });
+        });
+      });
+    });
+  }
+
+  /* ── Ask ─────────────────────────────────────────────────────────── */
+  function screenAsk() {
+    var c = company();
+    renderTop('Ask', c ? c.name : '');
+    guard(api('/api/ask/questions'), 'questions').then(function (r) {
+      if (!r) return;
+      var qs = ((r.data || {}).questions || []).slice().sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
+      setView('<div class="page narrow"><div class="head"><div class="stack"><h1 class="h-page">Ask</h1><p class="support">About ' + esc(c ? c.name : 'this property') + '. Every number is computed before the answer is written. Nothing is estimated.</p></div></div>' +
+        (qs.length ? '<div class="qlist" role="group" aria-label="Questions you can ask">' + qs.map(function (q) { return '<button type="button" class="qbtn" data-q="' + esc(q.key) + '"><b>' + esc(q.label) + '</b>' + (has(q.blurb) ? '<span>' + esc(q.blurb) + '</span>' : '') + '</button>'; }).join('') + '</div>' : '<p class="support">No questions are available yet.</p>') +
+        '<div class="sec" data-answers aria-live="polite"></div><p class="support">A question with no data behind it gets a refusal, never a guess.</p></div>');
+      view.querySelectorAll('[data-q]').forEach(function (b) { b.addEventListener('click', function () { askOne(qs.filter(function (x) { return x.key === b.getAttribute('data-q'); })[0]); }); });
+    });
+  }
+  function askOne(q) {
+    var wrap = view.querySelector('[data-answers]'), block = document.createElement('section');
+    block.className = 'qa';
+    block.innerHTML = '<div class="qbubble"><span class="avatar" aria-hidden="true">' + esc(initials(state.me && state.me.email)) + '</span>' + esc(q.label) + '</div><div class="abody"><div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Reading the numbers…</div></div>';
+    wrap.insertBefore(block, wrap.firstChild);
+    var body = block.querySelector('.abody'), tries = 0;
+    (function go() {
+      api('/api/ask/' + encodeURIComponent(q.key), { method: 'POST', body: { company_id: state.companyId } }).then(function (r) {
+        if (r.status === 202 && tries++ < 20) { setTimeout(go, 3000); return; }
+        body.innerHTML = answerHtml(r.data || {});
+      }).catch(function (e) { if (e && e.status === 401) return; body.innerHTML = '<p class="inline-err" role="alert">' + esc(failText(e, 'We couldn’t answer that just now')) + '</p>'; });
+    })();
+  }
+  function answerHtml(a) {
+    var missing = has(a.missing_inputs) ? '<p class="gaps">Not in this answer: ' + esc(a.missing_inputs.map(function (m) { return m.source || m.input; }).join(', ')) + '.</p>' : '';
+    if (a.answered === false) return '<div class="refusal">' + esc(a.headline || a.summary || 'We can’t answer that from what we read.') + '</div>' + missing;
+    var receipts = [], idx = {};
+    function ref(ev) { if (!(ev in idx)) { receipts.push(ev); idx[ev] = receipts.length; } return idx[ev]; }
+    var findings = (a.findings || []).map(function (f) {
+      var refs = (f.evidence || []).map(ref);
+      return '<li><b>' + esc(f.title) + '</b><p>' + esc(f.detail) + (refs.length ? ' <sup>' + refs.map(function (n) { return '<a href="#" data-ref="' + n + '" aria-label="receipt ' + n + '">' + n + '</a>'; }).join(',') + '</sup>' : '') + '</p></li>';
+    }).join('');
+    if (!receipts.length) (a.evidence || []).forEach(ref);
+    var rc = receipts.map(function (ev, i) { var m = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(ev); return '<li id="rc-' + (i + 1) + '"><span class="n">' + (i + 1) + '</span><span>' + esc(m ? m[1] : ev) + (m ? ' <span class="support">· ' + esc(m[2]) + '</span>' : '') + '</span></li>'; }).join('');
+    return '<div class="answer"><div class="acol">' + (has(a.headline) ? '<p class="headline">' + esc(a.headline) + '</p>' : '') + (has(a.summary) ? '<p class="summary">' + esc(a.summary) + '</p>' : '') +
+      (findings ? '<ol class="findings">' + findings + '</ol>' : '') + (has(a.next_step) ? '<p class="summary"><b>Next step</b> ' + esc(a.next_step) + '</p>' : '') + missing + '</div>' +
+      (rc ? '<aside class="receipts" aria-label="The receipts"><h3 class="eyebrow">The receipts</h3><ol>' + rc + '</ol></aside>' : '') + '</div>';
+  }
+  view.addEventListener('click', function (e) {
+    var r = e.target.closest('[data-ref]'); if (!r) return;
+    e.preventDefault();
+    var box = r.closest('.answer'), li = box && box.querySelector('#rc-' + r.getAttribute('data-ref'));
+    if (li) { li.classList.add('flash'); li.scrollIntoView({ block: 'nearest' }); setTimeout(function () { li.classList.remove('flash'); }, 1200); }
+  });
+
+  /* ── New request (artboard E) ────────────────────────────────────── */
+  var CATEGORIES = ['creative', 'web', 'paid', 'seo', 'listing', 'reputation', 'other'];
+  var REQ_STATUS = { done: ['Done', 'done'], in_progress: ['In progress', 'prog'], new: ['New', 'new'] };
+  function startRequest(text) {
+    state.req = { companyId: state.companyId, text: text || '', tickets: [], gaps: [], sent: null };
+    if (location.hash === '#/request') route(); else location.hash = '#/request';
+  }
+  function screenRequest() {
+    var st = state.req;
+    if (!st || st.companyId !== state.companyId) st = state.req = { companyId: state.companyId, text: '', tickets: [], gaps: [], sent: null };
+    renderTop('New request', (company() || {}).name);
+    renderRequest();
+  }
+  function renderRequest(focusSel) {
+    setView('<div class="page">' + requestHtml(state.req) + '</div>');
+    bindRequest(); loadRecent();
+    if (focusSel) { var f = view.querySelector(focusSel); if (f) f.focus(); }
+  }
+  function shortDay(s) { var n = daysFromToday(s); if (n == null) return ''; if (n === 0) return 'today'; if (n < 0 && n > -7) return DOW[parseDay(s).getDay()]; return mdy(s); }
+  function loadRecent() {
+    var box = view.querySelector('[data-recent]'); if (!box) return;
+    api('/api/workspace/requests?' + cq()).then(function (r) {
+      var list = (r.data || {}).recent || [];
+      box.innerHTML = list.length ? list.map(function (x) {
+        var st = REQ_STATUS[x.status] || [String(x.status || ''), 'new'];
+        var title = x.work_item_id ? '<a href="#/item/' + encodeURIComponent(x.work_item_id) + '">' + esc(x.title) + '</a>' : esc(x.title);
+        return '<li><span class="rt">' + title + '</span><span class="rs"><i class="' + st[1] + '" aria-hidden="true"></i>' + esc(st[0] + (x.status === 'done' && x.status_date ? ' ' + shortDay(x.status_date) : '')) + '</span></li>';
+      }).join('') : '<li class="support">Nothing sent yet.</li>';
+    }).catch(function (e) { if (e && e.status === 401) return; box.innerHTML = '<li class="support">Your recent requests didn’t load.</li>'; });
+  }
+  function ticketCard(t) {
+    var id = esc(t.draft_id);
+    return '<article class="tcard" data-ticket="' + id + '"><div class="ttop"><label class="sr-only" for="tt-' + id + '">Ticket title</label><input class="ttitle" id="tt-' + id + '" data-f="title" value="' + esc(t.title) + '">' +
+      '<label class="sr-only" for="tc-' + id + '">Category</label><select class="tcat" id="tc-' + id + '" data-f="category">' + CATEGORIES.map(function (c) { return '<option value="' + c + '"' + (c === t.category ? ' selected' : '') + '>' + c.toUpperCase() + '</option>'; }).join('') + '</select></div>' +
+      '<dl class="tfields"><div><dt>Needed by</dt><dd class="need"><input type="date" data-f="needed_by" value="' + esc(t.needed_by || '') + '" aria-label="Needed by">' + (has(t.needed_by_reason) ? '<span>— ' + esc(t.needed_by_reason) + '</span>' : '') + '</dd></div>' +
+      (has(t.team) ? '<div><dt>Goes to</dt><dd>' + esc(t.team) + '</dd></div>' : '') + (has(t.attached_context) ? '<div><dt>Attached</dt><dd>' + esc(t.attached_context.join(', ')) + '</dd></div>' : '') + '</dl>' +
+      (t.failed ? '<p class="inline-err">Didn’t file: ' + esc(t.failed) + '</p>' : '') +
+      (t.warnings || []).map(function (w) { return '<div class="twarn">' + esc(w) + '</div>'; }).join('') +
+      '<div class="tact"><button type="button" class="textbtn" data-remove="' + id + '">Remove</button></div></article>';
+  }
+  function requestHtml(st) {
+    var n = st.tickets.length, teams = [];
+    st.tickets.forEach(function (t) { if (t.team && teams.indexOf(t.team) === -1) teams.push(t.team); });
+    var action = !n ? '<button type="button" class="btn primary send" data-draft>Draft it</button>'
+      : (canDecide() ? '<button type="button" class="btn primary send" data-send>Send it</button>' : '<p class="signin-row">' + signInLink('Sign in to send') + '</p>');
+    var heard = n ? (n === 1 ? 'One request.' : word(n) + ' requests, filed separately.') + ' Fix anything that’s wrong before you send.'
+      : (st.sent ? 'Sent. Status comes back under Your recent requests and in Approvals.' : 'Write it on the left and press Draft it. Each thing you ask for becomes its own ticket here.');
+    var sent = st.sent ? (st.sent.created || []).map(function (c) {
+      var t = (st.sent.tickets || []).filter(function (x) { return x.draft_id === c.draft_id; })[0] || {};
+      return '<div class="tcard"><div class="ttop"><b>' + esc(t.title || 'Request') + '</b><span class="pill healthy"><i></i>Filed</span></div>' + (c.work_item_id ? '<a class="link" href="#/item/' + encodeURIComponent(c.work_item_id) + '">Follow it</a>' : '') + '</div>';
+    }).join('') : '';
+    var foot = n ? (n === 1 ? 'It lands' : (n === 2 ? 'Both land' : 'All ' + word(n, true) + ' land')) + ' in ClickUp with every field filled in. You never open it — status comes back here.' : '';
+    return '<div class="req"><section class="req-l" aria-labelledby="req-h"><div class="stack" style="display:flex;flex-direction:column;gap:6px"><h1 class="req-h" id="req-h">What do you need?</h1><p class="req-sub">Write it how you’d say it. No form, no dropdowns, no ClickUp.</p></div>' +
+      '<label class="req-box"><span class="sr-only">Describe what you need</span><textarea data-req-text rows="6" placeholder="For example: the A1 photos are from before the renovation. Can we reshoot before the October wave?">' + esc(st.text) + '</textarea></label>' +
+      '<div class="req-row">' + (n ? '<button type="button" class="link" data-draft>Draft again</button>' : '') + '<span class="grow"></span><span class="support">' + esc(teams.length ? 'Goes to ' + teams.join(' and ') + ', not to your AM’s inbox' : 'Goes to the team that does the work, not to your AM’s inbox') + '</span></div>' +
+      '<p class="inline-err" role="alert" hidden data-req-err></p>' +
+      '<section class="req-recent"><h2 class="eyebrow">Your recent requests</h2><ul class="recent" data-recent><li class="support">Loading…</li></ul></section>' + action + '</section>' +
+      '<section class="req-r" aria-labelledby="heard-h"><div class="stack" style="display:flex;flex-direction:column;gap:5px"><h2 class="eyebrow" id="heard-h" tabindex="-1">What we heard</h2><p class="req-sub">' + esc(heard) + '</p></div>' +
+      sent + st.tickets.map(ticketCard).join('') + gapsLine(st.gaps) + '<div class="spacer"></div>' + (foot ? '<p class="req-foot">' + esc(foot) + '</p>' : '') + '</section></div>';
+  }
+  function readTickets() {
+    var st = state.req; if (!st) return;
+    view.querySelectorAll('.tcard[data-ticket]').forEach(function (card) {
+      var t = st.tickets.filter(function (x) { return String(x.draft_id) === card.getAttribute('data-ticket'); })[0];
+      if (t) card.querySelectorAll('[data-f]').forEach(function (el) { t[el.getAttribute('data-f')] = el.value || null; });
+    });
+  }
+  function bindRequest() {
+    var st = state.req, ta = view.querySelector('[data-req-text]'), err = view.querySelector('[data-req-err]');
+    function fail(e, what) { if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, what); }
+    ta.addEventListener('input', function () { st.text = ta.value; });
+    view.querySelectorAll('.tcard [data-f]').forEach(function (el) { el.addEventListener('input', readTickets); el.addEventListener('change', readTickets); });
+    view.querySelectorAll('[data-remove]').forEach(function (b) { b.addEventListener('click', function () { readTickets(); var id = b.getAttribute('data-remove'); st.tickets = st.tickets.filter(function (t) { return String(t.draft_id) !== id; }); renderRequest('#heard-h'); }); });
+    view.querySelectorAll('[data-draft]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!st.text.trim()) { err.hidden = false; err.textContent = 'Write what you need first.'; ta.focus(); return; }
+        var label = b.textContent; b.disabled = true; b.textContent = 'Reading…';
+        api('/api/workspace/requests/draft', { method: 'POST', body: { company_id: state.companyId, text: st.text } }).then(function (r) {
+          var d = r.data || {}; st.tickets = d.tickets || []; st.gaps = d.gaps || []; st.sent = null; renderRequest('#heard-h');
+        }).catch(function (e) { b.disabled = false; b.textContent = label; fail(e, 'We couldn’t draft that'); });
+      });
+    });
+    var send = view.querySelector('[data-send]');
+    if (send) send.addEventListener('click', function () {
+      readTickets();
+      if (st.tickets.some(function (t) { return !String(t.title || '').trim(); })) { err.hidden = false; err.textContent = 'Every ticket needs a title.'; return; }
+      send.disabled = true; send.textContent = 'Sending…';
+      var outgoing = st.tickets.map(function (t) { var c = {}; for (var k in t) if (k !== 'failed') c[k] = t[k]; return c; });
+      api('/api/workspace/requests', { method: 'POST', body: { company_id: state.companyId, tickets: outgoing } }).then(function (r) {
+        var d = r.data || {}, failed = {};
+        (d.failed || []).forEach(function (f) { failed[f.draft_id] = f.reason || 'not filed'; });
+        st.sent = { created: d.created || [], tickets: outgoing };
+        st.tickets = outgoing.filter(function (t) { return failed[t.draft_id]; }).map(function (t) { t.failed = failed[t.draft_id]; return t; });
+        if (!st.tickets.length) st.text = '';
+        renderRequest('#heard-h');
+      }).catch(function (e) { send.disabled = false; send.textContent = 'Send it'; fail(e, 'That didn’t send'); });
+    });
+  }
+
+
+
+  /* ── Router ──────────────────────────────────────────────────────── */
+  function route() {
+    stopTimer();
+    var parts = (location.hash || '').replace(/^#\/?/, '').split('?')[0].split('/').map(function (p) { try { return decodeURIComponent(p); } catch (e) { return p; } });
+    var name = parts[0] || 'dashboard';
+    if (name === 'work' || name === 'client') name = 'approvals';
+    if (name === 'portfolio') name = 'dashboard';
+    if (name === 'reports') { window.location.href = reportHref(); return; }
+    if (name === 'signals' && !viewInternal()) name = 'dashboard';
+    if (name === 'property' && parts[1]) {
+      setCompany(parts[1]);
+      name = parts[2] ? { 'media-plan': 'mediaplan', visibility: 'visibility', content: 'content', creative: 'creative' }[parts[2]] || 'property' : 'property';
+    }
+    var screens = {
+      dashboard: [screenDashboard, 'dashboard'], approvals: [screenApprovals, 'approvals'], item: [screenItem, 'approvals'],
+      approved: [screenApproved, 'approvals'], properties: [screenProperties, 'properties'], property: [screenProperty, 'properties'],
+      mediaplan: [screenMediaPlan, 'properties'], visibility: [screenVisibility, 'visibility'], content: [screenContent, 'content'],
+      creative: [screenCreative, 'creative'], value: [screenValue, 'value'], signals: [screenSignals, 'signals'],
+      ask: [screenAsk, ''], request: [screenRequest, 'approvals']
+    };
+    var s = screens[name] || screens.dashboard;
+    renderSide(s[1]);
+    window.scrollTo(0, 0);
+    s[0](parts[1] || '');
+  }
+
+  function boot() {
+    if (useClerk) loadClerk();
+    view.innerHTML = loadingHtml('your workspace');
+    api('/api/workspace/me').then(function (r) {
+      state.me = r.data || {};
+      if (!realInternal()) state.preview = false;
+      var saved = null;
+      try { saved = localStorage.getItem(COMPANY_KEY); } catch (e) {}
+      state.companyId = companyById(saved) ? saved : (companies()[0] ? String(companies()[0].company_id) : null);
+      window.addEventListener('hashchange', route);
+      route();
+    }).catch(function (err) {
+      if (err && err.status === 401) return;
+      view.innerHTML = errorHtml(err);
+    });
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

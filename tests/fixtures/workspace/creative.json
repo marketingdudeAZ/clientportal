@@ -1,0 +1,17 @@
+{
+  "as_of": "2026-09-14T13:04:00Z",
+  "counts": {"assets": 142, "tracked_in_ads": 12},
+  "top": {"name": "lyvbroadway-pool-03", "ctr": {"value": 0.048, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}},
+  "lowest": {"name": "lyvbroadway-exterior-06", "ctr": {"value": 0.003, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}},
+  "assets": [
+    {"id": "asset:3101", "name": "lyvbroadway-pool-03", "thumbnail_url": null, "tags": ["photo", "amenity"], "origin": "generated", "impressions": {"value": 1840, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}, "ctr": {"value": 0.048, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}, "leads": {"value": 6, "source": "hyly", "as_of": "2026-09-13T11:00:00Z"}, "flag": null},
+    {"id": "asset:3102", "name": "lyvbroadway-exterior-01", "thumbnail_url": null, "tags": ["photo", "exterior"], "origin": "inherited", "impressions": {"value": 1240, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}, "ctr": {"value": 0.032, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}, "leads": {"value": 4, "source": "hyly", "as_of": "2026-09-13T11:00:00Z"}, "flag": null},
+    {"id": "asset:3103", "name": "lyvbroadway-a1-renovated", "thumbnail_url": null, "tags": ["photo", "interior"], "origin": "uploaded", "impressions": {"value": 980, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}, "ctr": {"value": 0.021, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}, "leads": {"value": 2, "source": "hyly", "as_of": "2026-09-13T11:00:00Z"}, "flag": null},
+    {"id": "asset:3104", "name": "lyvbroadway-exterior-06", "thumbnail_url": null, "tags": ["photo", "exterior"], "origin": "inherited", "impressions": {"value": 620, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}, "ctr": {"value": 0.003, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}, "leads": {"value": 0, "source": "hyly", "as_of": "2026-09-13T11:00:00Z"}, "flag": "underperforming"},
+    {"id": "asset:3105", "name": "lyvbroadway-clubhouse-tour", "thumbnail_url": null, "tags": ["video", "amenity"], "origin": "generated", "impressions": {"value": 2210, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}, "ctr": {"value": 0.037, "source": "google_ads", "as_of": "2026-09-13T08:00:00Z"}, "leads": {"value": 5, "source": "hyly", "as_of": "2026-09-13T11:00:00Z"}, "flag": null},
+    {"id": "asset:3106", "name": "lyvbroadway-a1-floorplan", "thumbnail_url": null, "tags": ["floor plan"], "origin": "uploaded", "impressions": null, "ctr": null, "leads": null, "flag": null}
+  ],
+  "gaps": [
+    {"message": "Per-asset ad results come from a manual export until Google Ads is connected.", "field": "assets[].ctr", "source": "google_ads"}
+  ]
+}
