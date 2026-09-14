@@ -176,6 +176,16 @@ class PropertyUnavailable(ReportError):
     """The property can't be reported on (unknown, or no Hyly id)."""
 
 
+class NotInHylyBeta(PropertyUnavailable):
+    """The property exists but has no Hyly id. build_report still returns the
+    sections other sources can fill (Round 4); _resolve raises this so callers
+    that need Hyly can tell."""
+
+    def __init__(self, message: str, identity: Any = None):
+        super().__init__(message)
+        self.identity = identity
+
+
 class SourceError(ReportError):
     """A configured connector failed. Surface it; never render it as no data."""
 
@@ -1417,7 +1427,7 @@ def _resolve(company_id: str):
     except LookupError as exc:
         raise PropertyUnavailable(str(exc)) from exc
     if not identity.hyly_property_id or not str(identity.hyly_property_id).isdigit():
-        raise PropertyUnavailable("This property isn't in the Hyly reporting beta yet.")
+        raise NotInHylyBeta("This property isn't in the Hyly reporting beta yet.", identity)
     return identity
 
 
@@ -1431,13 +1441,73 @@ def _city_state(company_id: str) -> tuple[Optional[str], Optional[str]]:
         return None, None
 
 
+HYLY_SECTIONS = {
+    "occupancy": "Occupancy",
+    "funnel": "The leasing funnel",
+    "attribution": "Lead sources",
+    "spend": "Spend",
+    "website": "Website traffic",
+    "paid_search": "Paid search",
+    "reputation": "Reputation",
+}
+
+
+def gather_without_hyly(identity: Any, month: str, *, today: date, city: Optional[str] = None,
+                        state: Optional[str] = None, ils_query: Optional[QueryFn] = None) -> dict:
+    """The `raw` for a property outside the Hyly beta: what other sources fill,
+    and a named gap for every Hyly section."""
+    start, end = month_bounds(month)
+    as_of = min(end, today.isoformat())
+    gaps: list[dict] = [
+        {"section": key, "metric": "hyly",
+         "reason": f"{label} needs the Hyly reporting beta, which this property isn't in yet."}
+        for key, label in HYLY_SECTIONS.items()
+    ]
+    units = _num(getattr(identity, "unit_count", None))
+    listings = _gather_listings(identity, start, as_of, as_of, gaps, ils_query)
+    return {
+        "property": {"company_id": identity.company_id, "name": identity.name, "city": city, "state": state,
+                     "units": receipt(units, "hubspot_company", as_of) if units is not None else None},
+        "month": month,
+        "period_start": start,
+        "as_of": as_of,
+        "available_months": [month],
+        "values": {},
+        "vendors": [],
+        "spend_by_source": [],
+        "first_touch": {},
+        "by_medium": {},
+        "influence": None,
+        "website_sources": [],
+        "floorplans": [],
+        "listings": listings,
+        "reputation": [],
+        "benchmarks": None,
+        "gaps": gaps,
+    }
+
+
 def build_report(company_id: str, month: Optional[str] = None, *, today: Optional[date] = None,
-                 lake: Optional[LakeReader] = None) -> dict:
-    """The report for one property-month, from live connectors."""
+                 lake: Optional[LakeReader] = None, ils_query: Optional[QueryFn] = None) -> dict:
+    """The report for one property-month, from live connectors.
+
+    The default month is the last full month. A property outside the Hyly beta
+    still gets a report: the sections other sources fill, and a named gap for
+    every section that needs Hyly.
+    """
     today = today or date.today()
     if month is not None:
         parse_month(month)
-    identity = _resolve(company_id)
+    try:
+        identity = _resolve(company_id)
+    except NotInHylyBeta as exc:
+        last = last_complete_month(today)
+        month = month or last
+        if month > last:
+            raise MonthUnavailable(f"{month_label(month)} isn't over yet; the latest report is {month_label(last)}.")
+        city, state = _city_state(company_id)
+        raw = gather_without_hyly(exc.identity, month, today=today, city=city, state=state, ils_query=ils_query)
+        return polish_summary(assemble(raw))
     lake = lake or LakeReader()
     months = available_months(lake, int(identity.hyly_property_id), today)
     month = month or (months[-1] if months else None)
