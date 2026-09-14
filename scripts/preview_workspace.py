@@ -17,8 +17,9 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import sys
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, request
@@ -940,6 +941,28 @@ def report_page():
     return Response(REPORT_PAGE.read_text(encoding="utf-8"), mimetype="text/html", headers={"Cache-Control": "no-store"})
 
 
+LAST_FULL_MONTH = "2026-08"
+
+
+def _report_without_hyly(p: dict, month: str) -> dict | None:
+    """What the API returns for a property outside the Hyly beta: property identity,
+    units and listings, plus a gap for every Hyly-only section. Built with the
+    report skill itself so the preview can't drift from it."""
+    try:
+        sys.path.insert(0, str(REPO / "webhook-server"))
+        from skills import workspace_report as wr
+        from skills.property_resolver import PropertyIdentity
+    except Exception:  # pragma: no cover - the preview still runs without the skill
+        return None
+    ident = PropertyIdentity(company_id=p["company_id"], uuid=hashlib.md5(p["company_id"].encode()).hexdigest(), name=p["name"],
+                             unit_count=str(p["units"]))
+    cid = p["company_id"]
+    listing = [{"impressions": _h(cid + month + "imp", 6000, 22000), "leads": _h(cid + month + "lead", 10, 60),
+                "media_views": _h(cid + month + "mv", 300, 1400)}]
+    return wr.assemble(wr.gather_without_hyly(ident, month, today=date(2026, 9, 14), city=p["city"], state=p["state"],
+                                              ils_query=lambda sql, params: listing))
+
+
 @app.get("/api/workspace/report")
 def report_api():
     company_id = (request.args.get("company_id") or "").strip()
@@ -950,12 +973,25 @@ def report_api():
         data = json.loads(path.read_text(encoding="utf-8"))
         reports[(str(data["property"]["company_id"]), data["month"])] = data
     months = sorted(m for (cid, m) in reports if cid == company_id)
-    if not months:
+    month = (request.args.get("month") or "").strip()
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month or "2026-08"):
+        return jsonify({"error": "invalid_month", "detail": "Use YYYY-MM."}), 400
+    if months:
+        # Default to the last full month (Round 4).
+        month = month or (LAST_FULL_MONTH if LAST_FULL_MONTH in months else months[-1])
+        if (company_id, month) not in reports:
+            return jsonify({"error": "month_unavailable", "detail": f"No report for {month}."}), 404
+        return jsonify(reports[(company_id, month)])
+    p = prop(company_id)
+    if not p:
+        return jsonify({"error": "report_unavailable", "detail": "No report for this property."}), 404
+    month = month or LAST_FULL_MONTH
+    if month > LAST_FULL_MONTH:
+        return jsonify({"error": "month_unavailable", "detail": "That month isn't over yet; the latest report is August 2026."}), 404
+    data = _report_without_hyly(p, month)
+    if data is None:
         return jsonify({"error": "report_unavailable", "detail": "No report for this property yet."}), 404
-    month = (request.args.get("month") or "").strip() or months[-1]
-    if (company_id, month) not in reports:
-        return jsonify({"error": "month_unavailable", "detail": f"No report for {month}."}), 404
-    return jsonify(reports[(company_id, month)])
+    return jsonify(data)
 
 
 @app.get("/api/ask/questions")

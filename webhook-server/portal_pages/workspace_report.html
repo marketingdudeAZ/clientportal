@@ -499,6 +499,7 @@ tr.em td{font-weight:600;color:var(--ink)}
 
   var KEY_FMT = { leased_rate: fPct, occupied_rate: fPct, net_move_ins: fInt, leads_created: fInt, cost_per_lease: function (x) { return fMoney(x); } };
   function keyNumbers(d) {
+    if (!(d.key_numbers || []).some(function (k) { return has(k.value); })) return '';
     return '<section class="keys" aria-label="Key numbers">' + (d.key_numbers || []).map(function (k) {
       return '<div class="kn"><div class="v"' + title(k.value) + '>' + show(k.value, KEY_FMT[k.key] || fInt) + '</div><div class="l">' + esc(k.label) + '</div>' +
         (k.sub ? '<div class="s">' + esc(k.sub) + '</div>' : '') + '</div>';
@@ -729,22 +730,27 @@ tr.em td{font-weight:600;color:var(--ink)}
   function footer(d) {
     var disc = (d.discrepancies || []).map(function (x) { return '<li>' + esc(x.text) + '</li>'; }).join('');
     var seen = {};
-    var gaps = (d.gaps || []).filter(function (g) { if (seen[g.reason]) return false; seen[g.reason] = 1; return true; })
-      .map(function (g) { return '<li>' + esc(g.reason) + '</li>'; }).join('');
+    var gaps = (d.gaps || []).map(function (g) { return g.reason || g.message || ''; }).filter(function (t) { if (!t || seen[t]) return false; seen[t] = 1; return true; })
+      .map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('');
     return '<footer class="foot"><div><b>Sources.</b> ' + esc(d.sources_note || '') + '</div>' +
       (disc ? '<div><b>Known discrepancies.</b><ul>' + disc + '</ul></div>' : '') +
       (gaps ? '<div><b>Not yet available.</b><ul>' + gaps + '</ul></div>' : '') + '<div>RPM | Confidential</div></footer>';
   }
 
+  // Sections the API names as needing the Hyly reporting beta are left out; the
+  // footer lists them under "Not yet available" (Round 4: every property has a report).
+  var HYLY_LABEL = { occupancy: 'Occupancy', funnel: 'The leasing funnel', attribution: 'Lead sources', spend: 'Spend', website: 'Website traffic', paid_search: 'Paid search', reputation: 'Reputation' };
   function render(d) {
-    var html = header(d) + verdict(d) + keyNumbers(d) + funnel(d) + nextMonth(d) +
+    var reasons = (d.gaps || []).map(function (g) { return g.reason || g.message || ''; }).join(' | ');
+    function hyly(key) { return reasons.indexOf(HYLY_LABEL[key] + ' needs the Hyly reporting beta') !== -1; }
+    var partial = Object.keys(HYLY_LABEL).some(hyly);
+    function sec(key, fn) { return hyly(key) ? '' : collapsible(key, d[key], fn(d[key] || {})); }
+    var html = header(d) + verdict(d) +
+      (partial ? '<div class="empty"><b>This property isn\u2019t in the Hyly reporting beta yet</b>This report shows what other sources fill for ' + esc((d.property || {}).name || 'it') + '. Everything else is listed under Not yet available.</div>' : '') +
+      keyNumbers(d) + (hyly('funnel') ? '' : funnel(d)) + (partial && !(d.actions || []).length ? '' : nextMonth(d)) +
       '<div class="details"><div class="details-h">Details</div>' +
-      collapsible('occupancy', d.occupancy, occupancy(d.occupancy || {})) +
-      collapsible('spend', d.spend, spend(d.spend || {})) +
-      collapsible('attribution', d.attribution, attribution(d.attribution || {})) +
-      collapsible('website', d.website, website(d.website || {})) +
-      collapsible('paid_search', d.paid_search, paidSearch(d.paid_search || {})) +
-      collapsible('reputation', d.reputation, reputation(d.reputation || {})) +
+      sec('occupancy', occupancy) + sec('spend', spend) + sec('attribution', attribution) + sec('website', website) +
+      sec('paid_search', paidSearch) + sec('reputation', reputation) +
       collapsible('listings', d.listings, listings(d.listings || {})) +
       '</div>' + footer(d);
     content.innerHTML = html;

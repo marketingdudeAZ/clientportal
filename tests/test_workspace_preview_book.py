@@ -197,3 +197,18 @@ def test_content_rows_exist_only_with_a_draft(company_id):
         it = pw.item(row["item_id"])
         assert it["draft"] and it["draft"]["body"]
         assert it["for_whom"]["questions"]
+
+
+def test_every_property_has_a_report_defaulting_to_the_last_full_month():
+    client = pw.app.test_client()
+    for p in PROPS:
+        resp = client.get(f"/api/workspace/report?company_id={p['company_id']}")
+        assert resp.status_code == 200, f"{p['name']}: {resp.status_code}"
+        d = resp.get_json()
+        assert d["month"] == "2026-08", f"{p['name']} defaults to {d['month']}"
+        assert d["property"]["name"] == p["name"]
+        others = [q["name"] for q in PROPS if q["company_id"] != p["company_id"] and q["name"] in json.dumps(d)]
+        assert not others, f"{p['name']}'s report mentions {others}"
+    bromley = client.get("/api/workspace/report?company_id=26136316506&month=2026-06").get_json()
+    assert bromley["month"] == "2026-06"
+    assert client.get(f"/api/workspace/report?company_id={IDS[0]}&month=2026-09").status_code == 404
