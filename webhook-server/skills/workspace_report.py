@@ -1061,6 +1061,8 @@ def assemble(raw: dict) -> dict:
     clauses = [a["clause"] for a in actions[:2]]
     s3 = f"Next month we're {' and '.join(clauses)}." if clauses else ""
     summary_text = " ".join(s for s in (s1, s2, s3) if s)
+    actions_takeaway = (f"{len(actions)} {'step' if len(actions) == 1 else 'steps'} for next month, starting with "
+                        f"{clauses[0]}." if clauses else "No new steps this month.")
     for a in actions:
         a.pop("clause", None)
 
@@ -1100,9 +1102,7 @@ def assemble(raw: dict) -> dict:
         "key_numbers": key_numbers,
         **sec,
         "actions": actions,
-        "actions_takeaway": (f"{len(actions)} steps for next month, starting with "
-                             f"{actions[0]['title'][0].lower() + actions[0]['title'][1:]}."
-                             if actions else "No new steps this month."),
+        "actions_takeaway": actions_takeaway,
         "discrepancies": _discrepancies(c, sec),
         "gaps": c.gaps,
     }

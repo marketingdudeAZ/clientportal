@@ -230,7 +230,7 @@ def raw_from_export(path: str, *, company_id: Optional[str] = None,
                        ("days_applied_to_leased", "applied_to_leased_contact_velocity"),
                        ("days_created_to_leased", "created_to_leased_contact_velocity")):
         v = ex.ratio(field)
-        put(key, round(v, 4) if v is not None else None, SRC_EXPORT_VELOCITY)
+        put(key, v, SRC_EXPORT_VELOCITY)
     gaps.append({"section": "funnel", "metric": "days_to_next",
                  "reason": "Days per step are Hyly's velocity figures; the metric library doesn't define "
                            "them yet, so whether they're medians or averages is unconfirmed."})
@@ -381,7 +381,8 @@ def raw_from_export(path: str, *, company_id: Optional[str] = None,
                     "score": receipt(score, reputation_source, as_of) if score is not None else None,
                     "reviews": receipt(reviews, reputation_source, as_of) if reviews is not None else None})
         if score is None:
-            gaps.append({"section": "reputation", "metric": p["name"], "reason": "Not connected"})
+            gaps.append({"section": "reputation", "metric": p["name"],
+                         "reason": f"{p['name']} reviews aren't connected yet."})
     if reputation:
         gaps.append({"section": "reputation", "metric": "scores",
                      "reason": "Reputation scores come from the June report design; the lake export doesn't "

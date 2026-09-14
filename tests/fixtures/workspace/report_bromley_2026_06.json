@@ -175,7 +175,7 @@
         },
         "rate": null,
         "days_to_next": {
-          "value": 11.0208,
+          "value": 11.02083333,
           "source": "hyly_export.conversion_velocity",
           "as_of": "2026-06-30"
         }
@@ -194,7 +194,7 @@
           "as_of": "2026-06-30"
         },
         "days_to_next": {
-          "value": 2.0104,
+          "value": 2.010416667,
           "source": "hyly_export.conversion_velocity",
           "as_of": "2026-06-30"
         }
@@ -213,7 +213,7 @@
           "as_of": "2026-06-30"
         },
         "days_to_next": {
-          "value": 4.3333,
+          "value": 4.333333333,
           "source": "hyly_export.conversion_velocity",
           "as_of": "2026-06-30"
         }
@@ -254,7 +254,7 @@
       }
     ],
     "lead_to_lease_days": {
-      "value": 32.8021,
+      "value": 32.80208333,
       "source": "hyly_export.conversion_velocity",
       "as_of": "2026-06-30"
     },
@@ -1927,7 +1927,7 @@
       "rank": 5
     }
   ],
-  "actions_takeaway": "5 steps for next month, starting with reconcile Google Ads spend and conversion tracking before renewal.",
+  "actions_takeaway": "5 steps for next month, starting with reconciling Google Ads spend and conversion tracking before renewal.",
   "discrepancies": [
     {
       "key": "google_ads_spend",
@@ -2044,12 +2044,12 @@
     {
       "section": "reputation",
       "metric": "Yelp",
-      "reason": "Not connected"
+      "reason": "Yelp reviews aren't connected yet."
     },
     {
       "section": "reputation",
       "metric": "Facebook",
-      "reason": "Not connected"
+      "reason": "Facebook reviews aren't connected yet."
     },
     {
       "section": "reputation",
