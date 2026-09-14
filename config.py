@@ -933,6 +933,23 @@ TICKET_PROFILE_LOOP_ENABLED = (
     os.getenv("TICKET_PROFILE_LOOP_ENABLED", "").strip().lower() == "true"
 )
 
+# --- Portal Workspace (docs/handoffs/PORTAL_WORKSPACE_BUILD_PLAN.md) ---------
+# Master flag. Off → every /api/workspace/* route 404s. Read at request time by
+# skills/workspace_links.py so it can be flipped without a code change; this
+# symbol documents it and keeps the two config.py files in parity.
+WORKSPACE_ENABLED = (
+    os.getenv("WORKSPACE_ENABLED", "").strip().lower() in ("1", "true", "yes")
+)
+# Signed preview links for internal demos (scripts/workspace_link.py). Off → the
+# X-Workspace-Link header is ignored. Only RPM internal emails are honored.
+WORKSPACE_SIGNED_LINKS_ENABLED = (
+    os.getenv("WORKSPACE_SIGNED_LINKS_ENABLED", "").strip().lower() in ("1", "true", "yes")
+)
+# HMAC-SHA256 secret for those links. Empty → links cannot be minted or verified.
+WORKSPACE_LINK_SECRET = os.getenv("WORKSPACE_LINK_SECRET", "")
+# Hard ceiling on a link's lifetime, in days.
+WORKSPACE_LINK_MAX_DAYS = 7
+
 # Optional LLM extractor. Off → only the deterministic field-name map below
 # produces proposals. On → the ticket thread is also read by the model, which
 # may only propose fields already allow-listed for that ticket type.

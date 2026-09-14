@@ -116,6 +116,10 @@ FEATURES: dict[str, Feature] = {
         # LLM-written narrative in front of a client, so it opens to
         # internal staff and named pilot accounts first.
         Feature("ask", "Ask — preset questions"),
+        # The simplified Workspace (routes/workspace.py). Beta by default:
+        # internal staff plus allowlisted clients, and every route also 404s
+        # unless WORKSPACE_ENABLED=true.
+        Feature("workspace", "Portal Workspace"),
     )
 }
 
