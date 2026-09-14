@@ -31,6 +31,7 @@ portal_ui_bp = Blueprint("portal_ui", __name__)
 _PAGES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "portal_pages")
 _DEMO = os.path.join(_PAGES_DIR, "demo.html")
 _LITE = os.path.join(_PAGES_DIR, "portal.html")
+_WORKSPACE = os.path.join(_PAGES_DIR, "workspace.html")
 
 # Representative portfolio metrics for the Red Light preview — the rollout
 # dataset, so the Lite page shows real-shaped scoring + next steps.
@@ -100,6 +101,30 @@ def portal_page():
     else:
         page = config_js + page
     return Response(page, mimetype="text/html")
+
+
+def _workspace_enabled() -> bool:
+    """WORKSPACE_ENABLED, read from the environment at request time."""
+    return os.environ.get("WORKSPACE_ENABLED", "").strip().lower() in ("1", "true", "yes")
+
+
+@portal_ui_bp.route("/workspace", methods=["GET"])
+def workspace_page():
+    """The simplified client workspace (screens per the Paper workspace file).
+
+    Served as-is: no identity is injected and no query parameter is read. The
+    page authenticates itself (Clerk Bearer, or a signed preview link sent as
+    X-Workspace-Link), and every API route checks that identity server-side.
+    404 unless WORKSPACE_ENABLED is on, so the route does not exist in prod
+    until it is switched on.
+    """
+    if not _workspace_enabled():
+        return Response("Not found", status=404, mimetype="text/plain")
+    resp = _serve(_WORKSPACE)
+    if resp.status_code == 200:
+        resp.headers["Cache-Control"] = "no-store"
+        resp.headers["Referrer-Policy"] = "no-referrer"
+    return resp
 
 
 @portal_ui_bp.route("/portal/lite", methods=["GET"])
