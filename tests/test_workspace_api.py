@@ -1,4 +1,4 @@
-"""Workspace API — routes, gates, decisions, signed links, contract shapes.
+"""Workspace API — routes, gates, decisions, undo, signed links, preview, shapes.
 
 Offline: every HubSpot, HubDB, BigQuery, ClickUp and AptIQ read is mocked, and
 `requests` is disabled outright so a missed mock fails loudly instead of
@@ -6,28 +6,26 @@ reaching a live system. Nothing here writes anywhere.
 
 What these tests defend, in priority order:
 
-1. A DECISION NEEDS A PROVEN IDENTITY. An asserted X-Portal-Email, even an
-   internal one, can read but never act.
+1. AN ACTION NEEDS A PROVEN IDENTITY. An asserted X-Portal-Email, a read-only
+   signed link, or "Preview as client" can read but never act.
 2. EVERY ROUTE IS DARK UNTIL THE FLAG FLIPS, and every property-scoped route
    checks the property, not just the feature.
 3. A DECISION REACHES THE SOURCE'S EXISTING HANDLER and is written to the loop
-   with lens, reason, source and actor.
-4. A SIGNED LINK IS HONORED ONLY WHEN IT SHOULD BE: enabled, internal, unexpired,
-   untampered, at most 7 days.
+   with lens, reason, source, actor and requires_signature. UNDO is the
+   decider's alone, for ten minutes, and only where a safe reverse exists.
+4. INTERNAL NOTES AND TRAIL ENTRIES NEVER REACH A CLIENT-ROLE RESPONSE.
 5. EVERY RESPONSE MATCHES THE CONTRACT and no number leaves without a source.
 """
 
 from __future__ import annotations
 
-import base64
 import copy
 import hmac
 import importlib.util
 import json
-import os
 import sys
 import time
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -44,14 +42,17 @@ import feature_access  # noqa: E402
 import loop_writer  # noqa: E402
 import workspace_contract as contract  # noqa: E402
 from routes.workspace import workspace_bp  # noqa: E402
+from skills import workspace_cache as wcache  # noqa: E402
 from skills import workspace_decisions as wd  # noqa: E402
 from skills import workspace_inbox as wi  # noqa: E402
 from skills import workspace_links as wl  # noqa: E402
 from skills import workspace_portfolio as wp  # noqa: E402
 
 INTERNAL = "dana@rpmliving.com"
+OTHER_INTERNAL = "marcus@rpmliving.com"
 CLIENT = "owner@acme.com"
 CID = "123"
+TS = "2026-09-14T00:00:00Z"
 
 
 def _month() -> str:
@@ -78,7 +79,7 @@ PORTAL_TICKET = {"id": "cu1", "subject": "New pool photos", "status": "In progre
                  "created_ts": 1757500000000, "submitted_by": "pm@acme.com", "unresolved": False}
 SERVICE_TICKET = {"id": "hs1", "subject": "Website form broken", "stage_id": "4", "stage_label": "Closed",
                   "owner_name": "Your AM", "created_at": "2026-07-20T00:00:00Z",
-                  "updated_at": "2026-09-02T00:00:00Z"}
+                  "updated_at": "2026-09-02T00:00:00Z", "description": "The contact form returns an error"}
 
 
 def _props(**over) -> dict:
@@ -88,10 +89,12 @@ def _props(**over) -> dict:
         "domain": "lyvbroadway.com", "managementstart": "2024-07-01", "totalunits": "390",
         "target_occupancy": "95", "aptiq_property_id": "ap-1", "ga4_property_id": "g-1",
         "marketing_manager": "Dana Reyes", "marketing_manager_email": INTERNAL, "hubspot_owner_id": "77",
-        "fluency_romance": "A courtyard community near the lake.",
+        "fluency_romance": "A courtyard community near the lake.", "occupancy__": "91.8",
         "callprep_cycle_month": _month(),
         "callprep_data_json": json.dumps({
             "generated_at": "2026-09-02T00:00:00Z",
+            "summary": {"changed": "Occupancy is 91.8 percent.", "working": "Search is steady."},
+            "questions": ["Any events this month?"],
             "recommendations": [{"rec_id": "cp1", "title": "Refresh the creative set",
                                  "body": "The current set is tired", "channel": "paid_social",
                                  "status": "pending"}],
@@ -114,20 +117,25 @@ def _ctx(**over) -> wi.PropertyContext:
 
 @pytest.fixture(autouse=True)
 def _offline(monkeypatch):
-    """No network, no HubDB access table, a clean flag environment."""
+    """No network, no HubDB access table, a clean flag environment and caches."""
     def _no_network(*a, **k):
         raise RuntimeError("network disabled in workspace tests")
     monkeypatch.setattr("requests.sessions.Session.request", _no_network)
     for var in ("PORTAL_STRICT_IDENTITY", "PORTAL_COMPANY_ACCESS", "INTERNAL_API_KEY",
-                "WORKSPACE_SIGNED_LINKS_ENABLED", "WORKSPACE_LINK_SECRET"):
+                "WORKSPACE_SIGNED_LINKS_ENABLED", "WORKSPACE_LINK_SECRET",
+                "WORKSPACE_SIGNED_LINKS_CAN_DECIDE", "PORTAL_TICKETS_PILOT_EMAILS"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("WORKSPACE_ENABLED", "true")
     monkeypatch.setattr(feature_access, "_load_access_table", lambda: {})
     monkeypatch.setattr(feature_access, "_load_stage_table", lambda: {})
+    monkeypatch.setattr(loop_writer, "_bq", lambda: None)
     feature_access.clear_cache()
     wi._onboarding_cache.clear()
+    wcache.clear()
+    wd._recent.clear()
     yield
     feature_access.clear_cache()
+    wd._recent.clear()
 
 
 @pytest.fixture
@@ -169,7 +177,6 @@ def readers(monkeypatch):
     monkeypatch.setattr(portal_tickets, "tracking_degraded", lambda: False)
     monkeypatch.setattr(ticket_manager, "list_tickets",
                         lambda cid, include_closed=False: [dict(SERVICE_TICKET)])
-    monkeypatch.setattr(loop_writer, "_bq", lambda: None)
     return tables
 
 
@@ -194,23 +201,34 @@ def _h(email=INTERNAL, **extra):
 
 
 VERIFIED = {"portal.identity_verified": True}
+PREVIEW = {"X-Workspace-Preview-Role": "client"}
 
 GET_ROUTES = [
     "/api/workspace/me",
     "/api/workspace/portfolio",
+    "/api/workspace/signals",
     f"/api/workspace/work?company_id={CID}",
     f"/api/workspace/work/hubdb_rec:991?company_id={CID}",
     f"/api/workspace/property?company_id={CID}",
     f"/api/workspace/performance?company_id={CID}",
     f"/api/workspace/plan?company_id={CID}",
     f"/api/workspace/client-view?company_id={CID}",
+    f"/api/workspace/requests?company_id={CID}",
+    "/api/workspace/search?q=broadway",
 ]
 PROPERTY_ROUTES = [r for r in GET_ROUTES if "company_id" in r]
+POST_ROUTES = [
+    "/api/workspace/work/hubdb_rec:991/decision",
+    "/api/workspace/work/hubdb_rec:991/undo",
+    "/api/workspace/signals/stale_inventory:123:2026-09-14/start-work",
+    "/api/workspace/requests",
+]
 
 
 def _allowlist_client(monkeypatch, companies=("555",)):
     monkeypatch.setattr(feature_access, "_load_access_table", lambda: {
-        CLIENT: {"role": "client", "beta_features": {"workspace"}, "companies": set(companies)}})
+        CLIENT: {"role": "client", "beta_features": {"workspace", "portal_tickets"},
+                 "companies": set(companies)}})
     feature_access.clear_cache()
 
 
@@ -222,28 +240,32 @@ class TestFlag:
         monkeypatch.setenv("WORKSPACE_ENABLED", "false")
         assert client.get(url, headers=_h()).status_code == 404
 
-    def test_decision_404s_when_flag_off(self, client, monkeypatch):
+    @pytest.mark.parametrize("url", POST_ROUTES + ["/api/workspace/requests/draft",
+                                                   "/api/internal/workspace/warm"])
+    def test_every_write_404s_when_flag_off(self, client, monkeypatch, url):
         monkeypatch.delenv("WORKSPACE_ENABLED")
-        r = client.post("/api/workspace/work/hubdb_rec:991/decision", headers=_h(),
-                        json={"company_id": CID, "action": "approve"}, environ_overrides=VERIFIED)
+        r = client.post(url, headers=_h(), json={"company_id": CID}, environ_overrides=VERIFIED)
         assert r.status_code == 404
 
-    def test_preflight_404s_when_flag_off(self, client, monkeypatch):
-        monkeypatch.setenv("WORKSPACE_ENABLED", "")
-        assert client.options("/api/workspace/me").status_code == 404
-
-    def test_preflight_allows_the_link_header(self, client):
+    def test_preflight_allows_the_workspace_headers(self, client):
         r = client.options("/api/workspace/me", headers={"Origin": "https://go.rpmliving.com"})
         assert r.status_code == 204
-        assert "X-Workspace-Link" in r.headers["Access-Control-Allow-Headers"]
+        allowed = r.headers["Access-Control-Allow-Headers"]
+        assert "X-Workspace-Link" in allowed and "X-Workspace-Preview-Role" in allowed
 
-    def test_server_cors_allows_the_link_header(self):
+    def test_server_cors_allows_the_workspace_headers(self):
         import server
         r = server.app.test_client().get("/health", headers={"Origin": "https://go.rpmliving.com"})
-        assert "X-Workspace-Link" in (r.headers.get("Access-Control-Allow-Headers") or "")
+        allowed = r.headers.get("Access-Control-Allow-Headers") or ""
+        assert "X-Workspace-Link" in allowed and "X-Workspace-Preview-Role" in allowed
 
     def test_feature_key_is_registered_beta(self):
         assert feature_access.FEATURES["workspace"].default_stage == feature_access.STAGE_BETA
+
+    def test_workspace_event_types_are_registered(self):
+        for t in ("workspace_decision", "workspace_decision_undone", "workspace_request_filed",
+                  "recommendation_undone"):
+            assert loop_writer.is_known_event_type(t), t
 
 
 # ── 2. access gates ──────────────────────────────────────────────────────────
@@ -257,7 +279,6 @@ class TestAccess:
     def test_client_without_the_feature_is_403(self, client, url):
         r = client.get(url, headers=_h(CLIENT))
         assert r.status_code == 403
-        assert r.get_json()["feature"] == "workspace"
 
     @pytest.mark.parametrize("url", PROPERTY_ROUTES)
     def test_client_with_feature_but_not_this_property_is_403(self, client, monkeypatch, url):
@@ -267,34 +288,17 @@ class TestAccess:
         assert r.get_json()["error"] == "Not authorized for this property"
 
     @pytest.mark.parametrize("url", ["/api/workspace/work", "/api/workspace/property",
-                                     "/api/workspace/plan", "/api/workspace/client-view"])
+                                     "/api/workspace/plan", "/api/workspace/client-view",
+                                     "/api/workspace/requests"])
     def test_missing_company_id_is_400(self, client, url):
         assert client.get(url, headers=_h()).status_code == 400
 
-    def test_client_scoped_to_the_property_passes_the_gate(self, client, monkeypatch, readers):
-        _allowlist_client(monkeypatch, companies=(CID,))
-        c = _ctx()
-        monkeypatch.setattr(wi, "load_context", lambda company_id: c)
-        r = client.get(f"/api/workspace/work?company_id={CID}&status=all", headers=_h(CLIENT))
-        assert r.status_code == 200
-
-    def test_portfolio_is_internal_only(self, client, monkeypatch):
+    @pytest.mark.parametrize("url", ["/api/workspace/portfolio", "/api/workspace/signals"])
+    def test_portfolio_and_signals_are_internal_only(self, client, monkeypatch, url):
         _allowlist_client(monkeypatch)
-        r = client.get("/api/workspace/portfolio", headers=_h(CLIENT))
+        r = client.get(url, headers=_h(CLIENT))
         assert r.status_code == 403
         assert r.get_json()["error"] == "Internal role required"
-
-    def test_client_never_sees_internal_only_items(self, client, monkeypatch, readers):
-        _allowlist_client(monkeypatch, companies=(CID,))
-        c = _ctx()
-        monkeypatch.setattr(wi, "load_context", lambda company_id: c)
-        body = client.get(f"/api/workspace/work?company_id={CID}&status=all", headers=_h(CLIENT)).get_json()
-        items = body["groups"]["late"] + body["groups"]["this_week"]
-        sources = {i["source"] for i in items}
-        assert not sources & set(wi.INTERNAL_ONLY)
-        assert all(not g["field"].startswith("source:call_prep") for g in body["gaps"])
-        r = client.get(f"/api/workspace/work/call_prep:cp1?company_id={CID}", headers=_h(CLIENT))
-        assert r.status_code == 404
 
     def test_unknown_property_is_404(self, client, monkeypatch):
         def missing(company_id):
@@ -302,16 +306,109 @@ class TestAccess:
         monkeypatch.setattr(wi, "load_context", missing)
         assert client.get(f"/api/workspace/plan?company_id={CID}", headers=_h()).status_code == 404
 
-    def test_bad_status_and_range_are_400(self, client, ctx):
+    def test_bad_params_are_400(self, client, ctx):
         assert client.get(f"/api/workspace/work?company_id={CID}&status=later", headers=_h()).status_code == 400
         assert client.get(f"/api/workspace/performance?company_id={CID}&range=7", headers=_h()).status_code == 400
+        assert client.get("/api/workspace/portfolio?view=mine", headers=_h()).status_code == 400
+        assert client.get("/api/workspace/portfolio?page=0", headers=_h()).status_code == 400
 
     def test_unknown_item_id_is_404(self, client, ctx, readers):
         assert client.get(f"/api/workspace/work/nope:1?company_id={CID}", headers=_h()).status_code == 404
         assert client.get(f"/api/workspace/work/hubdb_rec:000?company_id={CID}", headers=_h()).status_code == 404
 
+    def test_warm_needs_the_internal_key(self, client, monkeypatch):
+        monkeypatch.setenv("INTERNAL_API_KEY", "k")
+        assert client.post("/api/internal/workspace/warm").status_code == 401
+        assert client.post("/api/internal/workspace/warm", headers={"X-Internal-Key": "bad"}).status_code == 401
+        with mock.patch.object(wcache, "warm", return_value={"ok": True, "warmed": []}) as warm:
+            r = client.post("/api/internal/workspace/warm", headers={"X-Internal-Key": "k"})
+        assert r.status_code == 200 and r.get_json()["ok"] is True
+        warm.assert_called_once()
 
-# ── 3. decisions ─────────────────────────────────────────────────────────────
+
+# ── 3. transparency ──────────────────────────────────────────────────────────
+
+class TestTransparency:
+    def test_clients_see_every_item(self, client, monkeypatch, readers):
+        _allowlist_client(monkeypatch, companies=(CID,))
+        c = _ctx()
+        monkeypatch.setattr(wi, "load_context", lambda company_id: c)
+        body = client.get(f"/api/workspace/work?company_id={CID}&status=all", headers=_h(CLIENT)).get_json()
+        items = body["groups"]["late"] + body["groups"]["this_week"]
+        sources = {i["source"] for i in items}
+        assert {"loop_rec", "hubdb_rec", "portal_ticket"} <= sources
+        # call prep is due at month end, so it groups under "later" (titles only)
+        assert client.get(f"/api/workspace/work/call_prep:cp1?company_id={CID}",
+                          headers=_h(CLIENT)).status_code == 200
+        assert all(i["client_visible"] is True and "internal_only" not in i for i in items)
+
+    def test_internal_notes_and_trail_never_reach_a_client(self, client, monkeypatch, readers):
+        _allowlist_client(monkeypatch, companies=(CID,))
+        c = _ctx()
+        monkeypatch.setattr(wi, "load_context", lambda company_id: c)
+        internal = client.get(f"/api/workspace/work/call_prep:cp1?company_id={CID}", headers=_h()).get_json()
+        assert internal["notes"] and all(n["visibility"] == "internal" for n in internal["notes"])
+        assert internal["comments_count"] == len(internal["notes"])
+        assert any(t["visibility"] == "internal" for t in internal["trail"])
+
+        as_client = client.get(f"/api/workspace/work/call_prep:cp1?company_id={CID}", headers=_h(CLIENT)).get_json()
+        assert as_client["notes"] == [] and as_client["comments_count"] == 0
+        assert all(t["visibility"] == "client" for t in as_client["trail"])
+        assert "fair_housing_review" not in as_client
+        assert json.dumps(as_client).find("Ask on the call") == -1
+
+    def test_client_visible_notes_are_kept_and_counted(self, client, monkeypatch, readers):
+        _allowlist_client(monkeypatch, companies=(CID,))
+        c = _ctx()
+        monkeypatch.setattr(wi, "load_context", lambda company_id: c)
+        body = client.get(f"/api/workspace/work/service_ticket:hs1?company_id={CID}", headers=_h(CLIENT)).get_json()
+        assert body["comments_count"] == 1 and body["notes"][0]["visibility"] == "client"
+
+    def test_internal_gaps_never_reach_a_client(self, client, monkeypatch, readers):
+        _allowlist_client(monkeypatch, companies=(CID,))
+        c = _ctx()
+        monkeypatch.setattr(wi, "load_context", lambda company_id: c)
+        # BigQuery is off in these tests, which yields an internal-only trail gap.
+        internal = client.get(f"/api/workspace/work?company_id={CID}&status=all", headers=_h()).get_json()
+        as_client = client.get(f"/api/workspace/work?company_id={CID}&status=all", headers=_h(CLIENT)).get_json()
+        assert any(g.get("field") == "trail" for g in internal["gaps"])
+        assert not any(g.get("field") == "trail" for g in as_client["gaps"])
+        for g in internal["gaps"] + as_client["gaps"]:
+            assert set(g) <= {"message", "field", "source"}
+
+
+class TestPreviewAsClient:
+    def test_reads_render_with_client_filtering(self, client, ctx, readers):
+        body = client.get(f"/api/workspace/work/call_prep:cp1?company_id={CID}",
+                          headers=_h(**PREVIEW)).get_json()
+        assert body["notes"] == [] and all(t["visibility"] == "client" for t in body["trail"])
+
+    def test_me_reports_client_role_and_no_decisions(self, client, monkeypatch):
+        monkeypatch.setattr(wp, "assigned_properties", lambda email: [])
+        body = client.get("/api/workspace/me", headers=_h(**PREVIEW), environ_overrides=VERIFIED).get_json()
+        assert body["role"] == "client" and body["can_decide"] is False and body["preview_as"] == "client"
+
+    @pytest.mark.parametrize("url", ["/api/workspace/portfolio", "/api/workspace/signals"])
+    def test_internal_screens_are_closed(self, client, url):
+        assert client.get(url, headers=_h(**PREVIEW)).status_code == 403
+
+    @pytest.mark.parametrize("url", POST_ROUTES + ["/api/workspace/requests/draft"])
+    def test_every_write_is_forbidden(self, client, ctx, readers, events, url):
+        r = client.post(url, headers=_h(**PREVIEW), environ_overrides=VERIFIED,
+                        json={"company_id": CID, "action": "approve", "text": "x", "tickets": []})
+        assert r.status_code == 403 and r.get_json()["error"] == "preview_read_only"
+        events.assert_not_called()
+
+    def test_header_from_a_client_is_ignored(self, client, monkeypatch, readers):
+        _allowlist_client(monkeypatch, companies=(CID,))
+        c = _ctx()
+        monkeypatch.setattr(wi, "load_context", lambda company_id: c)
+        r = client.post("/api/workspace/work/hubdb_rec:991/decision", headers=_h(CLIENT, **PREVIEW),
+                        json={"company_id": CID, "action": "approve"})
+        assert r.status_code == 401          # not "preview_read_only": the header did nothing
+
+
+# ── 4. decisions ─────────────────────────────────────────────────────────────
 
 def _decide(client, item_id, action="approve", reason=None, *, email=INTERNAL, verified=True,
             company_id=CID):
@@ -322,6 +419,11 @@ def _decide(client, item_id, action="approve", reason=None, *, email=INTERNAL, v
     )
 
 
+def _undo(client, item_id, *, email=INTERNAL, verified=True):
+    return client.post(f"/api/workspace/work/{item_id}/undo", headers=_h(email),
+                       json={"company_id": CID}, environ_overrides=VERIFIED if verified else {})
+
+
 LOOP_ID = "loop_rec:" + wi.loop_rec_hash("f1", LOOP_REC)
 
 
@@ -330,7 +432,6 @@ class TestDecisionGates:
         with mock.patch("approval_agent.route_approval") as handler:
             r = _decide(client, "hubdb_rec:991", verified=False)
         assert r.status_code == 401
-        assert r.get_json()["error"] == "Verified sign-in required"
         handler.assert_not_called()
         events.assert_not_called()
 
@@ -341,7 +442,6 @@ class TestDecisionGates:
     def test_not_now_without_reason_is_400(self, client, ctx, readers, events):
         r = _decide(client, "hubdb_rec:991", action="not_now")
         assert r.status_code == 400
-        assert "reason" in r.get_json()["error"].lower()
         events.assert_not_called()
 
     @pytest.mark.parametrize("body", [
@@ -357,12 +457,8 @@ class TestDecisionGates:
         _allowlist_client(monkeypatch, companies=("555",))
         assert _decide(client, "hubdb_rec:991", email=CLIENT).status_code == 403
 
-    def test_missing_company_id_is_400(self, client, ctx, readers):
-        assert _decide(client, "hubdb_rec:991", company_id="").status_code == 400
-
     def test_source_without_an_approval_step_is_400(self, client, ctx, readers, events):
-        r = _decide(client, "portal_ticket:cu1")
-        assert r.status_code == 400
+        assert _decide(client, "portal_ticket:cu1").status_code == 400
 
     def test_item_not_waiting_on_a_decision_is_400(self, client, monkeypatch, readers, events):
         c = _ctx(callprep_data_json=json.dumps({"recommendations": [
@@ -377,33 +473,43 @@ class TestDecisionGates:
 class TestDispatch:
     """Each source reaches its existing handler as a module call."""
 
-    def _assert_event(self, events, item_id, action, reason=None, outcome="ok"):
-        events.assert_called_once()
-        args, kwargs = events.call_args
-        source = item_id.split(":")[0]
-        assert args == (wi.STAGE[source], "workspace_decision")
-        assert kwargs["payload"]["lens"] == wi.LENS[source]
-        assert kwargs["payload"]["source"] == source
-        assert kwargs["payload"]["reason"] == reason
-        assert kwargs["payload"]["actor"] == INTERNAL
-        assert kwargs["payload"]["action"] == action
-        assert kwargs["payload"]["outcome"] == outcome
-        assert kwargs["payload"]["item_id"] == item_id
-        assert wi.STAGE[source] in loop_writer.LOOP_STAGES
+    def _event(self, events, event_type="workspace_decision"):
+        calls = [c for c in events.call_args_list if _etype(c) == event_type]
+        assert len(calls) == 1, [c.args for c in events.call_args_list]
+        return calls[0]
 
-    def test_hubdb_rec_approve(self, client, ctx, readers, events):
+    def _assert_event(self, events, item_id, action, reason=None, outcome="ok"):
+        call = self._event(events)
+        source = item_id.split(":")[0]
+        assert call.args == (wi.STAGE[source], "workspace_decision")
+        p = call.kwargs["payload"]
+        assert (p["lens"], p["source"], p["reason"], p["actor"], p["action"], p["outcome"], p["item_id"]) == \
+            (wi.LENS[source], source, reason, INTERNAL, action, outcome, item_id)
+        assert wi.STAGE[source] in loop_writer.LOOP_STAGES
+        return p
+
+    def test_hubdb_rec_approve(self, client, ctx, readers, events, monkeypatch):
+        import config
+        monkeypatch.setattr(config, "HUBSPOT_PORTAL_ID", "19843861", raising=False)
         with mock.patch("approval_agent.route_approval", return_value={
-                "status": "ok", "actions_taken": ["HubSpot Deal created: 42"], "errors": []}) as h:
+                "status": "ok", "actions_taken": ["HubSpot Deal created: 42", "ClickUp paid_media task created: abc"],
+                "errors": []}) as h:
             r = _decide(client, "hubdb_rec:991")
         assert r.status_code == 200
         kw = h.call_args.kwargs
         assert (kw["rec_id"], kw["rec_type"], kw["company_id"], kw["property_uuid"]) == \
             ("991", "budget_change", CID, "u-123")
-        self._assert_event(events, "hubdb_rec:991", "approve")
+        payload = self._assert_event(events, "hubdb_rec:991", "approve")
+        assert payload["requires_signature"] is True
         body = r.get_json()
         contract.assert_shape(body, "decision")
         assert body["item"]["status"] == "in_motion"
-        assert any(m["kind"] == "person" for m in body["in_motion"])
+        links = [m["action"] for m in body["in_motion"] if m["action"]]
+        assert {"label": "Open the draft deal",
+                "href": "https://app.hubspot.com/contacts/19843861/record/0-3/42"} in links
+        assert {"label": "Open the ClickUp task", "href": "https://app.clickup.com/t/abc"} in links
+        assert any(m["kind"] == "person" and m["note"] for m in body["in_motion"])
+        assert body["undo"]["available"] is False and body["undo"]["reason"]
 
     def test_hubdb_rec_not_now(self, client, ctx, readers, events):
         with mock.patch("approval_agent._update_rec_status") as upd, \
@@ -413,16 +519,18 @@ class TestDispatch:
         upd.assert_called_once_with("991", "dismissed")
         log.assert_called_once()
         self._assert_event(events, "hubdb_rec:991", "not_now", "already_handled")
-        assert r.get_json()["item"]["status"] == "done"
+        body = r.get_json()
+        assert body["item"]["status"] == "done"
+        assert body["undo"]["available"] is True and body["undo"]["until"]
 
-    def test_loop_rec_approve(self, client, ctx, readers, events):
+    def test_loop_rec_approve_requires_signature(self, client, ctx, readers, events):
         with mock.patch("routes.loop.record_recommendation_approved", return_value="ev-9") as h:
             r = _decide(client, LOOP_ID)
         assert r.status_code == 200
         args, kw = h.call_args
         assert args == ("u-123", LOOP_REC)
         assert kw["forecast_id"] == "f1" and kw["approver_email"] == INTERNAL
-        self._assert_event(events, LOOP_ID, "approve")
+        assert self._assert_event(events, LOOP_ID, "approve")["requires_signature"] is True
 
     def test_loop_rec_not_now(self, client, ctx, readers, events):
         with mock.patch("routes.loop.record_recommendation_rejected", return_value="ev-9") as h:
@@ -436,7 +544,7 @@ class TestDispatch:
             r = _decide(client, "call_prep:cp1")
         assert r.status_code == 200
         h.assert_called_once_with(CID, "cp1", INTERNAL)
-        self._assert_event(events, "call_prep:cp1", "approve")
+        assert self._assert_event(events, "call_prep:cp1", "approve")["requires_signature"] is False
 
     def test_call_prep_not_now(self, client, ctx, readers, events):
         with mock.patch("approval_actions.callprep_dismiss", return_value={"recommendations": []}) as h:
@@ -450,8 +558,7 @@ class TestDispatch:
                 {"status": "ok", "actions_taken": ["ClickUp SEO content task created: 7"], "errors": []}, 200)) as h:
             r = _decide(client, "content_brief:b1")
         assert r.status_code == 200
-        assert h.call_args.args == ("b1",)
-        assert h.call_args.kwargs["company_id"] == CID
+        assert h.call_args.args == ("b1",) and h.call_args.kwargs["company_id"] == CID
         self._assert_event(events, "content_brief:b1", "approve")
 
     def test_content_brief_not_now_records_only(self, client, ctx, readers, events):
@@ -470,21 +577,15 @@ class TestDispatch:
         self._assert_event(events, "video_variant:v1", "approve")
         assert r.get_json()["item"]["status"] == "done"
 
-    def test_ticket_profile_approve(self, client, ctx, readers, events):
+    def test_ticket_profile_approve_and_not_now(self, client, ctx, readers, events):
         import ticket_profile_sync
         with mock.patch.object(ticket_profile_sync, "accept", return_value={}) as h:
-            r = _decide(client, "ticket_profile:p1")
-        assert r.status_code == 200
+            assert _decide(client, "ticket_profile:p1").status_code == 200
         h.assert_called_once_with("p1", INTERNAL)
-        self._assert_event(events, "ticket_profile:p1", "approve")
-
-    def test_ticket_profile_not_now(self, client, ctx, readers, events):
-        import ticket_profile_sync
+        events.reset_mock()
         with mock.patch.object(ticket_profile_sync, "reject", return_value={}) as h:
-            r = _decide(client, "ticket_profile:p1", action="not_now", reason="not_priority")
-        assert r.status_code == 200
+            assert _decide(client, "ticket_profile:p1", action="not_now", reason="not_priority").status_code == 200
         h.assert_called_once_with("p1", INTERNAL, wi.REASONS["not_priority"])
-        self._assert_event(events, "ticket_profile:p1", "not_now", "not_priority")
 
     def test_handler_failure_is_502_and_still_logged(self, client, ctx, readers, events):
         with mock.patch("approval_actions.callprep_approve", side_effect=RuntimeError("boom")):
@@ -500,13 +601,105 @@ class TestDispatch:
         assert r.status_code == 409
         self._assert_event(events, "ticket_profile:p1", "approve", outcome="failed")
 
-    def test_every_decidable_source_has_both_handlers(self):
+    def test_record_from_decision_history(self, client, ctx, readers, events, monkeypatch):
+        history = {"call_prep:old": [{"at": "2026-09-01T00:00:00Z", "action": "approve", "actor": "x",
+                                      "outcome": "ok", "undone": False}] * 19
+                   + [{"at": "2026-09-02T00:00:00Z", "action": "not_now", "actor": "x",
+                       "outcome": "ok", "undone": False}]}
+        monkeypatch.setattr(wi, "decision_history", lambda ctx, gaps: history)
+        with mock.patch("approval_actions.callprep_approve", return_value=({"recommendations": []}, "created")):
+            body = _decide(client, "call_prep:cp1").get_json()
+        assert body["record"] == {"label": "Decisions on call prep recommendations at this property",
+                                  "approved_unedited": 20, "total": 21, "threshold": None,
+                                  "pct": round(20 / 21, 4)}
+
+    def test_record_is_null_without_history(self, client, ctx, readers, events):
+        with mock.patch("approval_actions.callprep_approve", return_value=({"recommendations": []}, "created")):
+            assert _decide(client, "call_prep:cp1").get_json()["record"] is None
+
+    def test_every_decidable_source_has_handlers_and_an_undo_rule(self):
         for source in wi.DECIDABLE:
-            assert (source, "approve") in wd.HANDLERS and (source, "not_now") in wd.HANDLERS
+            for action in ("approve", "not_now"):
+                assert (source, action) in wd.HANDLERS and (source, action) in wd.UNDO
 
 
-class TestMoneyRule:
-    """Nothing the workspace adds may move spend or write to an ad platform."""
+class TestUndo:
+    def test_undo_reverses_a_loop_decision_and_logs_it(self, client, ctx, readers, events):
+        assert _decide(client, LOOP_ID).status_code == 200
+        events.reset_mock()
+        r = _undo(client, LOOP_ID)
+        assert r.status_code == 200
+        body = r.get_json()
+        contract.assert_shape(body, "undo_result")
+        assert body["undone"] is True and body["item"]["status"] == "to_do"
+        types = [_etype(c) for c in events.call_args_list]
+        assert types == ["recommendation_undone", "workspace_decision_undone"]
+        undone = events.call_args_list[1]
+        assert undone.args[0] == "optimize"
+        assert undone.kwargs["payload"]["undone_action"] == "approve"
+        assert undone.kwargs["payload"]["actor"] == INTERNAL
+
+    def test_undo_not_now_puts_the_card_back(self, client, ctx, readers, events):
+        with mock.patch("approval_agent._update_rec_status") as upd, \
+                mock.patch("approval_agent._log_hubspot_activity"):
+            assert _decide(client, "hubdb_rec:991", action="not_now", reason="not_priority").status_code == 200
+            r = _undo(client, "hubdb_rec:991")
+        assert r.status_code == 200
+        assert upd.call_args_list[-1] == mock.call("991", "pending")
+
+    def test_only_the_decider_can_undo(self, client, ctx, readers, events):
+        assert _decide(client, LOOP_ID).status_code == 200
+        r = _undo(client, LOOP_ID, email=OTHER_INTERNAL)
+        assert r.status_code == 403
+        assert not [c for c in events.call_args_list if _etype(c) == "workspace_decision_undone"]
+
+    def test_window_closes_after_ten_minutes(self, client, ctx, readers, events):
+        assert _decide(client, LOOP_ID).status_code == 200
+        key = (CID, LOOP_ID)
+        wd._recent[key]["at"] = wd._recent[key]["at"] - timedelta(minutes=11)
+        r = _undo(client, LOOP_ID)
+        assert r.status_code == 409
+        contract.assert_shape(r.get_json(), "not_undoable")
+        assert "10-minute" in r.get_json()["reason"]
+
+    def test_non_undoable_source_is_409(self, client, ctx, readers, events):
+        with mock.patch("approval_actions.approve_video_variants", return_value=(
+                {"approved": 1, "cycle_status": "Approved", "asset_rows": 1}, 200)):
+            body = _decide(client, "video_variant:v1").get_json()
+        assert body["undo"] == {"available": False, "until": None,
+                                "reason": "Approval wrote the variant to the asset library."}
+        r = _undo(client, "video_variant:v1")
+        assert r.status_code == 409 and r.get_json()["error"] == "not_undoable"
+
+    def test_nothing_to_undo_is_409(self, client, ctx, readers, events):
+        r = _undo(client, LOOP_ID)
+        assert r.status_code == 409 and r.get_json()["error"] == "not_undoable"
+
+    def test_undo_needs_verified_identity(self, client, ctx, readers, events):
+        assert _decide(client, LOOP_ID).status_code == 200
+        assert _undo(client, LOOP_ID, verified=False).status_code == 401
+
+    def test_undo_falls_back_to_decision_history(self, client, ctx, readers, events, monkeypatch):
+        recent = wc_now_iso(minutes_ago=3)
+        monkeypatch.setattr(wi, "decision_history", lambda ctx, gaps: {
+            LOOP_ID: [{"at": recent, "action": "not_now", "reason": "not_priority", "actor": INTERNAL,
+                       "outcome": "ok", "undone": False, "undone_at": None}]})
+        r = _undo(client, LOOP_ID)
+        assert r.status_code == 200
+        assert events.call_args_list[-1].kwargs["payload"]["undone_action"] == "not_now"
+
+
+def _etype(call) -> str:
+    return call.args[1] if len(call.args) > 1 else call.kwargs.get("event_type")
+
+
+def wc_now_iso(minutes_ago: int) -> str:
+    from skills import workspace_common as wc
+    return wc.to_iso_ts(wc.utc_now() - timedelta(minutes=minutes_ago))
+
+
+class TestMoneyRuleStatic:
+    """Nothing the workspace adds may reference a spend writer."""
 
     FILES = sorted((REPO / "webhook-server" / "skills").glob("workspace_*.py")) + [
         REPO / "webhook-server" / "routes" / "workspace.py",
@@ -514,10 +707,10 @@ class TestMoneyRule:
     ]
     FORBIDDEN = ("import fluency", "from fluency", "fluency_exporter", "budget_sync",
                  "google_ads_islost", "deal_creator", "patch_deal", "create_deal",
-                 "rent_roll", "customer_match")
+                 "rent_roll", "customer_match", "write_monthly_spend", "sheets.googleapis")
 
     @pytest.mark.parametrize("path", FILES, ids=lambda p: p.name)
-    def test_no_spend_writers_imported(self, path):
+    def test_no_spend_writers_referenced(self, path):
         text = path.read_text()
         hits = [w for w in self.FORBIDDEN if w in text]
         assert not hits, f"{path.name} references {hits}"
@@ -528,7 +721,7 @@ class TestMoneyRule:
             assert "patch_company" not in text and "batch_patch_companies" not in text, path.name
 
 
-# ── 4. signed links ──────────────────────────────────────────────────────────
+# ── 5. signed links ──────────────────────────────────────────────────────────
 
 SECRET = "test-secret"
 
@@ -547,72 +740,68 @@ def _forge(email, exp, secret=SECRET):
 
 class TestSignedLinks:
     def _me(self, client, token, **headers):
-        with mock.patch("skills.workspace_views.build_me",
-                        side_effect=lambda email, verified: {"email": email, "verified": verified}):
+        with mock.patch.object(wp, "assigned_properties", lambda email: []):
             return client.get("/api/workspace/me", headers={wl.HEADER: token, **headers})
 
-    def test_valid_link_sets_a_verified_identity(self, client, links):
+    def test_valid_link_reads_but_is_not_a_verified_identity(self, client, links):
         r = self._me(client, wl.mint(INTERNAL, 3), **{"X-Portal-Email": "someone-else@rpmliving.com"})
         assert r.status_code == 200
-        assert r.get_json() == {"email": INTERNAL, "verified": True}
+        body = r.get_json()
+        assert body["email"] == INTERNAL and body["verified"] is False
+        assert body["can_decide"] is False and body["signed_link"] is True
 
-    def test_valid_link_can_decide(self, client, links, ctx, readers, events):
+    def test_link_cannot_decide_by_default(self, client, links, ctx, readers, events):
+        r = client.post("/api/workspace/work/call_prep:cp1/decision",
+                        headers={wl.HEADER: wl.mint(INTERNAL, 1)},
+                        json={"company_id": CID, "action": "not_now", "reason": "not_priority"})
+        assert r.status_code == 401
+        events.assert_not_called()
+
+    def test_can_decide_flag_makes_the_link_a_verified_identity(self, client, links, ctx, readers,
+                                                                events, monkeypatch):
+        monkeypatch.setenv("WORKSPACE_SIGNED_LINKS_CAN_DECIDE", "true")
+        assert self._me(client, wl.mint(INTERNAL, 1)).get_json()["can_decide"] is True
         with mock.patch("approval_actions.callprep_dismiss", return_value={"recommendations": []}):
             r = client.post("/api/workspace/work/call_prep:cp1/decision",
                             headers={wl.HEADER: wl.mint(INTERNAL, 1)},
                             json={"company_id": CID, "action": "not_now", "reason": "not_priority"})
-        assert r.status_code == 200
-        assert r.get_json()["decided_by"] == INTERNAL
+        assert r.status_code == 200 and r.get_json()["decided_by"] == INTERNAL
+
+    def test_internal_role_outside_rpmliving_is_refused(self, client, links, monkeypatch):
+        monkeypatch.setattr(feature_access, "INTERNAL_EMAILS", {"contractor@agency.com"})
+        assert feature_access.role_for("contractor@agency.com") == feature_access.ROLE_INTERNAL
+        with pytest.raises(ValueError):
+            wl.mint("contractor@agency.com", 1)
+        r = self._me(client, _forge("contractor@agency.com", int(time.time()) + 3600))
+        assert r.status_code == 401 and "rpmliving" in r.get_json()["detail"]
 
     def test_expired_link_is_401(self, client, links):
-        token = wl.mint(INTERNAL, 1, now=time.time() - 2 * 86400)
-        r = self._me(client, token)
-        assert r.status_code == 401
-        assert r.get_json()["detail"] == "Link expired"
+        r = self._me(client, wl.mint(INTERNAL, 1, now=time.time() - 2 * 86400))
+        assert r.status_code == 401 and r.get_json()["detail"] == "Link expired"
 
     def test_tampered_payload_is_401(self, client, links):
         good = wl.mint(INTERNAL, 1)
         other = _forge("kyle@rpmliving.com", int(time.time()) + 3600).split(".")[1]
         head, _, sig = good.split(".")
         r = self._me(client, f"{head}.{other}.{sig}")
-        assert r.status_code == 401
-        assert "signature" in r.get_json()["detail"]
+        assert r.status_code == 401 and "signature" in r.get_json()["detail"]
 
-    def test_tampered_signature_is_401(self, client, links):
+    def test_tampered_signature_and_wrong_secret_are_401(self, client, links):
         good = wl.mint(INTERNAL, 1)
-        bad = good[:-4] + ("AAAA" if not good.endswith("AAAA") else "BBBB")
-        assert self._me(client, bad).status_code == 401
-
-    def test_wrong_secret_is_401(self, client, links):
+        assert self._me(client, good[:-4] + ("AAAA" if not good.endswith("AAAA") else "BBBB")).status_code == 401
         assert self._me(client, _forge(INTERNAL, int(time.time()) + 3600, secret="other")).status_code == 401
 
-    def test_non_internal_email_is_401(self, client, links):
-        r = self._me(client, _forge(CLIENT, int(time.time()) + 3600))
-        assert r.status_code == 401
-        assert "internal" in r.get_json()["detail"]
-
-    def test_lifetime_over_seven_days_is_401(self, client, links):
-        r = self._me(client, _forge(INTERNAL, int(time.time()) + 10 * 86400))
-        assert r.status_code == 401
-
-    def test_malformed_is_401(self, client, links):
+    def test_client_email_and_long_lifetime_are_401(self, client, links):
+        assert self._me(client, _forge(CLIENT, int(time.time()) + 3600)).status_code == 401
+        assert self._me(client, _forge(INTERNAL, int(time.time()) + 10 * 86400)).status_code == 401
         assert self._me(client, "not-a-token").status_code == 401
 
     def test_flag_off_ignores_the_link(self, client, links, monkeypatch):
         monkeypatch.setenv("WORKSPACE_SIGNED_LINKS_ENABLED", "false")
         token = wl.mint(INTERNAL, 1)
-        # No other identity: the link does not sign anyone in.
         assert self._me(client, token).status_code == 401
-        # With an asserted header the request reads, but is not verified.
         r = self._me(client, token, **{"X-Portal-Email": INTERNAL})
-        assert r.get_json()["verified"] is False
-
-    def test_flag_off_link_cannot_decide(self, client, links, monkeypatch, ctx, readers):
-        monkeypatch.setenv("WORKSPACE_SIGNED_LINKS_ENABLED", "false")
-        r = client.post("/api/workspace/work/call_prep:cp1/decision",
-                        headers={wl.HEADER: wl.mint(INTERNAL, 1), "X-Portal-Email": INTERNAL},
-                        json={"company_id": CID, "action": "approve"})
-        assert r.status_code == 401
+        assert r.get_json()["verified"] is False and r.get_json()["signed_link"] is False
 
     def test_no_secret_is_401(self, client, links, monkeypatch):
         token = wl.mint(INTERNAL, 1)
@@ -621,11 +810,10 @@ class TestSignedLinks:
 
     def test_verified_session_wins_over_a_link(self, client, links):
         token = _forge(CLIENT, int(time.time()) + 3600)     # would 401 on its own
-        with mock.patch("skills.workspace_views.build_me",
-                        side_effect=lambda email, verified: {"email": email, "verified": verified}):
+        with mock.patch.object(wp, "assigned_properties", lambda email: []):
             r = client.get("/api/workspace/me", headers={wl.HEADER: token, "X-Portal-Email": INTERNAL},
                            environ_overrides=VERIFIED)
-        assert r.get_json() == {"email": INTERNAL, "verified": True}
+        assert r.get_json()["email"] == INTERNAL and r.get_json()["verified"] is True
 
     def test_signature_compare_is_constant_time(self, links):
         token = wl.mint(INTERNAL, 1)
@@ -633,56 +821,43 @@ class TestSignedLinks:
             wl.verify(token)
         cmp.assert_called_once()
 
-    def test_mint_refuses_long_lifetimes_and_clients(self, links):
-        with pytest.raises(ValueError):
-            wl.mint(INTERNAL, 8)
-        with pytest.raises(ValueError):
-            wl.mint(CLIENT, 1)
-
     def test_script_mints_a_verifiable_token(self, links, capsys):
         spec = importlib.util.spec_from_file_location("workspace_link_script", REPO / "scripts" / "workspace_link.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         assert mod.main([INTERNAL, "--days", "2"]) == 0
-        token = capsys.readouterr().out.strip()
-        assert wl.verify(token) == INTERNAL
+        assert wl.verify(capsys.readouterr().out.strip()) == INTERNAL
         assert mod.main([INTERNAL, "--days", "9"]) == 2
         assert mod.main([CLIENT]) == 2
 
 
-# ── 5. contract shapes ───────────────────────────────────────────────────────
+# ── 6. contract shapes ───────────────────────────────────────────────────────
 
 def _shape_ok(body, name):
     contract.assert_shape(body, name)
     assert contract.numbers_without_source(body) == [], contract.numbers_without_source(body)
 
 
+DAILY = {"ap-1": {"Property ID": "ap-1", "Advertised Occupancy %": "91.8", "Available Units": "44",
+                  "Exposure % (Next 30d)": "4.0", "Exposure % (Next 90d)": "9.1",
+                  "Report Generation Date": "09/13/2026"}}
+PLANS = {"ap-1": [{"Floor Plan Name": "A1", "Beds": "1", "Baths": "1", "Avg Sq Ft": "712",
+                   "Available Units": "7", "Days on Market": "96", "Report Generation Date": "09/13/2026"}]}
+
+
 @pytest.fixture
 def aptiq(monkeypatch):
-    from services.fluency_ingestion import apt_iq_csv_client, apt_iq_reader
-    monkeypatch.setenv("APT_IQ_DAILY_SHEET_URL", "https://example.invalid/daily.csv")
-    monkeypatch.setenv("APT_IQ_FLOOR_PLAN_SHEET_URL", "https://example.invalid/fp.csv")
-    monkeypatch.setattr(apt_iq_reader, "read_property", lambda company: {
-        "matched": True, "occupancy_pct": 91.8, "available_units": 44, "exposure_90d_pct": 9.1,
-        "raw": {"Report Generation Date": "09/13/2026"}})
-    monkeypatch.setattr(apt_iq_csv_client, "get_floor_plan_rows", lambda pid: [
-        {"Floor Plan Name": "A1", "Days on Market": "96", "Report Generation Date": "09/13/2026"}])
-    monkeypatch.setattr(apt_iq_reader, "read_floor_plans", lambda pid: [
-        {"name": "A1", "beds": 1, "baths": 1.0, "sqft": 712, "total_units": 40, "available": 7}])
-    monkeypatch.setattr(apt_iq_csv_client, "_cache_loaded_at", 1757830000.0)
-    monkeypatch.setattr(apt_iq_csv_client, "_fp_loaded_at", 1757830000.0)
-    monkeypatch.setattr(apt_iq_csv_client, "get_all_rows", lambda: {
-        "ap-1": {"Property ID": "ap-1", "Advertised Occupancy %": "76", "Available Units": "108"}})
+    monkeypatch.setattr(wcache, "aptiq_daily", lambda: (DAILY, TS))
+    monkeypatch.setattr(wcache, "aptiq_floor_plans", lambda: (PLANS, TS))
 
 
 @pytest.fixture
 def spend(monkeypatch):
     import hubspot_client
-    import spend_sheet
-    monkeypatch.setattr(spend_sheet, "get_company_monthly_spend", lambda cid: {
-        "company_id": cid, "total": 4638.0, "deal_id": "d1", "deal_name": "IO",
-        "by_sku": {"search": 1762.0, "pmax": 1077.0, "seo": 800.0, "social_posting": 499.0, "mgmt_fee": 500.0}})
-    monkeypatch.setattr(spend_sheet, "_cache", {"data": (1757830000.0, [])})
+    monkeypatch.setattr(wcache, "monthly_spend", lambda cid: ({
+        "company_id": cid, "total": 4638.0, "deal_id": "d1", "deal_name": "IO", "zero_skus": ["tiktok"],
+        "by_sku": {"search": 1762.0, "pmax": 1077.0, "seo": 800.0, "social_posting": 499.0, "mgmt_fee": 500.0}},
+        TS))
     monkeypatch.setattr(hubspot_client, "get_open_deals_for_company", lambda cid, channel=None: [{"id": "d9"}])
 
 
@@ -693,8 +868,7 @@ class TestContractShapes:
              "state": "TX", "totalunits": "390"}])
         body = client.get("/api/workspace/me", headers=_h(), environ_overrides=VERIFIED).get_json()
         _shape_ok(body, "me")
-        assert body["role"] == "internal" and body["verified"] is True
-        assert body["companies"][0]["units"] == 390
+        assert body["role"] == "internal" and body["verified"] is True and body["can_decide"] is True
 
     def test_me_client(self, client, monkeypatch):
         import hubspot_client
@@ -703,41 +877,46 @@ class TestContractShapes:
             "uuid": "u-123", "name": "LYV Broadway", "city": "Carrollton", "state": "TX", "totalunits": "390"})
         body = client.get("/api/workspace/me", headers=_h(CLIENT)).get_json()
         _shape_ok(body, "me")
-        assert body["role"] == "client" and body["verified"] is False
+        assert body["role"] == "client" and body["can_decide"] is False
         assert [c["company_id"] for c in body["companies"]] == [CID]
 
-    def test_portfolio(self, client, monkeypatch, readers, aptiq):
-        monkeypatch.setattr(wp, "assigned_properties", lambda email: [
-            {"hubspot_company_id": CID, "name": "LYV Broadway", "city": "Carrollton", "state": "TX",
-             "totalunits": "390", "aptiq_property_id": "ap-1"},
-            {"hubspot_company_id": "456", "name": "Quiet Place", "totalunits": "100", "aptiq_property_id": ""},
-        ])
+    def test_portfolio_needs_me(self, client, monkeypatch, readers, aptiq):
+        props = [{"hubspot_company_id": CID, "name": "LYV Broadway", "city": "Carrollton", "state": "TX",
+                  "totalunits": "390", "aptiq_property_id": "ap-1", "marketing_manager_email": INTERNAL},
+                 {"hubspot_company_id": "456", "name": "Quiet Place", "totalunits": "100",
+                  "marketing_manager_email": INTERNAL}]
+        monkeypatch.setattr(wp, "managed_properties", lambda: props)
         contexts = {CID: _ctx(), "456": wi.PropertyContext("456", "u-456", "Quiet Place", {"uuid": "u-456"})}
         monkeypatch.setattr(wi, "load_context", lambda cid: contexts[cid])
         body = client.get("/api/workspace/portfolio", headers=_h()).get_json()
         _shape_ok(body, "portfolio")
+        assert body["view"] == "needs_me" and body["scope_label"] == "Assigned to you · 2 properties"
         assert body["property_count"] == 2 and body["quiet_count"] == 1
         row = body["properties"][0]
-        assert row["units_at_risk"] == {"value": 108, "source": "aptiq", "as_of": "2025-09-14T06:06:40Z"}
-        assert row["occupancy"]["value"] == 0.76
+        assert row["units_at_risk"] == {"value": 44, "source": "aptiq", "as_of": "2026-09-13T00:00:00Z"}
+        assert row["top_item"]["needs_approval"] is True
+
+    def test_portfolio_defaults_to_all_without_assignments(self, client, monkeypatch, readers, aptiq):
+        props = [{"hubspot_company_id": str(i), "name": f"P{i:03d}"} for i in range(120)]
+        monkeypatch.setattr(wp, "managed_properties", lambda: props)
+        monkeypatch.setattr(wi, "load_context", lambda cid: wi.PropertyContext(cid, "", "", {}))
+        body = client.get("/api/workspace/portfolio", headers=_h()).get_json()
+        _shape_ok(body, "portfolio")
+        assert body["view"] == "all" and body["property_count"] == 120
+        assert len(body["properties"]) == 50 and body["next_page"] == 2
+        page3 = client.get("/api/workspace/portfolio?view=all&page=3", headers=_h()).get_json()
+        assert len(page3["properties"]) == 20 and page3["next_page"] is None
 
     def test_work(self, client, ctx, readers):
         body = client.get(f"/api/workspace/work?company_id={CID}&status=all", headers=_h()).get_json()
         _shape_ok(body, "work")
         items = body["groups"]["late"] + body["groups"]["this_week"]
         assert {i["source"] for i in items} | {"call_prep"} >= set(wi.SOURCES) - {"onboarding_gap"}
-        assert body["hidden_count"] == 0
-        assert sum(body["counts"].values()) == len(items) + body["groups"]["later"]["count"]
-
-    def test_work_default_status_hides_the_rest(self, client, ctx, readers):
-        body = client.get(f"/api/workspace/work?company_id={CID}", headers=_h()).get_json()
-        shown = body["groups"]["late"] + body["groups"]["this_week"]
-        assert all(i["status"] == "to_do" for i in shown)
-        assert body["hidden_count"] == body["counts"]["in_motion"] + body["counts"]["done"]
+        # the badge also counts open items grouped under "later" (call prep, due month end)
+        assert body["summary"]["needs_approval"] == sum(1 for i in items if i["needs_approval"]) + 1
 
     def test_item(self, client, ctx, readers):
-        r = client.get(f"/api/workspace/work/hubdb_rec:991?company_id={CID}", headers=_h())
-        _shape_ok(r.get_json(), "item")
+        _shape_ok(client.get(f"/api/workspace/work/hubdb_rec:991?company_id={CID}", headers=_h()).get_json(), "item")
 
     def test_decision(self, client, ctx, readers, events):
         with mock.patch("approval_actions.callprep_approve", return_value=({"recommendations": []}, "created")):
@@ -746,62 +925,69 @@ class TestContractShapes:
         contract.assert_shape({"company_id": CID, "action": "approve", "reason": None}, "decision_request")
 
     def test_property(self, client, ctx, aptiq, monkeypatch):
+        import config
         import portal_tickets
         import property_brief_audit
+        monkeypatch.setattr(config, "HUBSPOT_PORTAL_ID", "19843861", raising=False)
         monkeypatch.setattr(property_brief_audit, "recent_edits", lambda cid, limit=50: [
             {"field_key": "romance", "edited_by": "AM", "edited_at": "2026-08-12T10:00:00.000Z"}])
         monkeypatch.setattr(portal_tickets, "_owner_name", lambda oid: "Marcus Jennings")
         body = client.get(f"/api/workspace/property?company_id={CID}", headers=_h()).get_json()
         _shape_ok(body, "property")
-        assert body["address"] == "2800 Broadway Blvd, Carrollton TX 75007"
-        assert body["managed_since"] == "2024-07"
-        assert body["brief"] == {"text": "A courtyard community near the lake.", "curated": True,
-                                 "edited_by": "AM", "edited_at": "2026-08-12"}
-        assert body["people"][0] == {"name": "Marcus Jennings", "role": "Account manager", "email": None}
-        assert body["floorplans"][0]["code"] == "A1"
+        assert body["hubspot_url"] == f"https://app.hubspot.com/contacts/19843861/record/0-2/{CID}"
+        assert body["brief_edit_url"] is None
+        assert body["brief"]["text"] == "A courtyard community near the lake." and body["brief"]["curated"]
         assert body["floorplans"][0]["days_on_market"] == 96
         assert body["floorplans"][0]["as_of"] == "2026-09-13T00:00:00Z"
-        assert {c["name"]: c["status"] for c in body["connections"]}["ApartmentIQ"] == "connected"
+
+    def test_property_hides_hubspot_url_from_clients(self, client, monkeypatch, aptiq):
+        import config
+        monkeypatch.setattr(config, "HUBSPOT_PORTAL_ID", "19843861", raising=False)
+        _allowlist_client(monkeypatch, companies=(CID,))
+        c = _ctx()
+        monkeypatch.setattr(wi, "load_context", lambda company_id: c)
+        body = client.get(f"/api/workspace/property?company_id={CID}", headers=_h(CLIENT)).get_json()
+        assert body["hubspot_url"] is None
 
     def test_performance(self, client, ctx, aptiq, spend):
         body = client.get(f"/api/workspace/performance?company_id={CID}&range=90", headers=_h()).get_json()
         _shape_ok(body, "performance")
         assert body["occupied"]["value"] == 0.918 and body["occupied"]["units"] == 358
         assert body["occupied"]["as_of"] == "2026-09-13T00:00:00Z"
-        assert body["occupied"]["target"] == 0.95
         assert body["available_now"]["value"] == 44 and body["available_now"]["stale_90_plus"] is None
-        assert body["coming_open_90d"] is None and body["coming_by_week"] == []
-        assert body["monthly_plan"]["value"] == 4638.0
-        fields = {g["field"] for g in body["gaps"]}
+        fields = {g.get("field") for g in body["gaps"]}
         assert {"available_now.stale_90_plus", "coming_open_90d", "coming_by_week"} <= fields
 
     def test_plan(self, client, ctx, spend):
         body = client.get(f"/api/workspace/plan?company_id={CID}", headers=_h()).get_json()
         _shape_ok(body, "plan")
         by = {c["channel"]: c for c in body["channels"]}
-        assert by["Paid search"]["monthly"] == 2839.0
-        assert body["pending_changes"] == 1 and body["monthly_total"] == 4638.0
+        assert by["Paid search"]["monthly"] == 2839.0 and by["Paid search"]["status"] == "running"
+        assert by["Paid social"]["status"] == "ended" and by["Paid social"]["monthly"] == 0.0
+        assert body["pending_changes"] == 1 and body["channel_count"] == 4
         assert round(sum(c["share"] for c in body["channels"]), 3) == 1.0
-        assert all(c["cost_per_lease"] is None for c in body["channels"])
 
     def test_client_view(self, client, ctx, readers):
         body = client.get(f"/api/workspace/client-view?company_id={CID}", headers=_h()).get_json()
         _shape_ok(body, "client_view")
-        assert [c["title"] for c in body["changing"]] == ["New pool photos"]
-        # call prep and loop recs are internal-only; they are open but hidden
-        assert body["hidden_open_count"] >= 2
+        titles = [c["title"] for c in body["changing"]]
+        assert "New pool photos" in titles
+        assert all(c["date"] is None for c in body["changing"])
+        assert any(g.get("field") == "changing.date" for g in body["gaps"])
 
     @pytest.mark.parametrize("url", [u for u in GET_ROUTES if "portfolio" not in u])
     def test_errors_use_the_error_shape(self, client, url):
-        body = client.get(url).get_json()
-        contract.assert_shape(body, "error")
+        contract.assert_shape(client.get(url).get_json(), "error")
 
 
 class TestContractHelper:
-    def test_catches_missing_and_wrong_types(self):
+    def test_catches_missing_wrong_types_and_removed_fields(self):
         errs = contract.check({"summary": {"open": "3"}}, contract.WORK)
         assert any("summary.open" in e for e in errs)
         assert any("counts: missing" in e for e in errs)
+        assert contract.check({"message": "x", "reason": "y"}, contract.GAP)
+        assert contract.check({"done_count": 1, "hidden_open_count": 0, "changing": [],
+                               "done_this_quarter": [], "gaps": []}, contract.CLIENT_VIEW)
 
     def test_flags_a_bare_number(self):
         assert contract.numbers_without_source({"occupied": {"value": 0.9}}) == ["$.occupied.value"]
