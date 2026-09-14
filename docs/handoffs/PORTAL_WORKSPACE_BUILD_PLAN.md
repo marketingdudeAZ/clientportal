@@ -892,3 +892,10 @@ Recorded by the API branch (`feature/portal-workspace-api`). Every change is add
     - It returns 201 `{uploaded[{filename, file_url, thumbnail_url, asset_name, category, subcategory}], skipped[{filename, reason}]}`.
     - It returns 400 for no files or nothing stored, 401 for an unverified identity and 403 for preview-as-client.
 40. **Reports** default to the last full month for every property. A property outside the Hyly beta returns 200 with property identity, units and listings, plus a gap naming each Hyly-only section. It no longer returns 404.
+41. **Items add `draft: {kind, title, body} | null`**, the draft the Review panel shows.
+    - `kind` is one of `email`, `faq`, `page`, `post`, `ad`. The API always sends the key; the contract lets older fixtures omit it.
+    - Only drafts a source already stores are surfaced, and nothing is generated.
+    - **Content briefs:** built from the `rpm_content_briefs` record: `h1` (title), `meta_description`, and the `outline_json` sections (`h2`, `h3_list`, `paa_answered`). `schema_types` containing FAQPage makes the kind `faq`; anything else is `page`. Sentences quoting a number the record doesn't carry are dropped. A brief with none of these fields gets `null` and a `draft` gap.
+    - **Vendor items:** `null`. No source stores a rate email, so approvals names a `draft` gap.
+    - **GEO:** no item source carries GEO plans, and no `answer_text` column exists in this repo, so there is nothing to surface.
+    - **Fair Housing:** the draft title and body are part of the item's check. At high severity, clients get `draft: null`.

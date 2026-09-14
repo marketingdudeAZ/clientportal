@@ -31,6 +31,17 @@ logger = logging.getLogger(__name__)
 CATEGORIES = ("cost", "vendor", "content", "creative", "compliance")
 
 
+def draft_gaps(categorized: list) -> list:
+    """A gap when a vendor item has no draft: no source stores rate emails yet.
+
+    `categorized` is [(category, item)]. Content brief drafts come from the
+    brief record (see workspace_inbox.brief_draft); nothing is generated here.
+    """
+    if any(cat == "vendor" and not item.get("draft") for cat, item in categorized):
+        return [wc.gap("draft", "No source stores the vendor rate email yet, so vendor items carry no draft")]
+    return []
+
+
 def build_approvals(email: str, *, internal: bool, category: str | None = None,
                     today: date | None = None, scope_internal: bool | None = None) -> dict:
     from skills import workspace_history
@@ -41,7 +52,7 @@ def build_approvals(email: str, *, internal: bool, category: str | None = None,
     gaps: list = list(scope["gaps"])
 
     per_property = wdash.scope_items(props, today, gaps, sources=wdash.ITEM_SOURCES[:-1]) if props else []
-    rows, interrupts = [], []
+    rows, interrupts, categorized = [], [], []
     for p, items in per_property:
         for item in items:
             if item["status"] != "to_do" or not item["actions"]["approve"]:
@@ -59,11 +70,13 @@ def build_approvals(email: str, *, internal: bool, category: str | None = None,
                 })
             if category and cat != category:
                 continue
+            categorized.append((cat, item))
             rows.append({
                 "item_id": item["id"], "company_id": str(p.get("hubspot_company_id") or ""),
                 "property": p.get("name") or None, "action": view["title"], "category": cat,
                 "savings_per_year": None, "can_edit": False,
             })
+    gaps.extend(draft_gaps(categorized))
     if rows:
         gaps.append(wc.gap("batch.rows.savings_per_year", "No recommendation source records a savings amount yet"))
         gaps.append(wc.gap("batch.rows.can_edit", "Editing an item before approving it is not available yet"))

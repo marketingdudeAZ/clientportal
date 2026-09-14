@@ -269,6 +269,9 @@ def _new_item(source: str, source_id: Any, title: str, **fields: Any) -> dict:
         "why": None,
         "for_whom": None,
         "approving_does": [],
+        # The draft the Review panel shows: {kind, title, body}. Only drafts a
+        # source already stores; this module never writes draft text.
+        "draft": None,
         "actions": {"approve": False, "not_now": False},
         # internal bookkeeping, stripped by workspace_common.public()
         "_created": None,
@@ -545,6 +548,47 @@ def _call_prep(ctx: PropertyContext, gaps: list, today: date) -> list:
     return items
 
 
+DRAFT_KINDS = ("email", "faq", "page", "post", "ad")
+
+
+def brief_draft(row: dict) -> dict | None:
+    """The stored brief as the Review panel's draft, or None when it has none.
+
+    Built only from the brief record's own columns in `rpm_content_briefs`:
+    `h1` (title), `meta_description`, and `outline_json` sections (`h2`,
+    `h3_list`, `paa_answered`). `schema_types` containing FAQPage makes it an
+    FAQ draft; anything else is a page. Sentences quoting a number the record
+    doesn't carry are dropped. Nothing is generated.
+    """
+    keyword = str(row.get("hub_keyword") or "").strip()
+    allowed = wc.number_forms([keyword, row.get("target_word_count")])
+    try:
+        outline = json.loads(row.get("outline_json") or "[]")
+    except ValueError:
+        outline = []
+    outline = outline if isinstance(outline, list) else []
+
+    def ok(text):
+        return wc.verified_text(text, allowed)[0]
+
+    blocks = []
+    meta = ok(row.get("meta_description"))
+    if meta:
+        blocks.append(meta)
+    for section in outline:
+        if not isinstance(section, dict):
+            continue
+        lines = [t for t in [ok(section.get("h2"))] if t]
+        lines += [f"- {t}" for t in (ok(h) for h in section.get("h3_list") or []) if t]
+        lines += [f"Answers: {t}" for t in (ok(q) for q in section.get("paa_answered") or []) if t]
+        if lines:
+            blocks.append("\n".join(lines))
+    if not blocks:
+        return None
+    kind = "faq" if "faqpage" in str(row.get("schema_types") or "").lower().replace(" ", "") else "page"
+    return {"kind": kind, "title": ok(row.get("h1")) or keyword or None, "body": "\n\n".join(blocks)}
+
+
 def content_brief_steps() -> list:
     """What approving a content brief draft does. Shared with the content screen."""
     return [
@@ -582,6 +626,10 @@ def _content_briefs(ctx: PropertyContext, gaps: list, today: date) -> list:
         else:
             status = "in_motion"
         generated_at = row.get("generated_at")
+        draft = brief_draft(row)
+        if draft is None:
+            gaps.append(wc.gap("draft", f"Content brief {brief_id} has no stored outline or meta description to show",
+                               source="content_brief"))
         items.append(_new_item(
             "content_brief", brief_id,
             f"Content brief: {h1 or keyword or brief_id}",
@@ -594,6 +642,7 @@ def _content_briefs(ctx: PropertyContext, gaps: list, today: date) -> list:
             steps=content_brief_steps(),
             trail=[trail(generated_at, "content planner", "Generated")] if generated_at else [],
             _created=generated_at,
+            draft=draft,
             _raw={"brief_id": brief_id, "hub_keyword": keyword, "h1": row.get("h1") or ""},
         ))
     return items
@@ -1029,8 +1078,10 @@ def finalize(item: dict) -> dict:
 
 def _fair_housing_pass(items: list, gaps: list) -> None:
     for item in items:
+        draft = item.get("draft") or {}
         review = wc.fair_housing_review(item.get("title"), item.get("found"),
-                                        item.get("expect"), item.get("if_skip"))
+                                        item.get("expect"), item.get("if_skip"),
+                                        draft.get("title"), draft.get("body"))
         if not review:
             continue
         item["fair_housing_review"] = review
@@ -1090,6 +1141,7 @@ def view_item(item: dict, internal: bool = True) -> dict:
         if item.get("_fh_high"):
             out["title"] = item.get("_generic_title") or GENERIC_TITLES[item["source"]]
             out["found"] = out["expect"] = out["if_skip"] = None
+            out["draft"] = None
     out["comments_count"] = len(out["notes"])
     return wc.public(out)
 
