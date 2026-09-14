@@ -598,3 +598,46 @@ class TestMediaPlan:
         patch_deal.assert_not_called()
         patch_company.assert_not_called()
         assert rec.call_args.args == ("ops", "workspace_request_filed")
+
+
+# ── 8. value ─────────────────────────────────────────────────────────────────
+
+class TestValue:
+    def test_rows_from_decision_history(self, client, scope, monkeypatch):
+        at = wc.to_iso_ts(wc.utc_now() - timedelta(days=3))
+        events = [
+            _decision_event("hubdb_rec:991", "approve", at, title="Step down Parkline ILS"),
+            _decision_event("video_variant:v1", "approve", at, actor=OTHER, company_id=CID2),
+            _decision_event("content_brief:b1", "approve", at),
+            {"event_type": "workspace_decision_undone", "occurred_at": wc.to_iso_ts(wc.utc_now()),
+             "payload": json.dumps({"item_id": "content_brief:b1"})},
+            _decision_event("call_prep:r1", "not_now", at),
+            {"event_type": "recommendation_approved", "occurred_at": at, "source": "loop_autopilot",
+             "trigger": "autopilot", "property_uuid": "u-456", "company_id": None,
+             "payload": json.dumps({"recommendation": {"action": "shift_budget", "amount": 150,
+                                                       "from_channel": "paid_social", "to_channel": "seo"}})},
+        ]
+        monkeypatch.setattr(whist, "decision_events", lambda cids, uuids, since: events)
+        body = client.get("/api/workspace/value?range=6m", headers=_h()).get_json()
+        _ok(body, "value")
+        assert body["totals"]["changes"] == 3
+        assert body["totals"]["automatic_share"]["value"] == round(1 / 3, 4)
+        by_change = {r["change"]: r for r in body["rows"]}
+        assert by_change["Step down Parkline ILS"]["decided_by"] == "you"
+        assert by_change["Approved one of the video variants"]["decided_by"] == "team"
+        auto = by_change["Shift $150 from paid_social to seo"]
+        assert (auto["decided_by"], auto["property"], auto["company_id"]) == ("automatic", "Arcadia West", CID2)
+        assert all(r["annual_value"] is None for r in body["rows"])
+        assert body["headline"]["savings_captured"] is None
+        assert body["headline"]["changes_shipped"]["value"] == 3
+        assert "noi" not in json.dumps(body).lower()
+
+    def test_without_bigquery_everything_is_a_gap(self, client, scope):
+        body = client.get("/api/workspace/value", headers=_h()).get_json()
+        _ok(body, "value")
+        assert body["rows"] == [] and body["totals"]["changes"] is None
+        assert body["headline"]["changes_shipped"] is None
+        assert any(g.get("source") == "loop_events" for g in body["gaps"])
+
+    def test_bad_range_is_400(self, client):
+        assert client.get("/api/workspace/value?range=forever", headers=_h()).status_code == 400

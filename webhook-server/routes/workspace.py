@@ -716,3 +716,21 @@ def workspace_media_plan_regenerate():
         return _refused(exc)
     except Exception as exc:  # noqa: BLE001
         return _failed("media plan regenerate", exc)
+
+
+# ── v3: value ────────────────────────────────────────────────────────────────
+
+@workspace_bp.route("/api/workspace/value", methods=["GET", "OPTIONS"])
+def workspace_value():
+    gate = require_access(FEATURE_KEY)
+    if gate:
+        return gate
+    from skills import workspace_value as wval
+    range_key = (request.args.get("range") or "12m").strip()
+    if range_key not in wval.RANGES:
+        return jsonify({"error": "Invalid range", "detail": "|".join(wval.RANGES)}), 400
+    try:
+        return jsonify(wval.build_value(current_portal_email(), internal=_is_internal(),
+                                        scope_internal=_real_internal(), range_key=range_key))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("value", exc)
