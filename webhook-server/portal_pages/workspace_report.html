@@ -101,15 +101,17 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --ground:#FBFAF7; --paper:#FFFFFF; --ink:#282D27; --body:#3C4240; --muted:#5A5E5C; --soft:#76797A;
-  --faint:#8C8677; --eyebrow:#A09884; --line:#E3DFD4; --line2:#E9E5DB; --accent:#AB784A;
-  --panel:#F4F1EA; --bar1:#6B2E2E; --bar2:#8A4646; --bar3:#B08383;
-  --side:#444E4C; --side-card:#3B4442; --side-active:#525C5A; --side-muted:#98A5A2; --side-text:#D3DAD8; --side-icon:#B4BFBC;
-  --chip:#F1ECE2; --chip-ink:#7A5A33; --good:#2F6B57;
-  --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif; --display:"Montserrat",system-ui,sans-serif;
+  /* RPM Living palette ("RPM Templates"), matched to the v3 Workspace shell.
+     Brand hexes for fills and rules; darker shades of the same hues for small text. */
+  --ground:#FBFCFC; --paper:#FFFFFF; --ink:#282D27; --body:#444E4C; --muted:#5E6261; --soft:#6F7372;
+  --faint:#5E6261; --eyebrow:#5E6261; --line:#D9DEDC; --line2:#E7EBE9; --accent:#AB784A; --accent-ink:#8A6A3F;
+  --panel:#F3F5F4; --bar1:#444E4C; --bar2:#5E6B68; --bar3:#97693F;
+  --juniper:#444E4C; --mint-soft:#E8F3F2; --ink-on-dark:#E7EBE9;
+  --chip:#F3F5F4; --chip-ink:#5E6261; --good:#5B7265;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif; --display:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
@@ -117,21 +119,25 @@ body{background:var(--ground);color:var(--body);font:15px/1.5 var(--sans);-webki
 button,select{font:inherit;color:inherit}
 .app{display:flex;min-height:100vh}
 
-/* Sidebar — artboard A "Sidebar" */
-.side{width:216px;flex-shrink:0;background:var(--side);align-self:stretch;min-height:100vh}
-.side-inner{display:flex;flex-direction:column;gap:30px;padding:26px 0 22px;position:sticky;top:0}
-.wm{display:flex;flex-direction:column;gap:3px;padding:0 22px}
-.wm b{color:#fff;font:700 16px/20px var(--display);letter-spacing:.16em}
-.wm span{color:var(--side-muted);font-size:12px;line-height:16px;letter-spacing:.04em}
-.prop{background:var(--side-card);border-left:3px solid var(--accent);display:flex;flex-direction:column;gap:5px;padding:14px 22px}
-.prop .k{color:var(--side-muted);font-size:11px;font-weight:600;letter-spacing:.14em;line-height:14px}
-.prop .n{color:#fff;font:600 16px/20px var(--display);letter-spacing:-.01em;display:flex;justify-content:space-between;gap:8px;align-items:center}
-.prop .m{color:var(--side-muted);font-size:12px;line-height:16px}
-.nav{display:flex;flex-direction:column;gap:1px;padding:0 12px}
-.nav a{display:flex;align-items:center;gap:11px;padding:10px;border-radius:5px;color:var(--side-text);font-size:14px;line-height:18px;text-decoration:none}
-.nav a:hover{background:rgba(255,255,255,.05)}
-.nav a.on{background:var(--side-active);color:#fff;font-weight:600}
-.nav svg{width:16px;flex-shrink:0}
+/* Sidebar — the v3 Workspace shell */
+.side{width:240px;flex-shrink:0;background:var(--paper);border-right:1px solid var(--line);align-self:stretch;min-height:100vh}
+.side-inner{display:flex;flex-direction:column;gap:16px;padding:12px;position:sticky;top:0}
+.wm{display:flex;align-items:center;gap:10px;height:40px;padding:0 8px}
+.wm i{width:20px;height:20px;border-radius:5px;background:var(--accent);display:block;flex-shrink:0}
+.wm b{color:var(--ink);font:700 16px/20px var(--sans);letter-spacing:.16em}
+.wm span{color:var(--soft);font-size:12px;line-height:16px;letter-spacing:.04em}
+.prop{background:var(--mint-soft);border-radius:6px;display:flex;flex-direction:column;gap:2px;padding:10px}
+.prop .k{color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.08em;line-height:14px;text-transform:uppercase}
+.prop .n{color:var(--ink);font:600 13px/16px var(--sans)}
+.prop .m{color:var(--muted);font-size:11px;line-height:14px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav a{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:6px;color:var(--soft);font-size:13px;font-weight:500;line-height:16px;text-decoration:none}
+.nav a:hover{background:var(--panel);color:var(--ink)}
+.nav a.on{background:var(--juniper);color:var(--ink-on-dark);font-weight:600}
+.nav svg{width:16px;height:16px;flex-shrink:0;stroke:currentColor}
+.barl{display:flex;flex-direction:column;gap:6px}
+.back{display:inline-flex;align-items:center;gap:4px;color:var(--accent-ink);font-size:13px;font-weight:500;line-height:16px;text-decoration:none;min-height:24px}
+.back:hover{text-decoration:underline}
 
 /* Report column — artboard D "Report" */
 .report{flex:1;min-width:0;padding:38px 72px 44px}
@@ -140,7 +146,7 @@ button,select{font:inherit;color:inherit}
 .eyebrow{color:var(--eyebrow);font-size:12px;font-weight:600;letter-spacing:.16em;line-height:16px;text-transform:uppercase}
 .ctl{display:flex;gap:9px;align-items:center}
 .pill{display:flex;align-items:center;gap:7px;white-space:nowrap;background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:7px 13px;color:var(--body);font-size:13px;font-weight:500;line-height:16px;cursor:pointer}
-.pill:hover{border-color:#CFC9BB}
+.pill:hover{border-color:var(--soft)}
 .pill select{appearance:none;-webkit-appearance:none;border:0;background:transparent;font-size:13px;font-weight:500;line-height:16px;color:var(--body);cursor:pointer;padding-right:2px}
 .pill select:focus{outline:none}
 .pill:focus-within,.pill:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -154,7 +160,7 @@ button,select{font:inherit;color:inherit}
 .lead .num{display:flex;align-items:baseline;gap:10px}
 .lead .num b{color:var(--ink);font:600 88px/88px var(--display);letter-spacing:-.04em}
 .lead .num span{color:var(--faint);font-size:20px;line-height:24px}
-.lead .sub{color:var(--accent);font-size:13px;font-weight:600;letter-spacing:.1em;line-height:16px;text-transform:uppercase}
+.lead .sub{color:var(--accent-ink);font-size:13px;font-weight:600;letter-spacing:.1em;line-height:16px;text-transform:uppercase}
 .verdict .text{flex:1;min-width:0;color:var(--body);font-size:17px;line-height:29px}
 
 .keys{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-bottom:1px solid var(--line)}
@@ -165,7 +171,7 @@ button,select{font:inherit;color:inherit}
 .kn .s{color:var(--soft);font-size:13px;line-height:17px}
 
 .sec-title{display:flex;flex-direction:column;gap:5px}
-.sec-label{color:var(--accent);font-size:12px;font-weight:600;letter-spacing:.16em;line-height:16px;text-transform:uppercase}
+.sec-label{color:var(--accent-ink);font-size:12px;font-weight:600;letter-spacing:.16em;line-height:16px;text-transform:uppercase}
 .sec-desc{color:var(--soft);font-size:15px;line-height:23px;max-width:720px}
 
 /* Funnel — artboard D "Funnel" */
@@ -188,7 +194,7 @@ button,select{font:inherit;color:inherit}
 .acts{list-style:none;margin-top:10px;border-top:1px solid var(--line)}
 .act{display:grid;grid-template-columns:48px minmax(0,1fr);gap:4px 12px;padding:20px 0;border-bottom:1px solid var(--line)}
 .act .rk{grid-row:span 3;color:var(--accent);font:600 30px/34px var(--display)}
-.act .stake{color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.12em;line-height:14px;text-transform:uppercase}
+.act .stake{color:var(--accent-ink);font-size:11px;font-weight:600;letter-spacing:.12em;line-height:14px;text-transform:uppercase}
 .act h3{color:var(--ink);font-size:17px;font-weight:600;line-height:24px}
 .act p{color:var(--muted);font-size:15px;line-height:24px;max-width:760px}
 
@@ -240,7 +246,7 @@ tr.em td{font-weight:600;color:var(--ink)}
 .card .bars i{display:block;flex:1;max-width:32px;border-radius:2px}
 .card .shape{color:var(--good);font-size:12px;font-weight:600;letter-spacing:.06em;line-height:16px;text-transform:uppercase}
 .card .shape.early_stages{color:var(--muted)}
-.card .shape.later_stages{color:#9A5B22}
+.card .shape.later_stages{color:#975C38}
 .card .shape.single_stage{color:var(--faint)}
 .card[hidden]{display:none}
 .card.more{border-style:dashed;border-color:var(--line);background:transparent;align-items:center;justify-content:center;gap:6px;cursor:pointer}
@@ -259,7 +265,7 @@ tr.em td{font-weight:600;color:var(--ink)}
 .flow-legend i{width:10px;height:10px;border-radius:3px;display:block}
 .mediums{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:14px;color:var(--muted);font-size:14px;line-height:22px}
 .mediums b{color:var(--ink);font-weight:600}
-.linkbtn{background:none;border:0;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:10px 0 0}
+.linkbtn{background:none;border:0;color:var(--accent-ink);font-size:13px;font-weight:600;cursor:pointer;padding:10px 0 0}
 
 /* Website floor plans */
 .web-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:40px;align-items:start}
@@ -275,7 +281,7 @@ tr.em td{font-weight:600;color:var(--ink)}
 .rep .n{color:var(--faint);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
 .rep .v{color:var(--ink);font:600 34px/40px var(--display)}
 .rep .s{color:var(--soft);font-size:12.5px;line-height:17px}
-.rep .off{background:repeating-linear-gradient(135deg,#F4F1EA 0 8px,#EFEBE2 8px 16px)}
+.rep .off{background:repeating-linear-gradient(135deg,#F3F5F4 0 8px,#E7EBE9 8px 16px)}
 .rep .off .v{color:var(--eyebrow)}
 .empty{border:1px dashed var(--line);border-radius:6px;padding:22px;text-align:center;color:var(--soft);font-size:14px;line-height:22px;margin-top:4px}
 .empty b{display:block;color:var(--body);font-weight:600;margin-bottom:4px}
@@ -298,14 +304,15 @@ tr.em td{font-weight:600;color:var(--ink)}
 }
 @media (max-width:760px){
   .app{flex-direction:column}
-  .side{width:auto;min-height:0}
-  .side-inner{position:static;flex-direction:row;align-items:center;gap:14px;padding:12px 16px}
+  .side{width:auto;min-height:0;border-right:0;border-bottom:1px solid var(--line)}
+  .side-inner{position:static;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 12px}
   .bar{flex-wrap:wrap;gap:10px}
   .wm{padding:0}
-  .prop{background:transparent;border-left:0;padding:0 0 0 14px;border-left:1px solid #5B6563;gap:1px}
+  .prop{background:transparent;padding:0 0 0 14px;border-left:1px solid var(--line);border-radius:0;gap:1px}
   .prop .k{display:none}
   .prop .n{font-size:14px;line-height:18px}
-  .nav{display:none}
+  .nav{flex-direction:row;overflow-x:auto;flex-basis:100%;order:3;scrollbar-width:none}
+  .nav a{flex-shrink:0;height:44px}
   .report{padding:22px 16px 32px}
   .bar{padding-bottom:20px}
   .bar .eyebrow{font-size:10.5px;letter-spacing:.12em}
@@ -363,27 +370,28 @@ tr.em td{font-weight:600;color:var(--ink)}
 <body>
 <div class="app">
   <aside class="side" aria-label="Workspace"><div class="side-inner">
-    <div class="wm"><b>RPM</b><span>Digital</span></div>
+    <div class="wm"><i aria-hidden="true"></i><b>RPM</b><span>Digital</span></div>
+    <nav class="nav" id="nav">
+      <a href="/workspace#/dashboard" data-nav="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Dashboard</a>
+      <a href="/workspace#/approvals" data-nav="approvals"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>Approvals</a>
+      <a href="/workspace#/properties" data-nav="properties"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>Properties</a>
+      <a href="/workspace#/visibility" data-nav="visibility" data-scoped="visibility"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>Visibility</a>
+      <a href="/workspace#/content" data-nav="content" data-scoped="content"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M10 9H8M16 13H8M16 17H8"/></svg>Content</a>
+      <a href="/workspace#/creative" data-nav="creative" data-scoped="creative"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/></svg>Creative</a>
+      <a class="on" aria-current="page" data-nav="reports"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>Reports</a>
+      <a href="/workspace#/value" data-nav="value"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Value</a>
+    </nav>
     <div class="prop">
-      <div class="k">PROPERTY</div>
-      <div class="n"><span id="side-name">—</span>
-        <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1L5 5L9 1" fill="none" stroke="#98A5A2" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+      <div class="k">Report for</div>
+      <div class="n" id="side-name">—</div>
       <div class="m" id="side-meta"></div>
     </div>
-    <nav class="nav" id="nav">
-      <a href="/workspace#work" data-nav="work"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><rect x="1.6" y="2.4" width="11.8" height="10.2" rx="1.6" fill="none" stroke="#B4BFBC" stroke-width="1.3"/><path d="M4.6 6.2h5.8M4.6 9.1h3.6" fill="none" stroke="#B4BFBC" stroke-width="1.3" stroke-linecap="round"/></svg>Work</a>
-      <a href="/workspace#property" data-nav="property"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><path d="M2.2 6.4L7.5 2.2l5.3 4.2v6.1a.9.9 0 0 1-.9.9H3.1a.9.9 0 0 1-.9-.9V6.4z" fill="none" stroke="#B4BFBC" stroke-width="1.3" stroke-linejoin="round"/></svg>Property</a>
-      <a href="/workspace#performance" data-nav="performance"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><path d="M2 11.4l3.4-3.9 2.6 2.2 4.9-5.5" fill="none" stroke="#B4BFBC" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Performance</a>
-      <a href="/workspace#plan" data-nav="plan"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><circle cx="7.5" cy="7.5" r="5.4" fill="none" stroke="#B4BFBC" stroke-width="1.3"/><path d="M7.5 4.4v3.1l2.1 1.5" fill="none" stroke="#B4BFBC" stroke-width="1.3" stroke-linecap="round"/></svg>Plan &amp; Spend</a>
-      <a href="/workspace#ask" data-nav="ask"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><path d="M2.3 3.6a1.2 1.2 0 0 1 1.2-1.2h8a1.2 1.2 0 0 1 1.2 1.2v5a1.2 1.2 0 0 1-1.2 1.2H6.1L3.4 12.4V9.8h-1.1V3.6z" fill="none" stroke="#B4BFBC" stroke-width="1.3" stroke-linejoin="round"/></svg>Ask</a>
-      <a class="on" aria-current="page" data-nav="reports"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><path d="M3.6 1.9h5l3 3v8.2a.8.8 0 0 1-.8.8H3.6a.8.8 0 0 1-.8-.8V2.7a.8.8 0 0 1 .8-.8z" fill="none" stroke="#FFFFFF" stroke-width="1.3" stroke-linejoin="round"/><path d="M8.4 2v3.1h3" fill="none" stroke="#FFFFFF" stroke-width="1.3" stroke-linejoin="round"/></svg>Reports</a>
-    </nav>
   </div></aside>
 
   <main class="report" id="main">
     <div class="wrap">
       <div class="bar">
-        <div class="eyebrow">RPM Living · Marketing report</div>
+        <div class="barl"><a class="back" id="back-link" href="/workspace#/properties">← All properties</a><div class="eyebrow">RPM Living · Marketing report</div></div>
         <div class="ctl">
           <label class="pill" title="Month">
             <select id="month" aria-label="Report month"></select>
@@ -428,6 +436,11 @@ tr.em td{font-weight:600;color:var(--ink)}
 
   var params = new URLSearchParams(window.location.search);
   var companyId = params.get('company_id') || '';
+  if (companyId) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-scoped]'), function (a) {
+      a.href = '/workspace#/property/' + encodeURIComponent(companyId) + '/' + a.getAttribute('data-scoped');
+    });
+  }
   var content = document.getElementById('content');
   var monthSel = document.getElementById('month');
   var attrMode = 'cards';
@@ -467,6 +480,8 @@ tr.em td{font-weight:600;color:var(--ink)}
     document.getElementById('side-name').textContent = p.name || '—';
     var meta = [p.city && p.state ? p.city + ', ' + p.state : (p.city || p.state || ''), has(p.units) ? fInt(v(p.units)) + ' units' : ''].filter(Boolean).join(' · ');
     document.getElementById('side-meta').textContent = meta;
+    var back = document.getElementById('back-link');
+    if (back && companyId) { back.href = '/workspace#/property/' + encodeURIComponent(companyId); back.textContent = '\u2190 ' + (p.name || 'Property'); }
     monthSel.innerHTML = (d.available_months || [d.month]).slice().reverse().map(function (m) {
       var parts = m.split('-'); var label = new Date(Date.UTC(+parts[0], +parts[1] - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
       return '<option value="' + esc(m) + '"' + (m === d.month ? ' selected' : '') + '>' + esc(label) + '</option>';
