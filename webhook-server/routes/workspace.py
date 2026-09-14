@@ -249,9 +249,10 @@ def workspace_client_view():
         return err
     from skills import workspace_inbox
     try:
-        # What the client sees, whoever is asking: internal-only work never
-        # appears here, even for an internal caller previewing the page.
-        items, gaps = workspace_inbox.collect(ctx, internal=False)
+        # What the client sees, whoever is asking. Everything is collected so
+        # hidden_open_count can count internal work; build_client_view shows
+        # only client-visible items and drops gaps about internal sources.
+        items, gaps = workspace_inbox.collect(ctx, internal=True)
         return jsonify(workspace_inbox.build_client_view(items, gaps))
     except Exception as exc:  # noqa: BLE001
         return _failed("client view", exc)
