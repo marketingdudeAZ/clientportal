@@ -341,3 +341,38 @@ Searches across the caller's accessible properties: property names via the prope
 10. Plan `status` is one of `running | pending | ended | paused`, with `status_note` free text.
 11. The Work badge counts `summary.open` items that need the caller's approval.
 12. `changing[].date` is the planned go-live date.
+
+## Phase 2 amendments (after the API's live smoke test)
+Copy these into the plan doc too, directly under "Phase 2 contract".
+
+1. **One gap shape everywhere:** `{message, field?, source?}`. `message` is the human-readable reason (previously `reason`); `field` names the null field. Both the API and the UI use this shape.
+2. **Signed preview links are read-only.**
+   - A signed link lets an internal person see the Workspace. It does NOT satisfy the verified-identity check for decisions, requests, start-work or undo; those need a Clerk session.
+   - The API only sets `portal.identity_verified` from a link when `WORKSPACE_SIGNED_LINKS_CAN_DECIDE=true` (default false).
+   - Links are honored only for `@rpmliving.com` emails, in addition to the internal role.
+   - `/me` gains `can_decide` (bool). When it's false, the UI shows the decision panel with its buttons replaced by a quiet "Sign in to approve" link, not broken buttons.
+3. **Cold start.**
+   - Portfolio-wide reads (spend sheet, AptIQ exports) serve the last good copy immediately and refresh in the background. Every response carries `as_of` so staleness is visible.
+   - Add an internal `POST /api/internal/workspace/warm` (internal key) that pre-builds those caches, for use before a demo and from cron.
+   - Target: first request under 5 seconds after a warm.
+4. **LLM-authored text in existing sources.** Don't blanket-withhold text that contains digits. Show it when every number in it can be matched to the source record's structured fields. Otherwise replace only the unmatched sentence and add a gap. A generic title is the last resort.
+5. **Fair Housing filtering.**
+   - Use `fair_housing.py`'s own severity/context API if it has one.
+   - Hide copy from clients only on a high-severity or blocking result. Lower-severity matches are shown, and logged for internal review with a `fair_housing_review` flag on the item (visible to internal users only).
+   - Plain words like "single", "color", "age" or "white" in a normal sentence must not hide anything by themselves.
+6. **The brief paragraph.** Property `brief.text` uses the first non-empty value, override wins, from: `fluency_romance`, then a composed paragraph of `what_makes_this_property_unique_` + `property_voice_and_tone` + `additional_selling_points` (verbatim field text only, no LLM), then null with a gap.
+7. **Transparency.** Remove `hidden_open_count` from client view. Clients now see all work items.
+8. **Money guard.** Decisions on any budget or spend recommendation write `requires_signature: true` in the loop event payload. Add a test asserting that no workspace code path writes to Fluency, Google Ads or the spend sheet.
+9. **Portfolio for internal users with no assigned properties** defaults to `view=all` (every property, paged 50 at a time, ranked the same way) instead of an empty list.
+10. **Register `workspace_decision`, `workspace_decision_undone` and `workspace_request_filed`** as known event types in `loop_writer.py`.
+
+### Preview as client (UI mechanism)
+- An internal user can turn on "Preview as client" in the sidebar. The page then sends the request header `X-Workspace-Preview-Role: client` on every **read** (`GET`) under `/api/workspace/*` and `/api/ask/*`. Writes (decisions, requests, start-work, undo) never carry it; a write is always made as the real caller.
+- The server honors the header only when the verified caller is internal. From anyone else it is ignored.
+- When honored, a read returns exactly what a client-role caller with access to that `company_id` would get:
+  - no `visibility: "internal"` trail entries or notes;
+  - `comments_count` counted the client's way;
+  - no `fair_housing_review`;
+  - 403 on `/portfolio` and `/signals`.
+- `GET /me` ignores the header and always describes the real caller, so the page can keep showing the toggle and the preview banner.
+- The toggle lives in `sessionStorage` for the tab only. It never goes into the URL, and a shared link never opens in preview.
