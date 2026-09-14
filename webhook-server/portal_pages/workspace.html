@@ -57,7 +57,9 @@ ol,ul{list-style:none}
 
 /* ── Shell (App Shell EI-1) ─────────────────────────────────────────── */
 .app{display:flex;min-height:100vh}
-.side{width:240px;flex-shrink:0;background:var(--color-card);border-right:1px solid var(--color-border);padding:12px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+/* The column and its border run the full page height; the nav inside it stays in view. */
+.side{width:240px;flex-shrink:0;background:var(--color-card);border-right:1px solid var(--color-border)}
+.side-in{padding:12px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
 .logo{height:40px;display:flex;align-items:center;gap:10px;padding-inline:8px;margin-bottom:16px}
 .logo b{font-weight:700;font-size:16px;line-height:20px;letter-spacing:.16em;color:var(--color-fg)}
 .logo span{font-size:12px;line-height:16px;color:var(--color-fg-muted);letter-spacing:.04em}
@@ -621,7 +623,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 /* ── Mobile (≤760px) ────────────────────────────────────────────────── */
 @media (max-width:760px){
   .app{flex-direction:column}
-  .side{width:auto;height:auto;position:sticky;top:0;z-index:25;flex-direction:row;align-items:center;flex-wrap:wrap;padding:8px 12px;border-right:0;border-bottom:1px solid var(--color-border);overflow:visible}
+  .side{width:auto;position:sticky;top:0;z-index:25;border-right:0;border-bottom:1px solid var(--color-border)}
+  .side-in{height:auto;position:static;flex-direction:row;align-items:center;flex-wrap:wrap;padding:8px 12px;overflow:visible}
   .logo{margin:0;height:44px}
   .nav{flex-direction:row;overflow-x:auto;flex-basis:100%;order:3;padding-bottom:4px;scrollbar-width:none}
   .nav::-webkit-scrollbar{display:none}
@@ -949,7 +952,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     state.active = active;
     var side = document.getElementById('side');
     var logo = '<div class="logo"><i aria-hidden="true"></i><b>RPM</b><span>Digital</span></div>';
-    if (!state.me) { side.innerHTML = logo; return; }
+    if (!state.me) { side.innerHTML = '<div class="side-in">' + logo + '</div>'; return; }
     function link(n) {
       var cur = n.key === active;
       return '<a href="' + esc(n.href) + '"' + (cur ? ' aria-current="page"' : '') + '>' + ic(I[n.icon]) + '<span class="t">' + esc(n.label) + '</span>' +
@@ -967,7 +970,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     html += '<div class="side-bottom">' +
       (realInternal() ? '<button type="button" class="previewtoggle" aria-pressed="' + state.preview + '" data-preview>Preview as client<span class="switch" aria-hidden="true"></span></button>' : '') +
       '<div class="userrow"><span class="avatar" aria-hidden="true">' + esc(initials(me.email)) + '</span><div><b>' + esc(shortName(me.email)) + '</b><span>' + (realInternal() ? 'RPM Living' : 'Owner') + '</span></div></div></div>';
-    side.innerHTML = html;
+    side.innerHTML = '<div class="side-in">' + html + '</div>';
     var pv = side.querySelector('[data-preview]');
     if (pv) pv.addEventListener('click', function () {
       state.preview = !state.preview;
@@ -1072,7 +1075,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     return '<div class="state" role="alert"><h2>' + esc(title) + '</h2>' + (body ? '<p>' + esc(body) + '</p>' : '') + '<div><button class="btn sm" type="button" data-retry>Try again</button></div></div>';
   }
   function showSignIn(note) {
-    document.getElementById('side').innerHTML = '<div class="logo"><i aria-hidden="true"></i><b>RPM</b><span>Digital</span></div>';
+    document.getElementById('side').innerHTML = '<div class="side-in"><div class="logo"><i aria-hidden="true"></i><b>RPM</b><span>Digital</span></div></div>';
     document.getElementById('topbar').innerHTML = '';
     view.innerHTML = '<div class="state"><h2>Sign in to see your workspace</h2><p>' + esc(note || 'Your session has ended or you are not signed in.') + '</p><div><button class="btn primary" type="button" id="signin-btn">Sign in</button></div></div>';
     document.getElementById('signin-btn').addEventListener('click', function () {
@@ -1127,7 +1130,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   // leasing read; the second row is what the loop did and what waits on you.
   var KPI_DEFS = {
     occupancy: { label: 'Occupancy', fmt: function (v) { return pct(v, 1); }, cls: '' },
-    units_to_lease_90d: { label: 'Units to lease (90 days)', fmt: num, cls: '' },
+    units_to_lease_90d: { label: 'To lease · 90 days', fmt: num, cls: '' },
     leases_this_month: { label: 'Leases this month', fmt: num, cls: '', hint: 'Month to date' },
     cost_per_lease: { label: 'Cost per lease', fmt: money, cls: '', hint: 'Last full month' },
     ai_visibility: { label: 'AI visibility', fmt: num, cls: '' },
