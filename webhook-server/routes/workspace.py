@@ -573,3 +573,21 @@ def workspace_approvals():
                                             scope_internal=_real_internal(), category=category))
     except Exception as exc:  # noqa: BLE001
         return _failed("approvals", exc)
+
+
+# ── v3: property overview ────────────────────────────────────────────────────
+
+@workspace_bp.route("/api/workspace/property-overview", methods=["GET", "OPTIONS"])
+def workspace_property_overview():
+    company_id = _company_id()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_property_overview as wpo
+    try:
+        return jsonify(wpo.build_property_overview(ctx, internal=_is_internal()))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("property overview", exc)

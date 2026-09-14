@@ -318,3 +318,54 @@ class TestApprovals:
         assert [d["undone"] for d in decs] == [True, False]
         assert decs[1]["automatic"] is True and decs[1]["title"] == "Shift $200 from paid_social to seo"
         assert len(whist.effective(decs)) == 1
+
+
+# ── 3. property overview ─────────────────────────────────────────────────────
+
+class TestPropertyOverview:
+    @pytest.fixture
+    def sources(self, monkeypatch, scope, items):
+        import ai_mentions
+        import config
+        import sheets_reader
+        monkeypatch.setattr(config, "HUBDB_AI_MENTIONS_TABLE_ID", "t-ai", raising=False)
+        monkeypatch.setattr(ai_mentions, "get_latest_snapshot", lambda uuid: {
+            "composite_index": 62, "scanned_at": "2026-09-10T00:00:00Z",
+            "by_engine": {"chatgpt": {"cited_rate": 0.8}, "perplexity": {"cited_rate": 0.0}}, "history": []})
+        monkeypatch.setattr(sheets_reader, "get_spend_row", lambda cid: {"zillow_per_month": 450.0,
+                                                                         "costar_package": "Premium"})
+
+    def test_shape_and_real_values(self, client, sources):
+        body = client.get(f"/api/workspace/property-overview?company_id={CID}", headers=_h()).get_json()
+        _ok(body, "property_overview")
+        assert body["health"] == {"score": 82.0, "band": "healthy", "source": "redlight",
+                                  "as_of": "2026-09-02T00:00:00Z"}
+        assert body["kpis"]["ai_visibility"]["value"] == 62
+        assert body["kpis"]["units_to_lease"] == {"value": 12, "source": "aptiq", "as_of": "2026-09-13T00:00:00Z"}
+        assert body["kpis"]["renewal_rate"] is None and body["kpis"]["lead_to_lease"] is None
+        assert [m["units_to_lease"] for m in body["exposure_forecast"]["months"]] == [6, 4, 4]
+        assert body["objective"] == "Grow mode"
+        assert [v["verdict"] for v in body["vendor_audit"]] == ["unknown", "unknown"]
+        assert body["vendor_audit"][0]["monthly"]["value"] == 450.0
+        assert [e["score"]["value"] for e in body["visibility_by_engine"]] == [80, 0]
+        red_light = next(f for f in body["findings"] if f["item_id"] == "hubdb_rec:991")
+        assert red_light["receipts"][0]["source"] == "red_light"
+        assert body["recommended_action"]["item_id"] in {"hubdb_rec:991", "content_brief:b1"}
+        assert body["draft_email"] is None
+        assert {l["lens"]: l["status"] for l in body["loop"]} == \
+            {"express": "upcoming", "tailor": "waiting", "amplify": "done", "evolve": "waiting"}
+        assert body["links"]["media_plan"] == f"#/property/{CID}/media-plan"
+        fields = {g.get("field") for g in body["gaps"]}
+        assert {"vendor_audit.verdict", "kpis.renewal_rate", "kpis.lead_to_lease", "draft_email"} <= fields
+
+    def test_no_verdict_without_a_market_rate_source(self, client, sources, monkeypatch):
+        import sheets_reader
+        monkeypatch.setattr(sheets_reader, "get_spend_row", lambda cid: {})
+        body = client.get(f"/api/workspace/property-overview?company_id={CID}", headers=_h()).get_json()
+        assert body["vendor_audit"] == []
+        assert any(g.get("field") == "vendor_audit" for g in body["gaps"])
+
+    def test_property_gate(self, client, sources, monkeypatch):
+        _allowlist_client(monkeypatch, [CID2])
+        assert client.get(f"/api/workspace/property-overview?company_id={CID}",
+                          headers=_h(CLIENT)).status_code == 403
