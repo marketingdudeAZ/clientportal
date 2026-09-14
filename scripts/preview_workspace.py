@@ -66,6 +66,8 @@ def _preview_role_gate():
     # Mirrors the API contract: the header is honored on reads only, and /me ignores it.
     if request.method == "GET" and _as_client() and request.path.startswith(INTERNAL_ONLY_PATHS):
         return jsonify({"error": "forbidden", "detail": "Internal only."}), 403
+    if request.method == "POST" and _as_client():
+        return jsonify({"error": "preview_read_only", "detail": "Previewing as a client is read-only."}), 403
     return None
 
 
@@ -183,7 +185,7 @@ def start_work(signal_id: str):
         return jsonify({"error": "company_id is required"}), 400
     if signal_id not in {s["id"] for s in _fixture("signals")["signals"]}:
         abort(404)
-    return jsonify({"work_item_id": "hubdb_rec:991"})
+    return jsonify({"work_item_id": "hubdb_rec:991", "clickup_task_id": "86b2k8a2c"}), 201
 
 
 @app.post("/api/workspace/requests/draft")
@@ -292,6 +294,27 @@ def creative():
     if tag:
         data["assets"] = [a for a in data["assets"] if tag in a["tags"]]
     return jsonify(data)
+
+
+@app.post("/api/workspace/visibility/create-brief")
+def create_brief():
+    body = request.get_json(silent=True) or {}
+    if not body.get("company_id"):
+        return jsonify({"error": "company_id is required"}), 400
+    keyword = str(body.get("hub_keyword") or "").strip()
+    if not 2 <= len(keyword) <= 120:
+        return jsonify({"error": "hub_keyword is required", "detail": "2 to 120 characters"}), 400
+    data = _fixture("create_brief")
+    data["hub_keyword"] = keyword
+    return jsonify(data), 202
+
+
+@app.post("/api/workspace/media-plan/regenerate")
+def media_plan_regenerate():
+    body = request.get_json(silent=True) or {}
+    if not body.get("company_id"):
+        return jsonify({"error": "company_id is required"}), 400
+    return jsonify(_fixture("media_plan_regenerate")), 201
 
 
 @app.get("/api/workspace/value")
