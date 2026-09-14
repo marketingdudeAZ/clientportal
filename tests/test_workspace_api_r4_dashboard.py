@@ -70,7 +70,8 @@ class TestLeasing:
         spend = {"1": 2000.0, "2": 3000.0}
         monkeypatch.setattr(wcache, "monthly_spend", lambda cid: ({"total": spend.get(cid, 0.0)}, None))
         gaps = []
-        leases, cost = wdash.leasing_kpis(PROPS, TODAY, gaps)
+        leases, cost, by_company = wdash.leasing_kpis(PROPS, TODAY, gaps)
+        assert by_company == {"1": 3, "2": 5}
         assert leases["value"] == 8 and leases["source"] == "hyly_lake.pai_journey"
         assert leases["properties"] == 2 and leases["period"] == "2026-09-01 to 2026-09-14"
         # property 2 had no August leases, so only property 1's spend and leases count
@@ -82,7 +83,7 @@ class TestLeasing:
     def test_no_bigquery_is_a_gap_not_zero(self, monkeypatch):
         monkeypatch.setattr(wlease, "leases_by_property", lambda *a, **k: None)
         gaps = []
-        assert wdash.leasing_kpis(PROPS, TODAY, gaps) == (None, None)
+        assert wdash.leasing_kpis(PROPS, TODAY, gaps) == (None, None, {})
         assert {g["field"] for g in gaps} == {"kpis.leases_this_month", "kpis.cost_per_lease"}
 
 
@@ -118,3 +119,28 @@ class TestActionsTaken:
         rows, _ = wdash.activity_rows(PROPS, False, [])
         assert rows == [{"at": "2026-09-10T00:00:00Z", "text": "Monthly Fair Housing review — no issues — A",
                          "company_id": "1", "kind": "check", "visibility": "client"}]
+
+
+class TestPropertyRows:
+    def test_occupancy_leases_and_status_replace_overspend(self, monkeypatch):
+        from skills import workspace_scope as wscope
+        props = [dict(PROPS[0], aptiq_property_id="ap1", plestatus="RPM Managed", red_light_report_score="80"),
+                 dict(PROPS[2], aptiq_property_id="", plestatus="Onboarding")]
+        monkeypatch.setattr(wscope, "properties_in_scope", lambda email, internal: {
+            "properties": props, "label": "x", "gaps": []})
+        monkeypatch.setattr(wcache, "aptiq_daily", lambda: ({"ap1": {
+            "Advertised Occupancy %": "93", "Exposure % (Next 90d)": "10",
+            "Report Generation Date": "09/13/2026"}}, None))
+        monkeypatch.setattr(wdash, "leasing_kpis", lambda p, today, gaps: (None, None, {"1": 6}))
+        monkeypatch.setattr(wdash, "scope_items", lambda *a, **k: [])
+        monkeypatch.setattr(wdash, "greeting_name", lambda email, gaps: None)
+        monkeypatch.setattr(wdash, "activity_rows", lambda *a: ([], None))
+        monkeypatch.setattr(wdash, "visibility_kpi", lambda *a: None)
+        monkeypatch.setattr(wdash, "actions_taken_kpi", lambda *a: None)
+        body = wdash.build_dashboard("dana@rpmliving.com", internal=True, today=TODAY)
+        rows = {r["company_id"]: r for r in body["properties"]}
+        assert rows["1"]["occupancy"]["value"] == 0.93 and rows["1"]["leases_month"]["value"] == 6
+        assert rows["1"]["status"] == "RPM Managed" and rows["3"]["status"] == "Onboarding"
+        assert rows["3"]["occupancy"] is None and rows["3"]["leases_month"] is None
+        assert all("overspend_per_year" not in r for r in body["properties"])
+        assert any(g.get("field") == "properties.leases_month" for g in body["gaps"])

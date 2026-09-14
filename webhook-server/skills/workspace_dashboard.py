@@ -13,7 +13,9 @@
 | kpis.waiting_on_you       | items needing a decision (workspace_inbox, cheap sources)      |
 | health_tiles / properties | Red Light score on the HubSpot company (workspace_scope bands) |
 | properties.to_lease_90d   | AptIQ 90-day exposure × unit count                            |
-| properties.overspend      | null: no market-rate source                                    |
+| properties.occupancy      | AptIQ advertised occupancy (Round 4: replaces overspend)       |
+| properties.leases_month   | Hyly lake leases month to date (Hyly beta properties)          |
+| properties.status         | HubSpot plestatus                                              |
 | activity                  | BigQuery loop_events for the scope, last 30 days               |
 | waiting                   | workspace_inbox items needing a decision                       |
 | loop_status               | latest loop event across the scope                             |
@@ -198,8 +200,8 @@ def units_to_lease_kpi(props: list, rows: dict, loaded: str | None) -> dict | No
     return wc.metric(total, "aptiq", as_of or loaded, properties=counted)
 
 
-def leasing_kpis(props: list, today: date, gaps: list) -> tuple[dict | None, dict | None]:
-    """(leases_this_month, cost_per_lease) from the Hyly lake and the spend sheet."""
+def leasing_kpis(props: list, today: date, gaps: list) -> tuple:
+    """(leases_this_month, cost_per_lease, {company_id: leases month to date})."""
     import calendar
     from skills import workspace_cache, workspace_leasing
 
@@ -208,7 +210,7 @@ def leasing_kpis(props: list, today: date, gaps: list) -> tuple[dict | None, dic
         gaps.append(wc.gap("kpis.leases_this_month", "Leases need the Hyly leasing feed, which covers none of "
                                                      "these properties", source="hyly"))
         gaps.append(wc.gap("kpis.cost_per_lease", "Cost per lease needs Hyly leases", source="hyly"))
-        return None, None
+        return None, None, {}
     coverage = f"{len(ids)} of {len(props)} properties"
     month_start = today.replace(day=1)
     last_end = month_start - timedelta(days=1)
@@ -219,12 +221,12 @@ def leasing_kpis(props: list, today: date, gaps: list) -> tuple[dict | None, dic
     except Exception as exc:  # noqa: BLE001
         gaps.append(wc.gap("kpis.leases_this_month", f"Hyly leases could not be read ({type(exc).__name__})",
                            source="hyly"))
-        return None, None
+        return None, None, {}
     if mtd is None:
         gaps.append(wc.gap("kpis.leases_this_month", "Leases need BigQuery, which is not configured here",
                            source="hyly"))
         gaps.append(wc.gap("kpis.cost_per_lease", "Cost per lease needs BigQuery leases", source="hyly"))
-        return None, None
+        return None, None, {}
     leases = wc.metric(sum(mtd.values()), "hyly_lake.pai_journey", wc.now_iso(),
                        period=f"{month_start.isoformat()} to {today.isoformat()}", properties=len(ids))
     if len(ids) < len(props):
@@ -255,7 +257,8 @@ def leasing_kpis(props: list, today: date, gaps: list) -> tuple[dict | None, dic
         gaps.append(wc.gap("kpis.cost_per_lease",
                            f"No property had both leases and line items in {calendar.month_name[last_start.month]}",
                            source="hyly"))
-    return leases, cost
+    by_company = {cid: mtd.get(pid) for cid, pid in ids.items()}
+    return leases, cost, by_company
 
 
 def actions_taken_kpi(props: list, today: date, gaps: list) -> dict | None:
@@ -333,6 +336,8 @@ def build_dashboard(email: str, *, internal: bool, today: date | None = None,
                      if i["status"] == "to_do" and i["needs_approval"]]
     waiting_items.sort(key=lambda pi: (wscope.health_score(pi[0]) or 0, wi._sort_key(pi[1])))
 
+    leases, cost, lease_by_company = leasing_kpis(props, today, gaps) if props else (None, None, {})
+    lease_period = f"{today.replace(day=1).isoformat()} to {today.isoformat()}"
     tiles, prop_rows = [], []
     for p in wscope.worst_first(props)[:MAX_TILES]:
         score = wscope.health_score(p)
@@ -340,6 +345,8 @@ def build_dashboard(email: str, *, internal: bool, today: date | None = None,
         units = wc.to_int(p.get("totalunits"))
         row = _aptiq_row(p, rows)
         e90 = wc.ratio(row.get("Exposure % (Next 90d)")) if row else None
+        from services.fluency_ingestion import apt_iq_reader
+        occ = wc.ratio(apt_iq_reader._resolve_col(row, "occupancy_pct")) if row else None
         stamp = (wc.to_iso_ts(row.get("Report Generation Date")) if row else None) or loaded
         tiles.append({"company_id": cid, "name": p.get("name") or None, "score": score,
                       "band": wscope.health_band(score), "source": "redlight"})
@@ -348,14 +355,17 @@ def build_dashboard(email: str, *, internal: bool, today: date | None = None,
             "units": units, "units_source": "hubspot_company",
             "to_lease_90d": wc.metric(round(e90 * units) if (e90 is not None and units) else None,
                                       "aptiq", stamp, exposure_90d=e90),
-            "overspend_per_year": None,
+            "occupancy": wc.metric(occ, "aptiq", stamp),
+            "leases_month": wc.metric(lease_by_company.get(cid), "hyly_lake.pai_journey", wc.now_iso(),
+                                      period=lease_period),
+            "status": p.get("plestatus") or None,
             "health": score, "health_source": "redlight", "band": wscope.health_band(score),
         })
     if len(props) > MAX_TILES:
         gaps.append(wc.gap("health_tiles", f"Showing the {MAX_TILES} lowest-health properties of {len(props)}"))
-    if prop_rows:
-        gaps.append(wc.gap("properties.overspend_per_year",
-                           "Overspend needs a market-rate source for vendor packages; there is none"))
+    if prop_rows and len(lease_by_company) < len(prop_rows):
+        gaps.append(wc.gap("properties.leases_month", "Leases by property cover the Hyly beta properties only",
+                           source="hyly"))
     if any(t["score"] is None for t in tiles):
         gaps.append(wc.gap("health_tiles.score", "Some properties have no Red Light score yet", source="redlight"))
 
@@ -365,7 +375,6 @@ def build_dashboard(email: str, *, internal: bool, today: date | None = None,
         last = wc.to_datetime(latest)
         running = bool(last and wc.utc_now() - last <= timedelta(hours=48))
 
-    leases, cost = leasing_kpis(props, today, gaps) if props else (None, None)
     kpis = {
         "occupancy": occupancy_kpi(props, rows, loaded),
         "units_to_lease_90d": units_to_lease_kpi(props, rows, loaded),

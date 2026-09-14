@@ -185,11 +185,13 @@ class TestDashboard:
         assert [(t["name"], t["band"]) for t in body["health_tiles"]] == [("Arcadia West", "critical"),
                                                                            ("Parkline", "healthy")]
         parkline = next(p for p in body["properties"] if p["company_id"] == CID)
-        assert parkline["to_lease_90d"]["value"] == 14 and parkline["overspend_per_year"] is None
+        assert parkline["to_lease_90d"]["value"] == 14 and "overspend_per_year" not in parkline
+        assert parkline["occupancy"] == {"value": 0.91, "source": "aptiq", "as_of": "2026-09-13T00:00:00Z"}
+        assert parkline["leases_month"] is None
         assert body["waiting"][0]["company_id"] == CID2
         assert {w["category"] for w in body["waiting"]} >= {"cost", "content", "creative"}
         fields = {g.get("field") for g in body["gaps"]}
-        assert {"kpis.leases_this_month", "kpis.actions_taken", "properties.overspend_per_year", "activity"} <= fields
+        assert {"kpis.leases_this_month", "kpis.actions_taken", "activity"} <= fields
         assert body["loop_status"] == {"running": None, "property_count": 2, "last_pass": None}
 
     def test_no_lens_toggle(self, client, scope, items, visibility):
