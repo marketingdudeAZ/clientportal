@@ -118,6 +118,8 @@ class TestSignalRules:
         assert sig["title"] == "11 available units sit in floor plans on the market 90+ days"
         assert sig["detail"].startswith("S1 (8 available, 96 days), A1 (3 available, 120 days)")
         assert ws.stale_inventory(_ctx(), rows[2:], TODAY) is None
+        # the live export repeats plan rows; a repeat must not be counted twice
+        assert ws.stale_inventory(_ctx(), rows + [dict(rows[0]), dict(rows[1])], TODAY)["metric"]["value"] == 11
         assert ws.stale_inventory(_ctx(), rows[1:2], TODAY)["severity"] == "low"
 
     def test_lease_wave(self):

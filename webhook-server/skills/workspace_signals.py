@@ -121,12 +121,18 @@ def occupancy_drop(ctx, snapshots: list, today: date) -> dict | None:
 
 
 def stale_inventory(ctx, plan_rows: list, today: date) -> dict | None:
-    stale, as_of = [], None
+    stale, as_of, seen = [], None, set()
     for row in plan_rows:
         as_of = as_of or row.get("Report Generation Date")
-        dom, avail = wc.to_int(row.get("Days on Market")), wc.to_int(row.get("Available Units"))
         name = (row.get("Floor Plan Name") or "").strip()
-        if name and dom is not None and dom >= STALE_DAYS and avail:
+        # The export repeats plan rows; count each plan once, the same identity
+        # apt_iq_reader.read_floor_plans dedups on.
+        ident = (name, wc.to_int(row.get("Beds")), wc.to_float(row.get("Baths")), wc.to_int(row.get("Avg Sq Ft")))
+        if not name or ident in seen:
+            continue
+        seen.add(ident)
+        dom, avail = wc.to_int(row.get("Days on Market")), wc.to_int(row.get("Available Units"))
+        if dom is not None and dom >= STALE_DAYS and avail:
             stale.append((avail, dom, name))
     if not stale:
         return None
