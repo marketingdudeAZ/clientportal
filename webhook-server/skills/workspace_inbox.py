@@ -64,7 +64,7 @@ logger = logging.getLogger(__name__)
 
 SOURCES = (
     "hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
-    "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket",
+    "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket", "fair_housing_review",
 )
 
 LENS = {
@@ -77,6 +77,7 @@ LENS = {
     "onboarding_gap": "express",
     "portal_ticket": "amplify",
     "service_ticket": "amplify",
+    "fair_housing_review": "express",
 }
 
 # Existing loop stages a decision on each source is written under (ADR 0010).
@@ -90,6 +91,7 @@ STAGE = {
     "onboarding_gap": "ops",
     "portal_ticket": "ops",
     "service_ticket": "ops",
+    "fair_housing_review": "engage",
 }
 
 SOURCE_LABELS = {
@@ -102,6 +104,7 @@ SOURCE_LABELS = {
     "onboarding_gap": "onboarding checks",
     "portal_ticket": "portal requests",
     "service_ticket": "service tickets",
+    "fair_housing_review": "Fair Housing reviews",
 }
 
 # Shown to a client in place of copy held at high Fair Housing severity.
@@ -115,12 +118,13 @@ GENERIC_TITLES = {
     "onboarding_gap": "Onboarding step",
     "portal_ticket": "Request",
     "service_ticket": "Service ticket",
+    "fair_housing_review": "Monthly Fair Housing review",
 }
 
 # Sources with an existing approval handler (see workspace_decisions).
 DECIDABLE = frozenset({
     "hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
-    "ticket_profile",
+    "ticket_profile", "fair_housing_review",
 })
 
 STATUSES = ("to_do", "in_motion", "done")
@@ -153,7 +157,7 @@ PROPERTY_FIELDS = (
     "ga4_property_id", "google_ads_customer_id",
     "marketing_manager", "marketing_manager_email", "marketing_director_email",
     "marketing_rvp_email", "hubspot_owner_id",
-    "fluency_romance", "what_makes_this_property_unique_",
+    "overarching_goals", "fluency_romance", "what_makes_this_property_unique_",
     "property_voice_and_tone", "additional_selling_points",
     "red_light_run_date",
     "callprep_data_json", "callprep_cycle_month",
@@ -261,6 +265,10 @@ def _new_item(source: str, source_id: Any, title: str, **fields: Any) -> dict:
         "trail": [],
         "notes": [],
         "fair_housing_review": None,
+        # Round 4 review panel: why, who it's for, what approving does.
+        "why": None,
+        "for_whom": None,
+        "approving_does": [],
         "actions": {"approve": False, "not_now": False},
         # internal bookkeeping, stripped by workspace_common.public()
         "_created": None,
@@ -537,6 +545,18 @@ def _call_prep(ctx: PropertyContext, gaps: list, today: date) -> list:
     return items
 
 
+def content_brief_steps() -> list:
+    """What approving a content brief draft does. Shared with the content screen."""
+    return [
+        _step("SEO content task opened in ClickUp", "queued", "seo"),
+        _step("Account manager task logged in HubSpot", "person"),
+    ]
+
+
+def approving_does(steps: list) -> list:
+    return [{"label": s["label"], "owner": _owner_for(s), "when": _when_for(s, _owner_for(s))} for s in steps]
+
+
 def _content_briefs(ctx: PropertyContext, gaps: list, today: date) -> list:
     from config import HUBDB_CONTENT_BRIEFS_TABLE_ID
     if not HUBDB_CONTENT_BRIEFS_TABLE_ID or not ctx.uuid:
@@ -571,10 +591,7 @@ def _content_briefs(ctx: PropertyContext, gaps: list, today: date) -> list:
             channels=["seo"],
             status=status,
             needs_approval=status_raw == "generated",
-            steps=[
-                _step("SEO content task opened in ClickUp", "queued", "seo"),
-                _step("Account manager task logged in HubSpot", "person"),
-            ],
+            steps=content_brief_steps(),
             trail=[trail(generated_at, "content planner", "Generated")] if generated_at else [],
             _created=generated_at,
             _raw={"brief_id": brief_id, "hub_keyword": keyword, "h1": row.get("h1") or ""},
@@ -816,6 +833,51 @@ def _service_tickets(ctx: PropertyContext, gaps: list, today: date) -> list:
     return items
 
 
+FH_EVIDENCE_ROWS = 10
+
+
+def _fair_housing_reviews(ctx: PropertyContext, gaps: list, today: date) -> list:
+    """The latest monthly Fair Housing review, as a Compliance item when it found
+    something. A clean review is not an item; it counts as an action we took."""
+    from skills import workspace_fair_housing_review as fhr
+    record = fhr.latest(ctx, gaps)
+    if not record:
+        return []
+    findings = record.get("findings") or []
+    count = record.get("findings_count") or len(findings)
+    if not count:
+        return []
+    run_at = record.get("run_at")
+    run_day = str(run_at or "")[:10]
+    checked = (f"{record.get('pages_checked') or 0} website page(s) and "
+               f"{record.get('profile_fields_checked') or 0} profile field(s) were checked")
+    if record.get("assets_checked") is not None:
+        checked += f", and {record['assets_checked']} image(s)"
+    item = _new_item(
+        "fair_housing_review", f"{ctx.company_id}-{run_day}",
+        f"Your monthly Fair Housing review for {ctx.name or 'this property'} found {count} item(s)",
+        found=f"{checked}. Each finding lists where it is, why it was flagged and a suggested fix.",
+        receipts=[_receipt(f"Fair Housing review run on {run_day}", "fair_housing_review", run_at)],
+        evidence={
+            "columns": ["Page or asset", "Excerpt", "Why flagged", "Suggested fix"],
+            "rows": [[f.get("location"), f.get("excerpt"), f.get("reason"), f.get("suggested_fix")]
+                     for f in findings[:FH_EVIDENCE_ROWS]],
+            "more_count": max(0, count - min(len(findings), FH_EVIDENCE_ROWS)),
+        },
+        channels=["website", "listing"],
+        needs_approval=True,
+        steps=[
+            _step("The web team receives each suggested fix as a draft ticket", "queued", "website"),
+            _step("Nothing publishes until the web team applies the fixes", "person", "website"),
+        ],
+        trail=[trail(run_at, "Fair Housing review", "Review ran")] if run_at else [],
+        _created=run_at,
+        _raw={"run_at": run_at, "findings": findings},
+        review=record,
+    )
+    return [item]
+
+
 ADAPTERS: dict[str, Callable[[PropertyContext, list, date], list]] = {
     "hubdb_rec": _hubdb_recs,
     "loop_rec": _loop_recs,
@@ -826,6 +888,7 @@ ADAPTERS: dict[str, Callable[[PropertyContext, list, date], list]] = {
     "onboarding_gap": _onboarding_gaps,
     "portal_ticket": _portal_tickets,
     "service_ticket": _service_tickets,
+    "fair_housing_review": _fair_housing_reviews,
 }
 
 
@@ -869,6 +932,7 @@ def decision_history(ctx: PropertyContext, gaps: list) -> dict | None:
             "reason": payload.get("reason"),
             "actor": payload.get("actor"),
             "outcome": payload.get("outcome", "ok"),
+            "creative_kind": payload.get("creative_kind"),
             "undone": False,
             "undone_at": None,
         })
@@ -910,6 +974,51 @@ def apply_decisions(items: list, history: dict | None) -> None:
             item["_closed"] = last.get("at")
 
 
+# ── review panel fields (Round 4) ────────────────────────────────────────────
+
+_GOAL_SOURCES = frozenset({"hubdb_rec", "loop_rec", "call_prep"})
+
+
+def _owner_for(step: dict) -> str:
+    label = str(step.get("label") or "").lower()
+    if step.get("kind") == "person" and ("sign" in label or "you review" in label or "on-site" in label):
+        return "you"
+    return "RPM Digital"
+
+
+def _when_for(step: dict, owner: str) -> str:
+    label = str(step.get("label") or "").lower()
+    if step.get("kind") == "person" and "sign" in label:
+        return "Before anything is billed or spent"
+    if owner == "you":
+        return "After you approve"
+    return "When you approve" if step.get("kind") in ("auto", "queued") else "After you approve"
+
+
+def enrich(item: dict, ctx: "PropertyContext") -> dict:
+    """Fill why / for_whom / approving_does from the fields the item already carries.
+
+    why            the finding text and its receipts, when the source has either;
+    for_whom       content briefs: the renter search they answer; recommendation
+                   sources: the property's leasing goal, verbatim from HubSpot
+                   `overarching_goals` (no model involved); otherwise null;
+    approving_does the existing handler's steps with an owner and a when.
+    """
+    if item.get("found") or item.get("receipts"):
+        item["why"] = {"text": item.get("found") or item["title"], "receipts": list(item.get("receipts") or [])}
+    if item["source"] == "content_brief":
+        keyword = str((item.get("_raw") or {}).get("hub_keyword") or "").strip()
+        if keyword:
+            item["for_whom"] = {"text": f"Renters searching for “{keyword}”", "questions": [keyword]}
+    elif item["source"] in _GOAL_SOURCES:
+        goal = str(ctx.props.get("overarching_goals") or "").strip()
+        if goal:
+            item["for_whom"] = {"text": f"The property's leasing goal: {wc.truncate(goal, 300)}", "questions": []}
+    if not item.get("approving_does") and item["source"] in DECIDABLE:
+        item["approving_does"] = approving_does(item.get("steps") or [])
+    return item
+
+
 def finalize(item: dict) -> dict:
     """Derive the fields that depend on final status."""
     actionable = item["status"] == "to_do" and item["needs_approval"] and item["source"] in DECIDABLE
@@ -933,6 +1042,39 @@ def _fair_housing_pass(items: list, gaps: list) -> None:
                            f"({', '.join(review['terms'])})"
                            + ("; copy is hidden from clients" if item["_fh_high"] else ""),
                            internal=True))
+
+
+def shoot_dates(history: dict | None) -> list | None:
+    """Dates of approved photo-shoot recommendations, or None when unknown."""
+    if history is None:
+        return None
+    out = []
+    for decisions in history.values():
+        for d in decisions:
+            if (d.get("creative_kind") == "photo_shoot" and d.get("action") == "approve"
+                    and d.get("outcome", "ok") in ("ok", "partial") and not d.get("undone")):
+                day = wc.to_date(d.get("at"))
+                if day:
+                    out.append(day)
+    return out
+
+
+def _apply_creative_rule(ctx: "PropertyContext", items: list, history: dict | None, today: date,
+                         gaps: list) -> None:
+    from skills import workspace_creative_rules as rules
+    candidates = [i for i in items if i["status"] == "to_do" and rules.proposes_shoot(
+        i.get("title"), i.get("found"), (i.get("_raw") or {}).get("title"), (i.get("_raw") or {}).get("body"))]
+    if not candidates:
+        return
+    try:
+        from skills import workspace_creative
+        assets = workspace_creative._asset_rows(ctx, gaps)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("workspace creative rule: assets unreadable for %s: %s", ctx.company_id, exc)
+        assets = []
+    dates = shoot_dates(history)
+    for item in candidates:
+        rules.apply_rule(item, assets, dates, today, gaps)
 
 
 def view_item(item: dict, internal: bool = True) -> dict:
@@ -987,15 +1129,19 @@ def collect(ctx: PropertyContext, *, sources: tuple | list | None = None,
         items += src_items
         gaps += src_gaps
 
+    history = None
     if with_history:
         try:
-            apply_decisions(items, decision_history(ctx, gaps))
+            history = decision_history(ctx, gaps)
+            apply_decisions(items, history)
         except Exception as exc:  # noqa: BLE001
             logger.warning("workspace inbox: decision history failed for %s: %s", ctx.company_id, exc)
             gaps.append(wc.gap("trail", f"Decision history could not be read ({type(exc).__name__})",
                                internal=True))
 
+    _apply_creative_rule(ctx, items, history if with_history else None, today, gaps)
     for item in items:
+        enrich(item, ctx)
         finalize(item)
     _fair_housing_pass(items, gaps)
     return items, gaps

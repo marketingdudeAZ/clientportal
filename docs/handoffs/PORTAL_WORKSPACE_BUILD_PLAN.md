@@ -647,6 +647,147 @@ The v3 screens are built against the "v3 rebuild" contract above. These are the 
 5. **Creative upload.** The contract notes an existing asset upload path but gives no Workspace endpoint. The dropzone links to New request for now.
 6. **Item `company_id`.** Approval rows span properties. The UI sets the company from the row before opening or deciding. Adding `company_id` to the Item shape would remove that coupling.
 7. **Health score bands.** The UI uses the band the API sends. It falls back to ≥70 healthy, 50–69 attention, 35–49 warning, below 35 critical only when `band` is missing. Engine scores use ≥70 / 60–69 / below 60, as in the v3 audit screen. Please confirm or send bands.
+
+## Round 4 — Kyle's review
+
+# Workspace — Round 4: Kyle's review of the v3 preview (14 Sept 2026)
+
+Copy this file verbatim into `docs/handoffs/PORTAL_WORKSPACE_BUILD_PLAN.md` under a heading "Round 4 — Kyle's review". It amends "v3 rebuild" wherever the two conflict.
+
+## Bugs (fix first)
+
+1. **Wrong draft opens on Property detail.**
+   - On LYV Broadway, "Review" and "View full draft" in the recommended-action card open Remi West Dallas's Apartments.com rate email.
+   - Only the "Step down Apartments.com" button opens the right one.
+   - Every link on a property screen must resolve to that property's own items.
+2. **Wrong property on Content.**
+   - On LYV Broadway, opening "Pet policy and breed restrictions" shows The Bromley at Brighton Crossing, and Approve names The Bromley too.
+   - Cause: the preview serves one property's detail data for every property with only the name swapped, so item IDs, drafts and text still point at the original property.
+   - Fix: build per-property fixture data that's internally consistent (IDs, names, drafts, reports), and add a test that every item, draft and report reached from property X names property X.
+3. **Media plan contradicts its own recommendation.**
+   - The plan notes say "Keep Apartments.com running all year" while Apartments.com has a pending step-down.
+   - Plan notes must never contradict a pending recommendation for the same property. Enforce this with a generator rule and a test.
+
+## Dashboard
+
+- **Remove the lens toggle.** No Asset manager / Marketing manager switch; drop the `lens` param and `kpi_order` behavior.
+- **Sample book is 35 properties.** That's the minimum book a marketing manager has. The preview portfolio has 35 realistic RPM-style properties, and every total and count on screen agrees with them.
+- **KPI strip, in this order:**
+  1. Occupancy
+  2. Units to lease (90 days)
+  3. Leases this month
+  4. Cost per lease
+  5. AI visibility
+  6. Actions we took for you
+  7. Waiting on you
+
+  Seven stats. Lay them out cleanly: two rows, or a primary row of four and a secondary row of three, following v3 spacing.
+- **Remove Identified savings** from the dashboard.
+- **KPI contract** (each value is `{value, source, as_of}` or null plus a gap):
+  - `occupancy`
+  - `units_to_lease_90d`
+  - `leases_this_month`: month to date
+  - `cost_per_lease`: last full month, total marketing spend ÷ leases
+  - `ai_visibility`
+  - `actions_taken`: changes shipped without needing approval in the last 30 days. Count automatic `workspace_decision` / loop events and completed automatic steps; say in the source what was counted.
+  - `waiting_on_you`
+- **Properties table:** replace "Overspend / yr" with **Occupancy**.
+
+## Approvals
+
+- **Group by what's being approved.** Category chips are All · Cost · Vendors · Content · Creative · Compliance. `negotiate` is no longer its own category; it maps to `vendor`.
+- **No pacing for clients.**
+  - Remove pacing interrupts from Approvals entirely. Clients don't manage pacing and must never see a pause-campaign control.
+  - Pacing remains an internal Signal (`spend_pacing`) for RPM staff only.
+- **One button per row: "Review".** It opens a review panel (a side drawer on desktop, full screen on mobile) containing:
+  - **Why** we're proposing this: the finding, with receipts.
+  - **Who it's for:** the audience or renter question it serves. For content this is the renter question and the prompts or fan-out queries it answers; for vendors, the property's leasing goal.
+  - **What approving does:** the concrete next steps and who does them. Nothing vague.
+  - **What happens if you skip.**
+  - **Approve / Reject**, with Reject using the one-tap reasons.
+- **Item contract additions** (nullable when a source has no data):
+  - `why: {text, receipts[]}`
+  - `for_whom: {text, questions: [str]}`
+  - `approving_does: [{label, owner: "RPM Digital" | "vendor" | "you", when}]`
+- **Creative recommendations never ask for a photo shoot.**
+  - Recommend building new creative from existing assets that highlights X: new crops, video cuts, ad variants, AI-assisted edits within Fair Housing and disclosure rules.
+  - A new photo shoot is only proposed when there are no usable assets for a required subject, and at most once per property per 12 months.
+  - Add a rule and a test to the recommendation generator.
+  - Replace the sample "Refresh amenity photos — The Maddux at Shadowood" with a build-new-creative item.
+- **Keep the Fair Housing review tag.**
+
+## Monthly Fair Housing review (new, per property)
+
+- **Cadence:** monthly per property. The run date is shown, and the next run date is shown.
+- **Scope:**
+  - (a) website pages and listing copy, including content added by people outside the digital team (property marketing edits), checked with `fair_housing.py`;
+  - (b) images in the property's asset library and on its site that are AI-generated or AI-edited, checked for the disclosure a New York state law on AI-generated imagery in ads may require.
+  - **Do not encode that law's specifics until Kyle confirms the requirement.** Build the check as a pluggable rule with a TODO and a flag, and list it under open questions.
+- **Surfacing:** a Compliance approval item titled "Your monthly Fair Housing review for <Property> found <n> item(s)". Its Review panel lists each finding: page or asset, quoted text or image, why it was flagged, and the suggested fix.
+  - Approving applies suggested copy fixes as drafts for the web team; nothing publishes automatically.
+  - When nothing is found, it appears in "Actions we took for you" as "Monthly Fair Housing review — no issues", not as an approval.
+- **Contract:** new item source `fair_housing_review`. The review record is `{property, run_at, next_run, pages_checked, assets_checked, findings: [{kind: "copy" | "image", location, excerpt, reason, severity, suggested_fix}]}`.
+- **Schedule:** add an internal `POST /api/internal/workspace/fair-housing-review/run` (internal key) that runs one property or all, for a monthly cron. It must be read-only against the website; findings are stored and approvals created.
+
+## Properties list
+
+- No "Overspend / yr" column. Show Units · Occupancy · To lease (90d) · Leases (month) · Health · Status.
+
+## Property detail
+
+- Fix bug 1.
+- Keep findings in the right rail; Kyle likes them.
+
+## Media plan
+
+- **Always-on vs flighted mix** (Kyle's definition):
+  - **Always-on**, running all year: Google Business Profile, SEO / content, website, and base ILS listings.
+  - **Flighted with exposure:** paid search, PMax, Meta, and ILS upgrades or premium tiers.
+- Show the plan in those two groups. Always-on rows are flat across 12 months; flighted rows follow the exposure forecast.
+- Plan notes are generated from that mix and from pending recommendations, never contradicting them (bug 3).
+- **Contract:** each channel gains `mode: "always_on" | "flighted"`.
+
+## Visibility
+
+- **Show the audit itself on the main page, Searchable-style:**
+  - the tracked questions (prompts), grouped by topic and intent;
+  - for each engine, whether the property is named or cited;
+  - the follow-up searches the engines ran (query fan-out);
+  - the sources they used.
+- **"What we're writing" moves into the main column.** For each gap or fan-out query cluster, show the planned or drafted content piece that answers it and its status (drafted, in review, published), linking to the Content row and its Review panel. No content recommendations hidden in the right rail.
+- **Sources:** `geo_prompts`, `geo_responses`, `geo_brand_mentions`, `geo_sources`, `geo_fanout` and `geo_plans` when present (definitions are in `GEO_PROGRAM_BUILD_HANDOFF.md` on `feature/geo-portal`); `ai_mentions` otherwise; gaps when neither has rows.
+- **Contract additions:**
+  - `prompts: [{id, text, topic, intent, engines: {<engine>: {named, cited}}}]`
+  - `fanout: [{query, engine, count, content: {item_id, title, status} | null}]`
+  - `writing: [{title, answers: [query], status, item_id}]`
+
+## Content
+
+- **Everything is draft-ready.** A content row exists only once a draft exists. Statuses are `draft_ready | in_review | published`; remove `not_started`.
+- Each row's Review panel shows `why`, `for_whom` (the renter question plus the fan-out queries it answers), `approving_does` (for example: "RPM Digital publishes the FAQ to LYV Broadway's site within 5 business days; we re-check the AI answer in 30 days"), and the draft itself.
+- Fix bug 2.
+
+## Creative
+
+- Remove the line "142 assets · 12 tracked in ads · top creative … · lowest …".
+- **Drag-and-drop upload.** The drop zone and "Add videos/photos" accept files directly, with a per-file progress state.
+  - The API gains `POST /api/workspace/creative/upload` (multipart; verified identity required), reusing the existing asset upload path.
+  - No ticket form for uploads.
+
+## Reports
+
+- **Default to the last full month (August 2026)**, with the month picker.
+- **Every property has a report.** The preview includes a complete August 2026 report fixture for LYV Broadway, plus at least 3 other properties, in the Bromley format and calm tone, with internally consistent numbers.
+- On live data, properties without Hyly data show the sections that can be filled and name the gaps.
+
+## Unchanged rules
+
+- No retired product name.
+- Money never moves on a click.
+- Receipts on every number; nulls plus gaps, never invented values.
+- Clients see all work; internal notes stay private.
+- Fair Housing on all client- and channel-facing copy.
+
 ## Contract changes (API)
 
 The Phase 2 amendments above supersede this section where they conflict: gap entries are now `{message, field?, source?}` (item 1 below), and `hidden_open_count` is gone from `/client-view`.
@@ -721,6 +862,36 @@ Recorded by the API branch (`feature/portal-workspace-api`). Every change is add
     - Media plan channels add `source`, and months add `source` when set.
     - Value rows' `decided_by` adds `"team"` for a colleague's decision.
     - `POST /visibility/create-brief` (202) and `POST /media-plan/regenerate` (201) are added.
+
+### Round 4 (API)
+
+30. **Media plan notes** never contradict a pending recommendation. A note that says to keep, continue or increase a channel is dropped while a recommendation naming that channel is waiting on a decision. The plan says instead: "<channel>: “<title>” is waiting on a decision, so the plan holds <channel> as contracted until it is decided."
+31. **Dashboard KPIs** are exactly `occupancy`, `units_to_lease_90d`, `leases_this_month`, `cost_per_lease`, `ai_visibility`, `actions_taken`, `waiting_on_you` (order in `workspace_dashboard.KPI_ORDER`). `lens`, `kpi_order` and `identified_savings` are removed, and `?lens=` is ignored.
+    - `leases_this_month` and `cost_per_lease` come from the Hyly lake (`pai_journey` lease events) for Hyly beta properties only. The source string names the coverage. Cost per lease is contracted spend from HubSpot line items ÷ leases.
+    - `actions_taken` counts, over 30 days, autopilot approvals plus clean monthly Fair Housing reviews, and its source says so.
+32. **Approvals** categories are `cost`, `vendor`, `content`, `creative`, `compliance`. `negotiate` folds into `vendor`. Pacing interrupts are removed, so pacing stays an internal Signal. `interrupts[].kind` is `compliance` only.
+33. **Items** add `why {text, receipts[]}`, `for_whom {text, questions[]}` and `approving_does [{label, owner, when}]`. All three come from fields the item already carries; no model is involved.
+    - A creative item that proposes a photo shoot becomes "Build new creative that highlights <subject> from existing assets" when usable assets exist.
+    - A shoot is proposed only when no usable asset exists, and at most once per property per 12 months. Unknown shoot history never proposes one.
+34. **Monthly Fair Housing review.** New source `fair_housing_review` (category `compliance`) and `POST /api/internal/workspace/fair-housing-review/run`.
+    - Called with `{company_id}` it runs synchronously and returns 200 with the review record. Called with `{all: true, limit?}` it returns 202 and runs in the background. Anything else is 400. The internal key is required.
+    - The review record is `{company_id, run_at, next_run, pages_checked, assets_checked, image_check, findings[{kind, location, excerpt, severity, reason, suggested_fix}], findings_count}`.
+    - Findings become one approval. A clean run is an actions-taken event, not an approval.
+    - Approve files a ticket with draft fixes and publishes nothing.
+    - The AI-image disclosure check is a pluggable rule behind `WORKSPACE_FH_AI_IMAGE_CHECK` and is off by default.
+35. **Properties and dashboard rows** replace `overspend` with `occupancy` (metric), `leases_month` (metric) and `status`.
+36. **Media plan** `channels[]` add `mode`: `always_on` or `flighted`. Always-on months are flat. Flighted months follow the exposure forecast, and months beyond it are `null`.
+37. **Visibility** adds:
+    - `prompts[{id, text, topic, intent, engines{<engine>: {named, cited}}}]`
+    - `fanout[{query, engine, count, content{item_id, title, status}?}]`
+    - `writing[{title, answers[], status: drafted|in_review|published, item_id}]`
+
+    These come from the GEO tables when the property has rows there, and from the ai_mentions audit otherwise. On the ai_mentions path, `named`, `topic` and `intent` are `null` and `fanout` is empty, each with a gap.
+38. **Content** rows' `status` is `draft_ready`, `in_review` or `published`. `not_started` is removed, and a row exists only once a draft exists. Rows add `keyword`, `why`, `for_whom` and `approving_does` (empty unless `draft_ready`).
+39. **Creative upload.** `POST /api/workspace/creative/upload` takes multipart `company_id`, `files[]`, and optional `metadata` (JSON list) and `category`.
+    - It returns 201 `{uploaded[{filename, file_url, thumbnail_url, asset_name, category, subcategory}], skipped[{filename, reason}]}`.
+    - It returns 400 for no files or nothing stored, 401 for an unverified identity and 403 for preview-as-client.
+40. **Reports** default to the last full month for every property. A property outside the Hyly beta returns 200 with property identity, units and listings, plus a gap naming each Hyly-only section. It no longer returns 404.
 
 ## Round 4 — Kyle's review
 

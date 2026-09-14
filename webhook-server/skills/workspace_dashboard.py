@@ -3,18 +3,25 @@
 | field                     | source                                                        |
 |---------------------------|---------------------------------------------------------------|
 | greeting_name             | HubSpot owner record matching the caller's email               |
+| kpis.occupancy            | unit-weighted AptIQ advertised occupancy (daily export)        |
+| kpis.units_to_lease_90d   | sum of AptIQ 90-day exposure × units                           |
+| kpis.leases_this_month    | Hyly lake leases, month to date (Hyly beta properties only)    |
+| kpis.cost_per_lease       | last full month: contracted line items ÷ Hyly leases           |
 | kpis.ai_visibility        | mean `ai_mentions` composite index across scope (HubDB)        |
-| kpis.portfolio_occupancy  | unit-weighted AptIQ advertised occupancy (daily export)        |
-| kpis.identified_savings   | null: no recommendation source records a savings amount        |
+| kpis.actions_taken        | loop_events, last 30 days: autopilot approvals + clean monthly |
+|                           | Fair Housing reviews (the metric names what it counted)        |
 | kpis.waiting_on_you       | items needing a decision (workspace_inbox, cheap sources)      |
 | health_tiles / properties | Red Light score on the HubSpot company (workspace_scope bands) |
 | properties.to_lease_90d   | AptIQ 90-day exposure × unit count                            |
-| properties.overspend      | null: no market-rate source                                    |
+| properties.occupancy      | AptIQ advertised occupancy (Round 4: replaces overspend)       |
+| properties.leases_month   | Hyly lake leases month to date (Hyly beta properties)          |
+| properties.status         | HubSpot plestatus                                              |
 | activity                  | BigQuery loop_events for the scope, last 30 days               |
 | waiting                   | workspace_inbox items needing a decision                       |
 | loop_status               | latest loop event across the scope                             |
 
-`lens` changes only `kpi_order`; the data is the same for both.
+Round 4: no lens toggle and no identified savings. KPIs come in the order of
+`KPI_ORDER`.
 """
 
 from __future__ import annotations
@@ -29,12 +36,11 @@ from skills import workspace_scope as wscope
 
 logger = logging.getLogger(__name__)
 
-LENSES = ("asset_manager", "marketing_manager")
-KPI_ORDER = {
-    "asset_manager": ["portfolio_occupancy", "identified_savings", "waiting_on_you", "ai_visibility"],
-    "marketing_manager": ["ai_visibility", "waiting_on_you", "portfolio_occupancy", "identified_savings"],
-}
-ITEM_SOURCES = ("hubdb_rec", "call_prep", "video_variant", "content_brief", "onboarding_gap")
+KPI_ORDER = ("occupancy", "units_to_lease_90d", "leases_this_month", "cost_per_lease", "ai_visibility",
+             "actions_taken", "waiting_on_you")
+# The last entry (onboarding checks) is dropped for Approvals; keep it last.
+ITEM_SOURCES = ("hubdb_rec", "call_prep", "video_variant", "content_brief", "fair_housing_review",
+                "onboarding_gap")
 MAX_TILES = 50
 MAX_VISIBILITY_READS = 25
 
@@ -61,10 +67,12 @@ ACTIVITY = {
     "aptiq_history_backfill": ("check", "Refreshed AptIQ history", "internal"),
     "hyly_pull": ("check", "Refreshed the leasing funnel", "internal"),
     "cron_completed": ("check", "Scheduled check completed", "internal"),
+    "workspace_fair_housing_review": ("check", "Monthly Fair Housing review", "client"),
 }
 
 CATEGORY_BY_REC_TYPE = {"budget_change": "cost", "package_upgrade": "vendor", "strategy_change": "content"}
 CATEGORY_BY_SOURCE = {"loop_rec": "cost", "call_prep": "content", "content_brief": "content",
+                      "fair_housing_review": "compliance",
                       "video_variant": "creative", "ticket_profile": "content",
                       "onboarding_gap": "compliance", "portal_ticket": "content", "service_ticket": "content"}
 
@@ -74,6 +82,8 @@ def category_for(item: dict) -> str:
         return CATEGORY_BY_REC_TYPE.get((item.get("_raw") or {}).get("rec_type"), "cost")
     if item.get("fair_housing_review") and item["fair_housing_review"].get("severity") == "high":
         return "compliance"
+    if item.get("_creative_kind") in ("build_from_assets", "photo_shoot"):
+        return "creative"
     return CATEGORY_BY_SOURCE.get(item["source"], "content")
 
 
@@ -173,6 +183,106 @@ def visibility_kpi(props: list, gaps: list) -> dict | None:
     return wc.metric(round(sum(scores) / len(scores)), "ai_mentions", as_of, properties=len(scores))
 
 
+def units_to_lease_kpi(props: list, rows: dict, loaded: str | None) -> dict | None:
+    total, counted, as_of = 0, 0, None
+    for p in props:
+        row = _aptiq_row(p, rows)
+        units = wc.to_int(p.get("totalunits"))
+        e90 = wc.ratio(row.get("Exposure % (Next 90d)")) if row else None
+        if e90 is None or not units:
+            continue
+        total += round(e90 * units)
+        counted += 1
+        stamp = wc.to_iso_ts(row.get("Report Generation Date"))
+        as_of = max(as_of, stamp) if (as_of and stamp) else (stamp or as_of)
+    if not counted:
+        return None
+    return wc.metric(total, "aptiq", as_of or loaded, properties=counted)
+
+
+def leasing_kpis(props: list, today: date, gaps: list) -> tuple:
+    """(leases_this_month, cost_per_lease, {company_id: leases month to date})."""
+    import calendar
+    from skills import workspace_cache, workspace_leasing
+
+    ids = workspace_leasing.hyly_ids(props)
+    if not ids:
+        gaps.append(wc.gap("kpis.leases_this_month", "Leases need the Hyly leasing feed, which covers none of "
+                                                     "these properties", source="hyly"))
+        gaps.append(wc.gap("kpis.cost_per_lease", "Cost per lease needs Hyly leases", source="hyly"))
+        return None, None, {}
+    coverage = f"{len(ids)} of {len(props)} properties"
+    month_start = today.replace(day=1)
+    last_end = month_start - timedelta(days=1)
+    last_start = last_end.replace(day=1)
+    try:
+        mtd = workspace_leasing.leases_by_property(list(ids.values()), month_start.isoformat(), today.isoformat())
+        prev = workspace_leasing.leases_by_property(list(ids.values()), last_start.isoformat(), last_end.isoformat())
+    except Exception as exc:  # noqa: BLE001
+        gaps.append(wc.gap("kpis.leases_this_month", f"Hyly leases could not be read ({type(exc).__name__})",
+                           source="hyly"))
+        return None, None, {}
+    if mtd is None:
+        gaps.append(wc.gap("kpis.leases_this_month", "Leases need BigQuery, which is not configured here",
+                           source="hyly"))
+        gaps.append(wc.gap("kpis.cost_per_lease", "Cost per lease needs BigQuery leases", source="hyly"))
+        return None, None, {}
+    leases = wc.metric(sum(mtd.values()), "hyly_lake.pai_journey", wc.now_iso(),
+                       period=f"{month_start.isoformat()} to {today.isoformat()}", properties=len(ids))
+    if len(ids) < len(props):
+        gaps.append(wc.gap("kpis.leases_this_month", f"Leases cover the Hyly beta properties only ({coverage})",
+                           source="hyly"))
+
+    spend_total, lease_total, counted = 0.0, 0, 0
+    for cid, pid in ids.items():
+        n = (prev or {}).get(pid) or 0
+        try:
+            row, _ = workspace_cache.monthly_spend(cid)
+        except Exception:  # noqa: BLE001
+            continue
+        if not n or not row.get("total"):
+            continue
+        spend_total += float(row["total"])
+        lease_total += n
+        counted += 1
+    cost = None
+    if lease_total:
+        cost = wc.metric(round(spend_total / lease_total, 2), "hubspot_line_items ÷ hyly_lake.pai_journey",
+                         wc.now_iso(), period=f"{last_start:%Y-%m}", spend=round(spend_total, 2),
+                         spend_source="hubspot_line_items", leases=lease_total,
+                         leases_source="hyly_lake.pai_journey", properties=counted)
+        gaps.append(wc.gap("kpis.cost_per_lease", "Spend is the contracted monthly line items, not billed spend",
+                           source="hubspot_line_items"))
+    else:
+        gaps.append(wc.gap("kpis.cost_per_lease",
+                           f"No property had both leases and line items in {calendar.month_name[last_start.month]}",
+                           source="hyly"))
+    by_company = {cid: mtd.get(pid) for cid, pid in ids.items()}
+    return leases, cost, by_company
+
+
+def actions_taken_kpi(props: list, today: date, gaps: list) -> dict | None:
+    from datetime import datetime, timezone
+    from skills import workspace_history
+
+    since = datetime.now(timezone.utc) - timedelta(days=30)
+    try:
+        counts = workspace_history.automatic_actions([p.get("hubspot_company_id") for p in props],
+                                                     [p.get("uuid") for p in props], since)
+    except Exception as exc:  # noqa: BLE001
+        gaps.append(wc.gap("kpis.actions_taken", f"Loop events could not be read ({type(exc).__name__})",
+                           source="loop_events"))
+        return None
+    if counts is None:
+        gaps.append(wc.gap("kpis.actions_taken", "Actions we took need BigQuery loop events, which are not "
+                                                 "configured here", source="loop_events"))
+        return None
+    return wc.metric(counts["total"], "loop_events: loop_autopilot approvals + clean monthly Fair Housing reviews",
+                     wc.now_iso(), window_days=30,
+                     counted={"autopilot_approvals": counts["autopilot_approvals"],
+                              "fair_housing_reviews_clean": counts["fair_housing_reviews_clean"]})
+
+
 def activity_rows(props: list, internal: bool, gaps: list) -> tuple[list, str | None]:
     from skills import workspace_history
     names = {str(p.get("uuid") or ""): (p.get("name"), str(p.get("hubspot_company_id") or "")) for p in props}
@@ -199,6 +309,10 @@ def activity_rows(props: list, internal: bool, gaps: list) -> tuple[list, str | 
             title = (ev.get("payload") or {}).get("title")
             if title:
                 sentence = f"{sentence}: {title}"
+        if ev.get("event_type") == "workspace_fair_housing_review":
+            findings = (ev.get("payload") or {}).get("findings") or []
+            sentence = (f"Monthly Fair Housing review found {len(findings)} item(s)" if findings
+                        else "Monthly Fair Housing review — no issues")
         if visibility == "internal" and not internal:
             continue
         name, cid = names.get(str(ev.get("property_uuid") or ""), (None, ev.get("company_id")))
@@ -207,10 +321,9 @@ def activity_rows(props: list, internal: bool, gaps: list) -> tuple[list, str | 
     return rows[:20], latest
 
 
-def build_dashboard(email: str, *, internal: bool, lens: str | None = None,
-                    today: date | None = None, scope_internal: bool | None = None) -> dict:
+def build_dashboard(email: str, *, internal: bool, today: date | None = None,
+                    scope_internal: bool | None = None, **_ignored) -> dict:
     today = today or date.today()
-    lens = lens if lens in LENSES else "marketing_manager"
     # Scope follows the real role, filtering the effective one: an internal
     # "Preview as client" sees their own properties rendered as a client would.
     scope = wscope.properties_in_scope(email, internal if scope_internal is None else scope_internal)
@@ -223,6 +336,8 @@ def build_dashboard(email: str, *, internal: bool, lens: str | None = None,
                      if i["status"] == "to_do" and i["needs_approval"]]
     waiting_items.sort(key=lambda pi: (wscope.health_score(pi[0]) or 0, wi._sort_key(pi[1])))
 
+    leases, cost, lease_by_company = leasing_kpis(props, today, gaps) if props else (None, None, {})
+    lease_period = f"{today.replace(day=1).isoformat()} to {today.isoformat()}"
     tiles, prop_rows = [], []
     for p in wscope.worst_first(props)[:MAX_TILES]:
         score = wscope.health_score(p)
@@ -230,6 +345,8 @@ def build_dashboard(email: str, *, internal: bool, lens: str | None = None,
         units = wc.to_int(p.get("totalunits"))
         row = _aptiq_row(p, rows)
         e90 = wc.ratio(row.get("Exposure % (Next 90d)")) if row else None
+        from services.fluency_ingestion import apt_iq_reader
+        occ = wc.ratio(apt_iq_reader._resolve_col(row, "occupancy_pct")) if row else None
         stamp = (wc.to_iso_ts(row.get("Report Generation Date")) if row else None) or loaded
         tiles.append({"company_id": cid, "name": p.get("name") or None, "score": score,
                       "band": wscope.health_band(score), "source": "redlight"})
@@ -238,14 +355,17 @@ def build_dashboard(email: str, *, internal: bool, lens: str | None = None,
             "units": units, "units_source": "hubspot_company",
             "to_lease_90d": wc.metric(round(e90 * units) if (e90 is not None and units) else None,
                                       "aptiq", stamp, exposure_90d=e90),
-            "overspend_per_year": None,
+            "occupancy": wc.metric(occ, "aptiq", stamp),
+            "leases_month": wc.metric(lease_by_company.get(cid), "hyly_lake.pai_journey", wc.now_iso(),
+                                      period=lease_period),
+            "status": p.get("plestatus") or None,
             "health": score, "health_source": "redlight", "band": wscope.health_band(score),
         })
     if len(props) > MAX_TILES:
         gaps.append(wc.gap("health_tiles", f"Showing the {MAX_TILES} lowest-health properties of {len(props)}"))
-    if prop_rows:
-        gaps.append(wc.gap("properties.overspend_per_year",
-                           "Overspend needs a market-rate source for vendor packages; there is none"))
+    if prop_rows and len(lease_by_company) < len(prop_rows):
+        gaps.append(wc.gap("properties.leases_month", "Leases by property cover the Hyly beta properties only",
+                           source="hyly"))
     if any(t["score"] is None for t in tiles):
         gaps.append(wc.gap("health_tiles.score", "Some properties have no Red Light score yet", source="redlight"))
 
@@ -256,21 +376,22 @@ def build_dashboard(email: str, *, internal: bool, lens: str | None = None,
         running = bool(last and wc.utc_now() - last <= timedelta(hours=48))
 
     kpis = {
+        "occupancy": occupancy_kpi(props, rows, loaded),
+        "units_to_lease_90d": units_to_lease_kpi(props, rows, loaded),
+        "leases_this_month": leases,
+        "cost_per_lease": cost,
         "ai_visibility": visibility_kpi(props, gaps) if props else None,
-        "portfolio_occupancy": occupancy_kpi(props, rows, loaded),
-        "identified_savings": None,
+        "actions_taken": actions_taken_kpi(props, today, gaps) if props else None,
         "waiting_on_you": wc.metric(len(waiting_items), "workspace_inbox", wc.now_iso()),
     }
-    gaps.append(wc.gap("kpis.identified_savings",
-                       "No recommendation source records a savings amount yet"))
-    if props and kpis["portfolio_occupancy"] is None:
-        gaps.append(wc.gap("kpis.portfolio_occupancy", "No AptIQ occupancy for these properties", source="aptiq"))
+    for key, message in (("occupancy", "No AptIQ occupancy for these properties"),
+                         ("units_to_lease_90d", "No AptIQ 90-day exposure for these properties")):
+        if props and kpis[key] is None:
+            gaps.append(wc.gap(f"kpis.{key}", message, source="aptiq"))
 
     return {
         "greeting_name": greeting_name(email, gaps),
         "as_of": wc.now_iso(),
-        "lens": lens,
-        "kpi_order": KPI_ORDER[lens],
         "scope_label": scope["label"],
         "kpis": kpis,
         "health_tiles": tiles,

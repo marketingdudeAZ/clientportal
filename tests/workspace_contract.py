@@ -92,7 +92,7 @@ def check(value: Any, spec: Any, path: str = "$") -> list[str]:
 # ── shared pieces ────────────────────────────────────────────────────────────
 
 SOURCES = enum("hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
-               "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket")
+               "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket", "fair_housing_review")
 LENSES = enum("express", "tailor", "amplify", "evolve")
 STATUSES = enum("to_do", "in_motion", "done")
 KINDS = enum("auto", "queued", "person")
@@ -120,6 +120,9 @@ ITEM = {
     "internal_only": absent("internal_only"),
     "owner": opt(STR), "comments_count": INT, "cost_note": opt(STR),
     "steps": opt([STEP]), "trail": [TRAIL], "notes": [NOTE],
+    "why": opt({"text": STR, "receipts": [RECEIPT]}),
+    "for_whom": opt({"text": STR, "questions": [STR]}),
+    "approving_does": [{"label": STR, "owner": enum("RPM Digital", "vendor", "you"), "when": opt(STR)}],
     "actions": {"approve": BOOL, "not_now": BOOL},
 }
 
@@ -240,16 +243,19 @@ SHAPES = {
 # ── v3 rebuild screens ───────────────────────────────────────────────────────
 
 BAND = enum("healthy", "attention", "warning", "critical", "new")
-APPROVAL_CATEGORY = enum("cost", "vendor", "negotiate", "content", "creative", "compliance")
+APPROVAL_CATEGORY = enum("cost", "vendor", "content", "creative", "compliance")
 LOOP_LENS = enum("express", "tailor", "amplify", "evolve")
 
 DASHBOARD = {
     "greeting_name": opt(STR), "as_of": STR,
-    "kpis": {"ai_visibility": opt(METRIC), "portfolio_occupancy": opt(METRIC),
-             "identified_savings": opt(METRIC), "waiting_on_you": opt(METRIC)},
+    "lens": absent("lens"), "kpi_order": absent("kpi_order"),
+    "kpis": {"occupancy": opt(METRIC), "units_to_lease_90d": opt(METRIC), "leases_this_month": opt(METRIC),
+             "cost_per_lease": opt(METRIC), "ai_visibility": opt(METRIC), "actions_taken": opt(METRIC),
+             "waiting_on_you": opt(METRIC), "identified_savings": absent("identified_savings")},
     "health_tiles": [{"company_id": STR, "name": opt(STR), "score": opt(NUM), "band": BAND}],
     "properties": [{"company_id": STR, "name": opt(STR), "units": opt(INT), "to_lease_90d": opt(METRIC),
-                    "overspend_per_year": opt(METRIC), "health": opt(NUM), "band": BAND}],
+                    "occupancy": opt(METRIC), "leases_month": opt(METRIC), "status": opt(STR),
+                    "no_overspend": absent("overspend_per_year"), "health": opt(NUM), "band": BAND}],
     "activity": [{"at": opt(STR), "text": STR, "company_id": opt(STR),
                   "kind": enum("audit", "draft", "check", "flag", "forecast", "decision", "publish"),
                   "visibility": VISIBILITY}],
@@ -260,7 +266,7 @@ DASHBOARD = {
 
 APPROVALS = {
     "waiting": INT, "interrupts_count": INT, "approved_this_month": opt(INT),
-    "interrupts": [{"id": STR, "kind": enum("compliance", "pacing", "tracking"), "title": STR, "detail": STR,
+    "interrupts": [{"id": STR, "kind": enum("compliance"), "title": STR, "detail": STR,
                     "company_id": STR, "item_id": opt(STR), "primary_action": {"label": STR},
                     "secondary_action": {"label": STR}}],
     "batch": {"label": STR, "rows": [{"item_id": STR, "company_id": STR, "property": opt(STR), "action": STR,
@@ -290,8 +296,8 @@ PROPERTY_OVERVIEW = {
 MEDIA_PLAN = {
     "fiscal_year": STR, "envelope": opt(METRIC), "objective": opt(STR), "generated_at": opt(STR),
     "months": [{"month": STR, "units_to_lease": opt(INT)}],
-    "channels": [{"channel": STR, "monthly": [NUM], "monthly_avg": NUM, "annual": NUM, "share": opt(NUM),
-                  "cpl_target": opt(NUM)}],
+    "channels": [{"channel": STR, "mode": enum("always_on", "flighted"), "monthly": [opt(NUM)],
+                  "monthly_avg": NUM, "annual": NUM, "share": opt(NUM), "cpl_target": opt(NUM)}],
     "allocated": opt(METRIC), "notes": [STR], "gaps": [GAP],
 }
 
@@ -302,6 +308,11 @@ VISIBILITY_SCREEN = {
     "comp_stack": opt({"competitors": [STR], "rows": [{"surface": STR, "values": ANY}]}),
     "citation_sources": [{"source": STR, "share": NUM}],
     "recommendations": [{"text": STR, "action": {"type": STR}}],
+    "prompts": [{"id": STR, "text": STR, "topic": opt(STR), "intent": opt(STR), "engines": ANY}],
+    "fanout": [{"query": STR, "engine": opt(STR), "count": INT,
+                "content": opt({"item_id": opt(STR), "title": STR, "status": STR})}],
+    "writing": [{"title": STR, "answers": [STR], "status": enum("drafted", "in_review", "published"),
+                 "item_id": opt(STR)}],
     "alerts": [{"kind": enum("exposure", "competitor"), "text": STR}],
     "gaps": [GAP],
 }
@@ -310,9 +321,12 @@ CREATE_BRIEF = {"status": enum("generating"), "hub_keyword": STR}
 CONTENT = {
     "counts": {"recommendations": INT, "published": INT, "in_review": INT},
     "rows": [{"id": STR, "priority": opt(enum("high", "med", "low", "done")), "type": opt(STR), "title": STR,
-              "gap_source": opt(STR),
-              "status": enum("draft_ready", "in_review", "not_started", "published"),
-              "published_at": opt(STR), "item_id": opt(STR)}],
+              "keyword": opt(STR), "gap_source": opt(STR),
+              "status": enum("draft_ready", "in_review", "published"),
+              "published_at": opt(STR), "item_id": opt(STR),
+              "why": opt({"text": STR, "receipts": [RECEIPT]}),
+              "for_whom": opt({"text": STR, "questions": [STR]}),
+              "approving_does": [{"label": STR, "owner": enum("RPM Digital", "vendor", "you"), "when": opt(STR)}]}],
     "impact": [{"text": STR}], "gaps": [GAP],
 }
 
@@ -335,7 +349,23 @@ VALUE = {
     "gaps": [GAP],
 }
 
+FAIR_HOUSING_REVIEW = {
+    "property": {"company_id": STR, "name": opt(STR)},
+    "run_at": STR, "next_run": STR, "pages_checked": INT, "assets_checked": opt(INT),
+    "findings": [{"kind": enum("copy", "image"), "location": STR, "excerpt": STR, "reason": STR,
+                  "severity": STR, "suggested_fix": STR}],
+}
+FAIR_HOUSING_RUN_ALL = {"status": enum("started"), "scope": enum("all"), "limit": opt(INT)}
+
+CREATIVE_UPLOAD = {
+    "uploaded": [{"filename": STR, "file_url": STR, "thumbnail_url": opt(STR), "asset_name": STR,
+                  "category": STR, "subcategory": opt(STR)}],
+    "skipped": [{"filename": STR, "reason": STR}],
+}
+
 SHAPES.update({
+    "creative_upload": CREATIVE_UPLOAD,
+    "fair_housing_review": FAIR_HOUSING_REVIEW, "fair_housing_run_all": FAIR_HOUSING_RUN_ALL,
     "dashboard": DASHBOARD, "approvals": APPROVALS, "property_overview": PROPERTY_OVERVIEW,
     "media_plan": MEDIA_PLAN, "visibility": VISIBILITY_SCREEN, "create_brief": CREATE_BRIEF,
     "content": CONTENT, "creative": CREATIVE, "value": VALUE,
@@ -358,7 +388,8 @@ COUNT_KEYS = frozenset({
     "page", "page_size", "next_page", "high", "medium", "low", "more_count",
     "approved_unedited", "total", "pct", "threshold", "highlight_index",
     "waiting", "interrupts_count", "approved_this_month", "recommendations", "published", "in_review",
-    "assets", "tracked_in_ads", "changes",
+    "assets", "tracked_in_ads", "changes", "window_days", "autopilot_approvals", "fair_housing_reviews_clean",
+    "pages_checked", "assets_checked", "profile_fields_checked", "findings_count",
 })
 
 
