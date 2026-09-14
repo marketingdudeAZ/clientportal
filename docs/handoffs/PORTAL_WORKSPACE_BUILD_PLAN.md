@@ -206,3 +206,20 @@ Response:
 - GA4 and the Google Ads API aren't wired on `main`; `/api/benchmarks` is seeded data.
 - Only portal tickets and Ask check `require_company_access` today; every other legacy endpoint checks email presence only.
 - `scripts/deploy_template.py` and the GitHub workflow only know `client-portal.html`.
+
+## Contract requests (UI)
+
+Nothing below was changed silently: the UI builds against the contract above as written and hides what isn't there. These are additions the Paper screens need to reach full parity. All are optional fields, so none of them break the current shapes.
+
+1. **`gaps[]` element shape.** The contract shows `gaps: []` but never an entry. The UI accepts either a plain string or `{message}` (it also reads `detail` / `reason`). Please settle on one; the fixtures use strings.
+2. **Item: the evidence table (artboard B, "The units").** Suggest `table: {columns: [...], rows: [[...]], source, as_of}` or null. Without it, the unit-by-unit table is not shown.
+3. **Item: the sparkline on the Work card (artboard A, "units coming available, by week").** Suggest `spark: {values: [..], highlight_index, label, source, as_of}` or null.
+4. **Decision: the trigger's record bar (artboard F, "17 of 19 … 89%").** Suggest `record: {approved_unedited, total, threshold_pct, threshold_items}`. Today only the `written_down` sentence is shown.
+5. **Decision: per-row caption and action in `in_motion[]`** (artboard F's "no spend, reversible" and the "Review the IO" button). Suggest `note` and `action: {label, href}`.
+6. **Undo.** Artboard F has Undo; there is no endpoint, so the button is rendered disabled. If it's wanted: `POST /work/<id>/undo` with a window in the decision response (`undo_until`).
+7. **Portfolio: scope and "All".** Artboard G's scope line ("Dallas + Austin") and the "Needs me / All 38" chips need `scope_label` and a `?scope=all` variant (or `quiet_properties`). Without them the UI shows the count only and no chips.
+8. **Portfolio: the "Automatic" state.** Suggest `top_item.needs_approval` so rows whose only item runs itself read "Automatic" instead of a date.
+9. **Property: action links.** "Open in HubSpot" and "Edit the brief" need `hubspot_url` and `brief_edit_url`; the buttons are omitted until then.
+10. **Plan: `channels[].status` values.** The UI treats `pending` as amber, anything matching `ended|expired|paused|stopped` as red, and everything else as plain text. An enum in the contract would stop that guess.
+11. **Work: which count the sidebar badge shows.** The UI uses `counts.to_do`. Paper's badge (4) matches neither `summary.open` (6) nor `counts.to_do` (3).
+12. **Client view: what `changing[].date` means.** The UI captions it "live" (go-live date), as Paper does.
