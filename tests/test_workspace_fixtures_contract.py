@@ -236,3 +236,35 @@ def test_signals():
     assert sum(d["counts"].values()) == len(d["signals"])
     for g in d["gaps"]:
         check(g, {"message": str}, "signals.gaps[]")
+
+
+REQUEST_CATEGORIES = {"creative", "web", "paid", "seo", "listing", "reputation", "other"}
+
+
+def test_request_draft():
+    d = load("request_draft")
+    check(d, {"tickets": list, "gaps": list}, "request_draft")
+    assert d["tickets"]
+    for i, t in enumerate(d["tickets"]):
+        where = f"request_draft.tickets[{i}]"
+        check(t, {"draft_id": str, "title": str, "category": str, "team": OPT_STR, "needed_by": OPT_STR,
+                  "needed_by_reason": OPT_STR, "attached_context": list, "warnings": list}, where)
+        assert t["category"] in REQUEST_CATEGORIES, f"{where}.category {t['category']!r}"
+    assert any(t["warnings"] for t in d["tickets"]), "one drafted ticket should carry a warning"
+
+
+def test_request_created():
+    d = load("request_created")
+    check(d, {"created": list, "failed": list}, "request_created")
+    for c in d["created"]:
+        check(c, {"draft_id": str, "work_item_id": str, "clickup_task_id": str}, "request_created.created[]")
+    for f in d["failed"]:
+        check(f, {"draft_id": str, "reason": str}, "request_created.failed[]")
+
+
+def test_requests_recent():
+    d = load("requests_recent")
+    check(d, {"recent": list}, "requests_recent")
+    for r in d["recent"]:
+        check(r, {"title": str, "status": str, "status_date": OPT_STR, "work_item_id": OPT_STR}, "requests_recent.recent[]")
+        assert r["status"] in {"done", "in_progress", "new"}

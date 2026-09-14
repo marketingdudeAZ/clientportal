@@ -134,6 +134,34 @@ def start_work(signal_id: str):
     return jsonify({"work_item_id": "hubdb_rec:991"})
 
 
+@app.post("/api/workspace/requests/draft")
+def request_draft():
+    body = request.get_json(silent=True) or {}
+    if not str(body.get("text") or "").strip():
+        return jsonify({"error": "text is required"}), 400
+    return jsonify(_fixture("request_draft"))
+
+
+@app.post("/api/workspace/requests")
+def request_file():
+    body = request.get_json(silent=True) or {}
+    tickets = body.get("tickets") or []
+    if not tickets:
+        return jsonify({"error": "tickets are required"}), 400
+    created, failed = [], []
+    for i, t in enumerate(tickets):
+        if not str(t.get("title") or "").strip():
+            failed.append({"draft_id": t.get("draft_id"), "reason": "A ticket needs a title."})
+        else:
+            created.append({"draft_id": t.get("draft_id"), "work_item_id": f"portal_ticket:{4471 + i}", "clickup_task_id": f"86b2k7x{i}"})
+    return jsonify({"as_of": _fixture("request_created")["as_of"], "created": created, "failed": failed})
+
+
+@app.get("/api/workspace/requests")
+def requests_recent():
+    return jsonify(_fixture("requests_recent"))
+
+
 @app.get("/api/ask/questions")
 def ask_questions():
     return jsonify(_fixture("ask_questions"))

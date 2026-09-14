@@ -409,6 +409,52 @@ a{color:inherit;text-decoration:none}
 .sc.act{width:140px;flex-shrink:0;display:flex;justify-content:flex-end}
 .srow .inline-err{flex-basis:100%;padding-left:236px}
 
+/* New request (artboard E) */
+.req{display:flex;border:1px solid var(--border-2);border-radius:12px;overflow:clip;min-height:700px;background:var(--white)}
+.req-l{width:560px;flex-shrink:0;display:flex;flex-direction:column;gap:20px;padding:32px 34px}
+.req-head{display:flex;flex-direction:column;gap:6px}
+.req-h{font-family:var(--font-display);font-weight:600;font-size:24px;line-height:30px;letter-spacing:-.02em;color:var(--ink)}
+.req-sub{font-size:14px;line-height:21px;color:var(--muted)}
+.req-box{display:flex;background:#FBFCFC;border:1.5px solid var(--copper);border-radius:9px;padding:18px 19px;min-height:190px}
+.req-box:focus-within{outline:2px solid var(--copper-fill);outline-offset:2px}
+.req-box textarea{flex:1;border:0;outline:0;background:transparent;resize:vertical;font-size:15px;line-height:25px;color:var(--ink);caret-color:var(--copper);min-height:152px}
+.req-box textarea::placeholder{color:var(--faint)}
+.req-row{display:flex;align-items:center;gap:9px}
+.req-row .grow{flex:1}
+.req-recent{border-top:1px solid var(--line-3);flex:1;display:flex;flex-direction:column;gap:11px;padding-top:22px}
+.recent{list-style:none;display:flex;flex-direction:column;gap:11px}
+.recent li{display:flex;align-items:center;gap:12px}
+.recent .rt{flex:1;min-width:0;font-size:14px;line-height:18px;color:var(--text)}
+.recent .rt a:hover{text-decoration:underline}
+.recent .rs{display:flex;align-items:center;gap:6px;flex-shrink:0;min-width:80px;font-size:13px;line-height:16px;font-weight:500;color:var(--text-2)}
+.recent .rs i{width:7px;height:7px;border-radius:4px;background:var(--side);flex-shrink:0}
+.recent .rs i.done{background:var(--sage)}
+.recent .rs i.prog{background:var(--copper)}
+.btn.send{width:100%;padding:14px;border-radius:7px;font-size:14px;line-height:18px;font-weight:600;min-height:46px}
+.signin-row{text-align:center;padding:14px;font-size:14px}
+.req-r{flex:1;min-width:0;background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;gap:16px;padding:32px 34px}
+.req-head2{display:flex;flex-direction:column;gap:5px}
+.tcard{background:var(--white);border:1px solid var(--border-2);border-radius:8px;display:flex;flex-direction:column;gap:11px;padding:16px 17px}
+.ttop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.ttitle{flex:1;min-width:0;font-size:15px;line-height:18px;font-weight:600;color:var(--ink);border:1px solid transparent;border-radius:4px;padding:2px 4px;margin:-3px -5px;background:transparent}
+.ttitle:hover{border-color:var(--border)}
+.ttitle:focus{outline:2px solid var(--copper-fill);outline-offset:1px}
+.ttitle-s{flex:1;min-width:0;font-size:15px;line-height:18px;font-weight:600;color:var(--ink)}
+.tcat{flex-shrink:0;appearance:none;-webkit-appearance:none;background:var(--tag);border:0;border-radius:4px;padding:3px 9px;font-size:11px;line-height:14px;font-weight:600;letter-spacing:.04em;color:var(--side);cursor:pointer}
+.tfields{display:flex;flex-direction:column;gap:7px}
+.tfields div{display:flex;align-items:center;gap:10px}
+.tfields dt{width:78px;flex-shrink:0;font-size:12px;line-height:16px;font-weight:500;color:var(--faint)}
+.tfields dd{flex:1;min-width:0;font-size:13px;line-height:16px;color:var(--text)}
+.tfields dd.need{display:flex;align-items:center;gap:4px;flex-wrap:wrap;color:var(--muted);font-weight:500}
+.need input{border:1px solid transparent;border-radius:4px;padding:1px 3px;margin:-2px -4px;font-size:13px;line-height:16px;font-weight:500;color:var(--muted);background:transparent}
+.need input:hover{border-color:var(--border)}
+.twarn{display:flex;align-items:center;gap:8px;background:#FBF7F2;border-radius:6px;padding:9px 11px}
+.twarn svg{flex-shrink:0}
+.twarn p{flex:1;min-width:0;font-size:12px;line-height:18px;color:#7A5E38}
+.tact{display:flex;justify-content:flex-end;margin-top:-4px}
+.link.quiet{color:var(--muted);font-weight:400;font-size:12px}
+.req-foot{border-top:1px solid var(--border-2);padding-top:14px;font-size:12px;line-height:18px;color:var(--faint)}
+
 /* Mobile (Paper artboard L, 390px) */
 @media (max-width:760px){
   .app{flex-direction:column}
@@ -426,7 +472,6 @@ a{color:inherit;text-decoration:none}
   .h1{font-size:24px;line-height:30px}
   .h1.lg{font-size:26px;line-height:32px}
   .topbar{padding:20px 16px 14px}
-  .tools .btn.primary{display:none}
   .tools{width:100%}
   .search{height:44px;flex:1}
   .search input,.search input:focus,.search input:not(:placeholder-shown){width:100%}
@@ -487,6 +532,17 @@ a{color:inherit;text-decoration:none}
   .sc.act{width:100%;justify-content:flex-start}
   .sc.act .btn{flex:1}
   .srow .inline-err{padding-left:0}
+  .tools .btn.primary{display:inline-flex;min-height:44px;padding-inline:12px}
+  .req{flex-direction:column;min-height:0;gap:18px;padding-block:20px}
+  .req-l{display:contents}
+  .req-l > *{margin-inline:16px}
+  .req-head{order:1}
+  .req-box{order:2}
+  .req-row{order:3;flex-wrap:wrap}
+  .req-err{order:4}
+  .req-r{order:5;border-left:0;border-block:1px solid var(--line);padding:20px 16px}
+  .req-l > .send,.req-l > .signin-row{order:6}
+  .req-recent{order:7;border-top:0;padding-top:0}
 }
 
 </style>
@@ -697,6 +753,16 @@ a{color:inherit;text-decoration:none}
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
   }
 
+  function canDecide() { return !state.me || state.me.can_decide !== false; }
+  function signInLink(label) { return '<a href="#" class="link" data-signin>' + esc(label) + '</a>'; }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('[data-signin]');
+    if (!a) return;
+    e.preventDefault();
+    try { sessionStorage.removeItem(LINK_KEY); } catch (err) {}
+    window.location.replace(window.location.pathname + window.location.hash);
+  });
+
   /* ── State ───────────────────────────────────────────────────────── */
   var state = { me: null, companyId: null, workCount: null, portfolioCount: null, lastDecision: {}, askCache: {} };
   var COMPANY_KEY = 'ws.company';
@@ -889,7 +955,7 @@ a{color:inherit;text-decoration:none}
     return '<div class="topbar"><div class="stack"><h1 class="h1">Work</h1>' +
       (sub.length ? '<p class="lede">' + esc(sub.join(' · ')) + '</p>' : '') + '</div>' +
       '<div class="tools"><label class="search">' + SEARCH_ICON + '<span class="sr-only">Search this list</span><input type="search" placeholder="Search" data-search></label>' +
-      '<button type="button" class="btn primary" aria-disabled="true" title="New requests are not built yet">' + PLUS_ICON + 'New request</button></div></div>' +
+      '<a class="btn primary" href="#/request">' + PLUS_ICON + 'New request</a></div></div>' +
       '<div class="filters"><div class="chips" role="group" aria-label="Filter by status">' + chips + '</div>' +
       '<div class="legend"><span class="sw" aria-hidden="true"></span>Internal only — the client never sees these' +
       (isInternal() ? '<span class="vr" aria-hidden="true"></span><a class="link" href="#/client">Client view</a>' : '') + '</div></div>' +
@@ -1546,6 +1612,148 @@ a{color:inherit;text-decoration:none}
     });
   }
 
+  /* ── New request (artboard E) ────────────────────────────────────── */
+  var CATEGORIES = ['creative', 'web', 'paid', 'seo', 'listing', 'reputation', 'other'];
+  var REQ_STATUS = { done: ['Done', 'done'], in_progress: ['In progress', 'prog'], new: ['New', 'new'] };
+  var WARN_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.9l5.5 9.6H1.5L7 1.9z" fill="none" stroke="#AB784A" stroke-width="1.3" stroke-linejoin="round"/><path d="M7 5.9v2.4M7 9.9v.1" fill="none" stroke="#AB784A" stroke-width="1.4" stroke-linecap="round"/></svg>';
+
+  function screenRequest() {
+    var st = state.req;
+    if (!st || st.companyId !== state.companyId) st = state.req = { companyId: state.companyId, text: '', tickets: [], gaps: [], sent: null };
+    renderRequest();
+  }
+  function renderRequest(focusSel) {
+    setMain(requestHtml(state.req));
+    bindRequest();
+    loadRecent();
+    if (focusSel) { var f = main.querySelector(focusSel); if (f) f.focus(); }
+  }
+
+  function shortDay(s) {
+    var n = daysFromToday(s); if (n == null) return '';
+    if (n === 0) return 'today';
+    if (n < 0 && n > -7) return DOW[parseDay(s).getDay()];
+    return mdy(s);
+  }
+
+  function loadRecent() {
+    var box = main.querySelector('[data-recent]'); if (!box) return;
+    api('/api/workspace/requests?' + cq()).then(function (r) {
+      var list = (r.data || {}).recent || [];
+      box.innerHTML = list.length ? list.map(function (x) {
+        var st = REQ_STATUS[x.status] || [String(x.status || ''), 'new'];
+        var label = st[0] + (x.status === 'done' && x.status_date ? ' ' + shortDay(x.status_date) : '');
+        var title = x.work_item_id ? '<a href="#/item/' + encodeURIComponent(x.work_item_id) + '">' + esc(x.title) + '</a>' : esc(x.title);
+        return '<li><span class="rt">' + title + '</span><span class="rs"><i class="' + st[1] + '" aria-hidden="true"></i>' + esc(label) + '</span></li>';
+      }).join('') : '<li class="caption">Nothing sent yet.</li>';
+    }).catch(function (e) {
+      if (e && e.status === 401) return;
+      box.innerHTML = '<li class="caption">Your recent requests didn’t load.</li>';
+    });
+  }
+
+  function ticketCard(t) {
+    var id = esc(t.draft_id);
+    var opts = CATEGORIES.map(function (c) { return '<option value="' + c + '"' + (c === t.category ? ' selected' : '') + '>' + c.toUpperCase() + '</option>'; }).join('');
+    return '<article class="tcard" data-ticket="' + id + '">' +
+      '<div class="ttop"><label class="sr-only" for="tt-' + id + '">Ticket title</label><input class="ttitle" id="tt-' + id + '" data-f="title" value="' + esc(t.title) + '">' +
+      '<label class="sr-only" for="tc-' + id + '">Category</label><select class="tcat" id="tc-' + id + '" data-f="category">' + opts + '</select></div>' +
+      '<dl class="tfields">' +
+      '<div><dt>Needed by</dt><dd class="need"><input type="date" data-f="needed_by" value="' + esc(t.needed_by || '') + '" aria-label="Needed by">' +
+        (has(t.needed_by_reason) ? '<span>— ' + esc(t.needed_by_reason) + '</span>' : '') + '</dd></div>' +
+      (has(t.team) ? '<div><dt>Goes to</dt><dd>' + esc(t.team) + '</dd></div>' : '') +
+      (has(t.attached_context) ? '<div><dt>Attached</dt><dd>' + esc(t.attached_context.join(', ')) + '</dd></div>' : '') + '</dl>' +
+      (t.failed ? '<p class="inline-err">Didn’t file: ' + esc(t.failed) + '</p>' : '') +
+      (t.warnings || []).map(function (w) { return '<div class="twarn">' + WARN_ICON + '<p>' + esc(w) + '</p></div>'; }).join('') +
+      '<div class="tact"><button type="button" class="link quiet" data-remove="' + id + '">Remove</button></div></article>';
+  }
+
+  function sentHtml(sent) {
+    var byId = {};
+    (sent.tickets || []).forEach(function (t) { byId[t.draft_id] = t; });
+    return (sent.created || []).map(function (c) {
+      var t = byId[c.draft_id] || {};
+      return '<div class="tcard"><div class="ttop"><b class="ttitle-s">' + esc(t.title || 'Request') + '</b><span class="pill green caps">FILED</span></div>' +
+        (c.work_item_id ? '<a class="link" href="#/item/' + encodeURIComponent(c.work_item_id) + '">Follow it in Work</a>' : '') + '</div>';
+    }).join('');
+  }
+
+  function requestHtml(st) {
+    var n = st.tickets.length, teams = [];
+    st.tickets.forEach(function (t) { if (t.team && teams.indexOf(t.team) === -1) teams.push(t.team); });
+    var routeNote = teams.length ? 'Goes to ' + teams.join(' and ') + ', not to your AM’s inbox' : 'Goes to the team that does the work, not to your AM’s inbox';
+    var action = !n ? '<button type="button" class="btn primary send" data-draft>Draft it</button>'
+      : (canDecide() ? '<button type="button" class="btn primary send" data-send>Send it</button>' : '<p class="signin-row">' + signInLink('Sign in to send') + '</p>');
+    var heard = n ? (n === 1 ? 'One request.' : word(n) + ' requests, filed separately.') + ' Fix anything that’s wrong before you send.'
+      : (st.sent ? 'Sent. Status comes back under Your recent requests and in Work.' : 'Write it on the left and press Draft it. Each thing you ask for becomes its own ticket here.');
+    var foot = n ? (n === 1 ? 'It lands' : (n === 2 ? 'Both land' : 'All ' + word(n, true) + ' land')) + ' in ClickUp with every field mapped. You never open it — status comes back here.' : '';
+    return '<div class="page reqpage"><div class="req">' +
+      '<section class="req-l" aria-labelledby="req-h"><div class="req-head"><h1 class="req-h" id="req-h">What do you need?</h1>' +
+      '<p class="req-sub">Write it how you’d say it. No form, no dropdowns, no ClickUp.</p></div>' +
+      '<label class="req-box"><span class="sr-only">Describe what you need</span><textarea data-req-text rows="6" placeholder="For example: the A1 photos are from before the renovation. Can we reshoot before the October wave?">' + esc(st.text) + '</textarea></label>' +
+      '<div class="req-row">' + (n ? '<button type="button" class="link" data-draft>Draft again</button>' : '') + '<span class="grow"></span><span class="caption">' + esc(routeNote) + '</span></div>' +
+      '<p class="inline-err req-err" role="alert" hidden data-req-err></p>' +
+      '<section class="req-recent"><h2 class="eyebrow">Your recent requests</h2><ul class="recent" data-recent><li class="caption">Loading…</li></ul></section>' +
+      action + '</section>' +
+      '<section class="req-r" aria-labelledby="heard-h"><div class="req-head2"><h2 class="eyebrow" id="heard-h" tabindex="-1">What we heard</h2><p class="req-sub">' + esc(heard) + '</p></div>' +
+      (st.sent ? sentHtml(st.sent) : '') + st.tickets.map(ticketCard).join('') + gapsLine(st.gaps) +
+      '<div class="spacer"></div>' + (foot ? '<p class="req-foot">' + esc(foot) + '</p>' : '') + '</section></div></div>';
+  }
+
+  function readTickets() {
+    var st = state.req; if (!st) return;
+    main.querySelectorAll('.tcard[data-ticket]').forEach(function (card) {
+      var t = st.tickets.filter(function (x) { return String(x.draft_id) === card.getAttribute('data-ticket'); })[0];
+      if (!t) return;
+      card.querySelectorAll('[data-f]').forEach(function (el) { t[el.getAttribute('data-f')] = el.value || null; });
+    });
+  }
+
+  function bindRequest() {
+    var st = state.req, ta = main.querySelector('[data-req-text]'), err = main.querySelector('[data-req-err]');
+    function fail(e, what) {
+      if (e && e.status === 401) return;
+      err.hidden = false; err.textContent = what + ': ' + (e && e.message || 'try again') + '.';
+    }
+    ta.addEventListener('input', function () { st.text = ta.value; });
+    main.querySelectorAll('.tcard [data-f]').forEach(function (el) { el.addEventListener('input', readTickets); el.addEventListener('change', readTickets); });
+    main.querySelectorAll('[data-remove]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        readTickets();
+        var id = b.getAttribute('data-remove');
+        st.tickets = st.tickets.filter(function (t) { return String(t.draft_id) !== id; });
+        renderRequest('#heard-h');
+      });
+    });
+    main.querySelectorAll('[data-draft]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!st.text.trim()) { err.hidden = false; err.textContent = 'Write what you need first.'; ta.focus(); return; }
+        var label = b.textContent;
+        b.disabled = true; b.textContent = 'Reading…';
+        api('/api/workspace/requests/draft', { method: 'POST', body: { company_id: state.companyId, text: st.text } }).then(function (r) {
+          var d = r.data || {};
+          st.tickets = d.tickets || []; st.gaps = d.gaps || []; st.sent = null;
+          renderRequest('#heard-h');
+        }).catch(function (e) { b.disabled = false; b.textContent = label; fail(e, 'We couldn’t draft that'); });
+      });
+    });
+    var send = main.querySelector('[data-send]');
+    if (send) send.addEventListener('click', function () {
+      readTickets();
+      if (st.tickets.some(function (t) { return !String(t.title || '').trim(); })) { err.hidden = false; err.textContent = 'Every ticket needs a title.'; return; }
+      send.disabled = true; send.textContent = 'Sending…';
+      var outgoing = st.tickets.map(function (t) { var c = {}; for (var k in t) if (k !== 'failed') c[k] = t[k]; return c; });
+      api('/api/workspace/requests', { method: 'POST', body: { company_id: state.companyId, tickets: outgoing } }).then(function (r) {
+        var d = r.data || {}, failed = {};
+        (d.failed || []).forEach(function (f) { failed[f.draft_id] = f.reason || 'not filed'; });
+        st.sent = { created: d.created || [], tickets: outgoing };
+        st.tickets = outgoing.filter(function (t) { return failed[t.draft_id]; }).map(function (t) { t.failed = failed[t.draft_id]; return t; });
+        if (!st.tickets.length) st.text = '';
+        renderRequest('#heard-h');
+      }).catch(function (e) { send.disabled = false; send.textContent = 'Send it'; fail(e, 'That didn’t send'); });
+    });
+  }
+
   /* ── Reports (on hold) ───────────────────────────────────────────── */
   function screenReports() {
     setMain('<div class="page"><div class="head"><div class="stack"><h1 class="h1">Reports</h1><p class="lede">Monthly reports are being reworked. They will be back here soon.</p></div></div></div>');
@@ -1565,10 +1773,10 @@ a{color:inherit;text-decoration:none}
     var screens = {
       portfolio: screenPortfolio, work: screenWork, item: screenItem, approved: screenApproved,
       property: screenProperty, performance: screenPerformance, plan: screenPlan, ask: screenAsk,
-      client: screenClient, reports: screenReports, signals: screenSignals
+      client: screenClient, reports: screenReports, signals: screenSignals, request: screenRequest
     };
     var fn = screens[name] || screenWork;
-    renderSide(fn === screenItem || fn === screenApproved ? 'item' : name);
+    renderSide(fn === screenItem || fn === screenApproved || fn === screenRequest ? 'item' : name);
     window.scrollTo(0, 0);
     fn(decodeURIComponent(parts[1] || ''));
   }
