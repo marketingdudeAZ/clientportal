@@ -207,6 +207,148 @@ Response:
 - Only portal tickets and Ask check `require_company_access` today; every other legacy endpoint checks email presence only.
 - `scripts/deploy_template.py` and the GitHub workflow only know `client-portal.html`.
 
+## Phase 2 contract
+
+# Workspace — Phase 2 contract (Kyle's decisions, 14 Sept 2026)
+
+Copy this whole section verbatim into `docs/handoffs/PORTAL_WORKSPACE_BUILD_PLAN.md` under a heading "Phase 2 contract". The API and UI branches both carry an identical copy so the merge is clean.
+
+## Decisions
+1. **Signals gets its own screen.** Internal role only, reached from the Portfolio sidebar.
+2. **New request, Search and Undo get built now.** No disabled or "coming soon" buttons.
+3. **Full client transparency.**
+   - Clients see ALL work items, including open items still on RPM's side, with status.
+   - Internal comments, call notes and internal trail entries stay private.
+   - The server filters these by role. Never rely on the page to hide them.
+   - `internal_only` on Items goes away. Visibility now lives on individual trail entries and notes.
+4. **One portal for clients and staff.**
+   - Clients sign in to the same Workspace.
+   - They see Work, Property, Performance, Plan & Spend, Ask and Reports. Portfolio and Signals are internal only.
+   - "Client view" is no longer a client destination. It becomes an internal "Preview as client" toggle that renders the same screens with client-role filtering.
+5. **Brand palette** (Paper file "RPM Templates" tokens):
+
+   | Token | Hex |
+   |---|---|
+   | Juniper | `#444E4C` |
+   | Black | `#282D27` |
+   | Gray | `#76797A` |
+   | Copper | `#AB784A` |
+   | Sage | `#8BA395` |
+   | Mint | `#BDDDD9` |
+   | Rule | `#D9DEDC` |
+   | Ink-on-dark | `#E7EBE9` |
+
+   - Large fills, charts, borders and accents use these exact hexes.
+   - Small text and button fills use darker shades of the SAME hues for AA contrast: copper button `#97693F`, copper text `#8A6A3F`, muted grey `#6F7372`.
+   - No new hues, except semantic status colors. Derive those so they sit with the palette, and document them.
+
+## Item changes
+- Remove `internal_only`.
+- Add `trail[].visibility` (`"client" | "internal"`) and `notes[]` (`{at, actor, text, visibility}`).
+- For client-role callers, the server omits every `visibility: "internal"` entry. `comments_count` counts only what the caller can see.
+- `client_visible` stays, and is `true` for every work item.
+
+## `GET /api/workspace/signals?company_id=` (omit `company_id` for the portfolio)
+Internal role only; clients get 403. Signals are what changed across properties that has not yet become work. They're computed by deterministic rules from existing data; no LLM writes a number.
+
+```json
+{"as_of": "…", "counts": {"high": 3, "medium": 7, "low": 12},
+ "signals": [{"id": "occupancy_drop:123:2026-09-14", "company_id": "123", "property_name": "Skye Reserve",
+   "kind": "occupancy_drop", "severity": "high",
+   "title": "Occupancy down 3.1 points in 30 days",
+   "detail": "76.0% today against 79.1% on Aug 15.",
+   "metric": {"value": 0.76, "source": "aptiq", "as_of": "…"},
+   "change": {"from": 0.791, "to": 0.76, "window_days": 30},
+   "detected_at": "…", "work_item_id": null}],
+ "gaps": [{"message": "Lead signals need GA4, which is not connected.", "source": "ga4"}]}
+```
+
+- `kind` is one of `occupancy_drop | stale_inventory | lease_wave | lead_drop | spend_pacing | reputation_drop | tracking_break | data_stale`.
+- Wire every kind the portal has data for: Red Light scores, `aptiq_snapshots`, forecast / `ninjacat_metrics`, `data_quality.py` freshness. The rest are listed in `gaps`.
+- `POST /api/workspace/signals/<id>/start-work {company_id}` creates a work item through the existing portal ticket create path. It requires verified identity and returns `{work_item_id}`.
+
+## New request
+**`POST /api/workspace/requests/draft {company_id, text}`**
+- Turns plain words into proposed tickets through `skills/llm_gateway.py` with structured output.
+- `fair_housing.py` checks the text.
+- Draft only; nothing is filed.
+
+Response:
+```json
+{"tickets": [{"draft_id": "d1", "title": "Reshoot A1 photography — post-renovation", "category": "creative",
+   "team": "Creative Marketing Services", "needed_by": "2026-09-28", "needed_by_reason": "7 units open Oct 5",
+   "attached_context": ["Property address", "Market", "PM contact", "Brand kit"], "warnings": []}],
+ "gaps": []}
+```
+- `category` is one of `creative | web | paid | seo | listing | reputation | other`.
+- `warnings` example: "A wrong amenity is also wrong in the paid ads and ILS feeds. We'll flag those too."
+
+**`POST /api/workspace/requests {company_id, tickets:[…draft tickets, possibly edited…]}`**
+- Files each ticket through the existing portal ticket create path (ClickUp).
+- Requires verified identity.
+- Returns `{created: [{draft_id, work_item_id, clickup_task_id}], failed: [{draft_id, reason}]}`.
+
+**`GET /api/workspace/requests?company_id=`**
+```json
+{"recent": [{"title": "…", "status": "done" | "in_progress" | "new", "status_date": "…", "work_item_id": "…"}]}
+```
+
+## Search
+**`GET /api/workspace/search?q=&company_id=`** (`company_id` optional)
+
+Searches across the caller's accessible properties: property names via the property resolver, work item titles, report months, and Ask preset questions. At most 20 results, ranked.
+
+```json
+{"results": [{"type": "property" | "work_item" | "report" | "question", "id": "…", "title": "…", "subtitle": "…", "company_id": "…", "href": "#/item/hubdb_rec:991"}]}
+```
+
+## Undo
+- **`POST /api/workspace/work/<id>/decision`** responses gain `undo: {available, until, reason}`. The window is 10 minutes, and undo is available only while no in-motion step has executed an irreversible action.
+- **`POST /api/workspace/work/<id>/undo {company_id}`**
+  - Requires verified identity AND that the caller is the person who decided.
+  - Reverses through the source's handler where one exists (HubDB recommendation status back to pending; loop event `recommendation_undone`; content brief back to draft).
+  - Sources with no safe reverse return 409 `{error: "not_undoable", reason}`.
+  - Writes a `workspace_decision_undone` loop event.
+  - Returns `{item, undone: true}`.
+
+## UI contract requests — resolutions
+1. `gaps[]` entries are `{message, source?}` everywhere.
+2. The Item gains `evidence: {columns: [...], rows: [[...]], more_count}` when the source carries tabular evidence (e.g. the stale-units list); otherwise `null`.
+3. The Item gains `sparkline: {label, points: [{x, y}], highlight_index}` when real series data exists; otherwise `null`.
+4. The decision response gains `record: {label, approved_unedited, total, threshold, pct}` when the trigger has history; otherwise `null`.
+5. `in_motion[]` gains `note` and `action: {label, href}`, both nullable.
+6. Undo: see above.
+7. Portfolio gains `scope_label` and `?view=needs_me|all`.
+8. `top_item.needs_approval` (bool) is added; a `false` value renders as "Automatic".
+9. Property gains `hubspot_url` and `brief_edit_url`, both nullable.
+10. Plan `status` is one of `running | pending | ended | paused`, with `status_note` free text.
+11. The Work badge counts `summary.open` items that need the caller's approval.
+12. `changing[].date` is the planned go-live date.
+
+## Phase 2 amendments (after the API's live smoke test)
+Copy these into the plan doc too, directly under "Phase 2 contract".
+
+1. **One gap shape everywhere:** `{message, field?, source?}`. `message` is the human-readable reason (previously `reason`); `field` names the null field. Both the API and the UI use this shape.
+2. **Signed preview links are read-only.**
+   - A signed link lets an internal person see the Workspace. It does NOT satisfy the verified-identity check for decisions, requests, start-work or undo; those need a Clerk session.
+   - The API only sets `portal.identity_verified` from a link when `WORKSPACE_SIGNED_LINKS_CAN_DECIDE=true` (default false).
+   - Links are honored only for `@rpmliving.com` emails, in addition to the internal role.
+   - `/me` gains `can_decide` (bool). When it's false, the UI shows the decision panel with its buttons replaced by a quiet "Sign in to approve" link, not broken buttons.
+3. **Cold start.**
+   - Portfolio-wide reads (spend sheet, AptIQ exports) serve the last good copy immediately and refresh in the background. Every response carries `as_of` so staleness is visible.
+   - Add an internal `POST /api/internal/workspace/warm` (internal key) that pre-builds those caches, for use before a demo and from cron.
+   - Target: first request under 5 seconds after a warm.
+4. **LLM-authored text in existing sources.** Don't blanket-withhold text that contains digits. Show it when every number in it can be matched to the source record's structured fields. Otherwise replace only the unmatched sentence and add a gap. A generic title is the last resort.
+5. **Fair Housing filtering.**
+   - Use `fair_housing.py`'s own severity/context API if it has one.
+   - Hide copy from clients only on a high-severity or blocking result. Lower-severity matches are shown, and logged for internal review with a `fair_housing_review` flag on the item (visible to internal users only).
+   - Plain words like "single", "color", "age" or "white" in a normal sentence must not hide anything by themselves.
+6. **The brief paragraph.** Property `brief.text` uses the first non-empty value, override wins, from: `fluency_romance`, then a composed paragraph of `what_makes_this_property_unique_` + `property_voice_and_tone` + `additional_selling_points` (verbatim field text only, no LLM), then null with a gap.
+7. **Transparency.** Remove `hidden_open_count` from client view. Clients now see all work items.
+8. **Money guard.** Decisions on any budget or spend recommendation write `requires_signature: true` in the loop event payload. Add a test asserting that no workspace code path writes to Fluency, Google Ads or the spend sheet.
+9. **Portfolio for internal users with no assigned properties** defaults to `view=all` (every property, paged 50 at a time, ranked the same way) instead of an empty list.
+10. **Register `workspace_decision`, `workspace_decision_undone` and `workspace_request_filed`** as known event types in `loop_writer.py`.
+
 ## Contract changes (API)
 
 Recorded by the API branch (`feature/portal-workspace-api`). Every change is additive or makes a field nullable; nothing in the shapes above was renamed or removed. `tests/workspace_contract.py` encodes the contract with these changes, so fixtures can be checked against it.
