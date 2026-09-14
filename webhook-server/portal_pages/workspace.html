@@ -230,7 +230,8 @@ main.content{display:flex;flex:1;min-height:0;align-items:stretch}
 @media (prefers-reduced-motion:reduce){.spinner{animation:none}}
 .gate{position:fixed;inset:0;background:var(--juniper);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px}
 @media (prefers-reduced-motion:no-preference){.page{animation:rise .3s ease-out}}
-@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* Motion only, never opacity: text stays at full contrast from the first frame. */
+@keyframes rise{from{transform:translateY(8px)}to{transform:none}}
 /* ── Dashboard (CXR-2, FYF-1 hero) ───────────────────────────────────── */
 .greet{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .greet .stack{display:flex;flex-direction:column;gap:2px}
@@ -455,9 +456,9 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 
 /* ── Media plan (DM0-1, GJQ-1) ──────────────────────────────────────── */
 .flight{padding:20px;display:flex;flex-direction:column;gap:10px;overflow-x:auto}
-.frow{display:flex;align-items:center;min-width:820px}
-.frow .fl{width:200px;flex-shrink:0;padding-right:12px;font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-muted)}
-.flgrp{min-width:820px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:14px 0 4px;border-top:1px solid var(--color-border)}
+.frow{display:flex;align-items:center;min-width:720px}
+.frow .fl{width:150px;flex-shrink:0;padding-right:10px;font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-muted)}
+.flgrp{min-width:720px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:14px 0 4px;border-top:1px solid var(--color-border)}
 .flgrp b{font-size:11px;line-height:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--juniper)}
 .flgrp span{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
 .frow.ch.flat .on{background:var(--color-muted);color:var(--gray-ink-strong)}
@@ -506,7 +507,9 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .nc.cited{color:var(--healthy-text)} .nc.cited i{background:var(--healthy)}
 .nc.named{color:var(--juniper)} .nc.named i{background:var(--color-card);box-shadow:inset 0 0 0 2px var(--sage)}
 .nc.none{color:var(--color-fg-muted)} .nc.none i{background:var(--rule)}
-.tbl.boxed.qtbl td.q{white-space:normal;min-width:220px}
+.tbl.boxed.qtbl td.q{white-space:normal;min-width:200px}
+.tbl.boxed.qtbl.eng th,.tbl.boxed.qtbl.eng td{padding-inline:10px}
+.tbl.boxed.qtbl.eng td.q .fine{display:block;margin-top:2px}
 .tbl.boxed.qtbl td.q.mono{font-family:var(--font-mono);font-size:12px}
 .card.writing{padding:4px 20px}
 .wrow{display:flex;gap:16px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--color-line)}
@@ -1807,8 +1810,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   function intentLabel(k) { return INTENT_LABEL[k] || (k ? String(k).charAt(0).toUpperCase() + String(k).slice(1) : ''); }
   function ncCell(r) {
     if (!r) return '<td><span class="empty-dash">—</span></td>';
-    var label = r.named && r.cited ? 'Named · cited' : (r.named ? 'Named' : (r.cited ? 'Cited' : 'Not named'));
-    return '<td><span class="nc ' + (r.cited ? 'cited' : (r.named ? 'named' : 'none')) + '"><i aria-hidden="true"></i>' + label + '</span></td>';
+    if (!r.named && !r.cited) return '<td><span class="nc none"><i aria-hidden="true"></i><span aria-hidden="true">—</span><span class="sr-only">Not named</span></span></td>';
+    return '<td><span class="nc ' + (r.cited ? 'cited' : 'named') + '"><i aria-hidden="true"></i>' + (r.cited ? 'Cited' : 'Named') + '</span></td>';
   }
   function byTopic(list) {
     var order = [], map = {};
@@ -1844,13 +1847,13 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     prompts.forEach(function (p) { Object.keys(p.engines || {}).forEach(function (k) { if (engNames.indexOf(k) === -1) engNames.push(k); }); });
     var qs = prompts.length ? '<section class="sec" aria-labelledby="vq-h"><div class="sec-head"><h2 class="h-sec" id="vq-h">Questions we track</h2><span class="support">' +
       esc(num(prompts.length)) + ' ' + plural(prompts.length, 'question') + ' · by topic and intent</span></div>' +
-      '<div class="tscroll"><table class="tbl boxed qtbl"><thead><tr><th scope="col">Question</th><th scope="col">Intent</th>' + engNames.map(function (n) { return '<th scope="col">' + esc(n) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      '<div class="tscroll"><table class="tbl boxed qtbl eng"><thead><tr><th scope="col">Question and intent</th>' + engNames.map(function (n) { return '<th scope="col">' + esc(n) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       byTopic(prompts).map(function (g) {
         var named = 0, total = 0;
         g.rows.forEach(function (p) { engNames.forEach(function (n) { var r = (p.engines || {})[n]; if (r) { total++; if (r.named) named++; } }); });
-        return '<tr class="grprow"><th scope="rowgroup" colspan="' + (engNames.length + 2) + '">' + esc(g.topic) + ' <span class="fine">· named in ' + esc(named) + ' of ' + esc(total) + ' answers</span></th></tr>' +
-          g.rows.map(function (p) { return '<tr><td class="q">' + esc(p.text) + '</td><td class="support">' + esc(intentLabel(p.intent)) + '</td>' + engNames.map(function (n) { return ncCell((p.engines || {})[n]); }).join('') + '</tr>'; }).join('');
-      }).join('') + '</tbody></table></div><p class="receipt">Named: the answer mentions ' + esc(c.name || 'the property') + '. Cited: the answer links to or quotes one of its pages.' +
+        return '<tr class="grprow"><th scope="rowgroup" colspan="' + (engNames.length + 1) + '">' + esc(g.topic) + ' <span class="fine">· named in ' + esc(named) + ' of ' + esc(total) + ' answers</span></th></tr>' +
+          g.rows.map(function (p) { return '<tr><td class="q">' + esc(p.text) + (p.intent ? '<span class="fine">' + esc(intentLabel(p.intent)) + '</span>' : '') + '</td>' + engNames.map(function (n) { return ncCell((p.engines || {})[n]); }).join('') + '</tr>'; }).join('');
+      }).join('') + '</tbody></table></div><p class="receipt">Named: the answer mentions ' + esc(c.name || 'the property') + '. Cited: it also links to or quotes one of its pages. A dash: not named.' +
       (d.last_audit ? ' From the ' + esc(mdy(d.last_audit)) + ' audit.' : '') + '</p></section>' : '';
     var fan = (d.fanout || []).slice().sort(function (a, b) { return (b.count || 0) - (a.count || 0); });
     var fanHtml = fan.length ? '<section class="sec" aria-labelledby="vf-h"><div class="sec-head"><h2 class="h-sec" id="vf-h">Follow-up searches the engines ran</h2><span class="support">What they looked up to answer those questions</span></div>' +
