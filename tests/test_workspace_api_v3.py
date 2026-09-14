@@ -225,3 +225,96 @@ class TestDashboard:
         from skills import workspace_scope as wscope
         assert [wscope.health_band(s) for s in (90, 75, 74, 60, 55, 49, None)] == \
             ["healthy", "healthy", "attention", "attention", "warning", "critical", "new"]
+
+
+# ── 2. approvals ─────────────────────────────────────────────────────────────
+
+class TestApprovals:
+    def test_batch_and_compliance_interrupt(self, client, scope, items):
+        body = client.get("/api/workspace/approvals", headers=_h()).get_json()
+        _ok(body, "approvals")
+        assert body["waiting"] == 4
+        assert {r["item_id"] for r in body["batch"]["rows"]} == \
+            {"hubdb_rec:991", "content_brief:b1", "video_variant:v1", "hubdb_rec:fh1"}
+        assert all(r["can_edit"] is False and r["savings_per_year"] is None for r in body["batch"]["rows"])
+        compliance = [i for i in body["interrupts"] if i["kind"] == "compliance"]
+        assert compliance and compliance[0]["item_id"] == "hubdb_rec:fh1"
+        assert body["stats"]["edit_rate"] is None and body["stats"]["approval_rate"] is None
+        assert body["approved_this_month"] is None
+        assert {"stats", "stats.edit_rate"} <= {g.get("field") for g in body["gaps"]}
+
+    def test_category_filter(self, client, scope, items):
+        body = client.get("/api/workspace/approvals?category=creative", headers=_h()).get_json()
+        assert [r["item_id"] for r in body["batch"]["rows"]] == ["video_variant:v1"]
+        assert client.get("/api/workspace/approvals?category=vibes", headers=_h()).status_code == 400
+
+    def test_clients_get_no_interrupts(self, client, scope, items, monkeypatch):
+        _allowlist_client(monkeypatch, [CID2])
+        body = client.get("/api/workspace/approvals", headers=_h(CLIENT)).get_json()
+        assert body["interrupts"] == []
+        row = next(r for r in body["batch"]["rows"] if r["item_id"] == "hubdb_rec:fh1")
+        assert row["action"] == "Recommendation"            # high-severity copy is held from clients
+
+    def test_pacing_interrupt_creates_work_and_never_pauses(self, client, scope, items, monkeypatch):
+        import bigquery_client
+        import portal_tickets
+        from skills import workspace_signals
+        monkeypatch.setattr(bigquery_client, "is_bigquery_configured", lambda: True)
+        sig = {"id": f"spend_pacing:{CID2}:2026-09-14", "kind": "spend_pacing", "severity": "high",
+               "detail": "$900 spent against $3,000 of monthly paid line items (under plan)."}
+        monkeypatch.setattr(workspace_signals, "signals_for_property",
+                            lambda ctx, gaps, today=None, **kw: [dict(sig)] if ctx.company_id == CID2 else [])
+        with mock.patch.object(portal_tickets, "create_ticket") as create, \
+                mock.patch("hubspot_client.patch_deal") as patch_deal:
+            body = client.get("/api/workspace/approvals", headers=_h()).get_json()
+        pacing = next(i for i in body["interrupts"] if i["kind"] == "pacing")
+        assert pacing["primary_action"]["label"] == "Pause campaign"
+        assert pacing["primary_action"]["creates"] == "work_item"
+        assert pacing["primary_action"]["href"] == f"/api/workspace/signals/{sig['id']}/start-work"
+        assert "Nothing is paused" in pacing["primary_action"]["note"]
+        create.assert_not_called()
+        patch_deal.assert_not_called()
+
+    def test_stats_and_auto_approve_candidates(self, client, scope, items, monkeypatch):
+        at = TODAY.isoformat() + "T10:00:00+00:00"
+        events = [_decision_event(f"content_brief:c{n}", "approve", at) for n in range(19)]
+        events += [_decision_event("content_brief:c99", "not_now", at)]
+        events += [_decision_event(f"content_brief:c{n}", "approve", at) for n in range(100, 102)]
+        events += [_decision_event(f"video_variant:v{n}", "approve", at) for n in range(19)]
+        events += [_decision_event(f"call_prep:r{n}", "approve" if n < 17 else "not_now", at) for n in range(20)]
+        monkeypatch.setattr(whist, "decision_events", lambda cids, uuids, since: events)
+        with mock.patch("skills.workspace_approvals.date") as d:
+            d.today.return_value = TODAY
+            body = client.get("/api/workspace/approvals", headers=_h()).get_json()
+        assert body["stats"]["auto_approve_candidates"] == ["Content briefs"]
+        rate = body["stats"]["approval_rate"]
+        assert rate["source"] == "workspace_decision" and rate["decisions"] == 61
+        assert rate["value"] == round(57 / 61, 4)
+        assert body["approved_this_month"] == 57
+
+    def test_candidates_rule_edges(self):
+        at = "2026-09-01T00:00:00+00:00"
+        decs = whist.to_decisions([_decision_event(f"hubdb_rec:{n}", "approve", at) for n in range(20)])
+        assert whist.auto_approve_candidates(decs) == ["Red Light recommendations"]
+        decs = whist.to_decisions([_decision_event(f"hubdb_rec:{n}", "approve", at) for n in range(19)])
+        assert whist.auto_approve_candidates(decs) == []
+        mixed = [_decision_event(f"hubdb_rec:{n}", "approve" if n < 17 else "not_now", at) for n in range(20)]
+        assert whist.auto_approve_candidates(whist.to_decisions(mixed)) == []
+
+    def test_history_pairs_undo_and_marks_autopilot(self):
+        at1, at2 = "2026-09-01T10:00:00+00:00", "2026-09-01T10:05:00+00:00"
+        events = [
+            _decision_event("loop_rec:a", "approve", at1),
+            {"event_type": "workspace_decision_undone", "occurred_at": at2,
+             "payload": json.dumps({"item_id": "loop_rec:a"})},
+            {"event_type": "recommendation_approved", "occurred_at": at1, "source": "loop_autopilot",
+             "trigger": "autopilot", "property_uuid": "u-123",
+             "payload": json.dumps({"recommendation": {"action": "shift_budget", "amount": 200,
+                                                       "from_channel": "paid_social", "to_channel": "seo"}})},
+            {"event_type": "recommendation_approved", "occurred_at": at1, "source": "client_action",
+             "payload": json.dumps({})},
+        ]
+        decs = whist.to_decisions(events)
+        assert [d["undone"] for d in decs] == [True, False]
+        assert decs[1]["automatic"] is True and decs[1]["title"] == "Shift $200 from paid_social to seo"
+        assert len(whist.effective(decs)) == 1

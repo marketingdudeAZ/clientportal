@@ -555,3 +555,21 @@ def workspace_dashboard():
                                              scope_internal=_real_internal(), lens=lens))
     except Exception as exc:  # noqa: BLE001
         return _failed("dashboard", exc)
+
+
+# ── v3: approvals ────────────────────────────────────────────────────────────
+
+@workspace_bp.route("/api/workspace/approvals", methods=["GET", "OPTIONS"])
+def workspace_approvals():
+    gate = require_access(FEATURE_KEY)
+    if gate:
+        return gate
+    from skills import workspace_approvals as wapp
+    category = (request.args.get("category") or "").strip() or None
+    if category and category not in wapp.CATEGORIES:
+        return jsonify({"error": "Invalid category", "detail": "|".join(wapp.CATEGORIES)}), 400
+    try:
+        return jsonify(wapp.build_approvals(current_portal_email(), internal=_is_internal(),
+                                            scope_internal=_real_internal(), category=category))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("approvals", exc)
