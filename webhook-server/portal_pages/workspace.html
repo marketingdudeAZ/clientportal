@@ -481,6 +481,7 @@ ol,ul{list-style:none}
 .ledger tfoot td{border-top:2px solid var(--color-fg);border-bottom:0;padding-top:18px;font-weight:600}
 .who.you{color:var(--copper-ink);font-weight:500}
 .who.auto{color:var(--color-fg-muted);font-weight:500}
+.who.team{color:var(--color-fg-2);font-weight:500}
 
 /* ── Signals ─────────────────────────────────────────────────────────── */
 .sgroup{display:flex;flex-direction:column;gap:0}
@@ -779,7 +780,8 @@ ol,ul{list-style:none}
   var SOURCES = { aptiq: 'ApartmentIQ', hubspot: 'HubSpot', hubspot_line_items: 'HubSpot line items', ga4: 'GA4', google_ads: 'Google Ads',
     hyly: 'Hyly', fluency: 'Fluency', yardi: 'Yardi', bigquery: 'BigQuery', clickup: 'ClickUp', ai_mentions: 'AI visibility audit',
     redlight: 'Red Light', forecasting: 'Exposure forecast', workspace_inbox: 'Workspace', workspace_decisions: 'Workspace decisions',
-    hubdb_rec: 'Recommendations', soci: 'SOCi' };
+    hubdb_rec: 'Recommendations', soci: 'SOCi', geo_sources: 'GEO citation tracking', geo_brand_mentions: 'GEO brand mentions',
+    geo_responses: 'GEO responses', hubspot_company: 'HubSpot company record', aptiq_exposure: 'ApartmentIQ exposure' };
   function sourceName(s) { return SOURCES[s] || s || ''; }
   function receipt(r) {
     if (!r || typeof r !== 'object' || (!r.source && !r.as_of)) return '';
@@ -814,7 +816,23 @@ ol,ul{list-style:none}
   function companies() { return (state.me && state.me.companies) || []; }
   function companyById(id) { var l = companies(); for (var i = 0; i < l.length; i++) if (String(l[i].company_id) === String(id)) return l[i]; return null; }
   function company() { return companyById(state.companyId) || companies()[0] || null; }
-  function setCompany(id) { if (!id) return; state.companyId = String(id); try { localStorage.setItem(COMPANY_KEY, state.companyId); } catch (e) {} }
+  function setCompany(id) {
+    if (!id) return;
+    var changed = String(id) !== String(state.companyId);
+    state.companyId = String(id);
+    try { localStorage.setItem(COMPANY_KEY, state.companyId); } catch (e) {}
+    if (changed && state.me) loadBadge();
+  }
+  function loadBadge() {
+    if (!state.companyId) return;
+    var cid = state.companyId;
+    api('/api/workspace/work?' + cq() + '&status=to_do').then(function (r) {
+      if (cid !== state.companyId) return;
+      var n = ((r.data || {}).summary || {}).needs_approval;
+      state.waiting = n == null ? null : n;
+      renderSide(state.active);
+    }).catch(function () {});
+  }
   function cq() { return 'company_id=' + encodeURIComponent(state.companyId || ''); }
   function stopTimer() { if (state.timer) { clearInterval(state.timer); state.timer = null; } }
   document.addEventListener('click', function (e) {
@@ -862,6 +880,7 @@ ol,ul{list-style:none}
     return items;
   }
   function renderSide(active) {
+    state.active = active;
     var side = document.getElementById('side');
     var logo = '<div class="logo"><i aria-hidden="true"></i><b>RPM</b><span>Digital</span></div>';
     if (!state.me) { side.innerHTML = logo; return; }
@@ -1056,7 +1075,6 @@ ol,ul{list-style:none}
       if (!r) return;
       var d = r.data || {};
       state.loop = d.loop_status || state.loop;
-      var w = val((d.kpis || {}).waiting_on_you); if (w != null) state.waiting = w;
       renderSide('dashboard');
       var h = dashboardHtml(d);
       setView(h.page, h.rail);
@@ -1128,7 +1146,6 @@ ol,ul{list-style:none}
     guard(api('/api/workspace/approvals' + (cat ? '?category=' + encodeURIComponent(cat) : '')), 'approvals').then(function (r) {
       if (!r) return;
       var d = r.data || {};
-      if (!cat && d.waiting != null) state.waiting = d.waiting;
       renderSide('approvals');
       renderTop('Approvals', num(d.waiting) + ' waiting');
       setView(approvalsHtml(d, cat));
@@ -1601,7 +1618,8 @@ ol,ul{list-style:none}
     }
     var cites = has(d.citation_sources) ? '<section class="sec"><h2 class="h-sec">Citation sources</h2><div class="citebar" role="img" aria-label="' + esc(d.citation_sources.map(function (s) { return s.source + ' ' + pct(s.share); }).join(', ')) + '">' +
       d.citation_sources.map(function (s, i) { return '<i style="width:' + (s.share * 100).toFixed(1) + '%;background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>'; }).join('') + '</div>' +
-      '<div class="legend">' + d.citation_sources.map(function (s, i) { return '<span><i style="background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>' + esc(s.source) + ' ' + esc(pct(s.share)) + '</span>'; }).join('') + '</div></section>' : '';
+      '<div class="legend">' + d.citation_sources.map(function (s, i) { return '<span' + (s.share_source ? ' title="' + esc(sourceName(s.share_source)) + '"' : '') + '><i style="background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>' + esc(s.source) + ' ' + esc(pct(s.share)) + '</span>'; }).join('') + '</div>' +
+      (function () { var srcs = []; d.citation_sources.forEach(function (s) { if (s.share_source && srcs.indexOf(s.share_source) === -1) srcs.push(s.share_source); }); return srcs.length ? '<p class="receipt">Shares from ' + esc(srcs.map(sourceName).join(', ')) + '</p>' : ''; })() + '</section>' : '';
     var page = '<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Visibility audit</h1><p class="support">' +
       esc([d.last_audit ? 'Last audit: ' + mdy(d.last_audit) : '', d.next_audit ? 'Next scheduled: ' + mdy(d.next_audit) : ''].filter(Boolean).join(' · ')) + '</p></div></div>' +
       hero + strip + comp + cites + gapsLine(d.gaps) + '</div>';
@@ -1680,7 +1698,7 @@ ol,ul{list-style:none}
       var rows = (d.rows || []).map(function (x) {
         var prop = x.company_id ? '<a class="link quiet" href="#/property/' + encodeURIComponent(x.company_id) + '">' + esc(x.property) + '</a>' : esc(x.property);
         return '<tr><td>' + esc(x.change) + '</td><td class="support">' + prop + '</td><td class="num"' + rtitle(x.annual_value) + '><b>' + (val(x.annual_value) == null ? '<span class="empty-dash">—</span>' : esc(moneyK(val(x.annual_value)))) + '</b></td>' +
-          '<td class="num">' + (x.decided_by === 'you' ? '<span class="who you">You approved</span>' : '<span class="who auto">RPM Digital, automatic</span>') + '<span class="fine" style="display:block">' + esc(mdy(x.decided_at)) + '</span></td></tr>';
+          '<td class="num">' + (x.decided_by === 'you' ? '<span class="who you">You approved</span>' : (x.decided_by === 'team' ? '<span class="who team">A teammate approved</span>' : '<span class="who auto">RPM Digital, automatic</span>')) + '<span class="fine" style="display:block">' + esc(mdy(x.decided_at)) + '</span></td></tr>';
       }).join('');
       setView('<div class="page narrow" style="gap:40px"><div class="vhead"><div class="head"><p class="eyebrow">Trailing 12 months · ' + esc(d.period || '') + '</p>' + staleLabel(d.as_of) + '</div>' +
         '<h1>What we changed this year, and what it saved.</h1></div>' +
@@ -1928,6 +1946,7 @@ ol,ul{list-style:none}
       state.companyId = companyById(saved) ? saved : (companies()[0] ? String(companies()[0].company_id) : null);
       window.addEventListener('hashchange', route);
       route();
+      loadBadge();
     }).catch(function (err) {
       if (err && err.status === 401) return;
       view.innerHTML = errorHtml(err);
