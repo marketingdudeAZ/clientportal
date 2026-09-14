@@ -862,3 +862,33 @@ Recorded by the API branch (`feature/portal-workspace-api`). Every change is add
     - Media plan channels add `source`, and months add `source` when set.
     - Value rows' `decided_by` adds `"team"` for a colleague's decision.
     - `POST /visibility/create-brief` (202) and `POST /media-plan/regenerate` (201) are added.
+
+### Round 4 (API)
+
+30. **Media plan notes** never contradict a pending recommendation. A note that says to keep, continue or increase a channel is dropped while a recommendation naming that channel is waiting on a decision. The plan says instead: "<channel>: “<title>” is waiting on a decision, so the plan holds <channel> as contracted until it is decided."
+31. **Dashboard KPIs** are exactly `occupancy`, `units_to_lease_90d`, `leases_this_month`, `cost_per_lease`, `ai_visibility`, `actions_taken`, `waiting_on_you` (order in `workspace_dashboard.KPI_ORDER`). `lens`, `kpi_order` and `identified_savings` are removed, and `?lens=` is ignored.
+    - `leases_this_month` and `cost_per_lease` come from the Hyly lake (`pai_journey` lease events) for Hyly beta properties only. The source string names the coverage. Cost per lease is contracted spend from HubSpot line items ÷ leases.
+    - `actions_taken` counts, over 30 days, autopilot approvals plus clean monthly Fair Housing reviews, and its source says so.
+32. **Approvals** categories are `cost`, `vendor`, `content`, `creative`, `compliance`. `negotiate` folds into `vendor`. Pacing interrupts are removed, so pacing stays an internal Signal. `interrupts[].kind` is `compliance` only.
+33. **Items** add `why {text, receipts[]}`, `for_whom {text, questions[]}` and `approving_does [{label, owner, when}]`. All three come from fields the item already carries; no model is involved.
+    - A creative item that proposes a photo shoot becomes "Build new creative that highlights <subject> from existing assets" when usable assets exist.
+    - A shoot is proposed only when no usable asset exists, and at most once per property per 12 months. Unknown shoot history never proposes one.
+34. **Monthly Fair Housing review.** New source `fair_housing_review` (category `compliance`) and `POST /api/internal/workspace/fair-housing-review/run`.
+    - Called with `{company_id}` it runs synchronously and returns 200 with the review record. Called with `{all: true, limit?}` it returns 202 and runs in the background. Anything else is 400. The internal key is required.
+    - The review record is `{company_id, run_at, next_run, pages_checked, assets_checked, image_check, findings[{kind, location, excerpt, severity, reason, suggested_fix}], findings_count}`.
+    - Findings become one approval. A clean run is an actions-taken event, not an approval.
+    - Approve files a ticket with draft fixes and publishes nothing.
+    - The AI-image disclosure check is a pluggable rule behind `WORKSPACE_FH_AI_IMAGE_CHECK` and is off by default.
+35. **Properties and dashboard rows** replace `overspend` with `occupancy` (metric), `leases_month` (metric) and `status`.
+36. **Media plan** `channels[]` add `mode`: `always_on` or `flighted`. Always-on months are flat. Flighted months follow the exposure forecast, and months beyond it are `null`.
+37. **Visibility** adds:
+    - `prompts[{id, text, topic, intent, engines{<engine>: {named, cited}}}]`
+    - `fanout[{query, engine, count, content{item_id, title, status}?}]`
+    - `writing[{title, answers[], status: drafted|in_review|published, item_id}]`
+
+    These come from the GEO tables when the property has rows there, and from the ai_mentions audit otherwise. On the ai_mentions path, `named`, `topic` and `intent` are `null` and `fanout` is empty, each with a gap.
+38. **Content** rows' `status` is `draft_ready`, `in_review` or `published`. `not_started` is removed, and a row exists only once a draft exists. Rows add `keyword`, `why`, `for_whom` and `approving_does` (empty unless `draft_ready`).
+39. **Creative upload.** `POST /api/workspace/creative/upload` takes multipart `company_id`, `files[]`, and optional `metadata` (JSON list) and `category`.
+    - It returns 201 `{uploaded[{filename, file_url, thumbnail_url, asset_name, category, subcategory}], skipped[{filename, reason}]}`.
+    - It returns 400 for no files or nothing stored, 401 for an unverified identity and 403 for preview-as-client.
+40. **Reports** default to the last full month for every property. A property outside the Hyly beta returns 200 with property identity, units and listings, plus a gap naming each Hyly-only section. It no longer returns 404.
