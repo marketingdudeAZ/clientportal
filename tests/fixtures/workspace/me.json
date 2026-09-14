@@ -1,0 +1,11 @@
+{
+  "email": "dana@rpmliving.com",
+  "role": "internal",
+  "verified": true,
+  "companies": [
+    {"company_id": "18234410021", "uuid": "a41c2e7d-5b0f-4c6a-9d3e-7f1b82c0e915", "name": "LYV Broadway", "city": "Carrollton", "state": "TX", "units": 390},
+    {"company_id": "18234410087", "uuid": "c9e07b31-2d84-4f19-8a6c-3e5d9f2b7a40", "name": "Skye Reserve", "city": "Tampa", "state": "FL", "units": 982},
+    {"company_id": "18234410112", "uuid": "5f2d8a96-1c3e-4b7d-a0e8-9b64c1d3f278", "name": "Remi West Dallas", "city": "Dallas", "state": "TX", "units": 336},
+    {"company_id": "18234410150", "uuid": "e17a4c02-8b9d-4e3f-b6a1-2c58d0f9e613", "name": "The Maddux at Shadowood", "city": "Atlanta", "state": "GA", "units": 287}
+  ]
+}

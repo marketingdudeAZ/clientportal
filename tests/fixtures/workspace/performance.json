@@ -1,0 +1,22 @@
+{
+  "occupied": {"value": 0.918, "units": 358, "total": 390, "target": 0.95, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+  "available_now": {"value": 44, "stale_90_plus": 10, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+  "coming_open_90d": {"value": 23, "one_bed": 10, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+  "coming_by_week": [
+    {"week_start": "2026-09-07", "one_bed": 2, "two_bed": 0, "other": 1},
+    {"week_start": "2026-09-14", "one_bed": 0, "two_bed": 0, "other": 1},
+    {"week_start": "2026-09-21", "one_bed": 2, "two_bed": 0, "other": 1},
+    {"week_start": "2026-09-28", "one_bed": 1, "two_bed": 0, "other": 1},
+    {"week_start": "2026-10-05", "one_bed": 4, "two_bed": 0, "other": 3},
+    {"week_start": "2026-10-12", "one_bed": 0, "two_bed": 0, "other": 1},
+    {"week_start": "2026-10-19", "one_bed": 0, "two_bed": 0, "other": 1},
+    {"week_start": "2026-10-26", "one_bed": 0, "two_bed": 2, "other": 2},
+    {"week_start": "2026-11-02", "one_bed": 0, "two_bed": 0, "other": 0},
+    {"week_start": "2026-11-09", "one_bed": 0, "two_bed": 0, "other": 0},
+    {"week_start": "2026-11-16", "one_bed": 0, "two_bed": 0, "other": 0},
+    {"week_start": "2026-11-23", "one_bed": 1, "two_bed": 0, "other": 0}
+  ],
+  "monthly_plan": {"value": 4638, "by_channel": {"paid": 2839, "seo": 800}, "source": "hubspot_line_items", "as_of": "2026-09-14T12:30:00Z"},
+  "note": "Dense for about six weeks, then thin — we see units when they get advertised, not when notice is given. Anything past mid-October will fill in as it arrives.",
+  "gaps": ["Leases and move-ins are not shown because Yardi is not connected."]
+}

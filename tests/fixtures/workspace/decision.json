@@ -1,0 +1,44 @@
+{
+  "item": {
+    "id": "hubdb_rec:1004",
+    "source": "hubdb_rec",
+    "source_id": "1004",
+    "title": "Ten units have sat 90+ days — one for 306 days",
+    "found": "10 of the 44 units advertised as available have been listed 90 days or more. Six are A1 one-bedrooms asking $1,385 against a floorplan average of $1,370 — we are not the cheapest A1 on our own website.",
+    "expect": "Days on market for the six A1s drops under 60 within four weeks of the reprice.",
+    "if_skip": null,
+    "receipts": [
+      {"label": "10 of 44 available units listed 90+ days", "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"}
+    ],
+    "channels": ["paid_search", "listing"],
+    "lens": "amplify",
+    "start_by": "2026-08-24",
+    "due": "2026-08-24",
+    "status": "in_motion",
+    "needs_approval": false,
+    "client_visible": false,
+    "internal_only": true,
+    "owner": "Dana R.",
+    "comments_count": 3,
+    "cost_note": null,
+    "steps": [
+      {"when": "2026-09-14", "label": "Hide #1321 from the syndication feed", "channel": "listing", "kind": "auto", "status": "done"},
+      {"when": "2026-09-15", "label": "Five A1s repriced to $1,362 — $8 under the plan average", "channel": "listing", "kind": "queued", "status": "pending"},
+      {"when": "2026-09-17", "label": "Concession moves from B plans to A plans for three weeks", "channel": "paid_search", "kind": "person", "status": "pending"}
+    ],
+    "trail": [
+      {"at": "2026-08-24T14:10:00Z", "actor": "availability monitor", "text": "Opened"},
+      {"at": "2026-09-14T14:14:00Z", "actor": "Marcus J.", "text": "Approved"}
+    ],
+    "actions": {"approve": false, "not_now": false}
+  },
+  "decided_by": "marcus@rpmliving.com",
+  "decided_at": "2026-09-14T14:14:00Z",
+  "in_motion": [
+    {"label": "#1321 hidden from the syndication feed", "kind": "auto", "status": "done", "detail": "Done at 9:14am, six seconds after you approved. Pushed to Zillow, Apartments.com and the property site."},
+    {"label": "Five A1s repriced to $1,362", "kind": "queued", "status": "pending", "detail": "Staged for Tue 9/15. Rent changes wait for the nightly pricing run — we don't write to the rent roll."},
+    {"label": "Concession moves from B plans to A plans", "kind": "person", "status": "pending", "detail": "This one changes what we spend, so it does not fire on a click. A deal and an IO are drafted for signature; the budget moves once it's signed."}
+  ],
+  "written_down": "Approved unedited by Marcus J. That counts toward this trigger's record — 17 of 19 stale-inventory plans approved without changes.",
+  "check_back": {"date": "2026-10-08", "text": "We check these ten units again on Oct 8. If days on market has not moved, the item reopens with what we tried attached."}
+}

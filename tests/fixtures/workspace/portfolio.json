@@ -1,0 +1,38 @@
+{
+  "as_of": "2026-09-14T13:04:00Z",
+  "property_count": 38,
+  "item_count": 23,
+  "starting_this_week": 6,
+  "properties": [
+    {
+      "company_id": "18234410087", "name": "Skye Reserve", "city": "Tampa", "state": "FL", "units": 982,
+      "occupancy": {"value": 0.76, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+      "top_item": {"id": "hubdb_rec:1012", "title": "108 of 165 available units have sat 90+ days"},
+      "more_items": 2, "start_by": "2026-09-10", "overdue": true,
+      "units_at_risk": {"value": 108, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"}
+    },
+    {
+      "company_id": "18234410021", "name": "LYV Broadway", "city": "Carrollton", "state": "TX", "units": 390,
+      "occupancy": {"value": 0.918, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+      "top_item": {"id": "hubdb_rec:991", "title": "Flight paid onto one-bedrooms before the Oct 5 wave"},
+      "more_items": 5, "start_by": "2026-09-14", "overdue": false,
+      "units_at_risk": {"value": 23, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"}
+    },
+    {
+      "company_id": "18234410112", "name": "Remi West Dallas", "city": "Dallas", "state": "TX", "units": 336,
+      "occupancy": {"value": 0.85, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+      "top_item": {"id": "call_prep:2207", "title": "2027 budget recommendation — $5,825/mo today"},
+      "more_items": 1, "start_by": "2026-09-18", "overdue": false,
+      "units_at_risk": {"value": 18, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"}
+    },
+    {
+      "company_id": "18234410150", "name": "The Maddux at Shadowood", "city": "Atlanta", "state": "GA", "units": 287,
+      "occupancy": {"value": 0.93, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+      "top_item": {"id": "service_ticket:5530", "title": "Renewal-season creative — files itself Tuesday"},
+      "more_items": 0, "start_by": "2026-09-22", "overdue": false,
+      "units_at_risk": {"value": 11, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"}
+    }
+  ],
+  "quiet_count": 34,
+  "gaps": ["Occupancy is missing for 3 properties because their ApartmentIQ token expired."]
+}
