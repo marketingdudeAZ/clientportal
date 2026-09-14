@@ -327,17 +327,21 @@ def test_dashboard():
     d = load("dashboard")
     check(d, {"greeting_name": OPT_STR, "as_of": str, "kpis": dict, "health_tiles": list, "properties": list,
               "activity": list, "waiting": list, "loop_status": dict}, "dashboard")
-    for k in ("ai_visibility", "portfolio_occupancy", "identified_savings", "waiting_on_you"):
-        assert k in d["kpis"], f"dashboard.kpis missing {k}"
+    # Round 4: seven KPIs in this order, no lens, no identified savings.
+    assert list(d["kpis"]) == ["occupancy", "units_to_lease_90d", "leases_this_month", "cost_per_lease",
+                               "ai_visibility", "actions_taken", "waiting_on_you"]
+    assert "lens" not in d and "kpi_order" not in d
+    for k in d["kpis"]:
         check_receipt(d["kpis"][k], f"dashboard.kpis.{k}")
     for t in d["health_tiles"]:
         check(t, {"company_id": str, "name": str, "score": OPT_NUM, "band": str}, "dashboard.health_tiles[]")
         assert t["band"] in BANDS
     for p in d["properties"]:
-        check(p, {"company_id": str, "name": str, "units": OPT_NUM, "to_lease_90d": OPT_RECEIPT,
-                  "overspend_per_year": OPT_RECEIPT, "health": OPT_NUM, "band": str}, "dashboard.properties[]")
-        check_receipt(p["to_lease_90d"], "dashboard.properties[].to_lease_90d")
-        check_receipt(p["overspend_per_year"], "dashboard.properties[].overspend_per_year")
+        check(p, {"company_id": str, "name": str, "units": OPT_NUM, "occupancy": OPT_RECEIPT, "to_lease_90d": OPT_RECEIPT,
+                  "leases_this_month": OPT_RECEIPT, "health": OPT_NUM, "band": str}, "dashboard.properties[]")
+        assert "overspend_per_year" not in p
+        for k in ("occupancy", "to_lease_90d", "leases_this_month"):
+            check_receipt(p[k], f"dashboard.properties[].{k}")
         assert p["band"] in BANDS
     for a in d["activity"]:
         check(a, {"at": str, "text": str, "kind": str, "visibility": str}, "dashboard.activity[]")
@@ -345,7 +349,7 @@ def test_dashboard():
         assert a["visibility"] in {"client", "internal"}
     for w in d["waiting"]:
         check(w, {"item_id": str, "title": str, "subtitle": OPT_STR, "category": str}, "dashboard.waiting[]")
-        assert w["category"] in {"cost", "vendor", "negotiate", "content", "creative", "compliance"}
+        assert w["category"] in {"cost", "vendor", "content", "creative", "compliance"}
     check(d["loop_status"], {"running": bool, "property_count": int, "last_pass": OPT_STR}, "dashboard.loop_status")
     check_gap_entries(d, "dashboard")
 

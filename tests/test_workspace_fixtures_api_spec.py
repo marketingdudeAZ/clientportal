@@ -33,6 +33,23 @@ SPEC_BY_FIXTURE = {
     "visibility": wc.VISIBILITY_SCREEN, "content": wc.CONTENT, "creative": wc.CREATIVE, "value": wc.VALUE,
     "create_brief": wc.CREATE_BRIEF, "media_plan_regenerate": REGENERATE_RESULT,
 }
+# Round 4 shapes ("Round 4 — Kyle's review" in docs/handoffs/PORTAL_WORKSPACE_BUILD_PLAN.md). The API
+# branch adds them to tests/workspace_contract.py in parallel; until they land here the Round 4 fixtures are
+# checked against these, built from the contract's own pieces and following the spec exactly.
+R4_CATEGORY = wc.enum("cost", "vendor", "content", "creative", "compliance")
+R4_DASHBOARD = {
+    **wc.DASHBOARD,
+    "lens": wc.absent("lens"), "kpi_order": wc.absent("kpi_order"),
+    "kpis": {**{k: wc.opt(wc.METRIC) for k in ("occupancy", "units_to_lease_90d", "leases_this_month", "cost_per_lease",
+                                              "ai_visibility", "actions_taken", "waiting_on_you")},
+             "identified_savings": wc.absent("identified_savings")},
+    "properties": [{"company_id": wc.STR, "name": wc.opt(wc.STR), "units": wc.opt(wc.INT),
+                    "occupancy": wc.opt(wc.METRIC), "to_lease_90d": wc.opt(wc.METRIC),
+                    "leases_this_month": wc.opt(wc.METRIC), "health": wc.opt(wc.NUM), "band": wc.BAND,
+                    "overspend_per_year": wc.absent("overspend_per_year")}],
+    "waiting": [{"item_id": wc.STR, "title": wc.STR, "subtitle": wc.opt(wc.STR), "category": R4_CATEGORY}],
+}
+SPEC_BY_FIXTURE["dashboard"] = R4_DASHBOARD
 # Fixtures that hold a list of one shape under a key.
 LIST_FIXTURES = {"approval_items": ("items", wc.ITEM)}
 # Covered by their own contract tests (tests/test_ask.py, tests/test_workspace_report.py).

@@ -163,10 +163,6 @@ ol,ul{list-style:none}
 .chip{height:28px;padding-inline:12px;border-radius:var(--radius-full);border:1px solid var(--color-border);background:var(--color-card);font-size:13px;line-height:16px;color:var(--color-fg-muted)}
 .chip:hover{background:var(--color-muted)}
 .chip[aria-pressed="true"]{background:var(--juniper);border-color:var(--juniper);color:var(--ink-on-dark);font-weight:500}
-.lens{display:flex;align-items:center;gap:4px;font-size:13px;line-height:16px}
-.lens button{color:var(--color-fg-muted);min-height:28px;padding-inline:2px}
-.lens button[aria-pressed="true"]{color:var(--copper-ink);font-weight:500;text-decoration:underline;text-underline-offset:4px}
-.lens .bar{color:var(--color-fg-muted);padding-inline:4px}
 .pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding-inline:10px;border-radius:var(--radius-full);font-size:12px;line-height:16px;font-weight:500;white-space:nowrap}
 .pill i{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
 .pill.healthy{background:var(--healthy-soft);color:var(--healthy-text)}
@@ -198,6 +194,10 @@ ol,ul{list-style:none}
 .kpi.sm .v{font-size:24px;line-height:30px}
 .kpi .rc{font-size:11px;line-height:14px;color:var(--color-fg-muted)}
 .kpi.emph .eyebrow{color:var(--color-fg-2);font-weight:600}
+.kpiset{display:flex;flex-direction:column;gap:16px;border-bottom:1px solid var(--color-border);padding-bottom:20px}
+.kpiset .kpis{display:grid;border-bottom:0;padding-bottom:0;row-gap:16px}
+.kpis.row4,.kpis.row3{grid-template-columns:repeat(4,minmax(0,1fr))}
+.kpis.row3{border-top:1px solid var(--color-line);padding-top:16px}
 
 /* Tables (v3 pattern) */
 .tscroll{overflow-x:auto}
@@ -607,6 +607,7 @@ ol,ul{list-style:none}
   .kpi .v{font-size:26px;line-height:32px}
   .kpis .kpi:nth-child(odd){padding-left:0;border-left:0}
   .kpis .kpi{flex:1 1 45%}
+  .kpis.row4,.kpis.row3{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hero{flex-direction:column;align-items:stretch;gap:16px;padding:18px}
   .hero .r{width:auto}
   .btn,.chip,.rchip,.textbtn{min-height:44px}
@@ -790,7 +791,9 @@ ol,ul{list-style:none}
     hyly: 'Hyly', fluency: 'Fluency', yardi: 'Yardi', bigquery: 'BigQuery', clickup: 'ClickUp', ai_mentions: 'AI visibility audit',
     redlight: 'Red Light', forecasting: 'Exposure forecast', workspace_inbox: 'Workspace', workspace_decisions: 'Workspace decisions',
     hubdb_rec: 'Recommendations', soci: 'SOCi', geo_sources: 'GEO citation tracking', geo_brand_mentions: 'GEO brand mentions',
-    geo_responses: 'GEO responses', hubspot_company: 'HubSpot company record', aptiq_exposure: 'ApartmentIQ exposure' };
+    geo_responses: 'GEO responses', hubspot_company: 'HubSpot company record', aptiq_exposure: 'ApartmentIQ exposure',
+    'hubspot_line_items+hyly': 'HubSpot line items and Hyly', fair_housing_review: 'Monthly Fair Housing review', geo_prompts: 'GEO prompts',
+    geo_fanout: 'GEO fan-out', geo_plans: 'GEO content plans' };
   function sourceName(s) { return SOURCES[s] || s || ''; }
   function receipt(r) {
     if (!r || typeof r !== 'object' || (!r.source && !r.as_of)) return '';
@@ -816,7 +819,7 @@ ol,ul{list-style:none}
   function channelName(c) { return CHANNELS[c] || (c ? c.replace(/_/g, ' ').replace(/^./, function (x) { return x.toUpperCase(); }) : ''); }
 
   /* ── State ───────────────────────────────────────────────────────── */
-  var state = { me: null, companyId: null, preview: false, lens: 'asset_manager', waiting: null, loop: null, lastDecision: {}, req: null, timer: null, hidden: {} };
+  var state = { me: null, companyId: null, preview: false, waiting: null, loop: null, lastDecision: {}, req: null, timer: null, hidden: {} };
   try { state.preview = sessionStorage.getItem(PREVIEW_KEY) === '1'; } catch (e) {}
   function realInternal() { return !!(state.me && state.me.role === 'internal'); }
   function viewInternal() { return realInternal() && !state.preview; }
@@ -1064,25 +1067,38 @@ ol,ul{list-style:none}
   function internalTag() { return viewInternal() ? ' <span class="tag internal">' + ic(I.lock, 10) + 'Internal</span>' : ''; }
 
   /* ── Dashboard (CXR-2, FYF-1) ────────────────────────────────────── */
+  // Round 4: one strip for everyone, in this order. The first four are the
+  // leasing read; the second row is what the loop did and what waits on you.
   var KPI_DEFS = {
-    ai_visibility: { label: 'AI visibility', fmt: function (v) { return num(v); }, cls: '' },
-    portfolio_occupancy: { label: 'Portfolio occupancy', fmt: function (v) { return pct(v, 1); }, cls: '' },
-    identified_savings: { label: 'Identified savings', fmt: function (v) { return moneyK(v); }, cls: 't-healthy' },
-    waiting_on_you: { label: 'Waiting on you', fmt: function (v) { return num(v); }, cls: 't-brand' }
+    occupancy: { label: 'Occupancy', fmt: function (v) { return pct(v, 1); }, cls: '' },
+    units_to_lease_90d: { label: 'Units to lease (90 days)', fmt: num, cls: '' },
+    leases_this_month: { label: 'Leases this month', fmt: num, cls: '', hint: 'Month to date' },
+    cost_per_lease: { label: 'Cost per lease', fmt: money, cls: '', hint: 'Last full month' },
+    ai_visibility: { label: 'AI visibility', fmt: num, cls: '' },
+    actions_taken: { label: 'Actions we took for you', fmt: num, cls: 't-healthy', hint: 'Last 30 days, no approval needed' },
+    waiting_on_you: { label: 'Waiting on you', fmt: num, cls: 't-brand' }
   };
-  var LENS_ORDER = { asset_manager: ['portfolio_occupancy', 'identified_savings', 'waiting_on_you', 'ai_visibility'], marketing_manager: ['ai_visibility', 'waiting_on_you', 'identified_savings', 'portfolio_occupancy'] };
+  var KPI_ROWS = [['occupancy', 'units_to_lease_90d', 'leases_this_month', 'cost_per_lease'], ['ai_visibility', 'actions_taken', 'waiting_on_you']];
   function greeting() { var h = new Date().getHours(); return h < 12 ? 'Good morning' : (h < 17 ? 'Good afternoon' : 'Good evening'); }
-  function kpiStrip(kpis, order, emphasize) {
-    return '<div class="kpis">' + order.map(function (k, i) {
-      var def = KPI_DEFS[k], r = kpis[k], v = val(r);
-      return '<div class="kpi' + (emphasize && i < 2 ? ' emph' : '') + '"' + rtitle(r) + '><span class="eyebrow">' + esc(def.label) + '</span>' +
-        '<span class="v ' + def.cls + '">' + (v == null ? '<span class="empty-dash">—</span>' : esc(def.fmt(v))) + '</span>' +
-        (receipt(r) ? '<span class="rc">' + receipt(r) + '</span>' : '') + '</div>';
+  function kpiReceipt(r) {
+    // Long, descriptive sources (what was counted) stay in the tooltip; the line under the number stays short.
+    if (!r || typeof r !== 'object') return '';
+    var name = r.source ? sourceName(r.source) : '';
+    return [name.length <= 28 ? esc(name) : '', r.as_of ? esc(asOf(r.as_of)) : ''].filter(Boolean).join(' · ');
+  }
+  function kpiStrip(kpis) {
+    return '<div class="kpiset">' + KPI_ROWS.map(function (row, ri) {
+      return '<div class="kpis ' + (ri ? 'row3' : 'row4') + '">' + row.map(function (k) {
+        var def = KPI_DEFS[k], r = kpis[k], v = val(r), rc = [def.hint ? esc(def.hint) : '', kpiReceipt(r)].filter(Boolean).join(' · ');
+        return '<div class="kpi' + (ri ? ' sm' : ' emph') + '"' + rtitle(r) + '><span class="eyebrow">' + esc(def.label) + '</span>' +
+          '<span class="v ' + def.cls + '">' + (v == null ? '<span class="empty-dash">—</span>' : esc(def.fmt(v))) + '</span>' +
+          (rc ? '<span class="rc">' + rc + '</span>' : '') + '</div>';
+      }).join('') + '</div>';
     }).join('') + '</div>';
   }
   function screenDashboard() {
     renderTop('Dashboard', companies().length + ' properties');
-    guard(api('/api/workspace/dashboard?lens=' + state.lens), 'the dashboard').then(function (r) {
+    guard(api('/api/workspace/dashboard'), 'the dashboard').then(function (r) {
       if (!r) return;
       var d = r.data || {};
       state.loop = d.loop_status || state.loop;
@@ -1090,15 +1106,11 @@ ol,ul{list-style:none}
       renderSide('dashboard');
       var h = dashboardHtml(d);
       setView(h.page, h.rail);
-      view.querySelectorAll('[data-lens]').forEach(function (b) { b.addEventListener('click', function () { state.lens = b.getAttribute('data-lens'); screenDashboard(); }); });
       view.querySelectorAll('[data-approve]').forEach(function (b) { b.addEventListener('click', function () { approveFlow(b, b.getAttribute('data-approve'), b.closest('[data-err-scope]').querySelector('.inline-err')); }); });
     });
   }
   function dashboardHtml(d) {
     var name = d.greeting_name ? ', ' + d.greeting_name : '';
-    var lens = '<div class="lens" role="group" aria-label="Show numbers for">' +
-      '<button type="button" data-lens="asset_manager" aria-pressed="' + (state.lens === 'asset_manager') + '">Asset manager</button><span class="bar" aria-hidden="true">|</span>' +
-      '<button type="button" data-lens="marketing_manager" aria-pressed="' + (state.lens === 'marketing_manager') + '">Marketing manager</button></div>';
     var waiting = d.waiting || [];
     var top = waiting[0];
     var hero = '';
@@ -1116,20 +1128,22 @@ ol,ul{list-style:none}
       var b = t.band || band(t.score);
       return '<a class="tile ' + esc(b) + '" href="#/property/' + encodeURIComponent(t.company_id) + '"><span>' + esc(t.name) + '</span><b>' + (t.score == null ? 'new' : esc(t.score)) + '</b><span class="sr-only">' + esc(BAND_LABEL[b]) + '</span></a>';
     }).join('');
-    var rows = (d.properties || []).map(function (p) {
+    var allProps = d.properties || [];
+    var DASH_ROWS = 10;
+    var rows = allProps.slice().sort(function (a, b) { return (a.health == null ? 1e3 : a.health) - (b.health == null ? 1e3 : b.health); }).slice(0, DASH_ROWS).map(function (p) {
       var b = p.band || band(p.health), href = '#/property/' + encodeURIComponent(p.company_id);
+      function cell(r, fmt) { var v = val(r); return '<td class="num"' + rtitle(r) + '>' + (v == null ? '<span class="empty-dash">—</span>' : esc(fmt(v))) + '</td>'; }
       return '<tr class="rowlink" data-href="' + href + '"><td class="name"><a href="' + href + '">' + esc(p.name) + '</a></td>' +
-        '<td class="num">' + esc(num(p.units)) + '</td>' +
-        '<td class="num"' + rtitle(p.to_lease_90d) + '>' + (val(p.to_lease_90d) == null ? '<span class="empty-dash">—</span>' : esc(num(val(p.to_lease_90d)))) + '</td>' +
-        '<td class="num t-critical"' + rtitle(p.overspend_per_year) + '>' + (val(p.overspend_per_year) == null ? '<span class="empty-dash">—</span>' : esc(money(val(p.overspend_per_year)))) + '</td>' +
+        '<td class="num">' + esc(num(p.units)) + '</td>' + cell(p.occupancy, function (v) { return pct(v, 1); }) + cell(p.to_lease_90d, num) +
         '<td><span class="healthcell t-' + esc(b) + '"><span class="dot ' + esc(b) + '" aria-hidden="true"></span>' + (p.health == null ? 'new' : esc(p.health)) + '</span></td></tr>';
     }).join('');
-    var order = (Array.isArray(d.kpi_order) && d.kpi_order.length ? d.kpi_order : (LENS_ORDER[state.lens] || LENS_ORDER.asset_manager)).filter(function (k) { return KPI_DEFS[k]; });
     var page = '<div class="page">' +
-      '<div class="greet"><div class="stack"><h1 class="h-greet">' + esc(greeting() + name) + '.</h1>' + staleLabel(d.as_of) + '</div>' + lens + '</div>' +
-      hero + kpiStrip(d.kpis || {}, order, true) +
+      '<div class="greet"><div class="stack"><h1 class="h-greet">' + esc(greeting() + name) + '.</h1>' + staleLabel(d.as_of) + '</div></div>' +
+      kpiStrip(d.kpis || {}) + hero +
       (tiles ? '<section class="sec"><h2 class="h-sec">Portfolio health</h2><div class="tiles">' + tiles + '</div></section>' : '') +
-      (rows ? '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Overspend/yr</th><th scope="col">Health</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
+      (rows ? '<section class="sec" aria-labelledby="dp-h"><div class="sec-head"><h2 class="h-sec" id="dp-h">Lowest health first</h2>' +
+        (allProps.length > DASH_ROWS ? '<a class="link" href="#/properties">All ' + esc(num(allProps.length)) + ' properties</a>' : '') + '</div>' +
+        '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties, lowest health first</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">Occupancy</th><th scope="col" class="num">To lease (90d)</th><th scope="col">Health</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>' : '') +
       gapsLine(d.gaps) + '</div>';
     var feed = (d.activity || []).map(function (a) {
       var dotc = { audit: 'healthy', check: 'healthy', forecast: 'healthy', publish: 'healthy', draft: 'brand', decision: 'brand', flag: 'attention' }[a.kind] || 'new';
@@ -1456,7 +1470,7 @@ ol,ul{list-style:none}
   /* ── Properties (GOO-0) ──────────────────────────────────────────── */
   function screenProperties() {
     renderTop('Properties', companies().length + ' properties');
-    guard(api('/api/workspace/dashboard?lens=' + state.lens), 'properties').then(function (r) {
+    guard(api('/api/workspace/dashboard'), 'properties').then(function (r) {
       if (!r) return;
       var d = r.data || {};
       state.loop = d.loop_status || state.loop;
