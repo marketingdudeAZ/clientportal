@@ -492,6 +492,7 @@ tr.em td{font-weight:600;color:var(--ink)}
 
   function verdict(d) {
     var s = d.summary || {}; var lead = s.lead || {};
+    if (!has(lead.value)) return '<section class="verdict" aria-label="Summary"><p class="text">' + esc(s.text || '') + '</p></section>';
     return '<section class="verdict" aria-label="Summary"><div class="lead"><div class="num"><b' + title(lead.value) + '>' + show(lead.value, fInt) +
       '</b><span>' + esc(lead.label || '') + '</span></div>' + (lead.sub ? '<div class="sub">' + esc(lead.sub) + '</div>' : '') +
       '</div><p class="text">' + esc(s.text || '') + '</p></section>';

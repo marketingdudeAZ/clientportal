@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import sys
 import re
 from datetime import datetime, timedelta, timezone, date
@@ -959,8 +960,19 @@ def _report_without_hyly(p: dict, month: str) -> dict | None:
     cid = p["company_id"]
     listing = [{"impressions": _h(cid + month + "imp", 6000, 22000), "leads": _h(cid + month + "lead", 10, 60),
                 "media_views": _h(cid + month + "mv", 300, 1400)}]
-    return wr.assemble(wr.gather_without_hyly(ident, month, today=date(2026, 9, 14), city=p["city"], state=p["state"],
-                                              ils_query=lambda sql, params: listing))
+    # The skill reads the listing feed only when a warehouse is configured. The preview
+    # answers the query itself, so it names a placeholder warehouse for this call only.
+    saved = {k: os.environ.get(k) for k in ("BIGQUERY_PROJECT_ID", "BIGQUERY_DATASET_PROD")}
+    os.environ.update({"BIGQUERY_PROJECT_ID": "preview", "BIGQUERY_DATASET_PROD": "preview"})
+    try:
+        return wr.assemble(wr.gather_without_hyly(ident, month, today=date(2026, 9, 14), city=p["city"], state=p["state"],
+                                                  ils_query=lambda sql, params: listing))
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 @app.get("/api/workspace/report")
