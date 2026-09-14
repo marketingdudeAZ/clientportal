@@ -439,6 +439,15 @@ def test_visibility():
         check(s, {"source": str, "share": NUM}, "visibility.citation_sources[]")
     for r in d["recommendations"]:
         check(r, {"text": str, "action": (dict, type(None))}, "visibility.recommendations[]")
+    for pr in d["prompts"]:
+        check(pr, {"id": str, "text": str, "topic": OPT_STR, "intent": OPT_STR, "engines": dict}, "visibility.prompts[]")
+        for e, r in pr["engines"].items():
+            assert isinstance(r.get("named"), (bool, type(None))) and isinstance(r.get("cited"), (bool, type(None))), f"visibility.prompts[].engines.{e}"
+    for f in d["fanout"]:
+        check(f, {"query": str, "engine": OPT_STR, "count": int, "content": (dict, type(None))}, "visibility.fanout[]")
+    for w in d["writing"]:
+        check(w, {"title": str, "answers": list, "status": str, "item_id": OPT_STR}, "visibility.writing[]")
+        assert w["status"] in {"drafted", "in_review", "published"}
     for a in d["alerts"]:
         check(a, {"kind": str, "text": str}, "visibility.alerts[]")
         assert a["kind"] in {"exposure", "competitor"}

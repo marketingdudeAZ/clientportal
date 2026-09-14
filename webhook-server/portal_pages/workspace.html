@@ -501,9 +501,21 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .callout p{font-size:12px;line-height:18px;color:var(--color-fg-2)}
 .callout.competitor{border-left-color:var(--critical);background:var(--critical-soft)}
 .callout.competitor b{color:var(--critical-text)}
-.recs li{display:flex;flex-direction:column;gap:6px;padding-bottom:12px;border-bottom:1px solid var(--color-border)}
-.recs li p{font-size:13px;line-height:18px}
-.recs{display:flex;flex-direction:column;gap:12px}
+.nc{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:16px;font-weight:500;white-space:nowrap}
+.nc i{width:8px;height:8px;border-radius:50%;display:block;flex-shrink:0}
+.nc.cited{color:var(--healthy-text)} .nc.cited i{background:var(--healthy)}
+.nc.named{color:var(--juniper)} .nc.named i{background:var(--color-card);box-shadow:inset 0 0 0 2px var(--sage)}
+.nc.none{color:var(--color-fg-muted)} .nc.none i{background:var(--rule)}
+.tbl.boxed.qtbl td.q{white-space:normal;min-width:220px}
+.tbl.boxed.qtbl td.q.mono{font-family:var(--font-mono);font-size:12px}
+.card.writing{padding:4px 20px}
+.wrow{display:flex;gap:16px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--color-line)}
+.wrow:first-child{border-top:0}
+.wrow .wl{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.wrow .wl b{font-size:15px;line-height:20px;font-weight:600}
+.wrow .wr{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.chipsq{display:flex;flex-wrap:wrap;gap:6px}
+.chipsq li{font-size:12px;line-height:16px;background:var(--color-muted);border-radius:var(--radius-sm);padding:3px 8px;color:var(--color-fg-2);font-family:var(--font-mono)}
 
 /* ── Content (E4U-1) and Creative (E4S-1) ───────────────────────────── */
 .prio{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:16px;font-weight:500}
@@ -684,6 +696,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   .vrows .n,.vrows .p{width:auto;flex:1}
   .forecast .col em{font-size:9px}
   .engines{flex-wrap:wrap}
+  .wrow{flex-direction:column;gap:10px}
+  .wrow .wr{flex-direction:row;align-items:center}
   .engines .cell{flex:1 1 33%;border-bottom:1px solid var(--color-border)}
   .answer{flex-direction:column}
   .receipts{width:100%}
@@ -1768,20 +1782,28 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       if (!r) return;
       var h = visibilityHtml(r.data || {});
       setView(h.page, h.rail);
-      view.querySelectorAll('.briefbox').forEach(function (box) {
-        var open = box.querySelector('[data-brief-open]'), form = box.querySelector('[data-brief-form]'), err = box.querySelector('.inline-err');
-        open.addEventListener('click', function () { form.hidden = !form.hidden; open.setAttribute('aria-expanded', String(!form.hidden)); if (!form.hidden) form.querySelector('input').focus(); });
-        form.addEventListener('submit', function (ev) {
-          ev.preventDefault();
-          var kw = form.querySelector('input').value.trim(), btn = form.querySelector('button');
-          if (kw.length < 2) { err.hidden = false; err.textContent = 'Give the brief a topic of at least two characters.'; return; }
-          btn.disabled = true; btn.textContent = 'Starting…'; err.hidden = true;
-          api('/api/workspace/visibility/create-brief', { method: 'POST', body: { company_id: state.companyId, hub_keyword: kw } }).then(function (res) {
-            box.innerHTML = '<p class="done-row" role="status">Brief started: \u201c' + esc((res.data || {}).hub_keyword || kw) + '\u201d.</p><a class="link" href="#/property/' + encodeURIComponent(state.companyId) + '/content">It shows up in Content when it\u2019s drafted</a>';
-          }).catch(function (e) { btn.disabled = false; btn.textContent = 'Start brief'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'The brief didn\u2019t start'); });
+      view.querySelectorAll('[data-brief-kw]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var box = b.closest('.briefbox'), err = box.querySelector('.inline-err'), kw = b.getAttribute('data-brief-kw');
+          b.disabled = true; b.textContent = 'Starting…'; err.hidden = true;
+          api('/api/workspace/visibility/create-brief', { method: 'POST', body: { company_id: state.companyId, hub_keyword: kw } }).then(function () {
+            box.innerHTML = '<span class="done-row" role="status">Brief started. It shows up under What we’re writing once there’s a draft.</span>';
+          }).catch(function (e) { b.disabled = false; b.textContent = 'Start a brief'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'The brief didn’t start'); });
         });
       });
     });
+  }
+  var INTENT_LABEL = { learn: 'Learning', compare: 'Comparing', decide: 'Deciding', local: 'Local', price: 'Pricing', navigate: 'Finding the property' };
+  function intentLabel(k) { return INTENT_LABEL[k] || (k ? String(k).charAt(0).toUpperCase() + String(k).slice(1) : ''); }
+  function ncCell(r) {
+    if (!r) return '<td><span class="empty-dash">—</span></td>';
+    var label = r.named && r.cited ? 'Named · cited' : (r.named ? 'Named' : (r.cited ? 'Cited' : 'Not named'));
+    return '<td><span class="nc ' + (r.cited ? 'cited' : (r.named ? 'named' : 'none')) + '"><i aria-hidden="true"></i>' + label + '</span></td>';
+  }
+  function byTopic(list) {
+    var order = [], map = {};
+    list.forEach(function (x) { var t = x.topic || 'Other'; if (!map[t]) { map[t] = []; order.push(t); } map[t].push(x); });
+    return order.map(function (t) { return { topic: t, rows: map[t] }; });
   }
   var CITE_FILLS = ['var(--copper)', 'var(--juniper)', 'var(--sage)', 'var(--mint)', 'var(--rule)'];
   function visibilityHtml(d) {
@@ -1803,29 +1825,52 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
           return '<tr><td class="surface">' + esc(row.surface) + '</td>' + cell(row.values.self, true) + cs.competitors.map(function (n) { return cell(row.values[n], false); }).join('') + '</tr>';
         }).join('') + '</tbody></table></div></section>';
     }
-    var cites = has(d.citation_sources) ? '<section class="sec"><h2 class="h-sec">Citation sources</h2><div class="citebar" role="img" aria-label="' + esc(d.citation_sources.map(function (s) { return s.source + ' ' + pct(s.share); }).join(', ')) + '">' +
+    var cites = has(d.citation_sources) ? '<section class="sec"><h2 class="h-sec">Sources the engines used</h2><div class="citebar" role="img" aria-label="' + esc(d.citation_sources.map(function (s) { return s.source + ' ' + pct(s.share); }).join(', ')) + '">' +
       d.citation_sources.map(function (s, i) { return '<i style="width:' + (s.share * 100).toFixed(1) + '%;background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>'; }).join('') + '</div>' +
       '<div class="legend">' + d.citation_sources.map(function (s, i) { return '<span' + (s.share_source ? ' title="' + esc(sourceName(s.share_source)) + '"' : '') + '><i style="background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>' + esc(s.source) + ' ' + esc(pct(s.share)) + '</span>'; }).join('') + '</div>' +
       (function () { var srcs = []; d.citation_sources.forEach(function (s) { if (s.share_source && srcs.indexOf(s.share_source) === -1) srcs.push(s.share_source); }); return srcs.length ? '<p class="receipt">Shares from ' + esc(srcs.map(sourceName).join(', ')) + '</p>' : ''; })() + '</section>' : '';
+    // Round 4, Searchable-style: the audit itself on the main page.
+    var prompts = d.prompts || [], engNames = engines.map(function (e) { return e.engine; });
+    prompts.forEach(function (p) { Object.keys(p.engines || {}).forEach(function (k) { if (engNames.indexOf(k) === -1) engNames.push(k); }); });
+    var qs = prompts.length ? '<section class="sec" aria-labelledby="vq-h"><div class="sec-head"><h2 class="h-sec" id="vq-h">Questions we track</h2><span class="support">' +
+      esc(num(prompts.length)) + ' ' + plural(prompts.length, 'question') + ' · by topic and intent</span></div>' +
+      '<div class="tscroll"><table class="tbl boxed qtbl"><thead><tr><th scope="col">Question</th><th scope="col">Intent</th>' + engNames.map(function (n) { return '<th scope="col">' + esc(n) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      byTopic(prompts).map(function (g) {
+        var named = 0, total = 0;
+        g.rows.forEach(function (p) { engNames.forEach(function (n) { var r = (p.engines || {})[n]; if (r) { total++; if (r.named) named++; } }); });
+        return '<tr class="grprow"><th scope="rowgroup" colspan="' + (engNames.length + 2) + '">' + esc(g.topic) + ' <span class="fine">· named in ' + esc(named) + ' of ' + esc(total) + ' answers</span></th></tr>' +
+          g.rows.map(function (p) { return '<tr><td class="q">' + esc(p.text) + '</td><td class="support">' + esc(intentLabel(p.intent)) + '</td>' + engNames.map(function (n) { return ncCell((p.engines || {})[n]); }).join('') + '</tr>'; }).join('');
+      }).join('') + '</tbody></table></div><p class="receipt">Named: the answer mentions ' + esc(c.name || 'the property') + '. Cited: the answer links to or quotes one of its pages.' +
+      (d.last_audit ? ' From the ' + esc(mdy(d.last_audit)) + ' audit.' : '') + '</p></section>' : '';
+    var fan = (d.fanout || []).slice().sort(function (a, b) { return (b.count || 0) - (a.count || 0); });
+    var fanHtml = fan.length ? '<section class="sec" aria-labelledby="vf-h"><div class="sec-head"><h2 class="h-sec" id="vf-h">Follow-up searches the engines ran</h2><span class="support">What they looked up to answer those questions</span></div>' +
+      '<div class="tscroll"><table class="tbl boxed qtbl"><thead><tr><th scope="col">Search</th><th scope="col">Engine</th><th scope="col" class="num">Times</th><th scope="col">What answers it</th></tr></thead><tbody>' +
+      fan.map(function (f) {
+        var ct = f.content, st = ct ? (CSTATUS[ct.status] || [ct.status, 'new']) : null;
+        var ans = ct ? reviewBtn(ct.item_id, state.companyId, 'link', ct.title) + ' <span class="pill ' + st[1] + '">' + esc(st[0]) + '</span>'
+          : (canDecide() ? '<div class="briefbox"><span class="support">Nothing yet.</span> <button type="button" class="link" data-brief-kw="' + esc(f.query) + '">Start a brief</button><p class="inline-err" role="alert" hidden></p></div>' : '<span class="support">Nothing yet</span>');
+        return '<tr><td class="q mono">' + esc(f.query) + '</td><td>' + esc(f.engine) + '</td><td class="num">' + esc(num(f.count)) + '</td><td class="q">' + ans + '</td></tr>';
+      }).join('') + '</tbody></table></div></section>' : '';
+    var writing = d.writing || [];
+    var wHtml = '<section class="sec" aria-labelledby="vw-h"><div class="sec-head"><h2 class="h-sec" id="vw-h">What we’re writing</h2><a class="link" href="#/property/' + encodeURIComponent(state.companyId) + '/content">All content</a></div>' +
+      (writing.length ? '<ul class="card writing">' + writing.map(function (w) {
+        var st = CSTATUS[w.status] || [w.status, 'new'];
+        return '<li class="wrow"><div class="wl">' + (w.topic ? '<span class="eyebrow">' + esc(w.topic) + '</span>' : '') + '<b>' + esc(w.title) + '</b>' +
+          (has(w.answers) ? '<span class="fine">Answers these searches</span><ul class="chipsq">' + w.answers.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ul>' : '') + '</div>' +
+          '<div class="wr"><span class="pill ' + st[1] + '"><i></i>' + esc(st[0]) + '</span>' + (w.item_id ? reviewBtn(w.item_id, state.companyId, 'btn xs outline', 'Review') : '') + '</div></li>';
+      }).join('') + '</ul>' : '<p class="support">Nothing in progress. A piece shows up here once its draft exists.</p>') + '</section>';
     var page = '<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Visibility audit</h1><p class="support">' +
       esc([d.last_audit ? 'Last audit: ' + mdy(d.last_audit) : '', d.next_audit ? 'Next scheduled: ' + mdy(d.next_audit) : ''].filter(Boolean).join(' · ')) + '</p></div></div>' +
-      hero + strip + comp + cites + gapsLine(d.gaps) + '</div>';
+      hero + strip + qs + fanHtml + cites + wHtml + comp + gapsLine(d.gaps) + '</div>';
+    // The rail keeps alerts only; content lives in the main column (Round 4).
     var rail = (d.alerts || []).filter(function (a) { return a.kind === 'exposure'; }).map(function (a) { return '<div class="callout"><b>Exposure</b><p>' + esc(a.text) + '</p></div>'; }).join('') +
-      (has(d.recommendations) ? '<section class="sec"><h2 class="h-rail">Content recommendations</h2><ul class="recs">' + d.recommendations.map(function (rc, i) {
-        var act = rc.action && rc.action.type === 'create_brief' ? (canDecide()
-          ? '<div class="briefbox"><button type="button" class="link" style="align-self:flex-start" data-brief-open aria-expanded="false" aria-controls="bf-' + i + '">Create brief</button>' +
-            '<form class="briefform" id="bf-' + i + '" hidden data-brief-form><label for="bk-' + i + '" class="fine">Topic for the brief</label><div class="briefrow"><input id="bk-' + i + '" name="hub_keyword" minlength="2" maxlength="120" required placeholder="e.g. pet policy">' +
-            '<button type="submit" class="btn xs primary">Start brief</button></div></form><p class="inline-err" role="alert" hidden></p></div>'
-          : signInLink('Sign in to create a brief')) : '';
-        return '<li><p>' + esc(rc.text) + '</p>' + act + '</li>';
-      }).join('') + '</ul></section>' : '') +
       (d.alerts || []).filter(function (a) { return a.kind === 'competitor'; }).map(function (a) { return '<div class="callout competitor"><b>Competitor alert</b><p>' + esc(a.text) + '</p></div>'; }).join('');
     return { page: page, rail: rail || null };
   }
 
   /* ── Content (E4U-1) ─────────────────────────────────────────────── */
   var PRIO = { high: ['High', 'critical'], med: ['Med', 'attention'], low: ['Low', 'healthy'] };
-  var CSTATUS = { draft_ready: ['Draft ready', 'brand'], in_review: ['In review', 'attention'], not_started: ['Not started', 'new'], published: ['Published', 'healthy'] };
+  var CSTATUS = { draft_ready: ['Draft ready', 'brand'], drafted: ['Drafted', 'brand'], in_review: ['In review', 'attention'], not_started: ['Not started', 'new'], published: ['Published', 'healthy'] };
   function screenContent() {
     var c = company();
     renderTop('Content', c ? c.name : '');

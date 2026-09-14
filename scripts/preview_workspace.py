@@ -538,7 +538,9 @@ def visibility(company_id: str) -> dict:
                            "content": None if not r else {"item_id": r["item_id"], "title": r["title"], "status": r["status"]}})
     writing = []
     for topic, r in by_topic.items():
-        writing.append({"title": r["title"], "topic": topic, "answers": [f["query"] for f in fanout if f.get("topic") == topic], "status": r["status"], "item_id": r["item_id"]})
+        # What we're writing reports drafted | in_review | published (a content row's draft_ready is "drafted" here).
+        writing.append({"title": r["title"], "topic": topic, "answers": [f["query"] for f in fanout if f.get("topic") == topic],
+                        "status": "drafted" if r["status"] == "draft_ready" else r["status"], "item_id": r["item_id"]})
     scores = {e: max(20, min(95, p["ai_visibility"] + _h(company_id + e, -14, 12))) for e in engines}
     hits = {e: sum(1 for pr in prompts if pr["engines"][e]["named"]) for e in engines}
     comps = [f"The Reserve at {city}", f"{city} Station", f"Solana {city}"]
