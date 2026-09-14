@@ -634,3 +634,16 @@ A vendor `verdict` other than `unknown` requires a real market-rate source. Ther
 
 ## Carried over from Phase 2 (still required)
 Search, New request, Undo, full client transparency (server-side filtering of internal notes), role-based nav, Signals, read-only signed links with `can_decide`, visible `as_of` staleness, and the decision detail with Found / Expect / If you skip and the one-tap Not-now reasons.
+
+### Contract requests (UI) — v3 rebuild
+The v3 screens are built against the "v3 rebuild" contract above. These are the places the UI had to work around a missing piece; nothing in the contract was changed.
+
+1. **Properties list.** The Properties screen (v5 artboard) needs a list endpoint with per-property spend/month, cost per lead and leads per week. None exists, so the UI builds the list from `/me` companies plus `/dashboard` `properties` and `health_tiles`. Those columns show units, to-lease, overspend, health and status instead.
+2. **Create brief.** Visibility recommendations carry `action: {type: "create_brief"}` but no endpoint. The UI routes "Create brief" into New request, prefilled with the recommendation text, so it arrives as a ticket through the existing request path. A `POST /api/workspace/visibility/recommendations/<id>/brief` would make this one tap.
+3. **Regenerate media plan.** "Regenerate plan" is draft-only, but no endpoint is named. The UI files it as a New request ("Draft only — no live budget changes").
+4. **Interrupt actions.**
+   - Pacing "Open an Ad Updates ticket" goes through New request, prefilled.
+   - "Dismiss" only hides the interrupt for the browser session, because there is no dismiss endpoint. Please add `POST /api/workspace/approvals/interrupts/<id>/dismiss` if dismissals should persist.
+5. **Creative upload.** The contract notes an existing asset upload path but gives no Workspace endpoint. The dropzone links to New request for now.
+6. **Item `company_id`.** Approval rows span properties. The UI sets the company from the row before opening or deciding. Adding `company_id` to the Item shape would remove that coupling.
+7. **Health score bands.** The UI uses the band the API sends. It falls back to ≥70 healthy, 50–69 attention, 35–49 warning, below 35 critical only when `band` is missing. Engine scores use ≥70 / 60–69 / below 60, as in the v3 audit screen. Please confirm or send bands.
