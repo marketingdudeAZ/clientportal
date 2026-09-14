@@ -481,6 +481,7 @@ ol,ul{list-style:none}
 .ledger tfoot td{border-top:2px solid var(--color-fg);border-bottom:0;padding-top:18px;font-weight:600}
 .who.you{color:var(--copper-ink);font-weight:500}
 .who.auto{color:var(--color-fg-muted);font-weight:500}
+.who.team{color:var(--color-fg-2);font-weight:500}
 
 /* ── Signals ─────────────────────────────────────────────────────────── */
 .sgroup{display:flex;flex-direction:column;gap:0}
@@ -560,6 +561,12 @@ ol,ul{list-style:none}
 .tact{display:flex;justify-content:flex-end;margin-top:-4px}
 .req-foot{border-top:1px solid var(--color-border);padding-top:14px;font-size:12px;line-height:18px;color:var(--color-fg-muted)}
 .spacer{flex:1;min-height:8px}
+
+.briefbox{display:flex;flex-direction:column;gap:6px}
+.briefform{display:flex;flex-direction:column;gap:4px}
+.briefrow{display:flex;gap:6px}
+.briefrow input{flex:1;min-width:0;height:28px;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:0 8px;font-size:13px;background:var(--color-card)}
+.briefrow input:focus{outline:2px solid var(--copper-fill);outline-offset:1px}
 
 /* AA on tinted surfaces: small muted text steps down to the strong gray shade */
 .pane .eyebrow,.pane .support,.finding .receipt,.receipts .support,.receipts .eyebrow,.tbl tr.top td.support,.tbl .self,
@@ -707,6 +714,9 @@ ol,ul{list-style:none}
   function ApiError(status, body) {
     this.status = status; this.body = body;
     this.message = (body && (body.detail || body.reason || body.error)) || ('Request failed (' + status + ')');
+    if (body && body.error === 'fair_housing') this.message = body.reason || 'The wording includes language Fair Housing rules don\u2019t allow in housing marketing. Reword it and try again';
+    if (body && body.error === 'preview_read_only') this.message = 'Previewing as a client is read-only';
+    if (body && body.error === 'not_undoable' && body.reason) this.message = body.reason;
   }
   function api(path, opts) {
     opts = opts || {};
@@ -779,7 +789,8 @@ ol,ul{list-style:none}
   var SOURCES = { aptiq: 'ApartmentIQ', hubspot: 'HubSpot', hubspot_line_items: 'HubSpot line items', ga4: 'GA4', google_ads: 'Google Ads',
     hyly: 'Hyly', fluency: 'Fluency', yardi: 'Yardi', bigquery: 'BigQuery', clickup: 'ClickUp', ai_mentions: 'AI visibility audit',
     redlight: 'Red Light', forecasting: 'Exposure forecast', workspace_inbox: 'Workspace', workspace_decisions: 'Workspace decisions',
-    hubdb_rec: 'Recommendations', soci: 'SOCi' };
+    hubdb_rec: 'Recommendations', soci: 'SOCi', geo_sources: 'GEO citation tracking', geo_brand_mentions: 'GEO brand mentions',
+    geo_responses: 'GEO responses', hubspot_company: 'HubSpot company record', aptiq_exposure: 'ApartmentIQ exposure' };
   function sourceName(s) { return SOURCES[s] || s || ''; }
   function receipt(r) {
     if (!r || typeof r !== 'object' || (!r.source && !r.as_of)) return '';
@@ -809,12 +820,31 @@ ol,ul{list-style:none}
   try { state.preview = sessionStorage.getItem(PREVIEW_KEY) === '1'; } catch (e) {}
   function realInternal() { return !!(state.me && state.me.role === 'internal'); }
   function viewInternal() { return realInternal() && !state.preview; }
-  function canDecide() { return !state.me || state.me.can_decide !== false; }
-  function signInLink(label) { return '<a href="#" class="link" data-signin>' + esc(label) + '</a>'; }
+  function canDecide() { return !state.preview && (!state.me || state.me.can_decide !== false); }
+  function signInLink(label) {
+    if (state.preview) return '<span class="support">Actions are off while you preview as a client</span>';
+    return '<a href="#" class="link" data-signin>' + esc(label) + '</a>';
+  }
   function companies() { return (state.me && state.me.companies) || []; }
   function companyById(id) { var l = companies(); for (var i = 0; i < l.length; i++) if (String(l[i].company_id) === String(id)) return l[i]; return null; }
   function company() { return companyById(state.companyId) || companies()[0] || null; }
-  function setCompany(id) { if (!id) return; state.companyId = String(id); try { localStorage.setItem(COMPANY_KEY, state.companyId); } catch (e) {} }
+  function setCompany(id) {
+    if (!id) return;
+    var changed = String(id) !== String(state.companyId);
+    state.companyId = String(id);
+    try { localStorage.setItem(COMPANY_KEY, state.companyId); } catch (e) {}
+    if (changed && state.me) loadBadge();
+  }
+  function loadBadge() {
+    if (!state.companyId) return;
+    var cid = state.companyId;
+    api('/api/workspace/work?' + cq() + '&status=to_do').then(function (r) {
+      if (cid !== state.companyId) return;
+      var n = ((r.data || {}).summary || {}).needs_approval;
+      state.waiting = n == null ? null : n;
+      renderSide(state.active);
+    }).catch(function () {});
+  }
   function cq() { return 'company_id=' + encodeURIComponent(state.companyId || ''); }
   function stopTimer() { if (state.timer) { clearInterval(state.timer); state.timer = null; } }
   document.addEventListener('click', function (e) {
@@ -862,6 +892,7 @@ ol,ul{list-style:none}
     return items;
   }
   function renderSide(active) {
+    state.active = active;
     var side = document.getElementById('side');
     var logo = '<div class="logo"><i aria-hidden="true"></i><b>RPM</b><span>Digital</span></div>';
     if (!state.me) { side.innerHTML = logo; return; }
@@ -875,7 +906,7 @@ ol,ul{list-style:none}
     if (viewInternal()) html += '<p class="nav-label">RPM only</p>' + link({ key: 'signals', href: '#/signals', label: 'Signals', icon: 'signal' });
     html += '</div><div class="side-grow"></div>';
     if (state.loop) {
-      html += '<div class="loopcard" role="status"><i class="' + (state.loop.running ? 'on' : '') + '" aria-hidden="true"></i><div><b>' + (state.loop.running ? 'Loop running' : 'Loop paused') + '</b>' +
+      html += '<div class="loopcard" role="status"><i class="' + (state.loop.running ? 'on' : '') + '" aria-hidden="true"></i><div><b>' + (state.loop.running === true ? 'Loop running' : (state.loop.running === false ? 'Loop paused' : 'Loop status unavailable')) + '</b>' +
         '<span>' + esc(num(state.loop.property_count)) + ' properties' + (state.loop.last_pass ? ' · last pass ' + esc(clock(state.loop.last_pass)) : '') + '</span></div></div>';
     }
     var me = state.me;
@@ -957,7 +988,7 @@ ol,ul{list-style:none}
       if (q.length < 2) { seq++; opts = []; box.innerHTML = ''; close(); return; }
       var my = ++seq;
       box.innerHTML = '<p class="sempty" role="status">Searching…</p>'; opts = []; open();
-      api('/api/workspace/search?q=' + encodeURIComponent(q)).then(function (r) {
+      api('/api/workspace/search?q=' + encodeURIComponent(q) + (state.companyId ? '&' + cq() : '')).then(function (r) {
         if (my === seq) render(q, ((r.data || {}).results || []).slice(0, 20));
       }).catch(function (e) { if (my !== seq || (e && e.status === 401)) return; box.innerHTML = '<p class="sempty">Search didn’t load. Try again.</p>'; });
     }
@@ -1056,7 +1087,7 @@ ol,ul{list-style:none}
       if (!r) return;
       var d = r.data || {};
       state.loop = d.loop_status || state.loop;
-      var w = val((d.kpis || {}).waiting_on_you); if (w != null) state.waiting = w;
+      if (d.scope_label) renderTop('Dashboard', d.scope_label);
       renderSide('dashboard');
       var h = dashboardHtml(d);
       setView(h.page, h.rail);
@@ -1094,7 +1125,7 @@ ol,ul{list-style:none}
         '<td class="num t-critical"' + rtitle(p.overspend_per_year) + '>' + (val(p.overspend_per_year) == null ? '<span class="empty-dash">—</span>' : esc(money(val(p.overspend_per_year)))) + '</td>' +
         '<td><span class="healthcell t-' + esc(b) + '"><span class="dot ' + esc(b) + '" aria-hidden="true"></span>' + (p.health == null ? 'new' : esc(p.health)) + '</span></td></tr>';
     }).join('');
-    var order = LENS_ORDER[state.lens] || LENS_ORDER.asset_manager;
+    var order = (Array.isArray(d.kpi_order) && d.kpi_order.length ? d.kpi_order : (LENS_ORDER[state.lens] || LENS_ORDER.asset_manager)).filter(function (k) { return KPI_DEFS[k]; });
     var page = '<div class="page">' +
       '<div class="greet"><div class="stack"><h1 class="h-greet">' + esc(greeting() + name) + '.</h1>' + staleLabel(d.as_of) + '</div>' + lens + '</div>' +
       hero + kpiStrip(d.kpis || {}, order, true) +
@@ -1128,7 +1159,6 @@ ol,ul{list-style:none}
     guard(api('/api/workspace/approvals' + (cat ? '?category=' + encodeURIComponent(cat) : '')), 'approvals').then(function (r) {
       if (!r) return;
       var d = r.data || {};
-      if (!cat && d.waiting != null) state.waiting = d.waiting;
       renderSide('approvals');
       renderTop('Approvals', num(d.waiting) + ' waiting');
       setView(approvalsHtml(d, cat));
@@ -1137,7 +1167,7 @@ ol,ul{list-style:none}
   }
   function approvalsHtml(d, cat) {
     var head = '<div class="head"><div class="stack"><h1 class="h-page">Approvals</h1>' +
-      '<p class="meta-line">' + esc(num(d.waiting)) + ' waiting · <span class="warn">' + esc(num(d.interrupts_count)) + ' ' + plural(d.interrupts_count, 'interrupt') + '</span> · ' + esc(num(d.approved_this_month)) + ' approved this month</p>' +
+      '<p class="meta-line">' + esc(num(d.waiting)) + ' waiting · <span class="warn">' + esc(num(d.interrupts_count)) + ' ' + plural(d.interrupts_count, 'interrupt') + '</span>' + (d.approved_this_month != null ? ' · ' + esc(num(d.approved_this_month)) + ' approved this month' : '') + '</p>' +
       '<p class="support">RPM Digital drafted these. Nothing changes until you approve.</p></div>' + staleLabel(d.as_of) + '</div>';
     var interrupts = (d.interrupts || []).filter(function (i) { return !state.hidden[i.id]; });
     var rows = (d.batch && d.batch.rows) || [];
@@ -1149,10 +1179,11 @@ ol,ul{list-style:none}
       return '<button type="button" class="chip" data-cat="' + c[0] + '" aria-pressed="' + (c[0] === cat) + '">' + esc(c[1]) + '</button>';
     }).join('') + '</div>';
     var intr = interrupts.map(function (i) {
-      var primary = i.kind === 'compliance' && i.item_id
-        ? '<a class="btn sm" href="#/item/' + encodeURIComponent(i.item_id) + '" data-set-company="' + esc(i.company_id) + '">' + esc(i.primary_action && i.primary_action.label || 'Review now') + '</a>'
-        : '<button type="button" class="btn sm" data-intr-request="' + esc(i.id) + '">' + esc(i.primary_action && i.primary_action.label || 'Open a ticket') + '</button>';
-      return '<div class="intr ' + esc(i.kind) + '"><div class="l"><b>' + esc(i.title) + '</b>' + (has(i.detail) ? '<p>' + esc(i.detail) + '</p>' : '') + '</div>' +
+      var pa = i.primary_action || {}, href = pa.href || (i.item_id ? '#/item/' + encodeURIComponent(i.item_id) : ''), primary = '';
+      if (href.indexOf('#/') === 0) primary = '<a class="btn sm" href="' + esc(href) + '" data-set-company="' + esc(i.company_id) + '">' + esc(pa.label || 'Review now') + '</a>';
+      else if (href.indexOf('/api/workspace/') === 0) primary = canDecide() ? '<button type="button" class="btn sm" data-intr-post="' + esc(href) + '" data-company="' + esc(i.company_id) + '">' + esc(pa.label || 'Create a work item') + '</button>' : signInLink('Sign in to act on this');
+      return '<div class="intr ' + esc(i.kind) + '"><div class="l"><b>' + esc(i.title) + '</b>' + (has(i.detail) ? '<p>' + esc(i.detail) + '</p>' : '') +
+        (has(pa.note) ? '<p class="fine">' + esc(pa.note) + '</p>' : '') + '<p class="inline-err" role="alert" hidden></p></div>' +
         '<div class="r">' + primary + (i.secondary_action ? '<button type="button" class="textbtn" data-dismiss="' + esc(i.id) + '">' + esc(i.secondary_action.label) + '</button>' : '') + '</div></div>';
     }).join('');
     var body = rows.map(function (row) {
@@ -1182,10 +1213,14 @@ ol,ul{list-style:none}
     var err = view.querySelector('[data-approvals-err]');
     view.querySelectorAll('[data-cat]').forEach(function (b) { b.addEventListener('click', function () { state.approvalCat = b.getAttribute('data-cat'); screenApprovals(); }); });
     view.querySelectorAll('[data-dismiss]').forEach(function (b) { b.addEventListener('click', function () { state.hidden[b.getAttribute('data-dismiss')] = true; b.closest('.intr').remove(); }); });
-    view.querySelectorAll('[data-intr-request]').forEach(function (b) {
+    view.querySelectorAll('[data-intr-post]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var box = b.closest('.intr');
-        startRequest(box.querySelector('b').textContent + '. ' + (box.querySelector('p') ? box.querySelector('p').textContent : '') + ' Please open an Ad Updates ticket for a person to review.');
+        var box = b.closest('.intr'), e2 = box.querySelector('.inline-err'), cid = b.getAttribute('data-company'), label = b.textContent;
+        b.disabled = true; b.textContent = 'Creating…';
+        api(b.getAttribute('data-intr-post'), { method: 'POST', body: { company_id: cid } }).then(function (res) {
+          var id = (res.data || {}).work_item_id;
+          b.outerHTML = id ? '<a class="btn sm" href="#/item/' + encodeURIComponent(id) + '" data-set-company="' + esc(cid) + '">Open the work item</a>' : '<span class="done-row" role="status">Work item created</span>';
+        }).catch(function (e) { b.disabled = false; b.textContent = label; if (e && e.status === 401) return; e2.hidden = false; e2.textContent = failText(e, 'That didn\u2019t go through'); });
       });
     });
     view.querySelectorAll('[data-row-approve]').forEach(function (b) {
@@ -1289,7 +1324,8 @@ ol,ul{list-style:none}
     return '<div class="page stage"><article class="panel"><div class="panel-head"><div class="pills">' +
       '<span class="pill brand"><i></i>' + esc(SOURCE_LABEL[it.source] || 'Item') + '</span>' +
       (it.status && it.status !== 'to_do' ? '<span class="pill new">' + esc(STATUS_LABEL[it.status] || it.status) + '</span>' : '') +
-      (viewInternal() && it.fair_housing_review ? '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review</span>' : '') + '</div>' +
+      (viewInternal() && it.fair_housing_review ? '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review' + (it.fair_housing_review.severity === 'high' ? ' · held from clients' : '') + '</span>' +
+        (has(it.fair_housing_review.terms) ? '<span class="support">Flagged: ' + esc(it.fair_housing_review.terms.join(', ')) + '</span>' : '') : '') + '</div>' +
       '<h1 class="qtitle">' + esc(it.title) + '</h1>' + (meta.length ? '<p class="support">' + esc(meta.join(' · ')) + '</p>' : '') + '</div>' +
       (why ? '<div class="why">' + why + '</div>' : '') + evidenceHtml(it.evidence) + sparkHtml(it.sparkline) + steps +
       (!why && !steps && !it.evidence ? '<p class="support">No detail came with this item yet.</p>' : '') +
@@ -1412,7 +1448,7 @@ ol,ul{list-style:none}
       }).catch(function (e) {
         if (e && e.status === 401) return;
         stopTimer();
-        var reason = (e && e.body && (e.body.reason || e.body.detail)) || (e && e.status === 409 ? 'This one can’t be undone.' : 'Undo didn’t go through.');
+        var reason = (e && e.body && (e.body.reason || e.body.detail || e.body.error)) || (e && e.status === 409 ? 'This one can\u2019t be undone.' : 'Undo didn\u2019t go through.');
         var w = btn.closest('.undo-wrap'); if (w) w.outerHTML = '<span class="undo-note">' + esc(reason) + '</span>';
       });
     });
@@ -1489,7 +1525,7 @@ ol,ul{list-style:none}
     var fc = d.exposure_forecast, fHtml = '';
     if (fc && has(fc.months)) {
       var max = Math.max.apply(null, fc.months.map(function (m) { return m.units_to_lease; })) || 1;
-      fHtml = '<section class="sec"><div class="sec-head"><h2 class="h-sec">Exposure forecast</h2><span class="receipt">' + receipt(fc) + '</span></div>' +
+      fHtml = '<section class="sec"><div class="sec-head"><h2 class="h-sec">Exposure forecast</h2><span class="receipt">' + receipt(fc) + '</span></div>' + (has(fc.basis) ? '<p class="receipt">' + esc(fc.basis) + '</p>' : '') +
         '<div class="forecast" role="img" aria-label="' + esc('Units to lease by month: ' + fc.months.map(function (m) { return monthShort(m.month) + ' ' + m.units_to_lease; }).join(', ')) + '">' +
         fc.months.map(function (m) {
           var r = m.units_to_lease / max, col = r >= .75 ? 'var(--copper)' : (r >= .5 ? 'var(--sage)' : 'var(--juniper)');
@@ -1507,16 +1543,19 @@ ol,ul{list-style:none}
     var loop = has(d.loop) ? '<section class="card loopcard2" aria-labelledby="loop-h"><div class="lh"><i aria-hidden="true"></i><b id="loop-h">The loop on this property</b><span class="support">Express · Tailor · Amplify · Evolve</span></div><ol class="stagel">' + d.loop.map(function (s) {
       var when = s.status === 'waiting' ? '<span class="wait">waiting on you' + (s.at ? ' since ' + esc(clock(s.at)) : '') + '</span>' : (s.at ? '<span>' + esc(s.status === 'upcoming' ? 'planned ' + mdy(s.at) : asOf(s.at)) + '</span>' : '<span>upcoming</span>');
       return '<li class="' + esc(s.status) + '"><span class="rl"><span class="node ' + esc(s.status) + '" aria-hidden="true"></span><span class="conn" aria-hidden="true"></span></span><div class="body"><div class="tl"><b>' + esc(LENS_LABEL[s.lens] || s.lens) + '</b>' + when + '</div><p>' + esc(s.text) + '</p>' +
-        (s.status === 'waiting' && ra ? '<a class="btn sm primary" href="#/item/' + encodeURIComponent(ra.item_id) + '">Review the one decision</a>' : '') + '</div></li>';
+        (s.status === 'waiting' && (s.item_id || ra) ? '<a class="btn sm primary" href="#/item/' + encodeURIComponent(s.item_id || ra.item_id) + '">Review the decision</a>' :
+          (s.item_id ? '<a class="link" href="#/item/' + encodeURIComponent(s.item_id) + '">Open</a>' : '')) + '</div></li>';
     }).join('') + '</ol></section>' : '';
     var page = '<div class="page"><a class="back" href="#/properties">' + ic(I.arrowLeft, 13) + 'All properties</a>' +
       '<div class="proptitle">' + ring(d.health && d.health.score, hb) + '<div class="stack" style="display:flex;flex-direction:column;gap:2px;min-width:0"><h1 class="h-page">' + esc(d.name) + '</h1><p class="support">' + esc(sub) + '</p>' +
+      (has(d.objective_reason) ? '<span class="receipt">Objective: ' + esc(d.objective_reason) + '</span>' : '') +
       (d.health ? '<span class="receipt">Health ' + receipt(d.health) + '</span>' : '') + '</div></div>' +
       (links ? '<div class="scoped-links">' + links + '</div>' : '') +
       '<div class="kpis">' + kp + '</div>' + fHtml + vend + eng + loop + gapsLine(d.gaps) + '</div>';
     var rail = '';
     if (has(d.findings)) rail += '<section class="sec"><h2 class="h-rail">Findings</h2>' + d.findings.map(function (f) {
-      return '<div class="finding"><p>' + esc(f.text) + '</p>' + (has(f.receipts) ? '<span class="receipt">' + f.receipts.map(function (rc) { return esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : ''); }).join('<br>') + '</span>' : '') + '</div>';
+      return '<div class="finding"><p>' + esc(f.text) + '</p>' + (has(f.receipts) ? '<span class="receipt">' + f.receipts.map(function (rc) { return esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : ''); }).join('<br>') + '</span>' : '') +
+        (f.item_id ? '<a class="link" href="#/item/' + encodeURIComponent(f.item_id) + '">Open the item</a>' : '') + '</div>';
     }).join('') + '</section>';
     if (ra || d.draft_email) {
       rail += '<div class="rail-sep"></div><section class="sec"><h2 class="h-rail">Recommended action</h2>' +
@@ -1537,7 +1576,16 @@ ol,ul{list-style:none}
       var h = mediaPlanHtml(r.data || {});
       setView(h.page, h.rail);
       var regen = view.querySelector('[data-regen]');
-      if (regen) regen.addEventListener('click', function () { startRequest('Regenerate the ' + ((r.data || {}).fiscal_year || '') + ' media plan for ' + (company() || {}).name + '. Draft only — no live budget changes.'); });
+      if (regen) regen.addEventListener('click', function () {
+        var err = view.querySelector('[data-regen-err]');
+        regen.disabled = true; regen.textContent = 'Requesting…'; err.hidden = true;
+        api('/api/workspace/media-plan/regenerate', { method: 'POST', body: { company_id: state.companyId } }).then(function (res) {
+          var id = (res.data || {}).work_item_id;
+          regen.outerHTML = '<p class="done-row" role="status">Draft requested. A person drafts the refreshed plan; live budgets don\u2019t change.</p>' +
+            (id ? '<a class="link" href="#/item/' + encodeURIComponent(id) + '">Follow the work item</a>' : '');
+          var note = view.querySelector('[data-regen-note]'); if (note) note.remove();
+        }).catch(function (e) { regen.disabled = false; regen.textContent = 'Regenerate plan'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'The request didn\u2019t go through'); });
+      });
       var pdf = view.querySelector('[data-print]'); if (pdf) pdf.addEventListener('click', function () { window.print(); });
     });
   }
@@ -1556,7 +1604,7 @@ ol,ul{list-style:none}
     var alloc = val(d.allocated), env = val(d.envelope);
     var breakdown = chans.length ? '<section class="sec"><h2 class="h-rail">Channel breakdown</h2><div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Channel</th><th scope="col" class="num">Monthly avg</th><th scope="col" class="num">Annual</th><th scope="col" class="num">% of budget</th><th scope="col" class="num">CPL target</th></tr></thead><tbody>' +
       chans.map(function (c) { return '<tr><td class="name">' + esc(c.channel) + '</td><td class="num">' + esc(money(c.monthly_avg)) + '</td><td class="num">' + esc(money(c.annual)) + '</td><td class="num">' + esc(pct(c.share)) + '</td><td class="num">' + (c.cpl_target == null ? '<span class="empty-dash">—</span>' : esc(money(c.cpl_target))) + '</td></tr>'; }).join('') +
-      '</tbody></table></div></section>' : '';
+      '</tbody></table></div>' + (function () { var srcs = []; chans.forEach(function (c) { if (c.source && srcs.indexOf(c.source) === -1) srcs.push(c.source); }); return srcs.length ? '<p class="receipt">Channel spend from ' + esc(srcs.map(sourceName).join(', ')) + '</p>' : ''; })() + '</section>' : '';
     var page = '<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Media plan</h1><p class="support">' +
       esc([d.fiscal_year, env != null ? money(env) + ' envelope' : '', d.objective ? 'Objective: ' + d.objective : ''].filter(Boolean).join(' · ')) + '</p></div>' + staleLabel(d.as_of) + '</div>' +
       (months.length ? '<section class="card flight" aria-label="Exposure forecast and flighting"><h2 class="h-rail">Exposure forecast</h2>' + head + bars + crow + tot +
@@ -1564,7 +1612,7 @@ ol,ul{list-style:none}
       breakdown + gapsLine(d.gaps) + '</div>';
     var rail = (d.generated_at ? '<p class="fine">Plan generated ' + esc(mdy(d.generated_at)) + '</p>' : '') +
       (has(d.notes) ? '<section class="sec"><h2 class="h-rail">Plan notes</h2><ol class="notes">' + d.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ol></section>' : '') +
-      '<div class="rail-sep"></div><section class="sec">' + (canDecide() ? '<button type="button" class="btn outline" style="width:100%" data-regen>Regenerate plan</button><p class="fine">Creates a draft for review. Live budgets don’t change.</p>' : signInLink('Sign in to regenerate the plan')) +
+      '<div class="rail-sep"></div><section class="sec">' + (canDecide() ? '<button type="button" class="btn outline" style="width:100%" data-regen>Regenerate plan</button><p class="fine" data-regen-note>Files a work item for a person to draft a refreshed plan. Live budgets don\u2019t change.</p><p class="inline-err" role="alert" hidden data-regen-err></p>' : signInLink('Sign in to regenerate the plan')) +
       '<button type="button" class="link" data-print>Export PDF</button></section>';
     return { page: page, rail: rail };
   }
@@ -1577,19 +1625,32 @@ ol,ul{list-style:none}
       if (!r) return;
       var h = visibilityHtml(r.data || {});
       setView(h.page, h.rail);
-      view.querySelectorAll('[data-brief]').forEach(function (b) { b.addEventListener('click', function () { startRequest('Create a content brief for ' + (company() || {}).name + ': ' + b.getAttribute('data-brief')); }); });
+      view.querySelectorAll('.briefbox').forEach(function (box) {
+        var open = box.querySelector('[data-brief-open]'), form = box.querySelector('[data-brief-form]'), err = box.querySelector('.inline-err');
+        open.addEventListener('click', function () { form.hidden = !form.hidden; open.setAttribute('aria-expanded', String(!form.hidden)); if (!form.hidden) form.querySelector('input').focus(); });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          var kw = form.querySelector('input').value.trim(), btn = form.querySelector('button');
+          if (kw.length < 2) { err.hidden = false; err.textContent = 'Give the brief a topic of at least two characters.'; return; }
+          btn.disabled = true; btn.textContent = 'Starting…'; err.hidden = true;
+          api('/api/workspace/visibility/create-brief', { method: 'POST', body: { company_id: state.companyId, hub_keyword: kw } }).then(function (res) {
+            box.innerHTML = '<p class="done-row" role="status">Brief started: \u201c' + esc((res.data || {}).hub_keyword || kw) + '\u201d.</p><a class="link" href="#/property/' + encodeURIComponent(state.companyId) + '/content">It shows up in Content when it\u2019s drafted</a>';
+          }).catch(function (e) { btn.disabled = false; btn.textContent = 'Start brief'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'The brief didn\u2019t start'); });
+        });
+      });
     });
   }
   var CITE_FILLS = ['var(--copper)', 'var(--juniper)', 'var(--sage)', 'var(--mint)', 'var(--rule)'];
   function visibilityHtml(d) {
     var c = company() || {}, sv = val(d.score), sb = engineBand(sv);
     var engines = d.engines || [];
-    var hits = engines.reduce(function (s, e) { return s + (e.queries_hit || 0); }, 0), total = engines.reduce(function (s, e) { return s + (e.queries_total || 0); }, 0);
+    var counted = engines.filter(function (e) { return e.queries_hit != null && e.queries_total != null; });
+    var hits = counted.reduce(function (s, e) { return s + e.queries_hit; }, 0), total = counted.reduce(function (s, e) { return s + e.queries_total; }, 0);
     var hero = '<div class="vhero"><div style="display:flex;flex-direction:column;align-items:center"' + rtitle(d.score) + '><span class="big t-' + sb + '">' + (sv == null ? '—' : esc(sv)) + '</span><span class="support">AI visibility score</span></div>' +
-      '<div class="stack" style="display:flex;flex-direction:column;gap:4px">' + (d.change ? '<b class="' + (d.change.value >= 0 ? 't-healthy' : 't-critical') + '" style="font-size:13px;font-weight:500">' + esc((d.change.value >= 0 ? '+' : '') + d.change.value + ' from last ' + (d.change.window || 'month')) + '</b>' : '') +
-      (total ? '<p class="support">Named in ' + esc(hits) + ' of ' + esc(total) + ' prospect questions across ' + esc(engines.length) + ' AI engines.</p>' : '') + (receipt(d.score) ? '<span class="receipt">' + receipt(d.score) + '</span>' : '') + '</div></div>';
+      '<div class="stack" style="display:flex;flex-direction:column;gap:4px">' + (d.change ? '<b class="' + (d.change.value >= 0 ? 't-healthy' : 't-critical') + '" style="font-size:13px;font-weight:500"' + (d.change.source ? ' title="' + esc(sourceName(d.change.source)) + '"' : '') + '>' + esc((d.change.value >= 0 ? '+' : '') + d.change.value + ' from last ' + (d.change.window || 'month')) + '</b>' : '') +
+      (total ? '<p class="support">Named in ' + esc(hits) + ' of ' + esc(total) + ' prospect questions across ' + esc(counted.length) + ' AI engines.</p>' : '') + (receipt(d.score) ? '<span class="receipt">' + receipt(d.score) + '</span>' : '') + '</div></div>';
     var strip = engines.length ? '<div class="card engines">' + engines.map(function (e) {
-      var v = val(e.score); return '<div class="cell"' + rtitle(e.score) + '><span>' + esc(e.engine) + '</span><b class="t-' + engineBand(v) + '">' + (v == null ? '—' : esc(v)) + '</b><em>' + esc(e.queries_hit + '/' + e.queries_total) + ' questions</em></div>';
+      var v = val(e.score); return '<div class="cell"' + rtitle(e.score) + '><span>' + esc(e.engine) + '</span><b class="t-' + engineBand(v) + '">' + (v == null ? '—' : esc(v)) + '</b>' + (e.queries_hit != null && e.queries_total != null ? '<em>' + esc(e.queries_hit + '/' + e.queries_total) + ' questions</em>' : '<em>' + esc(sourceName(e.score && e.score.source)) + '</em>') + '</div>';
     }).join('') + '</div>' : '';
     var cs = d.comp_stack, comp = '';
     if (cs && has(cs.rows)) {
@@ -1601,13 +1662,18 @@ ol,ul{list-style:none}
     }
     var cites = has(d.citation_sources) ? '<section class="sec"><h2 class="h-sec">Citation sources</h2><div class="citebar" role="img" aria-label="' + esc(d.citation_sources.map(function (s) { return s.source + ' ' + pct(s.share); }).join(', ')) + '">' +
       d.citation_sources.map(function (s, i) { return '<i style="width:' + (s.share * 100).toFixed(1) + '%;background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>'; }).join('') + '</div>' +
-      '<div class="legend">' + d.citation_sources.map(function (s, i) { return '<span><i style="background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>' + esc(s.source) + ' ' + esc(pct(s.share)) + '</span>'; }).join('') + '</div></section>' : '';
+      '<div class="legend">' + d.citation_sources.map(function (s, i) { return '<span' + (s.share_source ? ' title="' + esc(sourceName(s.share_source)) + '"' : '') + '><i style="background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>' + esc(s.source) + ' ' + esc(pct(s.share)) + '</span>'; }).join('') + '</div>' +
+      (function () { var srcs = []; d.citation_sources.forEach(function (s) { if (s.share_source && srcs.indexOf(s.share_source) === -1) srcs.push(s.share_source); }); return srcs.length ? '<p class="receipt">Shares from ' + esc(srcs.map(sourceName).join(', ')) + '</p>' : ''; })() + '</section>' : '';
     var page = '<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Visibility audit</h1><p class="support">' +
       esc([d.last_audit ? 'Last audit: ' + mdy(d.last_audit) : '', d.next_audit ? 'Next scheduled: ' + mdy(d.next_audit) : ''].filter(Boolean).join(' · ')) + '</p></div></div>' +
       hero + strip + comp + cites + gapsLine(d.gaps) + '</div>';
     var rail = (d.alerts || []).filter(function (a) { return a.kind === 'exposure'; }).map(function (a) { return '<div class="callout"><b>Exposure</b><p>' + esc(a.text) + '</p></div>'; }).join('') +
-      (has(d.recommendations) ? '<section class="sec"><h2 class="h-rail">Content recommendations</h2><ul class="recs">' + d.recommendations.map(function (rc) {
-        var act = rc.action && rc.action.type === 'create_brief' ? (canDecide() ? '<button type="button" class="link" style="align-self:flex-start" data-brief="' + esc(rc.text) + '">Create brief</button>' : signInLink('Sign in to create a brief')) : '';
+      (has(d.recommendations) ? '<section class="sec"><h2 class="h-rail">Content recommendations</h2><ul class="recs">' + d.recommendations.map(function (rc, i) {
+        var act = rc.action && rc.action.type === 'create_brief' ? (canDecide()
+          ? '<div class="briefbox"><button type="button" class="link" style="align-self:flex-start" data-brief-open aria-expanded="false" aria-controls="bf-' + i + '">Create brief</button>' +
+            '<form class="briefform" id="bf-' + i + '" hidden data-brief-form><label for="bk-' + i + '" class="fine">Topic for the brief</label><div class="briefrow"><input id="bk-' + i + '" name="hub_keyword" minlength="2" maxlength="120" required placeholder="e.g. pet policy">' +
+            '<button type="submit" class="btn xs primary">Start brief</button></div></form><p class="inline-err" role="alert" hidden></p></div>'
+          : signInLink('Sign in to create a brief')) : '';
         return '<li><p>' + esc(rc.text) + '</p>' + act + '</li>';
       }).join('') + '</ul></section>' : '') +
       (d.alerts || []).filter(function (a) { return a.kind === 'competitor'; }).map(function (a) { return '<div class="callout competitor"><b>Competitor alert</b><p>' + esc(a.text) + '</p></div>'; }).join('');
@@ -1659,7 +1725,8 @@ ol,ul{list-style:none}
         return '<li class="asset' + (best ? ' best' : '') + (worst ? ' worst' : '') + '"><div class="thumb" style="background:' + THUMBS[i % THUMBS.length] + '" role="img" aria-label="' + esc(a.name) + ' (no preview available)"><span>' + esc(a.tags[0] || '') + '</span></div>' +
           '<div class="fn">' + esc(a.name) + (worst ? '<span class="pill critical">Underperforming</span>' : '') + '</div>' +
           '<div class="tags">' + a.tags.slice(1).map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '<span class="' + esc(a.origin) + '">' + esc(a.origin) + '</span></div>' +
-          '<span class="fine"' + rtitle(a.ctr) + '>' + esc(metrics) + '</span></li>';
+          '<span class="fine"' + rtitle(a.ctr) + '>' + esc(metrics) + '</span>' +
+          (a.file_url && /^https:\/\//.test(a.file_url) ? '<a class="link" href="' + esc(a.file_url) + '" target="_blank" rel="noopener noreferrer">Open file<span class="sr-only"> (opens in a new tab)</span></a>' : '') + '</li>';
       }).join('');
       setView('<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Creative library</h1><p class="support">' + esc(c ? c.name : '') + '</p></div></div>' +
         '<p class="support">' + summary + '</p>' + chips +
@@ -1680,7 +1747,7 @@ ol,ul{list-style:none}
       var rows = (d.rows || []).map(function (x) {
         var prop = x.company_id ? '<a class="link quiet" href="#/property/' + encodeURIComponent(x.company_id) + '">' + esc(x.property) + '</a>' : esc(x.property);
         return '<tr><td>' + esc(x.change) + '</td><td class="support">' + prop + '</td><td class="num"' + rtitle(x.annual_value) + '><b>' + (val(x.annual_value) == null ? '<span class="empty-dash">—</span>' : esc(moneyK(val(x.annual_value)))) + '</b></td>' +
-          '<td class="num">' + (x.decided_by === 'you' ? '<span class="who you">You approved</span>' : '<span class="who auto">RPM Digital, automatic</span>') + '<span class="fine" style="display:block">' + esc(mdy(x.decided_at)) + '</span></td></tr>';
+          '<td class="num">' + (x.decided_by === 'you' ? '<span class="who you">You approved</span>' : (x.decided_by === 'team' ? '<span class="who team">A teammate approved</span>' : '<span class="who auto">RPM Digital, automatic</span>')) + '<span class="fine" style="display:block">' + esc(mdy(x.decided_at)) + '</span></td></tr>';
       }).join('');
       setView('<div class="page narrow" style="gap:40px"><div class="vhead"><div class="head"><p class="eyebrow">Trailing 12 months · ' + esc(d.period || '') + '</p>' + staleLabel(d.as_of) + '</div>' +
         '<h1>What we changed this year, and what it saved.</h1></div>' +
@@ -1928,6 +1995,7 @@ ol,ul{list-style:none}
       state.companyId = companyById(saved) ? saved : (companies()[0] ? String(companies()[0].company_id) : null);
       window.addEventListener('hashchange', route);
       route();
+      loadBadge();
     }).catch(function (err) {
       if (err && err.status === 401) return;
       view.innerHTML = errorHtml(err);

@@ -2,6 +2,7 @@
   "summary": {
     "open": 6,
     "late": 1,
+    "needs_approval": 2,
     "next_deadline": "2026-09-14"
   },
   "counts": {
@@ -116,7 +117,7 @@
           "more_count": 7
         },
         "sparkline": null,
-        "fair_housing_review": false
+        "fair_housing_review": null
       }
     ],
     "this_week": [
@@ -221,7 +222,7 @@
           ],
           "highlight_index": 4
         },
-        "fair_housing_review": false
+        "fair_housing_review": null
       },
       {
         "id": "service_ticket:5521",
@@ -261,7 +262,7 @@
         "notes": [],
         "evidence": null,
         "sparkline": null,
-        "fair_housing_review": false
+        "fair_housing_review": null
       },
       {
         "id": "onboarding_gap:yardi",
@@ -291,7 +292,7 @@
         "notes": [],
         "evidence": null,
         "sparkline": null,
-        "fair_housing_review": false
+        "fair_housing_review": null
       }
     ],
     "later": {

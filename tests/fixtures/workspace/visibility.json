@@ -7,7 +7,8 @@
   },
   "change": {
     "value": 4,
-    "window": "month"
+    "window": "month",
+    "source": "ai_mentions"
   },
   "last_audit": "2026-09-01",
   "next_audit": "2026-10-01",
@@ -106,42 +107,50 @@
   "citation_sources": [
     {
       "source": "Apartments.com",
-      "share": 0.34
+      "share": 0.34,
+      "share_source": "geo_sources"
     },
     {
       "source": "Property website",
-      "share": 0.28
+      "share": 0.28,
+      "share_source": "geo_sources"
     },
     {
       "source": "Zillow",
-      "share": 0.18
+      "share": 0.18,
+      "share_source": "geo_sources"
     },
     {
       "source": "Google Maps",
-      "share": 0.12
+      "share": 0.12,
+      "share_source": "geo_sources"
     },
     {
       "source": "Other",
-      "share": 0.08
+      "share": 0.08,
+      "share_source": "geo_sources"
     }
   ],
   "recommendations": [
     {
       "text": "Write 3 FAQ pages for the questions Perplexity answers with other properties (score 50, our lowest engine)",
       "action": {
-        "type": "create_brief"
+        "type": "create_brief",
+        "engine": "Perplexity"
       }
     },
     {
       "text": "Add schema.org markup to the floorplan pages — Google AI leans on structured data",
       "action": {
-        "type": "create_brief"
+        "type": "create_brief",
+        "engine": "Google AI"
       }
     },
     {
       "text": "Update the neighborhood page — ChatGPT still quotes the 2024 copy",
       "action": {
-        "type": "create_brief"
+        "type": "create_brief",
+        "engine": "ChatGPT"
       }
     }
   ],

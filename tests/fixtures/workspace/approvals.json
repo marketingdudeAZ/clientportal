@@ -4,23 +4,113 @@
   "interrupts_count": 2,
   "approved_this_month": 12,
   "interrupts": [
-    {"id": "interrupt:compliance:81", "kind": "compliance", "title": "Fair Housing review — Skye Reserve", "detail": "Our screen flagged a sentence in the new neighborhood description. It stays unpublished until a person reads it.", "company_id": "18234410087", "item_id": "content_brief:81", "primary_action": {"label": "Review now"}, "secondary_action": {"label": "Dismiss"}},
-    {"id": "interrupt:pacing:18234410150", "kind": "pacing", "title": "Pacing alert — The Maddux at Shadowood", "detail": "Google Ads is at 140% of monthly pace: $840 over with 11 days left. Nothing is paused until a person does it.", "company_id": "18234410150", "item_id": null, "primary_action": {"label": "Open an Ad Updates ticket"}, "secondary_action": {"label": "Dismiss"}}
+    {
+      "id": "interrupt:compliance:81",
+      "kind": "compliance",
+      "title": "Fair Housing review — Skye Reserve",
+      "detail": "Our screen flagged a sentence in the new neighborhood description. It stays unpublished until a person reads it.",
+      "company_id": "18234410087",
+      "item_id": "content_brief:81",
+      "primary_action": {
+        "label": "Review now",
+        "href": "#/item/content_brief:81"
+      },
+      "secondary_action": {
+        "label": "Dismiss"
+      }
+    },
+    {
+      "id": "pacing:spend_pacing:18234410150:2026-09-14",
+      "kind": "pacing",
+      "title": "Pacing — The Maddux at Shadowood",
+      "detail": "Google Ads is at 140% of monthly pace: $840 over with 11 days left.",
+      "company_id": "18234410150",
+      "item_id": null,
+      "primary_action": {
+        "label": "Pause campaign",
+        "creates": "work_item",
+        "href": "/api/workspace/signals/spend_pacing:18234410150:2026-09-14/start-work",
+        "note": "Creates an Ad Updates work item for a person. Nothing is paused automatically."
+      },
+      "secondary_action": {
+        "label": "Dismiss"
+      },
+      "signal_id": "spend_pacing:18234410150:2026-09-14"
+    }
   ],
   "batch": {
     "label": "Monthly batch — September 2026",
     "rows": [
-      {"item_id": "hubdb_rec:1031", "company_id": "18234410021", "property": "LYV Broadway", "action": "Step down Apartments.com Premium → Standard", "category": "cost", "savings_per_year": {"value": 28800, "source": "hubspot_line_items", "as_of": "2026-09-14T12:30:00Z"}, "can_edit": true},
-      {"item_id": "hubdb_rec:1032", "company_id": "18234410087", "property": "Skye Reserve", "action": "Add Zillow Promoted, $480/mo", "category": "vendor", "savings_per_year": null, "can_edit": true},
-      {"item_id": "call_prep:2231", "company_id": "18234410112", "property": "Remi West Dallas", "action": "Rep email: negotiate the Apartments.com rate", "category": "negotiate", "savings_per_year": {"value": 6000, "source": "hubdb_rec", "as_of": "2026-09-14T08:20:00Z"}, "can_edit": true},
-      {"item_id": "content_brief:77", "company_id": "26136316506", "property": "The Bromley at Brighton Crossing", "action": "Content brief: 3 FAQ pages for citation gaps", "category": "content", "savings_per_year": null, "can_edit": true},
-      {"item_id": "video_variant:14", "company_id": "18234410150", "property": "The Maddux at Shadowood", "action": "Site refresh: update amenity photos", "category": "creative", "savings_per_year": null, "can_edit": false}
+      {
+        "item_id": "hubdb_rec:1031",
+        "company_id": "18234410021",
+        "property": "LYV Broadway",
+        "action": "Step down Apartments.com Premium → Standard",
+        "category": "cost",
+        "savings_per_year": {
+          "value": 28800,
+          "source": "hubspot_line_items",
+          "as_of": "2026-09-14T12:30:00Z"
+        },
+        "can_edit": false
+      },
+      {
+        "item_id": "hubdb_rec:1032",
+        "company_id": "18234410087",
+        "property": "Skye Reserve",
+        "action": "Add Zillow Promoted, $480/mo",
+        "category": "vendor",
+        "savings_per_year": null,
+        "can_edit": false
+      },
+      {
+        "item_id": "call_prep:2231",
+        "company_id": "18234410112",
+        "property": "Remi West Dallas",
+        "action": "Rep email: negotiate the Apartments.com rate",
+        "category": "negotiate",
+        "savings_per_year": {
+          "value": 6000,
+          "source": "hubdb_rec",
+          "as_of": "2026-09-14T08:20:00Z"
+        },
+        "can_edit": false
+      },
+      {
+        "item_id": "content_brief:77",
+        "company_id": "26136316506",
+        "property": "The Bromley at Brighton Crossing",
+        "action": "Content brief: 3 FAQ pages for citation gaps",
+        "category": "content",
+        "savings_per_year": null,
+        "can_edit": false
+      },
+      {
+        "item_id": "video_variant:14",
+        "company_id": "18234410150",
+        "property": "The Maddux at Shadowood",
+        "action": "Site refresh: update amenity photos",
+        "category": "creative",
+        "savings_per_year": null,
+        "can_edit": false
+      }
     ]
   },
   "stats": {
-    "approval_rate": {"value": 0.89, "source": "workspace_decisions", "as_of": "2026-09-14T13:04:00Z"},
-    "edit_rate": {"value": 0.23, "source": "workspace_decisions", "as_of": "2026-09-14T13:04:00Z"},
-    "auto_approve_candidates": ["Visibility audits", "Content briefs"]
+    "approval_rate": {
+      "value": 0.89,
+      "source": "workspace_decisions",
+      "as_of": "2026-09-14T13:04:00Z"
+    },
+    "edit_rate": {
+      "value": 0.23,
+      "source": "workspace_decisions",
+      "as_of": "2026-09-14T13:04:00Z"
+    },
+    "auto_approve_candidates": [
+      "Visibility audits",
+      "Content briefs"
+    ]
   },
   "gaps": []
 }
