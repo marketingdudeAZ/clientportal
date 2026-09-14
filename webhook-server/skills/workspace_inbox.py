@@ -767,7 +767,7 @@ def apply_decisions(items: list, history: dict) -> None:
         for d in decisions:
             item["trail"].append({"at": wc.to_iso_ts(d.get("at")), "actor": d.get("actor"),
                                   "text": decision_text(d.get("action"), d.get("reason"))})
-        ok = [d for d in decisions if d.get("outcome", "ok") == "ok"]
+        ok = [d for d in decisions if d.get("outcome", "ok") in ("ok", "partial")]
         if ok and item["status"] == "to_do":
             last = ok[-1]
             if last.get("action") == "approve":

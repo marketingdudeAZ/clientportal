@@ -254,3 +254,44 @@ def workspace_client_view():
         return jsonify(workspace_inbox.build_client_view(items, gaps))
     except Exception as exc:  # noqa: BLE001
         return _failed("client view", exc)
+
+
+# ── decision ─────────────────────────────────────────────────────────────────
+
+@workspace_bp.route("/api/workspace/work/<item_id>/decision", methods=["POST", "OPTIONS"])
+def workspace_decision(item_id):
+    """Approve or "not now" one item, through the source's existing handler.
+
+    Needs a verified identity (Clerk or a signed preview link) whatever
+    PORTAL_STRICT_IDENTITY says, plus require_access and
+    require_company_access. An asserted X-Portal-Email is never enough to act.
+    """
+    if not identity_is_verified():
+        return jsonify({
+            "error": "Verified sign-in required",
+            "detail": "Decisions need a verified session, not an asserted email header.",
+        }), 401
+    body = request.get_json(silent=True) or {}
+    company_id = str(body.get("company_id") or "").strip()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+
+    from skills import workspace_decisions
+    action, reason = body.get("action"), body.get("reason")
+    try:
+        workspace_decisions.validate(action, reason)
+    except workspace_decisions.DecisionError as exc:
+        return jsonify(exc.body()), exc.status
+
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    try:
+        result = workspace_decisions.decide(ctx, item_id, action, reason, current_portal_email(),
+                                            internal=_is_internal())
+    except workspace_decisions.DecisionError as exc:
+        return jsonify(exc.body()), exc.status
+    except Exception as exc:  # noqa: BLE001
+        return _failed("decision", exc)
+    return jsonify(result)
