@@ -384,6 +384,31 @@ a{color:inherit;text-decoration:none}
 .hiddenbox svg{flex-shrink:0;margin-top:2px}
 .hiddenbox p{font-size:14px;line-height:21px;color:var(--text-2)}
 
+/* Signals */
+.page.signals{gap:0}
+.page.signals .head{padding-bottom:22px}
+.shead,.srow{display:flex;align-items:center;gap:16px;padding-inline:16px}
+.shead{border-bottom:1px solid var(--line);padding-bottom:9px}
+.shead .sc{font-size:12px;line-height:16px;font-weight:500;color:var(--faint)}
+.sgroup{padding-top:22px}
+.sgroup .grp{padding:0 0 10px}
+.srows{list-style:none}
+.srow{border-bottom:1px solid var(--line-2);border-left:3px solid var(--track);padding-block:15px;flex-wrap:wrap}
+.srow.sev-high{border-left-color:var(--red)}
+.srow.sev-medium{border-left-color:var(--copper)}
+.sc.prop{width:220px;flex-shrink:0;display:flex;flex-direction:column;gap:2px}
+.sc.prop b{font-size:15px;line-height:18px;font-weight:600;color:var(--ink)}
+.sc.prop span{font-size:12px;line-height:16px;color:var(--faint)}
+.sc.what{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sc.what .t{font-size:14px;line-height:18px;color:var(--text)}
+.sc.what .dtl{font-size:13px;line-height:18px;color:var(--muted)}
+.sc.chg{width:150px;flex-shrink:0;text-align:right;display:flex;flex-direction:column;gap:2px}
+.sc.chg b{font-size:15px;line-height:18px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.sc.chg span{font-size:12px;line-height:16px;color:var(--faint)}
+.sc.when{width:100px;flex-shrink:0;text-align:right;font-size:13px;line-height:16px;color:var(--muted)}
+.sc.act{width:140px;flex-shrink:0;display:flex;justify-content:flex-end}
+.srow .inline-err{flex-basis:100%;padding-left:236px}
+
 /* Mobile (Paper artboard L, 390px) */
 @media (max-width:760px){
   .app{flex-direction:column}
@@ -454,6 +479,14 @@ a{color:inherit;text-decoration:none}
   .cvd{width:auto;flex-direction:row;gap:6px;align-items:baseline}
   .cvb{flex-basis:100%;order:3}
   .cvs{width:auto;margin-left:auto}
+  .shead{display:none}
+  .srow{gap:6px 16px;padding:14px 12px}
+  .sc.prop,.sc.what{flex:1 1 100%;width:100%}
+  .sc.chg,.sc.when{width:auto;text-align:left}
+  .sc.chg{flex-direction:row;align-items:baseline;gap:8px}
+  .sc.act{width:100%;justify-content:flex-start}
+  .sc.act .btn{flex:1}
+  .srow .inline-err{padding-left:0}
 }
 
 </style>
@@ -690,6 +723,7 @@ a{color:inherit;text-decoration:none}
     lock: '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.3 5.2V3.8a2.7 2.7 0 0 1 5.4 0v1.4" fill="none" stroke="#2E4B48" stroke-width="1.3"/><rect x="2.3" y="5.2" width="7.4" height="5" rx="1.2" fill="none" stroke="#2E4B48" stroke-width="1.3"/></svg>',
     info: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="#616566" stroke-width="1.3"/><path d="M8 4.6v4.2M8 11v.1" fill="none" stroke="#616566" stroke-width="1.4" stroke-linecap="round"/></svg>',
     lockGrey: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.4 6.9V5a3.6 3.6 0 0 1 7.2 0v1.9" fill="none" stroke="#6F7372" stroke-width="1.3"/><rect x="3.1" y="6.9" width="9.8" height="6.6" rx="1.5" fill="none" stroke="#6F7372" stroke-width="1.3"/></svg>',
+    signals: '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke-width="1.3" aria-hidden="true"><path d="M1.6 7.8h2.6l1.7-4.4 3.2 8.2 1.7-3.8h2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     refuse: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="#6F7372" stroke-width="1.3"/><path d="M5.6 8h4.8" fill="none" stroke="#6F7372" stroke-width="1.4" stroke-linecap="round"/></svg>'
   };
 
@@ -704,13 +738,14 @@ a{color:inherit;text-decoration:none}
   ];
   var PORTFOLIO_NAV = [
     { key: 'portfolio', href: '#/portfolio', label: 'Work', icon: 'work' },
+    { key: 'signals', href: '#/signals', label: 'Signals', icon: 'signals' },
     { key: 'reports', href: '#/reports', label: 'Reports', icon: 'reports' }
   ];
 
   function renderSide(active) {
     var side = document.getElementById('side');
     if (!state.me) { side.innerHTML = markHtml(); return; }
-    var portfolio = active === 'portfolio';
+    var portfolio = active === 'portfolio' || active === 'signals';
     var list = state.me.companies || [];
     var c = company();
     var sw;
@@ -730,7 +765,7 @@ a{color:inherit;text-decoration:none}
     }
     var items = portfolio ? PORTFOLIO_NAV : NAV;
     var navHtml = items.map(function (n) {
-      var count = n.key === 'work' ? state.workCount : (n.key === 'portfolio' ? state.portfolioCount : null);
+      var count = n.key === 'work' ? state.workCount : (n.key === 'portfolio' ? state.portfolioCount : (n.key === 'signals' ? state.signalsHigh : null));
       var cur = (n.key === active) || (active === 'item' && n.key === 'work') || (active === 'client' && n.key === 'work');
       return '<a href="' + n.href + '"' + (cur ? ' aria-current="page"' : '') + '>' +
         '<span class="ico">' + ICON[n.icon] + '</span><span class="t">' + esc(n.label) + '</span>' +
@@ -1424,6 +1459,93 @@ a{color:inherit;text-decoration:none}
       (d.hidden_open_count ? '<div class="hiddenbox">' + ICON.lockGrey + '<p>' + esc(word(d.hidden_open_count)) + ' ' + plural(d.hidden_open_count, 'item is', 'items are') + ' open on our side and not shown here. They appear the moment they’re committed.</p></div>' : '') + '</div>';
   }
 
+  /* ── Signals (internal) ──────────────────────────────────────────── */
+  var SIGNAL_KIND = { occupancy_drop: 'Occupancy', stale_inventory: 'Stale inventory', lease_wave: 'Lease wave',
+    lead_drop: 'Leads', spend_pacing: 'Spend pacing', reputation_drop: 'Reputation', tracking_break: 'Tracking',
+    data_stale: 'Data freshness' };
+  var SEVERITY = [['high', 'High', 'late'], ['medium', 'Medium', 'week'], ['low', 'Low', 'later']];
+
+  function screenSignals() {
+    var scoped = state.signalScope === 'property' && state.companyId;
+    guard(api('/api/workspace/signals' + (scoped ? '?' + cq() : '')), 'signals').then(function (r) {
+      if (!r) return;
+      var d = r.data || {};
+      if (!scoped && d.counts) { state.signalsHigh = d.counts.high || null; renderSide('signals'); }
+      setMain(signalsHtml(d, scoped));
+      bindSignals();
+    });
+  }
+
+  function changeFigure(s) {
+    var c = s.change || {};
+    if (c.from == null || c.to == null) return '';
+    var ratio = Math.abs(c.from) <= 1 && Math.abs(c.to) <= 1 && (c.from % 1 !== 0 || c.to % 1 !== 0);
+    function f(v) {
+      if (ratio) return (v * 100).toFixed(1).replace(/\.0$/, '') + '%';
+      if (s.kind === 'spend_pacing') return money(v);
+      return num(v);
+    }
+    return f(c.from) + ' → ' + f(c.to);
+  }
+
+  function signalRow(s) {
+    var fig = changeFigure(s), win = s.change && s.change.window_days;
+    var act = s.work_item_id
+      ? '<a class="btn" href="#/item/' + encodeURIComponent(s.work_item_id) + '" data-open-company="' + esc(s.company_id) + '">Open work item</a>'
+      : '<button type="button" class="btn primary" data-start="' + esc(s.id) + '" data-company="' + esc(s.company_id) + '">Start work</button>';
+    return '<li class="srow sev-' + esc(s.severity) + '">' +
+      '<div class="sc prop"><b>' + esc(s.property_name) + '</b><span>' + esc(SIGNAL_KIND[s.kind] || s.kind) + '</span></div>' +
+      '<div class="sc what"><span class="t">' + esc(s.title) + '</span>' + (has(s.detail) ? '<span class="dtl">' + esc(s.detail) + '</span>' : '') +
+      (receipt(s.metric) ? '<span class="receipt">' + receipt(s.metric) + '</span>' : '') + '</div>' +
+      '<div class="sc chg">' + (fig ? '<b>' + esc(fig) + '</b>' + (win ? '<span>over ' + esc(win) + ' ' + plural(win, 'day') + '</span>' : '') : '') + '</div>' +
+      '<div class="sc when"><span class="m-lbl">Detected </span>' + esc(asOf(s.detected_at)) + '</div>' +
+      '<div class="sc act">' + act + '</div><p class="inline-err" role="alert" hidden></p></li>';
+  }
+
+  function signalsHtml(d, scoped) {
+    var list = d.signals || [], counts = d.counts || {};
+    var total = (counts.high || 0) + (counts.medium || 0) + (counts.low || 0);
+    var c = company();
+    var chips = '<button type="button" class="chip" aria-pressed="' + !scoped + '" data-sscope="all">All properties</button>' +
+      (c ? '<button type="button" class="chip" aria-pressed="' + !!scoped + '" data-sscope="property">' + esc(c.name) + '</button>' : '');
+    var groups = SEVERITY.map(function (sv) {
+      var rows = list.filter(function (s) { return s.severity === sv[0]; });
+      if (!rows.length) return '';
+      return '<section class="sgroup">' + grp(sv[1] + ' · ' + rows.length, sv[2]) + '<ol class="srows">' + rows.map(signalRow).join('') + '</ol></section>';
+    }).join('');
+    return '<div class="page signals"><div class="head"><div class="stack"><h1 class="h1">Signals</h1>' +
+      '<p class="lede">' + esc(total ? word(total) + ' ' + plural(total, 'change') + ' that ' + (total === 1 ? 'hasn’t' : 'haven’t') + ' become work yet.' : 'Nothing has changed that isn’t already work.') + '</p></div>' +
+      '<div class="chips" role="group" aria-label="Which properties">' + chips + '</div></div>' +
+      (groups ? '<div class="shead" aria-hidden="true"><span class="sc prop">Property</span><span class="sc what">What changed</span><span class="sc chg">Change</span><span class="sc when">Detected</span><span class="sc act"></span></div>' + groups : '') +
+      '<div class="pnote"><p>Signals come from fixed rules over the data we already read. Nothing here is estimated.</p>' + gapsLine(d.gaps) + '</div></div>';
+  }
+
+  function bindSignals() {
+    main.querySelectorAll('[data-sscope]').forEach(function (b) {
+      b.addEventListener('click', function () { state.signalScope = b.getAttribute('data-sscope'); screenSignals(); });
+    });
+    main.querySelectorAll('[data-open-company]').forEach(function (a) {
+      a.addEventListener('click', function () { setCompany(a.getAttribute('data-open-company')); });
+    });
+    main.querySelectorAll('[data-start]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var row = b.closest('.srow'), err = row.querySelector('.inline-err'), cid = b.getAttribute('data-company');
+        b.disabled = true; b.textContent = 'Starting…';
+        api('/api/workspace/signals/' + encodeURIComponent(b.getAttribute('data-start')) + '/start-work', { method: 'POST', body: { company_id: cid } })
+          .then(function (r) {
+            var id = (r.data || {}).work_item_id;
+            var cell = row.querySelector('.sc.act');
+            cell.innerHTML = id ? '<a class="btn" href="#/item/' + encodeURIComponent(id) + '">Open work item</a>' : '<span class="caption">Started</span>';
+            var a = cell.querySelector('a'); if (a) a.addEventListener('click', function () { setCompany(cid); });
+          }).catch(function (e) {
+            b.disabled = false; b.textContent = 'Start work';
+            if (e && e.status === 401) return;
+            err.hidden = false; err.textContent = 'That didn’t go through: ' + (e && e.message || 'try again') + '.';
+          });
+      });
+    });
+  }
+
   /* ── Reports (on hold) ───────────────────────────────────────────── */
   function screenReports() {
     setMain('<div class="page"><div class="head"><div class="stack"><h1 class="h1">Reports</h1><p class="lede">Monthly reports are being reworked. They will be back here soon.</p></div></div></div>');
@@ -1435,15 +1557,15 @@ a{color:inherit;text-decoration:none}
     var h = (location.hash || '').replace(/^#\/?/, '');
     var parts = h.split('?')[0].split('/');
     var name = parts[0] || (isInternal() ? 'portfolio' : 'work');
-    if (name === 'portfolio' && !isInternal()) name = 'work';
-    if (!state.companyId && name !== 'portfolio' && name !== 'reports') {
+    if ((name === 'portfolio' || name === 'signals') && !isInternal()) name = 'work';
+    if (!state.companyId && name !== 'portfolio' && name !== 'signals' && name !== 'reports') {
       setMain('<div class="state"><h2>No property selected</h2><p>There are no properties on this account yet.</p></div>');
       renderSide(name); return;
     }
     var screens = {
       portfolio: screenPortfolio, work: screenWork, item: screenItem, approved: screenApproved,
       property: screenProperty, performance: screenPerformance, plan: screenPlan, ask: screenAsk,
-      client: screenClient, reports: screenReports
+      client: screenClient, reports: screenReports, signals: screenSignals
     };
     var fn = screens[name] || screenWork;
     renderSide(fn === screenItem || fn === screenApproved ? 'item' : name);

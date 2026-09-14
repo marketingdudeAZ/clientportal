@@ -213,3 +213,26 @@ def test_fixture_copy_avoids_targeting_language(name):
     text = json.dumps(load(name)).lower()
     for phrase in ("radius", "zip code", "zip targeting", "audience layer", "lookalike"):
         assert phrase not in text, f"{name}.json mentions {phrase!r}"
+
+
+SIGNAL_KINDS = {"occupancy_drop", "stale_inventory", "lease_wave", "lead_drop", "spend_pacing",
+                "reputation_drop", "tracking_break", "data_stale"}
+
+
+def test_signals():
+    d = load("signals")
+    check(d, {"as_of": str, "counts": dict, "signals": list, "gaps": list}, "signals")
+    check(d["counts"], {"high": int, "medium": int, "low": int}, "signals.counts")
+    for i, s in enumerate(d["signals"]):
+        where = f"signals.signals[{i}]"
+        check(s, {"id": str, "company_id": str, "property_name": str, "kind": str, "severity": str,
+                  "title": str, "detail": OPT_STR, "metric": (dict, type(None)), "change": (dict, type(None)),
+                  "detected_at": str, "work_item_id": OPT_STR}, where)
+        assert s["kind"] in SIGNAL_KINDS, f"{where}.kind {s['kind']!r}"
+        assert s["severity"] in {"high", "medium", "low"}
+        check_receipt(s["metric"], where + ".metric")
+        if s["change"] is not None:
+            check(s["change"], {"from": NUM, "to": NUM, "window_days": int}, where + ".change")
+    assert sum(d["counts"].values()) == len(d["signals"])
+    for g in d["gaps"]:
+        check(g, {"message": str}, "signals.gaps[]")

@@ -114,6 +114,26 @@ def client_view():
     return jsonify(_fixture("client_view"))
 
 
+@app.get("/api/workspace/signals")
+def signals():
+    data = _fixture("signals")
+    company_id = request.args.get("company_id")
+    if company_id:
+        data["signals"] = [s for s in data["signals"] if s["company_id"] == company_id]
+        data["counts"] = {sev: sum(1 for s in data["signals"] if s["severity"] == sev) for sev in ("high", "medium", "low")}
+    return jsonify(data)
+
+
+@app.post("/api/workspace/signals/<path:signal_id>/start-work")
+def start_work(signal_id: str):
+    body = request.get_json(silent=True) or {}
+    if not body.get("company_id"):
+        return jsonify({"error": "company_id is required"}), 400
+    if signal_id not in {s["id"] for s in _fixture("signals")["signals"]}:
+        abort(404)
+    return jsonify({"work_item_id": "hubdb_rec:991"})
+
+
 @app.get("/api/ask/questions")
 def ask_questions():
     return jsonify(_fixture("ask_questions"))
