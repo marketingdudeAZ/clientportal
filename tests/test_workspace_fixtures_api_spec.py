@@ -37,6 +37,9 @@ SPEC_BY_FIXTURE = {
 LIST_FIXTURES = {"approval_items": ("items", wc.ITEM)}
 # Covered by their own contract tests (tests/test_ask.py, tests/test_workspace_report.py).
 OWN_CONTRACT = ("ask_", "report_")
+# The preview server's 35-property source book, not an API response;
+# tests/test_workspace_preview_book.py checks it and every screen built from it.
+PREVIEW_ONLY = {"preview_book"}
 
 
 def _names():
@@ -45,7 +48,8 @@ def _names():
 
 def test_every_workspace_fixture_has_an_api_spec():
     unmapped = [n for n in _names()
-                if n not in SPEC_BY_FIXTURE and n not in LIST_FIXTURES and not n.startswith(OWN_CONTRACT)]
+                if n not in SPEC_BY_FIXTURE and n not in LIST_FIXTURES and n not in PREVIEW_ONLY
+                and not n.startswith(OWN_CONTRACT)]
     assert not unmapped, f"fixtures with no API spec to check against: {unmapped}"
 
 
