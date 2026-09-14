@@ -101,7 +101,7 @@ def add_cors(response):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email, Authorization"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email, Authorization, X-Workspace-Link"
     return response
 
 

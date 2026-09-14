@@ -58,7 +58,7 @@ def _preflight():
 
 @workspace_bp.before_request
 def _gate():
-    """Flag check for every route in this blueprint.
+    """Flag check and signed-link verification for every route in this blueprint.
 
     Runs after the app-level Clerk hook, so a verified Bearer identity is
     already in place by the time anything here looks at the request.
@@ -71,7 +71,8 @@ def _gate():
         return jsonify({"error": "Not found"}), 404
     if request.method == "OPTIONS":
         return _preflight()
-    return None
+    # Signed preview link (X-Workspace-Link): verified here, or refused with 401.
+    return workspace_links.apply_to_request()
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
