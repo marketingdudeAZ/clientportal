@@ -98,3 +98,27 @@ class TestBuildMediaPlan:
         body = wmp.build_media_plan(ctx, today=TODAY)
         assert any("Paid search: “Reduce paid search spend in October” is waiting" in n for n in body["notes"])
         assert not [n for n in body["notes"] if wmp.contradicts(n, pending)]
+
+
+class TestModes:
+    def test_kyles_mix(self):
+        rows = {r["key"]: r["mode"] for r in wmp.channel_rows({
+            "search": 1, "pmax": 1, "paid_social": 1, "seo": 1, "website_hosting": 1, "reputation": 1})}
+        assert rows == {"paid_search": "flighted", "pmax": "flighted", "meta": "flighted", "seo": "always_on",
+                        "website": "always_on", "reputation": "always_on"}
+
+    def test_flighted_follows_exposure_and_always_on_is_flat(self):
+        months = ["2026-09", "2026-10", "2026-11", "2026-12"]
+        assert wmp.flighted_monthly(900.0, months, {"2026-09": 2, "2026-10": 1}) == [1200.0, 600.0, None, None]
+        assert wmp.flighted_monthly(900.0, months, {}) == [None] * 4
+
+    def test_mix_notes_keep_always_on_and_hold_pending(self):
+        rows = wmp.channel_rows({"search": 1000, "seo": 500, "website_hosting": 50})
+        pending = [_pending("Step down paid search in November", channels=["paid_search"])]
+        notes = wmp.mix_notes(rows, pending, None, {"2026-09": 5, "2026-10": 9})
+        assert "Keep SEO and content running all year." in notes and "Keep Website running all year." in notes
+        assert any(n.startswith("Paid search: “Step down paid search in November”") for n in notes)
+        assert not any("Paid search follows" in n for n in notes)
+        assert not [n for n in notes if wmp.contradicts(n, pending)]
+        notes_clear = wmp.mix_notes(rows, [], None, {"2026-09": 5, "2026-10": 9})
+        assert "Paid search follows the exposure forecast, heaviest in 2026-10." in notes_clear

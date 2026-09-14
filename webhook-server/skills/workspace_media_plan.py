@@ -1,9 +1,16 @@
 """Workspace v3 Media Plan — `GET /api/workspace/media-plan?company_id=`.
 
 The plan is the property's contracted monthly line items (spend sheet, via
-`workspace_cache`), grouped into channels by `spend_sheet_to_channels`, laid
-across the fiscal year (July to June). No flight calendar is stored, so every
-month repeats the contracted amount, and a gap says so.
+`workspace_cache`), one row per channel, laid across the fiscal year (July to
+June). Each channel has a `mode` (Round 4, Kyle's definition):
+
+* always_on — runs all year: SEO / content, website, reputation, social posting,
+  email, management; (Google Business Profile and base ILS listings are always-on
+  too, but are not deal line items, so they are a gap). Monthly values are flat.
+* flighted — follows exposure: paid search, PMax, display, retargeting, Meta and
+  other paid social/video, geofence; (ILS upgrades are flighted but not line
+  items). Monthly values follow the AptIQ exposure forecast, which covers three
+  months; months outside it are null with a gap.
 
 * `objective` — `plan_stages.determine_mode` over AptIQ occupancy, target and
   exposure (the same posture the legacy plan builder uses).
@@ -34,6 +41,28 @@ from skills import workspace_common as wc
 logger = logging.getLogger(__name__)
 
 REGENERATE_TICKET_TYPE = "campaign_review"
+
+# spend sheet SKU column → (row key, label, mode, CHANNEL_TERMS key used to match recommendations)
+SKU_CHANNELS = {
+    "search": ("paid_search", "Paid search", "flighted", "paid_search"),
+    "pmax": ("pmax", "PMax", "flighted", "paid_search"),
+    "display": ("display", "Display", "flighted", "paid_search"),
+    "retargeting": ("retargeting", "Retargeting", "flighted", "paid_search"),
+    "paid_social": ("meta", "Meta", "flighted", "paid_social"),
+    "tiktok": ("tiktok", "TikTok", "flighted", "paid_social"),
+    "youtube": ("youtube", "YouTube", "flighted", "paid_social"),
+    "ctv": ("ctv", "CTV", "flighted", "paid_social"),
+    "demand_gen": ("demand_gen", "Demand Gen", "flighted", "paid_social"),
+    "geofence": ("geofence", "Geofence", "flighted", "paid_social"),
+    "seo": ("seo", "SEO and content", "always_on", "seo"),
+    "reputation": ("reputation", "Reputation", "always_on", "reputation"),
+    "social_posting": ("social_posting", "Social posting", "always_on", "creative"),
+    "eblast": ("email", "Email", "always_on", "creative"),
+    "email_drip": ("email", "Email", "always_on", "creative"),
+    "website_hosting": ("website", "Website", "always_on", "website"),
+    "mgmt_fee": ("management", "Management fee", "always_on", "fees"),
+}
+MODES = ("always_on", "flighted")
 
 # Words that tie text to a channel. Keys are spend_sheet_to_channels buckets plus
 # the ILS, GBP and website channels Kyle's always-on list names.
@@ -110,6 +139,45 @@ def plan_notes(channel_keys: list, labels: dict, pending: list, objective_reason
     return guard_notes(notes, pending)
 
 
+def channel_rows(by_sku: dict) -> list:
+    """Line items grouped into channel rows: [{key, label, mode, match, amount}]."""
+    rows: dict = {}
+    for sku, amt in (by_sku or {}).items():
+        key, label, mode, match = SKU_CHANNELS.get(sku, (sku, sku.replace("_", " ").capitalize(), "always_on", sku))
+        row = rows.setdefault(key, {"key": key, "label": label, "mode": mode, "match": match, "amount": 0.0})
+        row["amount"] += wc.to_float(amt) or 0.0
+    order = [v[0] for v in SKU_CHANNELS.values()]
+    return sorted(rows.values(),
+                  key=lambda r: (MODES.index(r["mode"]), order.index(r["key"]) if r["key"] in order else 99))
+
+
+def flighted_monthly(amount: float, months: list, exposure: dict) -> list:
+    """Monthly values that follow exposure: the contracted amount weighted by each
+    known month's units to lease; months without a forecast are null."""
+    known = [exposure[m] for m in months if m in exposure]
+    mean = (sum(known) / len(known)) if known else 0
+    if not mean:
+        return [None] * len(months)
+    return [round(amount * exposure[m] / mean, 2) if m in exposure else None for m in months]
+
+
+def mix_notes(rows: list, pending: list, objective_reason: str | None, exposure: dict) -> list:
+    """Notes from the always-on / flighted mix and pending recommendations, guarded."""
+    notes = [objective_reason] if objective_reason else []
+    peak = max(exposure, key=exposure.get) if exposure else None
+    for r in rows:
+        waiting = [i for i in pending if r["match"] in item_channels(i)]
+        if waiting:
+            title = waiting[0].get("title") or "A recommendation"
+            notes.append(f"{r['label']}: “{title}” is waiting on a decision, so the plan holds {r['label']} "
+                         "as contracted until it is decided.")
+        elif r["mode"] == "always_on":
+            notes.append(f"Keep {r['label']} running all year.")
+        elif peak:
+            notes.append(f"{r['label']} follows the exposure forecast, heaviest in {peak}.")
+    return guard_notes(notes, pending)
+
+
 def pending_recommendations(ctx, today: date, gaps: list) -> list:
     from skills import workspace_inbox as wi
     items, item_gaps = wi.collect(ctx, sources=PENDING_SOURCES, today=today, with_history=False)
@@ -146,28 +214,32 @@ def build_media_plan(ctx, *, internal: bool = True, today: date | None = None) -
                        "Units to lease come from AptIQ exposure for the next three months only"))
 
     channels, total = [], None
+    rows = channel_rows((row or {}).get("by_sku") or {}) if row else []
     if row:
         total = row.get("total") or 0.0
-        amounts = wv.channel_amounts(row.get("by_sku") or {})
-        order = list(wv.CHANNEL_LABELS)
-        for key in sorted(amounts, key=lambda k: order.index(k) if k in order else 99):
-            amt = amounts[key]
+        for r in rows:
+            amt = round(r["amount"], 2)
+            monthly = [amt] * 12 if r["mode"] == "always_on" else flighted_monthly(amt, months, by_month)
             channels.append({
-                "channel": wv.CHANNEL_LABELS.get(key, key),
-                "monthly": [amt] * 12,
+                "channel": r["label"],
+                "mode": r["mode"],
+                "monthly": monthly,
                 "monthly_avg": amt,
                 "annual": round(amt * 12, 2),
                 "share": round(amt / total, 4) if total else None,
                 "cpl_target": None,
                 "source": wv.SPEND_SOURCE,
             })
-        gaps.append(wc.gap("channels.monthly", "No flight calendar is stored; each month repeats the contracted amount"))
+        if any(r["mode"] == "flighted" for r in rows):
+            gaps.append(wc.gap("channels.monthly", "Flighted months follow the AptIQ exposure forecast, which covers "
+                                                   "three months; other months are not planned yet"))
         gaps.append(wc.gap("channels.cpl_target", "No CPL target is stored per channel"))
+        gaps.append(wc.gap("channels", "Google Business Profile and ILS listings are not deal line items, so they "
+                                       "are not in the plan"))
 
     objective, reason = wpo.objective(ctx, aptiq)
     pending = pending_recommendations(ctx, today, gaps)
-    keys = list(wv.channel_amounts((row or {}).get("by_sku") or {}).keys()) if row else []
-    notes = plan_notes(keys, wv.CHANNEL_LABELS, pending, reason)
+    notes = mix_notes(rows, pending, reason, by_month)
     envelope = wc.metric(round(total * 12, 2), wv.SPEND_SOURCE, as_of, period="annual") if total else None
     return {
         "fiscal_year": label,

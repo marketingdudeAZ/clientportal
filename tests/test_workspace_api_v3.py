@@ -557,9 +557,18 @@ class TestMediaPlan:
         assert body["months"][-1]["month"] == "2027-06"
         assert {m["month"]: m["units_to_lease"] for m in body["months"] if m["units_to_lease"] is not None} == \
             {"2026-09": 6, "2026-10": 4, "2026-11": 4}
-        search = next(c for c in body["channels"] if c["channel"] == "Paid search")
-        assert search["monthly"] == [3000.0] * 12 and search["annual"] == 36000.0 and search["share"] == 0.6
-        assert search["cpl_target"] is None
+        by = {c["channel"]: c for c in body["channels"]}
+        assert [c["mode"] for c in body["channels"]] == ["always_on", "always_on", "flighted", "flighted"]
+        seo = by["SEO and content"]
+        assert seo["monthly"] == [1500.0] * 12 and seo["annual"] == 18000.0
+        search = by["Paid search"]
+        mean = (6 + 4 + 4) / 3
+        assert search["monthly"][2:5] == [round(2000 * 6 / mean, 2), round(2000 * 4 / mean, 2),
+                                          round(2000 * 4 / mean, 2)]
+        assert search["monthly"][:2] == [None, None] and search["monthly"][5:] == [None] * 7
+        assert search["annual"] == 24000.0 and search["share"] == 0.4 and search["cpl_target"] is None
+        assert by["PMax"]["mode"] == "flighted"
+        assert "Keep SEO and content running all year." in body["notes"]
         assert body["envelope"] == {"value": 60000.0, "source": "hubspot_line_items", "as_of": TS, "period": "annual"}
         assert body["objective"] == "Grow mode" and body["notes"]
         assert {"channels.monthly", "channels.cpl_target", "months.units_to_lease"} <= \

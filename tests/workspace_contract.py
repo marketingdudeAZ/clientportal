@@ -296,8 +296,8 @@ PROPERTY_OVERVIEW = {
 MEDIA_PLAN = {
     "fiscal_year": STR, "envelope": opt(METRIC), "objective": opt(STR), "generated_at": opt(STR),
     "months": [{"month": STR, "units_to_lease": opt(INT)}],
-    "channels": [{"channel": STR, "monthly": [NUM], "monthly_avg": NUM, "annual": NUM, "share": opt(NUM),
-                  "cpl_target": opt(NUM)}],
+    "channels": [{"channel": STR, "mode": enum("always_on", "flighted"), "monthly": [opt(NUM)],
+                  "monthly_avg": NUM, "annual": NUM, "share": opt(NUM), "cpl_target": opt(NUM)}],
     "allocated": opt(METRIC), "notes": [STR], "gaps": [GAP],
 }
 
