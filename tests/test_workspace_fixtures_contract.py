@@ -86,8 +86,9 @@ def check_item(it, where):
         check(it["sparkline"], {"label": str, "points": list, "highlight_index": (int, type(None))}, f"{where}.sparkline")
         for pt in it["sparkline"]["points"]:
             check(pt, {"x": (str, int, float), "y": NUM}, f"{where}.sparkline.points[]")
-    if "fair_housing_review" in it:
-        assert isinstance(it["fair_housing_review"], bool)
+    if it.get("fair_housing_review") is not None:
+        check(it["fair_housing_review"], {"severity": str, "terms": list}, f"{where}.fair_housing_review")
+        assert it["fair_housing_review"]["severity"] in {"high", "low"}
     assert all(isinstance(c, str) for c in it["channels"])
 
 
