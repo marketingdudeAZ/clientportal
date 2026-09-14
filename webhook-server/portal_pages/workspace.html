@@ -562,6 +562,12 @@ ol,ul{list-style:none}
 .req-foot{border-top:1px solid var(--color-border);padding-top:14px;font-size:12px;line-height:18px;color:var(--color-fg-muted)}
 .spacer{flex:1;min-height:8px}
 
+.briefbox{display:flex;flex-direction:column;gap:6px}
+.briefform{display:flex;flex-direction:column;gap:4px}
+.briefrow{display:flex;gap:6px}
+.briefrow input{flex:1;min-width:0;height:28px;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:0 8px;font-size:13px;background:var(--color-card)}
+.briefrow input:focus{outline:2px solid var(--copper-fill);outline-offset:1px}
+
 /* AA on tinted surfaces: small muted text steps down to the strong gray shade */
 .pane .eyebrow,.pane .support,.finding .receipt,.receipts .support,.receipts .eyebrow,.tbl tr.top td.support,.tbl .self,
 .tbl tr.rowlink:hover .fine,.tbl tr.rowlink:hover .empty-dash,.kbd,.chip:hover,.sopt:hover span,.sopt[aria-selected="true"] span,.hero .support{color:var(--gray-ink-strong)}
@@ -1166,10 +1172,11 @@ ol,ul{list-style:none}
       return '<button type="button" class="chip" data-cat="' + c[0] + '" aria-pressed="' + (c[0] === cat) + '">' + esc(c[1]) + '</button>';
     }).join('') + '</div>';
     var intr = interrupts.map(function (i) {
-      var primary = i.kind === 'compliance' && i.item_id
-        ? '<a class="btn sm" href="#/item/' + encodeURIComponent(i.item_id) + '" data-set-company="' + esc(i.company_id) + '">' + esc(i.primary_action && i.primary_action.label || 'Review now') + '</a>'
-        : '<button type="button" class="btn sm" data-intr-request="' + esc(i.id) + '">' + esc(i.primary_action && i.primary_action.label || 'Open a ticket') + '</button>';
-      return '<div class="intr ' + esc(i.kind) + '"><div class="l"><b>' + esc(i.title) + '</b>' + (has(i.detail) ? '<p>' + esc(i.detail) + '</p>' : '') + '</div>' +
+      var pa = i.primary_action || {}, href = pa.href || (i.item_id ? '#/item/' + encodeURIComponent(i.item_id) : ''), primary = '';
+      if (href.indexOf('#/') === 0) primary = '<a class="btn sm" href="' + esc(href) + '" data-set-company="' + esc(i.company_id) + '">' + esc(pa.label || 'Review now') + '</a>';
+      else if (href.indexOf('/api/workspace/') === 0) primary = canDecide() ? '<button type="button" class="btn sm" data-intr-post="' + esc(href) + '" data-company="' + esc(i.company_id) + '">' + esc(pa.label || 'Create a work item') + '</button>' : signInLink('Sign in to act on this');
+      return '<div class="intr ' + esc(i.kind) + '"><div class="l"><b>' + esc(i.title) + '</b>' + (has(i.detail) ? '<p>' + esc(i.detail) + '</p>' : '') +
+        (has(pa.note) ? '<p class="fine">' + esc(pa.note) + '</p>' : '') + '<p class="inline-err" role="alert" hidden></p></div>' +
         '<div class="r">' + primary + (i.secondary_action ? '<button type="button" class="textbtn" data-dismiss="' + esc(i.id) + '">' + esc(i.secondary_action.label) + '</button>' : '') + '</div></div>';
     }).join('');
     var body = rows.map(function (row) {
@@ -1199,10 +1206,14 @@ ol,ul{list-style:none}
     var err = view.querySelector('[data-approvals-err]');
     view.querySelectorAll('[data-cat]').forEach(function (b) { b.addEventListener('click', function () { state.approvalCat = b.getAttribute('data-cat'); screenApprovals(); }); });
     view.querySelectorAll('[data-dismiss]').forEach(function (b) { b.addEventListener('click', function () { state.hidden[b.getAttribute('data-dismiss')] = true; b.closest('.intr').remove(); }); });
-    view.querySelectorAll('[data-intr-request]').forEach(function (b) {
+    view.querySelectorAll('[data-intr-post]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var box = b.closest('.intr');
-        startRequest(box.querySelector('b').textContent + '. ' + (box.querySelector('p') ? box.querySelector('p').textContent : '') + ' Please open an Ad Updates ticket for a person to review.');
+        var box = b.closest('.intr'), e2 = box.querySelector('.inline-err'), cid = b.getAttribute('data-company'), label = b.textContent;
+        b.disabled = true; b.textContent = 'Creating…';
+        api(b.getAttribute('data-intr-post'), { method: 'POST', body: { company_id: cid } }).then(function (res) {
+          var id = (res.data || {}).work_item_id;
+          b.outerHTML = id ? '<a class="btn sm" href="#/item/' + encodeURIComponent(id) + '" data-set-company="' + esc(cid) + '">Open the work item</a>' : '<span class="done-row" role="status">Work item created</span>';
+        }).catch(function (e) { b.disabled = false; b.textContent = label; if (e && e.status === 401) return; e2.hidden = false; e2.textContent = failText(e, 'That didn\u2019t go through'); });
       });
     });
     view.querySelectorAll('[data-row-approve]').forEach(function (b) {
@@ -1554,7 +1565,16 @@ ol,ul{list-style:none}
       var h = mediaPlanHtml(r.data || {});
       setView(h.page, h.rail);
       var regen = view.querySelector('[data-regen]');
-      if (regen) regen.addEventListener('click', function () { startRequest('Regenerate the ' + ((r.data || {}).fiscal_year || '') + ' media plan for ' + (company() || {}).name + '. Draft only — no live budget changes.'); });
+      if (regen) regen.addEventListener('click', function () {
+        var err = view.querySelector('[data-regen-err]');
+        regen.disabled = true; regen.textContent = 'Requesting…'; err.hidden = true;
+        api('/api/workspace/media-plan/regenerate', { method: 'POST', body: { company_id: state.companyId } }).then(function (res) {
+          var id = (res.data || {}).work_item_id;
+          regen.outerHTML = '<p class="done-row" role="status">Draft requested. A person drafts the refreshed plan; live budgets don\u2019t change.</p>' +
+            (id ? '<a class="link" href="#/item/' + encodeURIComponent(id) + '">Follow the work item</a>' : '');
+          var note = view.querySelector('[data-regen-note]'); if (note) note.remove();
+        }).catch(function (e) { regen.disabled = false; regen.textContent = 'Regenerate plan'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'The request didn\u2019t go through'); });
+      });
       var pdf = view.querySelector('[data-print]'); if (pdf) pdf.addEventListener('click', function () { window.print(); });
     });
   }
@@ -1581,7 +1601,7 @@ ol,ul{list-style:none}
       breakdown + gapsLine(d.gaps) + '</div>';
     var rail = (d.generated_at ? '<p class="fine">Plan generated ' + esc(mdy(d.generated_at)) + '</p>' : '') +
       (has(d.notes) ? '<section class="sec"><h2 class="h-rail">Plan notes</h2><ol class="notes">' + d.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ol></section>' : '') +
-      '<div class="rail-sep"></div><section class="sec">' + (canDecide() ? '<button type="button" class="btn outline" style="width:100%" data-regen>Regenerate plan</button><p class="fine">Creates a draft for review. Live budgets don’t change.</p>' : signInLink('Sign in to regenerate the plan')) +
+      '<div class="rail-sep"></div><section class="sec">' + (canDecide() ? '<button type="button" class="btn outline" style="width:100%" data-regen>Regenerate plan</button><p class="fine" data-regen-note>Files a work item for a person to draft a refreshed plan. Live budgets don\u2019t change.</p><p class="inline-err" role="alert" hidden data-regen-err></p>' : signInLink('Sign in to regenerate the plan')) +
       '<button type="button" class="link" data-print>Export PDF</button></section>';
     return { page: page, rail: rail };
   }
@@ -1594,7 +1614,19 @@ ol,ul{list-style:none}
       if (!r) return;
       var h = visibilityHtml(r.data || {});
       setView(h.page, h.rail);
-      view.querySelectorAll('[data-brief]').forEach(function (b) { b.addEventListener('click', function () { startRequest('Create a content brief for ' + (company() || {}).name + ': ' + b.getAttribute('data-brief')); }); });
+      view.querySelectorAll('.briefbox').forEach(function (box) {
+        var open = box.querySelector('[data-brief-open]'), form = box.querySelector('[data-brief-form]'), err = box.querySelector('.inline-err');
+        open.addEventListener('click', function () { form.hidden = !form.hidden; open.setAttribute('aria-expanded', String(!form.hidden)); if (!form.hidden) form.querySelector('input').focus(); });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          var kw = form.querySelector('input').value.trim(), btn = form.querySelector('button');
+          if (kw.length < 2) { err.hidden = false; err.textContent = 'Give the brief a topic of at least two characters.'; return; }
+          btn.disabled = true; btn.textContent = 'Starting…'; err.hidden = true;
+          api('/api/workspace/visibility/create-brief', { method: 'POST', body: { company_id: state.companyId, hub_keyword: kw } }).then(function (res) {
+            box.innerHTML = '<p class="done-row" role="status">Brief started: \u201c' + esc((res.data || {}).hub_keyword || kw) + '\u201d.</p><a class="link" href="#/property/' + encodeURIComponent(state.companyId) + '/content">It shows up in Content when it\u2019s drafted</a>';
+          }).catch(function (e) { btn.disabled = false; btn.textContent = 'Start brief'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'The brief didn\u2019t start'); });
+        });
+      });
     });
   }
   var CITE_FILLS = ['var(--copper)', 'var(--juniper)', 'var(--sage)', 'var(--mint)', 'var(--rule)'];
@@ -1624,8 +1656,12 @@ ol,ul{list-style:none}
       esc([d.last_audit ? 'Last audit: ' + mdy(d.last_audit) : '', d.next_audit ? 'Next scheduled: ' + mdy(d.next_audit) : ''].filter(Boolean).join(' · ')) + '</p></div></div>' +
       hero + strip + comp + cites + gapsLine(d.gaps) + '</div>';
     var rail = (d.alerts || []).filter(function (a) { return a.kind === 'exposure'; }).map(function (a) { return '<div class="callout"><b>Exposure</b><p>' + esc(a.text) + '</p></div>'; }).join('') +
-      (has(d.recommendations) ? '<section class="sec"><h2 class="h-rail">Content recommendations</h2><ul class="recs">' + d.recommendations.map(function (rc) {
-        var act = rc.action && rc.action.type === 'create_brief' ? (canDecide() ? '<button type="button" class="link" style="align-self:flex-start" data-brief="' + esc(rc.text) + '">Create brief</button>' : signInLink('Sign in to create a brief')) : '';
+      (has(d.recommendations) ? '<section class="sec"><h2 class="h-rail">Content recommendations</h2><ul class="recs">' + d.recommendations.map(function (rc, i) {
+        var act = rc.action && rc.action.type === 'create_brief' ? (canDecide()
+          ? '<div class="briefbox"><button type="button" class="link" style="align-self:flex-start" data-brief-open aria-expanded="false" aria-controls="bf-' + i + '">Create brief</button>' +
+            '<form class="briefform" id="bf-' + i + '" hidden data-brief-form><label for="bk-' + i + '" class="fine">Topic for the brief</label><div class="briefrow"><input id="bk-' + i + '" name="hub_keyword" minlength="2" maxlength="120" required placeholder="e.g. pet policy">' +
+            '<button type="submit" class="btn xs primary">Start brief</button></div></form><p class="inline-err" role="alert" hidden></p></div>'
+          : signInLink('Sign in to create a brief')) : '';
         return '<li><p>' + esc(rc.text) + '</p>' + act + '</li>';
       }).join('') + '</ul></section>' : '') +
       (d.alerts || []).filter(function (a) { return a.kind === 'competitor'; }).map(function (a) { return '<div class="callout competitor"><b>Competitor alert</b><p>' + esc(a.text) + '</p></div>'; }).join('');
