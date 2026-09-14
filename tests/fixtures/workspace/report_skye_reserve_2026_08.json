@@ -1,0 +1,1772 @@
+{
+  "property": {
+    "company_id": "18234410087",
+    "name": "Skye Reserve",
+    "city": "Tampa",
+    "state": "Florida",
+    "units": {
+      "value": 982,
+      "source": "hyly_lake.t_oc_agg_occupancy_property",
+      "as_of": "2026-08-31"
+    }
+  },
+  "month": "2026-08",
+  "month_label": "August 2026",
+  "available_months": [
+    "2026-08"
+  ],
+  "as_of": "2026-09-02",
+  "summary": {
+    "lead": {
+      "value": {
+        "value": 31,
+        "source": "hyly_lake.pai_journey",
+        "as_of": "2026-08-31"
+      },
+      "label": "leases",
+      "sub": "$400 average cost per lease"
+    },
+    "text": "31 leases in August at $400 average cost per lease. 79.1% leased, with 31 signed residents moving in. Next month we're aligning Google Ads conversion tracking with CRM leads and building lease-up ad variants from the existing photo library.",
+    "polished": false
+  },
+  "key_numbers": [
+    {
+      "key": "leased_rate",
+      "label": "Leased",
+      "value": {
+        "value": 0.791242,
+        "source": "derived:(total_units-available)/total_units",
+        "as_of": "2026-08-31"
+      },
+      "sub": "982 units"
+    },
+    {
+      "key": "occupied_rate",
+      "label": "Occupied",
+      "value": {
+        "value": 0.759674,
+        "source": "derived:occupied/total_units",
+        "as_of": "2026-08-31"
+      },
+      "sub": "746 of 982"
+    },
+    {
+      "key": "net_move_ins",
+      "label": "Net move-ins",
+      "value": {
+        "value": 7,
+        "source": "derived:move_ins-move_outs",
+        "as_of": "2026-08-31"
+      },
+      "sub": "29 in / 22 out"
+    },
+    {
+      "key": "leads_created",
+      "label": "New leads",
+      "value": {
+        "value": 612,
+        "source": "hyly_lake.t_contact_activity",
+        "as_of": "2026-08-31"
+      },
+      "sub": "188 scheduled a tour"
+    },
+    {
+      "key": "cost_per_lease",
+      "label": "Cost per lease",
+      "value": {
+        "value": 400.0,
+        "source": "derived:total_spend/leased",
+        "as_of": "2026-08-31"
+      },
+      "sub": "total spend ÷ leases"
+    }
+  ],
+  "occupancy": {
+    "label": "Occupancy",
+    "takeaway": "79.1% leased and 76.0% occupied, with 31 signed residents moving in; net move-ins were 7.",
+    "leased_rate": {
+      "value": 0.791242,
+      "source": "derived:(total_units-available)/total_units",
+      "as_of": "2026-08-31"
+    },
+    "occupied_rate": {
+      "value": 0.759674,
+      "source": "derived:occupied/total_units",
+      "as_of": "2026-08-31"
+    },
+    "exposure_rate": {
+      "value": 0.208758,
+      "source": "derived:available/total_units",
+      "as_of": "2026-08-31"
+    },
+    "average_occupancy_rate": {
+      "value": 0.7541,
+      "source": "hyly_lake.t_occupancy_rate",
+      "as_of": "2026-08-31"
+    },
+    "total_units": {
+      "value": 982,
+      "source": "hyly_lake.t_oc_agg_occupancy_property",
+      "as_of": "2026-08-31"
+    },
+    "occupied": {
+      "value": 746,
+      "source": "hyly_lake.t_oc_agg_occupancy_property",
+      "as_of": "2026-08-31"
+    },
+    "available": {
+      "value": 205,
+      "source": "hyly_lake.t_oc_agg_occupancy_property",
+      "as_of": "2026-08-31"
+    },
+    "future_leases": {
+      "value": 31,
+      "source": "hyly_lake.t_oc_agg_occupancy_property",
+      "as_of": "2026-08-31"
+    },
+    "move_ins": {
+      "value": 29,
+      "source": "hyly_lake.t_ot_agg_resident_activity_property",
+      "as_of": "2026-08-31"
+    },
+    "move_outs": {
+      "value": 22,
+      "source": "hyly_lake.t_ot_agg_resident_activity_property",
+      "as_of": "2026-08-31"
+    },
+    "net_move_ins": {
+      "value": 7,
+      "source": "derived:move_ins-move_outs",
+      "as_of": "2026-08-31"
+    },
+    "vacant": {
+      "value": 236,
+      "source": "hyly_lake.t_oc_agg_occupancy_property",
+      "as_of": "2026-08-31"
+    },
+    "vacant_rented": {
+      "value": 31,
+      "source": "hyly_lake.t_oc_agg_occupancy_property",
+      "as_of": "2026-08-31"
+    },
+    "vacant_unrented": {
+      "value": 205,
+      "source": "hyly_lake.t_oc_agg_occupancy_property",
+      "as_of": "2026-08-31"
+    },
+    "delayed_move_ins": {
+      "value": 6,
+      "source": "hyly_lake.t_oc_agg_occupancy_operational",
+      "as_of": "2026-08-31"
+    },
+    "note": "Leased and occupied are month-end readings on 982 units."
+  },
+  "funnel": {
+    "label": "Leasing funnel",
+    "takeaway": "612 leads became 31 leases; lead to lease took 25.6 days.",
+    "stages": [
+      {
+        "key": "created",
+        "name": "Leads created",
+        "count": {
+          "value": 612,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "rate": null,
+        "days_to_next": {
+          "value": 3.9,
+          "source": "hyly_export.conversion_velocity",
+          "as_of": "2026-08-31"
+        }
+      },
+      {
+        "key": "scheduled",
+        "name": "Scheduled",
+        "count": {
+          "value": 188,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "rate": {
+          "value": 0.30719,
+          "source": "derived:scheduled/created",
+          "as_of": "2026-08-31"
+        },
+        "days_to_next": {
+          "value": 3.1,
+          "source": "hyly_export.conversion_velocity",
+          "as_of": "2026-08-31"
+        }
+      },
+      {
+        "key": "toured",
+        "name": "Toured",
+        "count": {
+          "value": 121,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "rate": {
+          "value": 0.643617,
+          "source": "derived:toured/scheduled",
+          "as_of": "2026-08-31"
+        },
+        "days_to_next": {
+          "value": 6.2,
+          "source": "hyly_export.conversion_velocity",
+          "as_of": "2026-08-31"
+        }
+      },
+      {
+        "key": "applied",
+        "name": "Applied",
+        "count": {
+          "value": 58,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "rate": {
+          "value": 0.479339,
+          "source": "derived:applied/toured",
+          "as_of": "2026-08-31"
+        },
+        "days_to_next": {
+          "value": 12.4,
+          "source": "hyly_export.conversion_velocity",
+          "as_of": "2026-08-31"
+        }
+      },
+      {
+        "key": "leased",
+        "name": "Leased",
+        "count": {
+          "value": 31,
+          "source": "hyly_lake.pai_journey",
+          "as_of": "2026-08-31"
+        },
+        "rate": {
+          "value": 0.534483,
+          "source": "derived:leased/applied",
+          "as_of": "2026-08-31"
+        },
+        "days_to_next": null
+      }
+    ],
+    "lead_to_lease_days": {
+      "value": 25.6,
+      "source": "hyly_export.conversion_velocity",
+      "as_of": "2026-08-31"
+    },
+    "net_applied": {
+      "value": 49,
+      "source": "hyly_lake.prospect_journey",
+      "as_of": "2026-08-31"
+    },
+    "note": "Counts are August activity at each step, not one group of prospects followed through, and each rate compares a step with the step before it. The longest step was application to lease at 12.4 days, 48% of the cycle. Days are Hyly's step velocity; we're confirming whether that's a median or an average."
+  },
+  "spend": {
+    "label": "Spend and leases",
+    "takeaway": "$12,400 across 4 vendors; Apartments.com had the lowest cost per lead at $45.",
+    "total": {
+      "value": 12400,
+      "source": "hyly_export.spend_manager",
+      "as_of": "2026-08-31"
+    },
+    "vendors": [
+      {
+        "name": "Google Ads",
+        "spend": {
+          "value": 5900,
+          "source": "hyly_export.spend_manager",
+          "as_of": "2026-08-31"
+        },
+        "share": {
+          "value": 0.475806,
+          "source": "derived:vendor_spend/total_spend",
+          "as_of": "2026-08-31"
+        },
+        "leads": {
+          "value": 96,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "cost_per_lead": {
+          "value": 61.458333,
+          "source": "derived:vendor_spend/first_touch_leads",
+          "as_of": "2026-08-31"
+        },
+        "leases": {
+          "value": 4,
+          "source": "hyly_lake.pai_journey",
+          "as_of": "2026-08-31"
+        },
+        "label": null
+      },
+      {
+        "name": "Apartments.com",
+        "spend": {
+          "value": 3200,
+          "source": "hyly_export.spend_manager",
+          "as_of": "2026-08-31"
+        },
+        "share": {
+          "value": 0.258065,
+          "source": "derived:vendor_spend/total_spend",
+          "as_of": "2026-08-31"
+        },
+        "leads": {
+          "value": 71,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "cost_per_lead": {
+          "value": 45.070423,
+          "source": "derived:vendor_spend/first_touch_leads",
+          "as_of": "2026-08-31"
+        },
+        "leases": {
+          "value": 3,
+          "source": "hyly_lake.pai_journey",
+          "as_of": "2026-08-31"
+        },
+        "label": null
+      },
+      {
+        "name": "Paid social (Meta)",
+        "spend": {
+          "value": 2100,
+          "source": "hyly_export.spend_manager",
+          "as_of": "2026-08-31"
+        },
+        "share": {
+          "value": 0.169355,
+          "source": "derived:vendor_spend/total_spend",
+          "as_of": "2026-08-31"
+        },
+        "leads": {
+          "value": 31,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "cost_per_lead": {
+          "value": 67.741935,
+          "source": "derived:vendor_spend/first_touch_leads",
+          "as_of": "2026-08-31"
+        },
+        "leases": {
+          "value": 1,
+          "source": "hyly_lake.pai_journey",
+          "as_of": "2026-08-31"
+        },
+        "label": null
+      },
+      {
+        "name": "ApartmentList.com",
+        "spend": {
+          "value": 1200,
+          "source": "hyly_export.spend_manager",
+          "as_of": "2026-08-31"
+        },
+        "share": {
+          "value": 0.096774,
+          "source": "derived:vendor_spend/total_spend",
+          "as_of": "2026-08-31"
+        },
+        "leads": {
+          "value": 22,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "cost_per_lead": {
+          "value": 54.545455,
+          "source": "derived:vendor_spend/first_touch_leads",
+          "as_of": "2026-08-31"
+        },
+        "leases": {
+          "value": 1,
+          "source": "hyly_lake.pai_journey",
+          "as_of": "2026-08-31"
+        },
+        "label": null
+      },
+      {
+        "name": "Property website",
+        "spend": {
+          "value": 0,
+          "source": "hyly_export.spend_manager:no_entry",
+          "as_of": "2026-08-31"
+        },
+        "share": null,
+        "leads": {
+          "value": 318,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "cost_per_lead": null,
+        "leases": {
+          "value": 19,
+          "source": "hyly_lake.pai_journey",
+          "as_of": "2026-08-31"
+        },
+        "label": "Unpaid"
+      }
+    ],
+    "note": "Leads and leases here use each lead's first source (the vendor basis). Most paid visitors reach the property website before they inquire, so the website carries the first-touch lease credit; Where leads came from shows the paid sources' part earlier in the journey."
+  },
+  "attribution": {
+    "label": "Where leads came from",
+    "takeaway": "Property website was the first source for 318 of 612 new leads; 1,904 prospects were influenced across all touches.",
+    "prospects": {
+      "created": {
+        "value": 1904,
+        "source": "hyly_export.multi_touch_attribution",
+        "as_of": "2026-08-31"
+      },
+      "scheduled": {
+        "value": 188,
+        "source": "hyly_export.multi_touch_attribution",
+        "as_of": "2026-08-31"
+      },
+      "toured": {
+        "value": 121,
+        "source": "hyly_export.multi_touch_attribution",
+        "as_of": "2026-08-31"
+      },
+      "applied": {
+        "value": 58,
+        "source": "hyly_export.multi_touch_attribution",
+        "as_of": "2026-08-31"
+      },
+      "leased": {
+        "value": 31,
+        "source": "hyly_export.multi_touch_attribution",
+        "as_of": "2026-08-31"
+      }
+    },
+    "sources": [
+      {
+        "name": "Property website",
+        "source_label": "Property Website",
+        "color": "#3D6FD1",
+        "created": {
+          "value": 318,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "influenced": {
+          "value": 1620,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "toured": {
+          "value": 66,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "leased": {
+          "value": 22,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "stages": {
+          "created": {
+            "value": 1620,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "scheduled": {
+            "value": 104,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "toured": {
+            "value": 66,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "applied": {
+            "value": 38,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "leased": {
+            "value": 22,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          }
+        },
+        "shape": "present_throughout"
+      },
+      {
+        "name": "Google Ads (PPC)",
+        "source_label": "Google PayPerClick (PPC)",
+        "color": "#C94444",
+        "created": {
+          "value": 96,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "influenced": {
+          "value": 402,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "toured": {
+          "value": 22,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "leased": {
+          "value": 5,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "stages": {
+          "created": {
+            "value": 402,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "scheduled": {
+            "value": 41,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "toured": {
+            "value": 22,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "applied": {
+            "value": 9,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "leased": {
+            "value": 5,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          }
+        },
+        "shape": "present_throughout"
+      },
+      {
+        "name": "Apartments.com",
+        "source_label": "Apartments.com",
+        "color": "#A7A29A",
+        "created": {
+          "value": 71,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "influenced": {
+          "value": 288,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "toured": {
+          "value": 12,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "leased": {
+          "value": 3,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "stages": {
+          "created": {
+            "value": 288,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "scheduled": {
+            "value": 22,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "toured": {
+            "value": 12,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "applied": {
+            "value": 6,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "leased": {
+            "value": 3,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          }
+        },
+        "shape": "present_throughout"
+      },
+      {
+        "name": "Facebook",
+        "source_label": "Facebook",
+        "color": "#A7A29A",
+        "created": {
+          "value": 31,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "influenced": {
+          "value": 176,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "toured": {
+          "value": 4,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "leased": {
+          "value": 1,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "stages": {
+          "created": {
+            "value": 176,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "scheduled": {
+            "value": 9,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "toured": {
+            "value": 4,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "applied": {
+            "value": 1,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "leased": {
+            "value": 1,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          }
+        },
+        "shape": "early_stages"
+      },
+      {
+        "name": "Google Business / Maps",
+        "source_label": "Google My Business/Maps",
+        "color": "#8E63C7",
+        "created": {
+          "value": 44,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "influenced": {
+          "value": 96,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "toured": {
+          "value": 6,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "leased": {
+          "value": 2,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "stages": {
+          "created": {
+            "value": 96,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "scheduled": {
+            "value": 8,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "toured": {
+            "value": 6,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "applied": {
+            "value": 3,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "leased": {
+            "value": 2,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          }
+        },
+        "shape": "later_stages"
+      },
+      {
+        "name": "ApartmentList.com",
+        "source_label": "ApartmentList.com",
+        "color": "#B07A2A",
+        "created": {
+          "value": 22,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "influenced": {
+          "value": 84,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "toured": {
+          "value": 2,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "leased": {
+          "value": 1,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "stages": {
+          "created": {
+            "value": 84,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "scheduled": {
+            "value": 4,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "toured": {
+            "value": 2,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "applied": {
+            "value": 1,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "leased": {
+            "value": 1,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          }
+        },
+        "shape": "present_throughout"
+      },
+      {
+        "name": "Hyly assistant",
+        "source_label": "hyly",
+        "color": "#E2661F",
+        "created": {
+          "value": 0,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "influenced": {
+          "value": 0,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "toured": {
+          "value": 58,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "leased": {
+          "value": 0,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "stages": {
+          "created": {
+            "value": 0,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "scheduled": {
+            "value": 0,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "toured": {
+            "value": 58,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "applied": {
+            "value": 6,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "leased": {
+            "value": 0,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          }
+        },
+        "shape": "later_stages"
+      },
+      {
+        "name": "Walking / driving by",
+        "source_label": "Walking / Driving By",
+        "color": "#2B8FA8",
+        "created": {
+          "value": 12,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "influenced": {
+          "value": 13,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "toured": {
+          "value": 5,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "leased": {
+          "value": 1,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "stages": {
+          "created": {
+            "value": 13,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "scheduled": {
+            "value": 6,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "toured": {
+            "value": 5,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "applied": {
+            "value": 2,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "leased": {
+            "value": 1,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          }
+        },
+        "shape": "later_stages"
+      },
+      {
+        "name": "Google.com",
+        "source_label": "Google.com",
+        "color": "#6C9A2E",
+        "created": {
+          "value": 9,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "influenced": {
+          "value": 11,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "toured": {
+          "value": 3,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "leased": {
+          "value": 0,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "stages": {
+          "created": {
+            "value": 11,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "scheduled": {
+            "value": 2,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "toured": {
+            "value": 3,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "applied": {
+            "value": 1,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "leased": {
+            "value": 0,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          }
+        },
+        "shape": "present_throughout"
+      },
+      {
+        "name": "Apple Maps",
+        "source_label": "Apple Maps",
+        "color": "#64748B",
+        "created": {
+          "value": 5,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "influenced": {
+          "value": 6,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "toured": {
+          "value": 1,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "leased": {
+          "value": 0,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "stages": {
+          "created": {
+            "value": 6,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "scheduled": {
+            "value": 1,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "toured": {
+            "value": 1,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "applied": {
+            "value": 0,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "leased": {
+            "value": 0,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          }
+        },
+        "shape": "early_stages"
+      },
+      {
+        "name": "Bing",
+        "source_label": "Bing",
+        "color": "#A7A29A",
+        "created": {
+          "value": 4,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        },
+        "influenced": {
+          "value": 5,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "toured": {
+          "value": 1,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "leased": {
+          "value": 0,
+          "source": "hyly_export.multi_touch_attribution",
+          "as_of": "2026-08-31"
+        },
+        "stages": {
+          "created": {
+            "value": 5,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "scheduled": {
+            "value": 0,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "toured": {
+            "value": 1,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "applied": {
+            "value": 0,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          },
+          "leased": {
+            "value": 0,
+            "source": "hyly_export.multi_touch_attribution",
+            "as_of": "2026-08-31"
+          }
+        },
+        "shape": "early_stages"
+      }
+    ],
+    "by_medium": {
+      "created": [
+        {
+          "name": "Organic",
+          "count": {
+            "value": 402,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.656863,
+            "source": "derived:medium_count/created",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "CPC",
+          "count": {
+            "value": 96,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.156863,
+            "source": "derived:medium_count/created",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Direct",
+          "count": {
+            "value": 61,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.099673,
+            "source": "derived:medium_count/created",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Social",
+          "count": {
+            "value": 31,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.050654,
+            "source": "derived:medium_count/created",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Affiliate",
+          "count": {
+            "value": 22,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.035948,
+            "source": "derived:medium_count/created",
+            "as_of": "2026-08-31"
+          }
+        }
+      ],
+      "scheduled": [
+        {
+          "name": "Organic",
+          "count": {
+            "value": 118,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.62766,
+            "source": "derived:medium_count/scheduled",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "CPC",
+          "count": {
+            "value": 34,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.180851,
+            "source": "derived:medium_count/scheduled",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Direct",
+          "count": {
+            "value": 21,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.111702,
+            "source": "derived:medium_count/scheduled",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Social",
+          "count": {
+            "value": 9,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.047872,
+            "source": "derived:medium_count/scheduled",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Affiliate",
+          "count": {
+            "value": 6,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.031915,
+            "source": "derived:medium_count/scheduled",
+            "as_of": "2026-08-31"
+          }
+        }
+      ],
+      "toured": [
+        {
+          "name": "Organic",
+          "count": {
+            "value": 80,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.661157,
+            "source": "derived:medium_count/toured",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "CPC",
+          "count": {
+            "value": 20,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.165289,
+            "source": "derived:medium_count/toured",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Direct",
+          "count": {
+            "value": 14,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.115702,
+            "source": "derived:medium_count/toured",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Social",
+          "count": {
+            "value": 4,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.033058,
+            "source": "derived:medium_count/toured",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Affiliate",
+          "count": {
+            "value": 3,
+            "source": "hyly_lake.t_contact_activity",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.024793,
+            "source": "derived:medium_count/toured",
+            "as_of": "2026-08-31"
+          }
+        }
+      ],
+      "leased": [
+        {
+          "name": "Organic",
+          "count": {
+            "value": 22,
+            "source": "hyly_lake.pai_journey",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.709677,
+            "source": "derived:medium_count/leased",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "CPC",
+          "count": {
+            "value": 4,
+            "source": "hyly_lake.pai_journey",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.129032,
+            "source": "derived:medium_count/leased",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Direct",
+          "count": {
+            "value": 3,
+            "source": "hyly_lake.pai_journey",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.096774,
+            "source": "derived:medium_count/leased",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Social",
+          "count": {
+            "value": 1,
+            "source": "hyly_lake.pai_journey",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.032258,
+            "source": "derived:medium_count/leased",
+            "as_of": "2026-08-31"
+          }
+        },
+        {
+          "name": "Affiliate",
+          "count": {
+            "value": 1,
+            "source": "hyly_lake.pai_journey",
+            "as_of": "2026-08-31"
+          },
+          "share": {
+            "value": 0.032258,
+            "source": "derived:medium_count/leased",
+            "as_of": "2026-08-31"
+          }
+        }
+      ]
+    },
+    "note": "First touch credits each lead to the source that brought it in. Influenced counts a prospect once for every source that touched it, so the columns add up to more than the prospect total. The Hyly assistant played a part in 58 of the 121 tours. By medium, 65.7% of new leads were organic and 15.7% were tagged paid search."
+  },
+  "website": {
+    "label": "Website",
+    "takeaway": "11,480 sessions from 8,214 users, 53.5% engaged; floor plan B1 drew the most views per user (3.12).",
+    "sessions": {
+      "value": 11480,
+      "source": "hyly_export.website_ga4",
+      "as_of": "2026-08-31"
+    },
+    "users": {
+      "value": 8214,
+      "source": "hyly_export.website_ga4",
+      "as_of": "2026-08-31"
+    },
+    "engaged_sessions": {
+      "value": 6142,
+      "source": "hyly_export.website_ga4",
+      "as_of": "2026-08-31"
+    },
+    "engagement_rate": {
+      "value": 0.535017,
+      "source": "derived:engaged_sessions/sessions",
+      "as_of": "2026-08-31"
+    },
+    "avg_engagement_seconds": {
+      "value": 48,
+      "source": "hyly_export.website_ga4",
+      "as_of": "2026-08-31"
+    },
+    "conversions": {
+      "value": 164,
+      "source": "hyly_export.website_ga4",
+      "as_of": "2026-08-31"
+    },
+    "floorplan_page_views": {
+      "value": 7366,
+      "source": "hyly_export.website_ga4",
+      "as_of": "2026-08-31"
+    },
+    "sources": [
+      {
+        "name": "Google",
+        "sessions": {
+          "value": 6920,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "engaged_sessions": {
+          "value": 4302,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "bounce_rate": {
+          "value": 0.378324,
+          "source": "derived:(sessions-engaged_sessions)/sessions",
+          "as_of": "2026-08-31"
+        },
+        "conversions": {
+          "value": 118,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "label": null
+      },
+      {
+        "name": "Direct",
+        "sessions": {
+          "value": 1904,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "engaged_sessions": {
+          "value": 712,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "bounce_rate": {
+          "value": 0.62605,
+          "source": "derived:(sessions-engaged_sessions)/sessions",
+          "as_of": "2026-08-31"
+        },
+        "conversions": {
+          "value": 21,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "label": null
+      },
+      {
+        "name": "Facebook",
+        "sessions": {
+          "value": 1286,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "engaged_sessions": {
+          "value": 236,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "bounce_rate": {
+          "value": 0.816485,
+          "source": "derived:(sessions-engaged_sessions)/sessions",
+          "as_of": "2026-08-31"
+        },
+        "conversions": {
+          "value": 6,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "label": "Low engagement"
+      },
+      {
+        "name": "Apartments.com",
+        "sessions": {
+          "value": 1102,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "engaged_sessions": {
+          "value": 402,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "bounce_rate": {
+          "value": 0.635209,
+          "source": "derived:(sessions-engaged_sessions)/sessions",
+          "as_of": "2026-08-31"
+        },
+        "conversions": {
+          "value": 9,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "label": null
+      },
+      {
+        "name": "Bing",
+        "sessions": {
+          "value": 268,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "engaged_sessions": {
+          "value": 181,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "bounce_rate": {
+          "value": 0.324627,
+          "source": "derived:(sessions-engaged_sessions)/sessions",
+          "as_of": "2026-08-31"
+        },
+        "conversions": {
+          "value": 4,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        },
+        "label": null
+      }
+    ],
+    "floorplans": [
+      {
+        "code": "B1",
+        "views_per_user": {
+          "value": 3.12,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        }
+      },
+      {
+        "code": "A2",
+        "views_per_user": {
+          "value": 2.96,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        }
+      },
+      {
+        "code": "A1",
+        "views_per_user": {
+          "value": 2.71,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        }
+      },
+      {
+        "code": "C1",
+        "views_per_user": {
+          "value": 2.4,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        }
+      },
+      {
+        "code": "B2",
+        "views_per_user": {
+          "value": 2.22,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        }
+      },
+      {
+        "code": "S1",
+        "views_per_user": {
+          "value": 1.64,
+          "source": "hyly_export.website_ga4",
+          "as_of": "2026-08-31"
+        }
+      }
+    ],
+    "note": "Average engagement time was 48 seconds. Facebook sent 1,286 sessions with an 81.6% bounce rate and 6 conversions; we're reviewing where those visitors land. The floor plans page was viewed 7,366 times."
+  },
+  "paid_search": {
+    "label": "Paid search",
+    "takeaway": "3.22% click-through rate, within the 3–5% benchmark; we're aligning 413 ad conversions with the 96 leads in the CRM.",
+    "impressions": {
+      "value": 96400,
+      "source": "hyly_export.google_ads",
+      "as_of": "2026-08-31",
+      "approx": true
+    },
+    "clicks": {
+      "value": 3102,
+      "source": "hyly_export.google_ads",
+      "as_of": "2026-08-31"
+    },
+    "ctr": {
+      "value": 0.0322,
+      "source": "hyly_export.google_ads",
+      "as_of": "2026-08-31"
+    },
+    "cpc": {
+      "value": 1.87,
+      "source": "hyly_export.google_ads",
+      "as_of": "2026-08-31"
+    },
+    "platform_spend": {
+      "value": 5812,
+      "source": "hyly_export.google_ads",
+      "as_of": "2026-08-31"
+    },
+    "ad_conversions": {
+      "value": 412.5,
+      "source": "hyly_export.google_ads",
+      "as_of": "2026-08-31"
+    },
+    "cost_per_conversion": {
+      "value": 14.09,
+      "source": "hyly_export.google_ads",
+      "as_of": "2026-08-31"
+    },
+    "leads": {
+      "value": 96,
+      "source": "hyly_lake.t_contact_activity",
+      "as_of": "2026-08-31"
+    },
+    "leases": {
+      "value": 4,
+      "source": "hyly_lake.pai_journey",
+      "as_of": "2026-08-31"
+    },
+    "benchmark": {
+      "ctr_low": {
+        "value": 0.03,
+        "source": "workspace_benchmarks.seeded",
+        "as_of": "2026-08-31"
+      },
+      "ctr_high": {
+        "value": 0.05,
+        "source": "workspace_benchmarks.seeded",
+        "as_of": "2026-08-31"
+      },
+      "cost_per_conversion": {
+        "value": 150,
+        "source": "workspace_benchmarks.seeded",
+        "as_of": "2026-08-31"
+      }
+    },
+    "note": "Google Ads recorded 413 conversions, and 96 leads with Google Ads as their first source reached the CRM, with 4 leases. We're aligning the conversion definition with CRM leads before the next budget cycle."
+  },
+  "reputation": {
+    "label": "Reputation",
+    "takeaway": "Google 4.1 and Apartments.com 3.7; Yelp and Facebook aren't connected yet.",
+    "target": {
+      "value": 4.0,
+      "source": "workspace_benchmarks.reputation_target",
+      "as_of": "2026-08-31"
+    },
+    "platforms": [
+      {
+        "name": "Google",
+        "score": {
+          "value": 4.1,
+          "source": "reputation_snapshot.monthly",
+          "as_of": "2026-08-31"
+        },
+        "reviews": {
+          "value": 486,
+          "source": "reputation_snapshot.monthly",
+          "as_of": "2026-08-31"
+        },
+        "target": {
+          "value": 4.0,
+          "source": "workspace_benchmarks.reputation_target",
+          "as_of": "2026-08-31"
+        },
+        "status": "At target"
+      },
+      {
+        "name": "Apartments.com",
+        "score": {
+          "value": 3.7,
+          "source": "reputation_snapshot.monthly",
+          "as_of": "2026-08-31"
+        },
+        "reviews": {
+          "value": 64,
+          "source": "reputation_snapshot.monthly",
+          "as_of": "2026-08-31"
+        },
+        "target": {
+          "value": 4.0,
+          "source": "workspace_benchmarks.reputation_target",
+          "as_of": "2026-08-31"
+        },
+        "status": "Below target"
+      },
+      {
+        "name": "Yelp",
+        "score": null,
+        "reviews": null,
+        "target": {
+          "value": 4.0,
+          "source": "workspace_benchmarks.reputation_target",
+          "as_of": "2026-08-31"
+        },
+        "status": "Not connected"
+      },
+      {
+        "name": "Facebook",
+        "score": null,
+        "reviews": null,
+        "target": {
+          "value": 4.0,
+          "source": "workspace_benchmarks.reputation_target",
+          "as_of": "2026-08-31"
+        },
+        "status": "Not connected"
+      }
+    ],
+    "note": ""
+  },
+  "listings": {
+    "label": "Listings",
+    "takeaway": "Apartments.com: 21,840 impressions and 71 leads.",
+    "placements": [
+      {
+        "name": "Apartments.com",
+        "tier": null,
+        "impressions": {
+          "value": 21840,
+          "source": "hyly_export.listing_apartments_com",
+          "as_of": "2026-08-31"
+        },
+        "leads": {
+          "value": 71,
+          "source": "hyly_export.listing_apartments_com",
+          "as_of": "2026-08-31"
+        },
+        "media_views": {
+          "value": 1230,
+          "source": "hyly_export.listing_apartments_com",
+          "as_of": "2026-08-31"
+        },
+        "cost": null
+      }
+    ],
+    "note": "Placement tiers and costs aren't in the listing feed yet."
+  },
+  "actions": [
+    {
+      "title": "Align Google Ads conversion tracking with CRM leads",
+      "detail": "Google Ads recorded 413 conversions, and 96 leads with Google Ads as their first source reached the CRM. We'll align the conversion definition so bidding follows real inquiries.",
+      "stake_label": "$5,900 monthly budget",
+      "lens": "evolve",
+      "work_item_id": null,
+      "rank": 1
+    },
+    {
+      "title": "Build lease-up ad variants from the existing photo library",
+      "detail": "205 units were available at month end. We'll cut new crops, ad variants and short video edits from the photos and floor plans we already have, one set per floor plan, and rotate them into Google Ads and Meta.",
+      "stake_label": "205 available units",
+      "lens": "express",
+      "work_item_id": null,
+      "rank": 2
+    },
+    {
+      "title": "Improve where Facebook visitors land",
+      "detail": "Facebook, where our Meta ads run, sent 1,286 website sessions with an 81.6% bounce rate. We're pointing each ad at the floor plan page it shows.",
+      "stake_label": "1,286 sessions",
+      "lens": "tailor",
+      "work_item_id": null,
+      "rank": 3
+    },
+    {
+      "title": "Shorten the time from application to lease",
+      "detail": "Application to lease took 12.4 of the 25.6 days from lead to lease. We'll review the approval steps with the leasing team.",
+      "stake_label": "12.4 days",
+      "lens": "evolve",
+      "work_item_id": null,
+      "rank": 4
+    },
+    {
+      "title": "Respond to Apartments.com reviews",
+      "detail": "Apartments.com is at 3.7 on 64 reviews, below the 4.0 target. We'll draft responses to recent reviews for the community team to approve.",
+      "stake_label": "3.7 rating",
+      "lens": "amplify",
+      "work_item_id": null,
+      "rank": 5
+    }
+  ],
+  "actions_takeaway": "5 steps for next month, starting with aligning Google Ads conversion tracking with CRM leads.",
+  "discrepancies": [
+    {
+      "key": "ads_conversions_vs_leads",
+      "text": "Google Ads recorded 413 conversions, while 96 leads list Google Ads as their first source; we're aligning the conversion definition.",
+      "values": [
+        {
+          "value": 412.5,
+          "source": "hyly_export.google_ads",
+          "as_of": "2026-08-31"
+        },
+        {
+          "value": 96,
+          "source": "hyly_lake.t_contact_activity",
+          "as_of": "2026-08-31"
+        }
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "section": "funnel",
+      "metric": "days_to_next",
+      "reason": "Days per step are Hyly's velocity figures; the metric library doesn't define them yet, so whether they're medians or averages is unconfirmed."
+    },
+    {
+      "section": "listings",
+      "metric": "tier_and_cost",
+      "reason": "Placement tier and cost aren't in the listing feed yet. Chat, tour and application lead types aren't populated, so they're left out rather than shown as zero."
+    },
+    {
+      "section": "reputation",
+      "metric": "Yelp",
+      "reason": "Yelp reviews aren't connected yet."
+    },
+    {
+      "section": "reputation",
+      "metric": "Facebook",
+      "reason": "Facebook reviews aren't connected yet."
+    },
+    {
+      "section": "reputation",
+      "metric": "scores",
+      "reason": "Reputation scores come from a monthly snapshot; the lake export doesn't carry them, so they aren't reconciled."
+    }
+  ],
+  "sources_note": "1–31 August 2026 · Hyly data lake (occupancy, leasing and lead sources) · Hyly data-lake dashboard export (spend manager, multi-touch attribution, website and Google Ads) · reputation scores from the monthly snapshot · RPM benchmarks"
+}

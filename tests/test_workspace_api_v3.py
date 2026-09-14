@@ -172,26 +172,32 @@ class TestDashboard:
         _ok(body, "dashboard")
         assert body["greeting_name"] == "Dana"
         k = body["kpis"]
+        from skills import workspace_dashboard as wdash
+        # JSON does not keep key order; the fixed strip order is KPI_ORDER.
+        assert wdash.KPI_ORDER == ("occupancy", "units_to_lease_90d", "leases_this_month", "cost_per_lease",
+                                   "ai_visibility", "actions_taken", "waiting_on_you")
+        assert set(k) == set(wdash.KPI_ORDER)
         assert k["ai_visibility"] == {"value": 60, "source": "ai_mentions", "as_of": "2026-09-12T00:00:00Z",
                                       "properties": 2}
-        assert k["portfolio_occupancy"]["value"] == round((0.91 * 138 + 0.80 * 200) / 338, 4)
-        assert k["waiting_on_you"]["value"] == 4 and k["identified_savings"] is None
+        assert k["occupancy"]["value"] == round((0.91 * 138 + 0.80 * 200) / 338, 4)
+        assert k["units_to_lease_90d"]["value"] == 14 + 24
+        assert k["waiting_on_you"]["value"] == 4 and k["leases_this_month"] is None
         assert [(t["name"], t["band"]) for t in body["health_tiles"]] == [("Arcadia West", "critical"),
                                                                            ("Parkline", "healthy")]
         parkline = next(p for p in body["properties"] if p["company_id"] == CID)
-        assert parkline["to_lease_90d"]["value"] == 14 and parkline["overspend_per_year"] is None
+        assert parkline["to_lease_90d"]["value"] == 14 and "overspend_per_year" not in parkline
+        assert parkline["occupancy"] == {"value": 0.91, "source": "aptiq", "as_of": "2026-09-13T00:00:00Z"}
+        assert parkline["leases_month"] is None
         assert body["waiting"][0]["company_id"] == CID2
         assert {w["category"] for w in body["waiting"]} >= {"cost", "content", "creative"}
         fields = {g.get("field") for g in body["gaps"]}
-        assert {"kpis.identified_savings", "properties.overspend_per_year", "activity"} <= fields
+        assert {"kpis.leases_this_month", "kpis.actions_taken", "activity"} <= fields
         assert body["loop_status"] == {"running": None, "property_count": 2, "last_pass": None}
 
-    def test_lens_changes_only_the_kpi_order(self, client, scope, items, visibility):
-        am = client.get("/api/workspace/dashboard?lens=asset_manager", headers=_h()).get_json()
-        mm = client.get("/api/workspace/dashboard?lens=marketing_manager", headers=_h()).get_json()
-        assert am["kpi_order"][0] == "portfolio_occupancy" and mm["kpi_order"][0] == "ai_visibility"
-        assert am["kpis"] == mm["kpis"] or am["kpis"].keys() == mm["kpis"].keys()
-        assert client.get("/api/workspace/dashboard?lens=cfo", headers=_h()).status_code == 400
+    def test_no_lens_toggle(self, client, scope, items, visibility):
+        body = client.get("/api/workspace/dashboard?lens=asset_manager", headers=_h())
+        assert body.status_code == 200
+        assert "lens" not in body.get_json() and "kpi_order" not in body.get_json()
 
     def test_activity_from_loop_events_is_role_filtered(self, client, scope, items, visibility, monkeypatch):
         now = wc.utc_now()
@@ -255,25 +261,15 @@ class TestApprovals:
         row = next(r for r in body["batch"]["rows"] if r["item_id"] == "hubdb_rec:fh1")
         assert row["action"] == "Recommendation"            # high-severity copy is held from clients
 
-    def test_pacing_interrupt_creates_work_and_never_pauses(self, client, scope, items, monkeypatch):
+    def test_no_pacing_interrupts_even_when_a_pacing_signal_is_high(self, client, scope, items, monkeypatch):
         import bigquery_client
-        import portal_tickets
         from skills import workspace_signals
         monkeypatch.setattr(bigquery_client, "is_bigquery_configured", lambda: True)
-        sig = {"id": f"spend_pacing:{CID2}:2026-09-14", "kind": "spend_pacing", "severity": "high",
-               "detail": "$900 spent against $3,000 of monthly paid line items (under plan)."}
-        monkeypatch.setattr(workspace_signals, "signals_for_property",
-                            lambda ctx, gaps, today=None, **kw: [dict(sig)] if ctx.company_id == CID2 else [])
-        with mock.patch.object(portal_tickets, "create_ticket") as create, \
-                mock.patch("hubspot_client.patch_deal") as patch_deal:
-            body = client.get("/api/workspace/approvals", headers=_h()).get_json()
-        pacing = next(i for i in body["interrupts"] if i["kind"] == "pacing")
-        assert pacing["primary_action"]["label"] == "Pause campaign"
-        assert pacing["primary_action"]["creates"] == "work_item"
-        assert pacing["primary_action"]["href"] == f"/api/workspace/signals/{sig['id']}/start-work"
-        assert "Nothing is paused" in pacing["primary_action"]["note"]
-        create.assert_not_called()
-        patch_deal.assert_not_called()
+        monkeypatch.setattr(workspace_signals, "signals_for_property", lambda ctx, gaps, today=None, **kw: [
+            {"id": "spend_pacing:x", "kind": "spend_pacing", "severity": "high", "detail": "under plan"}])
+        body = client.get("/api/workspace/approvals", headers=_h()).get_json()
+        assert all(i["kind"] == "compliance" for i in body["interrupts"])
+        assert "pause" not in json.dumps(body).lower()
 
     def test_stats_and_auto_approve_candidates(self, client, scope, items, monkeypatch):
         at = TODAY.isoformat() + "T10:00:00+00:00"
@@ -561,9 +557,18 @@ class TestMediaPlan:
         assert body["months"][-1]["month"] == "2027-06"
         assert {m["month"]: m["units_to_lease"] for m in body["months"] if m["units_to_lease"] is not None} == \
             {"2026-09": 6, "2026-10": 4, "2026-11": 4}
-        search = next(c for c in body["channels"] if c["channel"] == "Paid search")
-        assert search["monthly"] == [3000.0] * 12 and search["annual"] == 36000.0 and search["share"] == 0.6
-        assert search["cpl_target"] is None
+        by = {c["channel"]: c for c in body["channels"]}
+        assert [c["mode"] for c in body["channels"]] == ["always_on", "always_on", "flighted", "flighted"]
+        seo = by["SEO and content"]
+        assert seo["monthly"] == [1500.0] * 12 and seo["annual"] == 18000.0
+        search = by["Paid search"]
+        mean = (6 + 4 + 4) / 3
+        assert search["monthly"][2:5] == [round(2000 * 6 / mean, 2), round(2000 * 4 / mean, 2),
+                                          round(2000 * 4 / mean, 2)]
+        assert search["monthly"][:2] == [None, None] and search["monthly"][5:] == [None] * 7
+        assert search["annual"] == 24000.0 and search["share"] == 0.4 and search["cpl_target"] is None
+        assert by["PMax"]["mode"] == "flighted"
+        assert "Keep SEO and content running all year." in body["notes"]
         assert body["envelope"] == {"value": 60000.0, "source": "hubspot_line_items", "as_of": TS, "period": "annual"}
         assert body["objective"] == "Grow mode" and body["notes"]
         assert {"channels.monthly", "channels.cpl_target", "months.units_to_lease"} <= \

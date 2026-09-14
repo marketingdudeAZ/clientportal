@@ -57,7 +57,9 @@ ol,ul{list-style:none}
 
 /* ── Shell (App Shell EI-1) ─────────────────────────────────────────── */
 .app{display:flex;min-height:100vh}
-.side{width:240px;flex-shrink:0;background:var(--color-card);border-right:1px solid var(--color-border);padding:12px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+/* The column and its border run the full page height; the nav inside it stays in view. */
+.side{width:240px;flex-shrink:0;background:var(--color-card);border-right:1px solid var(--color-border)}
+.side-in{padding:12px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
 .logo{height:40px;display:flex;align-items:center;gap:10px;padding-inline:8px;margin-bottom:16px}
 .logo b{font-weight:700;font-size:16px;line-height:20px;letter-spacing:.16em;color:var(--color-fg)}
 .logo span{font-size:12px;line-height:16px;color:var(--color-fg-muted);letter-spacing:.04em}
@@ -119,7 +121,7 @@ ol,ul{list-style:none}
 .previewbar .grow{flex:1}
 
 /* Content + right rail */
-.content{display:flex;flex:1;min-height:0;align-items:stretch}
+main.content{display:flex;flex:1;min-height:0;align-items:stretch}
 .page{flex:1;min-width:0;display:flex;flex-direction:column;gap:24px;padding:28px 32px 48px}
 .rail{width:340px;flex-shrink:0;background:var(--color-card);border-left:1px solid var(--color-border);padding:28px 24px;display:flex;flex-direction:column;gap:20px}
 .page.narrow{max-width:1140px}
@@ -163,10 +165,6 @@ ol,ul{list-style:none}
 .chip{height:28px;padding-inline:12px;border-radius:var(--radius-full);border:1px solid var(--color-border);background:var(--color-card);font-size:13px;line-height:16px;color:var(--color-fg-muted)}
 .chip:hover{background:var(--color-muted)}
 .chip[aria-pressed="true"]{background:var(--juniper);border-color:var(--juniper);color:var(--ink-on-dark);font-weight:500}
-.lens{display:flex;align-items:center;gap:4px;font-size:13px;line-height:16px}
-.lens button{color:var(--color-fg-muted);min-height:28px;padding-inline:2px}
-.lens button[aria-pressed="true"]{color:var(--copper-ink);font-weight:500;text-decoration:underline;text-underline-offset:4px}
-.lens .bar{color:var(--color-fg-muted);padding-inline:4px}
 .pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding-inline:10px;border-radius:var(--radius-full);font-size:12px;line-height:16px;font-weight:500;white-space:nowrap}
 .pill i{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
 .pill.healthy{background:var(--healthy-soft);color:var(--healthy-text)}
@@ -198,6 +196,10 @@ ol,ul{list-style:none}
 .kpi.sm .v{font-size:24px;line-height:30px}
 .kpi .rc{font-size:11px;line-height:14px;color:var(--color-fg-muted)}
 .kpi.emph .eyebrow{color:var(--color-fg-2);font-weight:600}
+.kpiset{display:flex;flex-direction:column;gap:16px;border-bottom:1px solid var(--color-border);padding-bottom:20px}
+.kpiset .kpis{display:grid;border-bottom:0;padding-bottom:0;row-gap:16px}
+.kpis.row4,.kpis.row3{grid-template-columns:repeat(4,minmax(0,1fr))}
+.kpis.row3{border-top:1px solid var(--color-line);padding-top:16px}
 
 /* Tables (v3 pattern) */
 .tscroll{overflow-x:auto}
@@ -228,7 +230,8 @@ ol,ul{list-style:none}
 @media (prefers-reduced-motion:reduce){.spinner{animation:none}}
 .gate{position:fixed;inset:0;background:var(--juniper);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px}
 @media (prefers-reduced-motion:no-preference){.page{animation:rise .3s ease-out}}
-@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* Motion only, never opacity: text stays at full contrast from the first frame. */
+@keyframes rise{from{transform:translateY(8px)}to{transform:none}}
 /* ── Dashboard (CXR-2, FYF-1 hero) ───────────────────────────────────── */
 .greet{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .greet .stack{display:flex;flex-direction:column;gap:2px}
@@ -335,6 +338,51 @@ ol,ul{list-style:none}
 .trail .who{color:var(--color-fg-muted)}
 .afternote{font-size:13px;line-height:16px;color:var(--color-fg-muted)}
 
+/* ── Review panel (Round 4): side drawer on desktop, full screen on mobile ─ */
+body.drawer-open{overflow:hidden}
+.drawer-scrim{position:fixed;inset:0;background:rgba(40,45,39,.32);z-index:40}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(580px,100%);background:var(--color-card);border-left:1px solid var(--color-border);box-shadow:-12px 0 32px rgba(40,45,39,.14);z-index:41;display:flex;flex-direction:column}
+.drawer-head{display:flex;align-items:center;gap:12px;padding:10px 16px 10px 24px;border-bottom:1px solid var(--color-border);min-height:56px}
+.drawer-head .grow{flex:1}
+.iconbtn{width:44px;height:44px;border-radius:var(--radius-sm);display:inline-flex;align-items:center;justify-content:center;color:var(--color-fg-muted)}
+.iconbtn:hover{background:var(--color-muted);color:var(--color-fg)}
+.drawer-body{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:24px}
+.rv-foot{display:flex;flex-direction:column;gap:12px}
+.drawer .rv-foot{border-top:1px solid var(--color-border);padding:16px 24px;background:var(--color-card)}
+.panel .rv-foot{border-top:1px solid var(--color-border);padding-top:20px}
+.foot-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.foot-row .grow{flex:1}
+.rv-title{font-size:20px;line-height:28px;font-weight:600;letter-spacing:-.01em}
+.panel .rv-title{font-size:26px;line-height:34px;letter-spacing:-.02em}
+.rv-sec{display:flex;flex-direction:column;gap:8px}
+.rv-sec>h3{font-size:12px;line-height:16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--color-fg-muted)}
+.rv-sec>p{font-size:14px;line-height:22px;color:var(--color-fg-2)}
+.rv-pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.rv-receipts{display:flex;flex-direction:column;gap:2px}
+.rv-receipts li{font-size:12px;line-height:18px;color:var(--color-fg-muted)}
+.rv-qs{display:flex;flex-wrap:wrap;gap:6px}
+.rv-qs li{font-size:13px;line-height:18px;background:var(--color-muted);border-radius:var(--radius-sm);padding:4px 10px;color:var(--color-fg-2)}
+.rv-does li{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--color-line)}
+.rv-does li:first-child{border-top:0;padding-top:2px}
+.rv-does .n{width:22px;height:22px;border-radius:50%;background:var(--color-brand-soft);color:var(--juniper);font-size:12px;line-height:22px;font-weight:600;text-align:center;flex-shrink:0}
+.rv-does .l{flex:1;min-width:0;font-size:14px;line-height:20px}
+.rv-does .m{display:block;font-size:12px;line-height:16px;color:var(--color-fg-muted);margin-top:2px}
+.rv-draft{border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg);padding:16px}
+.rv-draft b{display:block;font-size:14px;line-height:20px;font-weight:600;margin-bottom:8px}
+.rv-draft .body{font-size:14px;line-height:22px;white-space:pre-wrap;color:var(--color-fg)}
+.fh-meta{font-size:13px;line-height:18px;color:var(--color-fg-muted)}
+.fh-finds{display:flex;flex-direction:column;gap:12px}
+.fh-find{border:1px solid var(--color-border);border-left:3px solid var(--critical);border-radius:var(--radius-sm);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fh-find.attention{border-left-color:var(--attention)}
+.fh-find.new{border-left-color:var(--gray)}
+.fh-find .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fh-find .top b{font-size:13px;line-height:18px;font-weight:600;flex:1;min-width:0}
+.fh-find blockquote{font-size:14px;line-height:21px;color:var(--color-fg);background:var(--color-muted);border-radius:4px;padding:6px 10px}
+.fh-find p{font-size:13px;line-height:20px;color:var(--color-fg-2)}
+.fh-find .k{display:block;font-size:12px;line-height:16px;font-weight:600;color:var(--gray-ink-strong)}
+button.link{text-align:left;align-self:flex-start;min-height:24px}
+.btn.wide{width:100%;height:auto;min-height:40px;padding-block:9px;white-space:normal;text-align:center}
+
 /* ── Approved ───────────────────────────────────────────────────────── */
 .banner{display:flex;align-items:center;gap:14px;padding:18px 32px;background:var(--healthy-soft);border-bottom:1px solid var(--color-border)}
 .banner .bcheck{width:30px;height:30px;border-radius:50%;background:var(--healthy-text);display:flex;align-items:center;justify-content:center;flex-shrink:0}
@@ -409,7 +457,13 @@ ol,ul{list-style:none}
 /* ── Media plan (DM0-1, GJQ-1) ──────────────────────────────────────── */
 .flight{padding:20px;display:flex;flex-direction:column;gap:10px;overflow-x:auto}
 .frow{display:flex;align-items:center;min-width:720px}
-.frow .fl{width:112px;flex-shrink:0;font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-muted)}
+.frow .fl{width:150px;flex-shrink:0;padding-right:10px;font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-muted)}
+.flgrp{min-width:720px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:14px 0 4px;border-top:1px solid var(--color-border)}
+.flgrp b{font-size:11px;line-height:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--juniper)}
+.flgrp span{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.frow.ch.flat .on{background:var(--color-muted);color:var(--gray-ink-strong)}
+.tbl.boxed tr.grprow th{background:var(--color-muted);color:var(--juniper);font-size:12px;line-height:16px;letter-spacing:0;text-transform:none}
+.tbl.boxed tr.grprow th .fine{color:var(--gray-ink-strong)}
 .frow .cells{flex:1;display:grid;grid-template-columns:repeat(12,1fr)}
 .frow .cells>*{text-align:center;font-size:11px;line-height:14px;padding:5px 2px}
 .frow.mh .cells>*{font-weight:600;color:var(--color-fg-muted)}
@@ -448,9 +502,23 @@ ol,ul{list-style:none}
 .callout p{font-size:12px;line-height:18px;color:var(--color-fg-2)}
 .callout.competitor{border-left-color:var(--critical);background:var(--critical-soft)}
 .callout.competitor b{color:var(--critical-text)}
-.recs li{display:flex;flex-direction:column;gap:6px;padding-bottom:12px;border-bottom:1px solid var(--color-border)}
-.recs li p{font-size:13px;line-height:18px}
-.recs{display:flex;flex-direction:column;gap:12px}
+.nc{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:16px;font-weight:500;white-space:nowrap}
+.nc i{width:8px;height:8px;border-radius:50%;display:block;flex-shrink:0}
+.nc.cited{color:var(--healthy-text)} .nc.cited i{background:var(--healthy)}
+.nc.named{color:var(--juniper)} .nc.named i{background:var(--color-card);box-shadow:inset 0 0 0 2px var(--sage)}
+.nc.none{color:var(--color-fg-muted)} .nc.none i{background:var(--rule)}
+.tbl.boxed.qtbl td.q{white-space:normal;min-width:200px}
+.tbl.boxed.qtbl.eng th,.tbl.boxed.qtbl.eng td{padding-inline:10px}
+.tbl.boxed.qtbl.eng td.q .fine{display:block;margin-top:2px}
+.tbl.boxed.qtbl td.q.mono{font-family:var(--font-mono);font-size:12px}
+.card.writing{padding:4px 20px}
+.wrow{display:flex;gap:16px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--color-line)}
+.wrow:first-child{border-top:0}
+.wrow .wl{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.wrow .wl b{font-size:15px;line-height:20px;font-weight:600}
+.wrow .wr{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.chipsq{display:flex;flex-wrap:wrap;gap:6px}
+.chipsq li{font-size:12px;line-height:16px;background:var(--color-muted);border-radius:var(--radius-sm);padding:3px 8px;color:var(--color-fg-2);font-family:var(--font-mono)}
 
 /* ── Content (E4U-1) and Creative (E4S-1) ───────────────────────────── */
 .prio{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:16px;font-weight:500}
@@ -466,8 +534,18 @@ ol,ul{list-style:none}
 .asset .tags span{height:20px;padding-inline:8px;border-radius:999px;font-size:11px;line-height:20px;background:var(--color-muted);color:var(--gray-ink-strong)}
 .asset .tags span.generated{background:var(--color-brand-soft);color:var(--juniper)}
 .asset .tags span.uploaded{background:var(--healthy-soft);color:var(--healthy-text)}
-.dropzone{border:2px dashed var(--color-border);border-radius:var(--radius-md);padding:24px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
-.dropzone:hover{background:var(--color-muted)}
+.dropzone{border:2px dashed var(--color-border);border-radius:var(--radius-md);padding:24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.dropzone.over{background:var(--color-brand-soft);border-color:var(--copper)}
+.uplist{display:flex;flex-direction:column;gap:10px}
+.upf{display:grid;grid-template-columns:minmax(0,1fr) minmax(80px,200px);gap:4px 12px;align-items:center}
+.upf .n{font-family:var(--font-mono);font-size:12px;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upf .bar{height:6px;border-radius:3px;background:var(--rule);overflow:hidden}
+.upf .bar i{display:block;height:100%;background:var(--copper-fill);transition:width .15s}
+.upf.done .bar i{background:var(--healthy-text)}
+.upf.err .bar i{background:var(--critical)}
+.upf .st{grid-column:1/-1;font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.upf.done .st{color:var(--healthy-text)}
+.upf.err .st{color:var(--critical-text)}
 
 /* ── Value (GC6-1) ──────────────────────────────────────────────────── */
 .vhead{display:flex;flex-direction:column;gap:10px}
@@ -576,7 +654,8 @@ ol,ul{list-style:none}
 /* ── Mobile (≤760px) ────────────────────────────────────────────────── */
 @media (max-width:760px){
   .app{flex-direction:column}
-  .side{width:auto;height:auto;position:sticky;top:0;z-index:25;flex-direction:row;align-items:center;flex-wrap:wrap;padding:8px 12px;border-right:0;border-bottom:1px solid var(--color-border);overflow:visible}
+  .side{width:auto;position:sticky;top:0;z-index:25;border-right:0;border-bottom:1px solid var(--color-border)}
+  .side-in{height:auto;position:static;flex-direction:row;align-items:center;flex-wrap:wrap;padding:8px 12px;overflow:visible}
   .logo{margin:0;height:44px}
   .nav{flex-direction:row;overflow-x:auto;flex-basis:100%;order:3;padding-bottom:4px;scrollbar-width:none}
   .nav::-webkit-scrollbar{display:none}
@@ -600,17 +679,33 @@ ol,ul{list-style:none}
   .greet{align-items:flex-start}
   .sresults{width:100%}
   .topbar .btn{height:44px}
-  .content{flex-direction:column}
+  main.content{flex-direction:column}
   .page{padding:20px 16px 32px;gap:20px}
   .rail{width:auto;border-left:0;border-top:1px solid var(--color-border);padding:20px 16px}
   .kpi{padding-inline:16px}
   .kpi .v{font-size:26px;line-height:32px}
   .kpis .kpi:nth-child(odd){padding-left:0;border-left:0}
   .kpis .kpi{flex:1 1 45%}
+  .kpis.row4,.kpis.row3{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hero{flex-direction:column;align-items:stretch;gap:16px;padding:18px}
   .hero .r{width:auto}
   .btn,.chip,.rchip,.textbtn{min-height:44px}
   .intr{flex-direction:column}
+  /* Approvals and Content rows stack as cards so Review is always in reach. */
+  .tscroll .tbl.cards-sm{min-width:0;border:0;background:none}
+  .tbl.cards-sm thead{display:none}
+  .tbl.cards-sm,.tbl.cards-sm tbody,.tbl.cards-sm tr,.tbl.cards-sm td{display:block;width:100%}
+  .tbl.cards-sm tr{padding:12px 0;border-bottom:1px solid var(--color-line)}
+  .tscroll .tbl.cards-sm td{border:0;padding:2px 0;white-space:normal}
+  .tscroll .tbl.cards-sm td.acts{text-align:left;padding-top:10px}
+  .tscroll .tbl.cards-sm td.acts .btn{width:100%}
+  .tscroll .tbl.cards-sm td.sav:has(.empty-dash){display:none}
+  .drawer{width:100%;border-left:0;box-shadow:none}
+  .drawer-head{padding-left:16px}
+  .drawer-body{padding:20px 16px}
+  .drawer .rv-foot{padding:12px 16px}
+  .foot-row .btn{flex:1}
+  .foot-row .fine{flex-basis:100%;order:3}
   .stage{padding:16px}
   .panel{padding:22px 18px}
   .why .row{flex-direction:column;gap:6px}
@@ -623,6 +718,8 @@ ol,ul{list-style:none}
   .vrows .n,.vrows .p{width:auto;flex:1}
   .forecast .col em{font-size:9px}
   .engines{flex-wrap:wrap}
+  .wrow{flex-direction:column;gap:10px}
+  .wrow .wr{flex-direction:row;align-items:center}
   .engines .cell{flex:1 1 33%;border-bottom:1px solid var(--color-border)}
   .answer{flex-direction:column}
   .receipts{width:100%}
@@ -790,7 +887,9 @@ ol,ul{list-style:none}
     hyly: 'Hyly', fluency: 'Fluency', yardi: 'Yardi', bigquery: 'BigQuery', clickup: 'ClickUp', ai_mentions: 'AI visibility audit',
     redlight: 'Red Light', forecasting: 'Exposure forecast', workspace_inbox: 'Workspace', workspace_decisions: 'Workspace decisions',
     hubdb_rec: 'Recommendations', soci: 'SOCi', geo_sources: 'GEO citation tracking', geo_brand_mentions: 'GEO brand mentions',
-    geo_responses: 'GEO responses', hubspot_company: 'HubSpot company record', aptiq_exposure: 'ApartmentIQ exposure' };
+    geo_responses: 'GEO responses', hubspot_company: 'HubSpot company record', aptiq_exposure: 'ApartmentIQ exposure',
+    'hubspot_line_items+hyly': 'HubSpot line items and Hyly', fair_housing_review: 'Monthly Fair Housing review', geo_prompts: 'GEO prompts',
+    geo_fanout: 'GEO fan-out', geo_plans: 'GEO content plans' };
   function sourceName(s) { return SOURCES[s] || s || ''; }
   function receipt(r) {
     if (!r || typeof r !== 'object' || (!r.source && !r.as_of)) return '';
@@ -816,7 +915,7 @@ ol,ul{list-style:none}
   function channelName(c) { return CHANNELS[c] || (c ? c.replace(/_/g, ' ').replace(/^./, function (x) { return x.toUpperCase(); }) : ''); }
 
   /* ── State ───────────────────────────────────────────────────────── */
-  var state = { me: null, companyId: null, preview: false, lens: 'asset_manager', waiting: null, loop: null, lastDecision: {}, req: null, timer: null, hidden: {} };
+  var state = { me: null, companyId: null, preview: false, waiting: null, loop: null, lastDecision: {}, req: null, timer: null, hidden: {} };
   try { state.preview = sessionStorage.getItem(PREVIEW_KEY) === '1'; } catch (e) {}
   function realInternal() { return !!(state.me && state.me.role === 'internal'); }
   function viewInternal() { return realInternal() && !state.preview; }
@@ -872,7 +971,8 @@ ol,ul{list-style:none}
     check: '<path d="M20 6 9 17l-5-5"/>',
     lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     arrowLeft: '<path d="m12 19-7-7 7-7M19 12H5"/>',
-    history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>'
+    history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>'
   };
 
   /* ── Sidebar ─────────────────────────────────────────────────────── */
@@ -894,7 +994,7 @@ ol,ul{list-style:none}
     state.active = active;
     var side = document.getElementById('side');
     var logo = '<div class="logo"><i aria-hidden="true"></i><b>RPM</b><span>Digital</span></div>';
-    if (!state.me) { side.innerHTML = logo; return; }
+    if (!state.me) { side.innerHTML = '<div class="side-in">' + logo + '</div>'; return; }
     function link(n) {
       var cur = n.key === active;
       return '<a href="' + esc(n.href) + '"' + (cur ? ' aria-current="page"' : '') + '>' + ic(I[n.icon]) + '<span class="t">' + esc(n.label) + '</span>' +
@@ -912,7 +1012,7 @@ ol,ul{list-style:none}
     html += '<div class="side-bottom">' +
       (realInternal() ? '<button type="button" class="previewtoggle" aria-pressed="' + state.preview + '" data-preview>Preview as client<span class="switch" aria-hidden="true"></span></button>' : '') +
       '<div class="userrow"><span class="avatar" aria-hidden="true">' + esc(initials(me.email)) + '</span><div><b>' + esc(shortName(me.email)) + '</b><span>' + (realInternal() ? 'RPM Living' : 'Owner') + '</span></div></div></div>';
-    side.innerHTML = html;
+    side.innerHTML = '<div class="side-in">' + html + '</div>';
     var pv = side.querySelector('[data-preview]');
     if (pv) pv.addEventListener('click', function () {
       state.preview = !state.preview;
@@ -1017,7 +1117,7 @@ ol,ul{list-style:none}
     return '<div class="state" role="alert"><h2>' + esc(title) + '</h2>' + (body ? '<p>' + esc(body) + '</p>' : '') + '<div><button class="btn sm" type="button" data-retry>Try again</button></div></div>';
   }
   function showSignIn(note) {
-    document.getElementById('side').innerHTML = '<div class="logo"><i aria-hidden="true"></i><b>RPM</b><span>Digital</span></div>';
+    document.getElementById('side').innerHTML = '<div class="side-in"><div class="logo"><i aria-hidden="true"></i><b>RPM</b><span>Digital</span></div></div>';
     document.getElementById('topbar').innerHTML = '';
     view.innerHTML = '<div class="state"><h2>Sign in to see your workspace</h2><p>' + esc(note || 'Your session has ended or you are not signed in.') + '</p><div><button class="btn primary" type="button" id="signin-btn">Sign in</button></div></div>';
     document.getElementById('signin-btn').addEventListener('click', function () {
@@ -1038,8 +1138,12 @@ ol,ul{list-style:none}
   /* ── Shared decision pieces ──────────────────────────────────────── */
   var REASONS = [['wrong_data', 'Wrong read of the data'], ['already_handled', 'Already handled'], ['not_priority', 'Not a priority this month'], ['discuss_on_call', 'Discuss on our call']];
   function reasonLabel(k) { for (var i = 0; i < REASONS.length; i++) if (REASONS[i][0] === k) return REASONS[i][1]; return k; }
-  var CAT_LABEL = { cost: 'Cost', vendor: 'Vendor', negotiate: 'Negotiate', content: 'Content', creative: 'Creative', compliance: 'Compliance' };
-  var SOURCE_LABEL = { hubdb_rec: 'Recommendation', loop_rec: 'Loop recommendation', call_prep: 'Call prep', content_brief: 'Content brief', video_variant: 'Creative', ticket_profile: 'Ticket profile', onboarding_gap: 'Onboarding', portal_ticket: 'Request', service_ticket: 'Service ticket' };
+  var CAT_LABEL = { cost: 'Cost', vendor: 'Vendor', content: 'Content', creative: 'Creative', compliance: 'Compliance' };
+  // Round 4: negotiate is no longer its own category; it reads as a vendor item.
+  function catKey(c) { return c === 'negotiate' ? 'vendor' : c; }
+  // Every decision opens the Review panel first: one button, one place to decide.
+  function reviewBtn(id, cid, cls, label) { return '<button type="button" class="' + cls + '" data-review="' + esc(id) + '" data-company="' + esc(cid || '') + '">' + esc(label || 'Review') + '</button>'; }
+  var SOURCE_LABEL = { hubdb_rec: 'Recommendation', loop_rec: 'Loop recommendation', call_prep: 'Call prep', content_brief: 'Content brief', video_variant: 'Creative', ticket_profile: 'Ticket profile', onboarding_gap: 'Onboarding', portal_ticket: 'Request', service_ticket: 'Service ticket', fair_housing_review: 'Fair Housing review' };
   var STATUS_LABEL = { to_do: 'Needs you', in_motion: 'In motion', done: 'Done' };
   function reasonChips(attr) { return REASONS.map(function (r) { return '<button type="button" class="rchip" aria-pressed="false" ' + attr + '="' + r[0] + '">' + esc(r[1]) + '</button>'; }).join(''); }
   function approveFlow(btn, id, errEl) {
@@ -1064,25 +1168,38 @@ ol,ul{list-style:none}
   function internalTag() { return viewInternal() ? ' <span class="tag internal">' + ic(I.lock, 10) + 'Internal</span>' : ''; }
 
   /* ── Dashboard (CXR-2, FYF-1) ────────────────────────────────────── */
+  // Round 4: one strip for everyone, in this order. The first four are the
+  // leasing read; the second row is what the loop did and what waits on you.
   var KPI_DEFS = {
-    ai_visibility: { label: 'AI visibility', fmt: function (v) { return num(v); }, cls: '' },
-    portfolio_occupancy: { label: 'Portfolio occupancy', fmt: function (v) { return pct(v, 1); }, cls: '' },
-    identified_savings: { label: 'Identified savings', fmt: function (v) { return moneyK(v); }, cls: 't-healthy' },
-    waiting_on_you: { label: 'Waiting on you', fmt: function (v) { return num(v); }, cls: 't-brand' }
+    occupancy: { label: 'Occupancy', fmt: function (v) { return pct(v, 1); }, cls: '' },
+    units_to_lease_90d: { label: 'To lease · 90 days', fmt: num, cls: '' },
+    leases_this_month: { label: 'Leases this month', fmt: num, cls: '', hint: 'Month to date' },
+    cost_per_lease: { label: 'Cost per lease', fmt: money, cls: '', hint: 'Last full month' },
+    ai_visibility: { label: 'AI visibility', fmt: num, cls: '' },
+    actions_taken: { label: 'Actions we took for you', fmt: num, cls: 't-healthy', hint: 'Last 30 days, no approval needed' },
+    waiting_on_you: { label: 'Waiting on you', fmt: num, cls: 't-brand' }
   };
-  var LENS_ORDER = { asset_manager: ['portfolio_occupancy', 'identified_savings', 'waiting_on_you', 'ai_visibility'], marketing_manager: ['ai_visibility', 'waiting_on_you', 'identified_savings', 'portfolio_occupancy'] };
+  var KPI_ROWS = [['occupancy', 'units_to_lease_90d', 'leases_this_month', 'cost_per_lease'], ['ai_visibility', 'actions_taken', 'waiting_on_you']];
   function greeting() { var h = new Date().getHours(); return h < 12 ? 'Good morning' : (h < 17 ? 'Good afternoon' : 'Good evening'); }
-  function kpiStrip(kpis, order, emphasize) {
-    return '<div class="kpis">' + order.map(function (k, i) {
-      var def = KPI_DEFS[k], r = kpis[k], v = val(r);
-      return '<div class="kpi' + (emphasize && i < 2 ? ' emph' : '') + '"' + rtitle(r) + '><span class="eyebrow">' + esc(def.label) + '</span>' +
-        '<span class="v ' + def.cls + '">' + (v == null ? '<span class="empty-dash">—</span>' : esc(def.fmt(v))) + '</span>' +
-        (receipt(r) ? '<span class="rc">' + receipt(r) + '</span>' : '') + '</div>';
+  function kpiReceipt(r) {
+    // Long, descriptive sources (what was counted) stay in the tooltip; the line under the number stays short.
+    if (!r || typeof r !== 'object') return '';
+    var name = r.source ? sourceName(r.source) : '';
+    return [name.length <= 28 ? esc(name) : '', r.as_of ? esc(asOf(r.as_of)) : ''].filter(Boolean).join(' · ');
+  }
+  function kpiStrip(kpis) {
+    return '<div class="kpiset">' + KPI_ROWS.map(function (row, ri) {
+      return '<div class="kpis ' + (ri ? 'row3' : 'row4') + '">' + row.map(function (k) {
+        var def = KPI_DEFS[k], r = kpis[k], v = val(r), rc = [def.hint ? esc(def.hint) : '', kpiReceipt(r)].filter(Boolean).join(' · ');
+        return '<div class="kpi' + (ri ? ' sm' : ' emph') + '"' + rtitle(r) + '><span class="eyebrow">' + esc(def.label) + '</span>' +
+          '<span class="v ' + def.cls + '">' + (v == null ? '<span class="empty-dash">—</span>' : esc(def.fmt(v))) + '</span>' +
+          (rc ? '<span class="rc">' + rc + '</span>' : '') + '</div>';
+      }).join('') + '</div>';
     }).join('') + '</div>';
   }
   function screenDashboard() {
     renderTop('Dashboard', companies().length + ' properties');
-    guard(api('/api/workspace/dashboard?lens=' + state.lens), 'the dashboard').then(function (r) {
+    guard(api('/api/workspace/dashboard'), 'the dashboard').then(function (r) {
       if (!r) return;
       var d = r.data || {};
       state.loop = d.loop_status || state.loop;
@@ -1090,57 +1207,50 @@ ol,ul{list-style:none}
       renderSide('dashboard');
       var h = dashboardHtml(d);
       setView(h.page, h.rail);
-      view.querySelectorAll('[data-lens]').forEach(function (b) { b.addEventListener('click', function () { state.lens = b.getAttribute('data-lens'); screenDashboard(); }); });
-      view.querySelectorAll('[data-approve]').forEach(function (b) { b.addEventListener('click', function () { approveFlow(b, b.getAttribute('data-approve'), b.closest('[data-err-scope]').querySelector('.inline-err')); }); });
     });
   }
   function dashboardHtml(d) {
     var name = d.greeting_name ? ', ' + d.greeting_name : '';
-    var lens = '<div class="lens" role="group" aria-label="Show numbers for">' +
-      '<button type="button" data-lens="asset_manager" aria-pressed="' + (state.lens === 'asset_manager') + '">Asset manager</button><span class="bar" aria-hidden="true">|</span>' +
-      '<button type="button" data-lens="marketing_manager" aria-pressed="' + (state.lens === 'marketing_manager') + '">Marketing manager</button></div>';
     var waiting = d.waiting || [];
     var top = waiting[0];
     var hero = '';
     if (top) {
-      var acts = canDecide()
-        ? '<button type="button" class="btn primary" data-approve="' + esc(top.item_id) + '">Approve</button><a class="btn" href="#/item/' + encodeURIComponent(top.item_id) + '">Not now</a>'
-        : '<p class="support">' + signInLink('Sign in to approve') + '</p>';
+      var topCat = catKey(top.category);
       hero = '<section class="sec" aria-labelledby="needs-h"><div class="sec-head"><h2 class="eyebrow" id="needs-h">Needs you</h2><span class="support">1 of ' + esc(num(waiting.length)) + ' waiting</span></div>' +
-        '<div class="hero" data-err-scope><div class="l"><span class="pill attention"><i></i>' + esc(CAT_LABEL[top.category] || top.category) + '</span>' +
-        '<p class="q">' + esc(top.title) + '</p>' + (has(top.subtitle) ? '<p class="body">' + esc(top.subtitle) + '. Nothing changes until you approve.</p>' : '') +
-        '<p class="inline-err" role="alert" hidden></p></div>' +
-        '<div class="r">' + acts + '<a class="link" href="#/item/' + encodeURIComponent(top.item_id) + '">See the full evidence</a></div></div></section>';
+        '<div class="hero"><div class="l"><span class="pill attention"><i></i>' + esc(CAT_LABEL[topCat] || topCat) + '</span>' +
+        '<p class="q">' + esc(top.title) + '</p><p class="body">' + (has(top.subtitle) ? esc(top.subtitle) + '. ' : '') + 'Nothing changes until you approve.</p></div>' +
+        '<div class="r">' + reviewBtn(top.item_id, top.company_id, 'btn primary') + '</div></div></section>';
     }
     var tiles = (d.health_tiles || []).map(function (t) {
       var b = t.band || band(t.score);
       return '<a class="tile ' + esc(b) + '" href="#/property/' + encodeURIComponent(t.company_id) + '"><span>' + esc(t.name) + '</span><b>' + (t.score == null ? 'new' : esc(t.score)) + '</b><span class="sr-only">' + esc(BAND_LABEL[b]) + '</span></a>';
     }).join('');
-    var rows = (d.properties || []).map(function (p) {
+    var allProps = d.properties || [];
+    var DASH_ROWS = 10;
+    var rows = allProps.slice().sort(function (a, b) { return (a.health == null ? 1e3 : a.health) - (b.health == null ? 1e3 : b.health); }).slice(0, DASH_ROWS).map(function (p) {
       var b = p.band || band(p.health), href = '#/property/' + encodeURIComponent(p.company_id);
+      function cell(r, fmt) { var v = val(r); return '<td class="num"' + rtitle(r) + '>' + (v == null ? '<span class="empty-dash">—</span>' : esc(fmt(v))) + '</td>'; }
       return '<tr class="rowlink" data-href="' + href + '"><td class="name"><a href="' + href + '">' + esc(p.name) + '</a></td>' +
-        '<td class="num">' + esc(num(p.units)) + '</td>' +
-        '<td class="num"' + rtitle(p.to_lease_90d) + '>' + (val(p.to_lease_90d) == null ? '<span class="empty-dash">—</span>' : esc(num(val(p.to_lease_90d)))) + '</td>' +
-        '<td class="num t-critical"' + rtitle(p.overspend_per_year) + '>' + (val(p.overspend_per_year) == null ? '<span class="empty-dash">—</span>' : esc(money(val(p.overspend_per_year)))) + '</td>' +
+        '<td class="num">' + esc(num(p.units)) + '</td>' + cell(p.occupancy, function (v) { return pct(v, 1); }) + cell(p.to_lease_90d, num) +
         '<td><span class="healthcell t-' + esc(b) + '"><span class="dot ' + esc(b) + '" aria-hidden="true"></span>' + (p.health == null ? 'new' : esc(p.health)) + '</span></td></tr>';
     }).join('');
-    var order = (Array.isArray(d.kpi_order) && d.kpi_order.length ? d.kpi_order : (LENS_ORDER[state.lens] || LENS_ORDER.asset_manager)).filter(function (k) { return KPI_DEFS[k]; });
     var page = '<div class="page">' +
-      '<div class="greet"><div class="stack"><h1 class="h-greet">' + esc(greeting() + name) + '.</h1>' + staleLabel(d.as_of) + '</div>' + lens + '</div>' +
-      hero + kpiStrip(d.kpis || {}, order, true) +
+      '<div class="greet"><div class="stack"><h1 class="h-greet">' + esc(greeting() + name) + '.</h1>' + staleLabel(d.as_of) + '</div></div>' +
+      hero + kpiStrip(d.kpis || {}) +
       (tiles ? '<section class="sec"><h2 class="h-sec">Portfolio health</h2><div class="tiles">' + tiles + '</div></section>' : '') +
-      (rows ? '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Overspend/yr</th><th scope="col">Health</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
+      (rows ? '<section class="sec" aria-labelledby="dp-h"><div class="sec-head"><h2 class="h-sec" id="dp-h">Lowest health first</h2>' +
+        (allProps.length > DASH_ROWS ? '<a class="link" href="#/properties">All ' + esc(num(allProps.length)) + ' properties</a>' : '') + '</div>' +
+        '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties, lowest health first</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">Occupancy</th><th scope="col" class="num">To lease (90d)</th><th scope="col">Health</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>' : '') +
       gapsLine(d.gaps) + '</div>';
     var feed = (d.activity || []).map(function (a) {
       var dotc = { audit: 'healthy', check: 'healthy', forecast: 'healthy', publish: 'healthy', draft: 'brand', decision: 'brand', flag: 'attention' }[a.kind] || 'new';
       return '<li><span class="dot ' + dotc + '" aria-hidden="true"></span><div><b>' + esc(a.text) + (a.visibility === 'internal' ? internalTag() : '') + '</b><span>' + esc(ago(a.at)) + '</span></div></li>';
     }).join('');
     var cards = waiting.slice(0, 3).map(function (w) {
-      var href = '#/item/' + encodeURIComponent(w.item_id);
-      return '<li class="wcard" data-err-scope><div class="top"><b>' + esc(w.title) + '</b><span class="tag ' + esc(w.category) + '">' + esc((CAT_LABEL[w.category] || w.category).toLowerCase()) + '</span></div>' +
+      var wk = catKey(w.category);
+      return '<li class="wcard"><div class="top"><b>' + esc(w.title) + '</b><span class="tag ' + esc(wk) + '">' + esc((CAT_LABEL[wk] || wk).toLowerCase()) + '</span></div>' +
         (has(w.subtitle) ? '<p>' + esc(w.subtitle) + '</p>' : '') +
-        '<div class="acts">' + (canDecide() ? '<button type="button" class="btn xs outline" data-approve="' + esc(w.item_id) + '">Approve</button>' : signInLink('Sign in to approve')) +
-        '<a class="textbtn" href="' + href + '">Review</a></div><p class="inline-err" role="alert" hidden></p></li>';
+        '<div class="acts">' + reviewBtn(w.item_id, w.company_id, 'btn xs outline') + '</div></li>';
     }).join('');
     var rail = '<section class="sec"><h2 class="h-rail"><span class="dot healthy" aria-hidden="true"></span> What we did on our own</h2><ol class="feed">' + (feed || '<li class="support">Nothing yet today.</li>') + '</ol></section>' +
       '<div class="rail-sep"></div>' +
@@ -1151,7 +1261,8 @@ ol,ul{list-style:none}
   }
 
   /* ── Approvals (DDE-0, 1HM-0) ────────────────────────────────────── */
-  var CATS = [['', 'All'], ['cost', 'Cost'], ['vendor', 'Vendor'], ['negotiate', 'Negotiate'], ['content', 'Content'], ['creative', 'Creative'], ['compliance', 'Compliance']];
+  // Grouped by what is being approved (Round 4).
+  var CATS = [['', 'All'], ['cost', 'Cost'], ['vendor', 'Vendors'], ['content', 'Content'], ['creative', 'Creative'], ['compliance', 'Compliance']];
   function screenApprovals() {
     renderTop('Approvals', '');
     var cat = state.approvalCat || '';
@@ -1166,9 +1277,10 @@ ol,ul{list-style:none}
   }
   function approvalsHtml(d, cat) {
     var head = '<div class="head"><div class="stack"><h1 class="h-page">Approvals</h1>' +
-      '<p class="meta-line">' + esc(num(d.waiting)) + ' waiting · <span class="warn">' + esc(num(d.interrupts_count)) + ' ' + plural(d.interrupts_count, 'interrupt') + '</span>' + (d.approved_this_month != null ? ' · ' + esc(num(d.approved_this_month)) + ' approved this month' : '') + '</p>' +
+      '<p class="meta-line">' + esc(num(d.waiting)) + ' waiting' + (d.approved_this_month != null ? ' · ' + esc(num(d.approved_this_month)) + ' approved this month' : '') + '</p>' +
       '<p class="support">RPM Digital drafted these. Nothing changes until you approve.</p></div>' + staleLabel(d.as_of) + '</div>';
-    var interrupts = (d.interrupts || []).filter(function (i) { return !state.hidden[i.id]; });
+    // Clients never see pacing or a pause-campaign control (Round 4); pacing stays an internal Signal.
+    var interrupts = (d.interrupts || []).filter(function (i) { return i.kind === 'compliance' && !state.hidden[i.id]; });
     var rows = (d.batch && d.batch.rows) || [];
     if (!cat && !rows.length && !interrupts.length) {
       return '<div class="page">' + head + '<div class="emptybox"><span class="ic">' + ic(I.check, 24).replace('currentColor', '#5B7265') + '</span><b>All caught up</b>' +
@@ -1178,24 +1290,16 @@ ol,ul{list-style:none}
       return '<button type="button" class="chip" data-cat="' + c[0] + '" aria-pressed="' + (c[0] === cat) + '">' + esc(c[1]) + '</button>';
     }).join('') + '</div>';
     var intr = interrupts.map(function (i) {
-      var pa = i.primary_action || {}, href = pa.href || (i.item_id ? '#/item/' + encodeURIComponent(i.item_id) : ''), primary = '';
-      if (href.indexOf('#/') === 0) primary = '<a class="btn sm" href="' + esc(href) + '" data-set-company="' + esc(i.company_id) + '">' + esc(pa.label || 'Review now') + '</a>';
-      else if (href.indexOf('/api/workspace/') === 0) primary = canDecide() ? '<button type="button" class="btn sm" data-intr-post="' + esc(href) + '" data-company="' + esc(i.company_id) + '">' + esc(pa.label || 'Create a work item') + '</button>' : signInLink('Sign in to act on this');
-      return '<div class="intr ' + esc(i.kind) + '"><div class="l"><b>' + esc(i.title) + '</b>' + (has(i.detail) ? '<p>' + esc(i.detail) + '</p>' : '') +
-        (has(pa.note) ? '<p class="fine">' + esc(pa.note) + '</p>' : '') + '<p class="inline-err" role="alert" hidden></p></div>' +
-        '<div class="r">' + primary + (i.secondary_action ? '<button type="button" class="textbtn" data-dismiss="' + esc(i.id) + '">' + esc(i.secondary_action.label) + '</button>' : '') + '</div></div>';
+      return '<div class="intr compliance"><div class="l"><b>' + esc(i.title) + '</b>' + (has(i.detail) ? '<p>' + esc(i.detail) + '</p>' : '') + '</div>' +
+        '<div class="r">' + (i.item_id ? reviewBtn(i.item_id, i.company_id, 'btn sm') : '') +
+        (i.secondary_action ? '<button type="button" class="textbtn" data-dismiss="' + esc(i.id) + '">' + esc(i.secondary_action.label) + '</button>' : '') + '</div></div>';
     }).join('');
     var body = rows.map(function (row) {
-      var href = '#/item/' + encodeURIComponent(row.item_id), sv = val(row.savings_per_year);
-      var acts = canDecide()
-        ? '<button type="button" class="btn xs outline" data-row-approve="' + esc(row.item_id) + '" data-company="' + esc(row.company_id) + '">Approve</button>' +
-          '<a class="textbtn" href="' + href + '" data-set-company="' + esc(row.company_id) + '">' + (row.can_edit ? 'Edit' : 'Review') + '</a>' +
-          '<button type="button" class="textbtn danger" data-row-reject="' + esc(row.item_id) + '" data-company="' + esc(row.company_id) + '" aria-expanded="false">Reject</button>'
-        : signInLink('Sign in to approve') + ' <a class="textbtn" href="' + href + '" data-set-company="' + esc(row.company_id) + '">Review</a>';
-      return '<tr data-row="' + esc(row.item_id) + '"><td class="name"><a href="' + href + '" data-set-company="' + esc(row.company_id) + '">' + esc(row.property) + '</a></td>' +
-        '<td>' + esc(row.action) + '</td><td><span class="tag ' + esc(row.category) + '">' + esc((CAT_LABEL[row.category] || row.category).toLowerCase()) + '</span></td>' +
+      var sv = val(row.savings_per_year), cat = catKey(row.category);
+      return '<tr data-row="' + esc(row.item_id) + '"><td class="name"><a href="#/property/' + encodeURIComponent(row.company_id) + '">' + esc(row.property) + '</a></td>' +
+        '<td>' + esc(row.action) + '</td><td><span class="tag ' + esc(cat) + '">' + esc((CAT_LABEL[cat] || cat).toLowerCase()) + '</span></td>' +
         '<td class="sav"' + rtitle(row.savings_per_year) + '>' + (sv == null ? '<span class="empty-dash">—</span>' : esc(money(sv)) + '/yr') + '</td>' +
-        '<td class="acts">' + acts + '</td></tr>';
+        '<td class="acts">' + reviewBtn(row.item_id, row.company_id, 'btn xs outline') + '</td></tr>';
     }).join('');
     var st = d.stats || {};
     var stats = [];
@@ -1204,51 +1308,13 @@ ol,ul{list-style:none}
     if (has(st.auto_approve_candidates)) stats.push('Candidates for auto-approve: ' + st.auto_approve_candidates.join(', '));
     return '<div class="page narrow">' + head + chips + (intr ? '<div class="interrupts">' + intr + '</div>' : '') +
       '<section class="sec"><h2 class="h-rail">' + esc(d.batch && d.batch.label || 'Waiting') + '</h2>' +
-      (body ? '<div class="tscroll"><table class="tbl batch"><thead><tr><th scope="col">Property</th><th scope="col">Action</th><th scope="col">Category</th><th scope="col">Savings</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>' + body + '</tbody></table></div>'
+      (body ? '<div class="tscroll"><table class="tbl batch cards-sm"><thead><tr><th scope="col">Property</th><th scope="col">Action</th><th scope="col">Category</th><th scope="col">Savings</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>' + body + '</tbody></table></div>'
         : '<p class="support">Nothing in this category.</p>') + '<p class="inline-err" role="alert" hidden data-approvals-err></p></section>' +
       '<a class="link" href="#/value">View approved history →</a>' + (stats.length ? '<p class="statline">' + esc(stats.join(' · ')) + '</p>' : '') + gapsLine(d.gaps) + '</div>';
   }
   function bindApprovals() {
-    var err = view.querySelector('[data-approvals-err]');
     view.querySelectorAll('[data-cat]').forEach(function (b) { b.addEventListener('click', function () { state.approvalCat = b.getAttribute('data-cat'); screenApprovals(); }); });
     view.querySelectorAll('[data-dismiss]').forEach(function (b) { b.addEventListener('click', function () { state.hidden[b.getAttribute('data-dismiss')] = true; b.closest('.intr').remove(); }); });
-    view.querySelectorAll('[data-intr-post]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var box = b.closest('.intr'), e2 = box.querySelector('.inline-err'), cid = b.getAttribute('data-company'), label = b.textContent;
-        b.disabled = true; b.textContent = 'Creating…';
-        api(b.getAttribute('data-intr-post'), { method: 'POST', body: { company_id: cid } }).then(function (res) {
-          var id = (res.data || {}).work_item_id;
-          b.outerHTML = id ? '<a class="btn sm" href="#/item/' + encodeURIComponent(id) + '" data-set-company="' + esc(cid) + '">Open the work item</a>' : '<span class="done-row" role="status">Work item created</span>';
-        }).catch(function (e) { b.disabled = false; b.textContent = label; if (e && e.status === 401) return; e2.hidden = false; e2.textContent = failText(e, 'That didn\u2019t go through'); });
-      });
-    });
-    view.querySelectorAll('[data-row-approve]').forEach(function (b) {
-      b.addEventListener('click', function () { setCompany(b.getAttribute('data-company')); approveFlow(b, b.getAttribute('data-row-approve'), err); });
-    });
-    view.querySelectorAll('[data-row-reject]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var tr = b.closest('tr'), next = tr.nextElementSibling;
-        if (next && next.classList.contains('reasonrow')) { next.remove(); b.setAttribute('aria-expanded', 'false'); return; }
-        b.setAttribute('aria-expanded', 'true');
-        var rr = document.createElement('tr'); rr.className = 'reasonrow';
-        rr.innerHTML = '<td colspan="5"><div class="reasons" role="group" aria-label="Why not now"><span class="q">Not now — which is it?</span>' + reasonChips('data-reason') + '</div><p class="inline-err" role="alert" hidden></p></td>';
-        tr.parentNode.insertBefore(rr, tr.nextSibling);
-        rr.querySelector('[data-reason]').focus();
-        rr.querySelectorAll('[data-reason]').forEach(function (c) {
-          c.addEventListener('click', function () {
-            var reason = c.getAttribute('data-reason'), e2 = rr.querySelector('.inline-err');
-            setCompany(b.getAttribute('data-company'));
-            c.setAttribute('aria-pressed', 'true');
-            decide(b.getAttribute('data-row-reject'), 'not_now', reason).then(function () {
-              if (state.waiting) state.waiting = Math.max(0, state.waiting - 1);
-              rr.remove();
-              tr.querySelector('.acts').innerHTML = '<span class="done-row" role="status">Set aside — ' + esc(reasonLabel(reason).toLowerCase()) + '</span>';
-              renderSide('approvals');
-            }).catch(function (e) { c.setAttribute('aria-pressed', 'false'); if (e && e.status === 401) return; e2.hidden = false; e2.textContent = failText(e, 'That didn’t go through'); });
-          });
-        });
-      });
-    });
   }
 
   /* ── Item detail (existing screen, restyled) ─────────────────────── */
@@ -1297,68 +1363,167 @@ ol,ul{list-style:none}
       return '<li><span class="d">' + esc(mdy(t.at)) + '</span><span class="x">' + esc(t.text) + (t.actor ? ' <span class="who">· ' + esc(t.actor) + '</span>' : '') + (t.visibility === 'internal' ? internalTag() : '') + '</span></li>';
     }).join('') + '</ol></section>';
   }
-  function itemHtml(it) {
-    var opened = (it.trail || [])[0], meta = [];
-    if (it.company_id || company()) meta.push((companyById(it.company_id) || company()).name);
-    if (opened) meta.push('opened ' + mdy(opened.at) + (opened.actor ? ' by the ' + opened.actor : ''));
-    if (it.owner) meta.push('owner ' + it.owner);
-    if (it.cost_note) meta.push(it.cost_note);
-    var why = '';
-    function row(k, v, extra) { return '<div class="row"><span class="k">' + esc(k) + '</span><div class="v">' + esc(v) + (extra || '') + '</div></div>'; }
-    if (has(it.found) || has(it.receipts)) why += row('Found', it.found || '', (it.receipts || []).map(function (rc) { return '<span class="rc">' + esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : '') + '</span>'; }).join(''));
-    if (has(it.expect)) why += row('Expect', it.expect);
-    if (has(it.if_skip)) why += row('If you skip', it.if_skip);
-    var steps = has(it.steps) ? '<section class="sec"><h2 class="eyebrow">If approved</h2><ol class="steps">' + it.steps.map(function (s) {
-      return '<li><span class="d">' + esc(relDay(s.when)) + '</span><span class="l">' + esc(s.label) + '</span><span class="c">' + esc(channelName(s.channel)) + '</span></li>';
-    }).join('') + '</ol></section>' : '';
-    var acts = it.actions || {}, call;
-    if (!acts.approve && !acts.not_now) call = '<div class="actions-row"><p class="support">Nothing to decide here — this is ' + esc((STATUS_LABEL[it.status] || 'in motion').toLowerCase()) + '.</p></div>';
-    else if (!canDecide()) call = '<div class="actions-row"><p class="support">Approving needs a signed-in account.</p><span class="grow"></span>' + signInLink('Sign in to approve') + '</div>';
-    else call = '<div class="actions-row" data-call>' +
-      (acts.approve ? '<button type="button" class="btn big primary" data-item-approve>' + ic(I.check, 15) + 'Approve</button>' : '') +
-      (acts.not_now ? '<button type="button" class="btn big" data-item-notnow aria-expanded="false" aria-controls="reasonbox">Not now</button>' : '') +
-      '<span class="grow"></span><a class="link quiet" href="#/approvals">Back to approvals</a></div>' +
-      (acts.not_now ? '<div class="reasonbox" id="reasonbox" hidden><p class="h-rail">If not now, which is it?</p><div class="reasons" role="group" aria-label="Why not now">' + reasonChips('data-reason') + '</div><p class="hint">One tap, no typing.</p></div>' : '') +
-      '<p class="inline-err" role="alert" hidden data-item-err></p>';
-    return '<div class="page stage"><article class="panel"><div class="panel-head"><div class="pills">' +
-      '<span class="pill brand"><i></i>' + esc(SOURCE_LABEL[it.source] || 'Item') + '</span>' +
-      (it.status && it.status !== 'to_do' ? '<span class="pill new">' + esc(STATUS_LABEL[it.status] || it.status) + '</span>' : '') +
-      (viewInternal() && it.fair_housing_review ? '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review' + (it.fair_housing_review.severity === 'high' ? ' · held from clients' : '') + '</span>' +
-        (has(it.fair_housing_review.terms) ? '<span class="support">Flagged: ' + esc(it.fair_housing_review.terms.join(', ')) + '</span>' : '') : '') + '</div>' +
-      '<h1 class="qtitle">' + esc(it.title) + '</h1>' + (meta.length ? '<p class="support">' + esc(meta.join(' · ')) + '</p>' : '') + '</div>' +
-      (why ? '<div class="why">' + why + '</div>' : '') + evidenceHtml(it.evidence) + sparkHtml(it.sparkline) + steps +
-      (!why && !steps && !it.evidence ? '<p class="support">No detail came with this item yet.</p>' : '') +
-      '<div data-call-wrap>' + call + '</div>' + entriesHtml('Notes', it.notes) + '<div data-trail>' + entriesHtml('Trail', it.trail) + '</div></article>' +
-      '<p class="afternote">Nothing changes until you approve. <a class="link" href="#/approvals">See everything waiting</a></p></div>';
+  /* ── Review panel (Round 4) ───────────────────────────────────────────
+     Why we propose it (with receipts), who it is for, what approving does
+     (steps, owner, when), what happens if you skip, the draft itself, and
+     Approve / Reject with the one-tap reasons. The drawer and the item page
+     render the same sections. */
+  var OWNER_LABEL = { 'RPM Digital': 'RPM Digital', vendor: 'The vendor', you: 'You' };
+  var SEV = { high: ['High', 'critical'], medium: ['Medium', 'attention'], review: ['Needs a look', 'attention'], low: ['Low', 'new'] };
+  var DRAFT_LABEL = { email: 'The email draft', faq: 'The FAQ draft', page: 'The page draft', post: 'The post draft', ad: 'The ad copy draft' };
+  function whenText(w) { if (!w) return ''; return /^\d{4}-\d{2}-\d{2}/.test(String(w)) ? mdy(w) : String(w); }
+  function receiptList(list) {
+    return has(list) ? '<ul class="rv-receipts">' + list.map(function (rc) { return '<li>' + esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : '') + '</li>'; }).join('') + '</ul>' : '';
   }
-  function bindItem(it) {
-    var wrap = view.querySelector('[data-call-wrap]'); if (!wrap) return;
-    var err = wrap.querySelector('[data-item-err]');
-    var ap = wrap.querySelector('[data-item-approve]');
-    if (ap) ap.addEventListener('click', function () { approveFlow(ap, it.id, err); });
-    var nn = wrap.querySelector('[data-item-notnow]'), box = wrap.querySelector('#reasonbox');
-    if (nn) nn.addEventListener('click', function () {
-      box.hidden = !box.hidden; nn.setAttribute('aria-expanded', String(!box.hidden));
+  function fhTag(it) {
+    if (!viewInternal() || !it.fair_housing_review) return '';
+    return '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review' + (it.fair_housing_review.severity === 'high' ? ' · held from clients' : '') + '</span>' +
+      (has(it.fair_housing_review.terms) ? '<span class="support">Flagged: ' + esc(it.fair_housing_review.terms.join(', ')) + '</span>' : '');
+  }
+  function fhReviewHtml(rv) {
+    if (!rv || typeof rv !== 'object') return '';
+    var counts = [rv.pages_checked != null ? num(rv.pages_checked) + ' ' + plural(rv.pages_checked, 'page') : '', rv.assets_checked != null ? num(rv.assets_checked) + ' ' + plural(rv.assets_checked, 'image') : ''].filter(Boolean).join(' and ');
+    var meta = [rv.run_at ? 'Run ' + mdy(String(rv.run_at).slice(0, 10)) : '', rv.next_run ? 'next run ' + mdy(String(rv.next_run).slice(0, 10)) : '', counts ? counts + ' checked' : ''].filter(Boolean).join(' · ');
+    var finds = (rv.findings || []).map(function (f) {
+      var sv = SEV[f.severity] || ['Needs a look', 'attention'];
+      return '<li class="fh-find ' + sv[1] + '"><div class="top"><span class="tag ' + (f.kind === 'image' ? 'creative' : 'content') + '">' + (f.kind === 'image' ? 'Image' : 'Copy') + '</span><b>' + esc(f.location) + '</b><span class="pill ' + sv[1] + '">' + esc(sv[0]) + '</span></div>' +
+        '<blockquote>' + esc(f.excerpt) + '</blockquote>' +
+        '<p><span class="k">Why it was flagged</span>' + esc(f.reason) + '</p>' +
+        '<p><span class="k">Suggested fix</span>' + esc(f.suggested_fix) + '</p></li>';
+    }).join('');
+    return '<section class="rv-sec"><h3>What the review found</h3>' + (meta ? '<p class="fh-meta">' + esc(meta) + '</p>' : '') +
+      (finds ? '<ol class="fh-finds">' + finds + '</ol>' : '<p>Nothing was flagged.</p>') + '</section>';
+  }
+  function reviewSections(it) {
+    var c = companyById(it.company_id), cat = catKey(it.category), out = '';
+    var meta = [c ? c.name : '', it.owner ? 'Owner ' + it.owner : '', it.cost_note || ''].filter(Boolean).join(' · ');
+    out += '<div class="rv-sec"><div class="rv-pills">' + (CAT_LABEL[cat] ? '<span class="tag ' + esc(cat) + '">' + esc(CAT_LABEL[cat]) + '</span>' : '<span class="pill brand"><i></i>' + esc(SOURCE_LABEL[it.source] || 'Item') + '</span>') +
+      (it.status && it.status !== 'to_do' ? '<span class="pill new">' + esc(STATUS_LABEL[it.status] || it.status) + '</span>' : '') + fhTag(it) + '</div>' +
+      '<h2 class="rv-title" id="rv-title">' + esc(it.title) + '</h2>' + (meta ? '<p class="support">' + esc(meta) + '</p>' : '') + '</div>';
+    var why = it.why || (has(it.found) || has(it.receipts) ? { text: it.found || '', receipts: it.receipts || [] } : null);
+    if (why) out += '<section class="rv-sec"><h3>Why we’re proposing this</h3>' + (has(why.text) ? '<p>' + esc(why.text) + '</p>' : '') + receiptList(why.receipts) +
+      (it.review ? '' : evidenceHtml(it.evidence) + sparkHtml(it.sparkline)) + '</section>';
+    out += fhReviewHtml(it.review);
+    var fw = it.for_whom;
+    if (fw && (has(fw.text) || has(fw.questions))) out += '<section class="rv-sec"><h3>Who it’s for</h3>' + (has(fw.text) ? '<p>' + esc(fw.text) + '</p>' : '') +
+      (has(fw.questions) ? '<p class="fine">' + (cat === 'content' ? 'The renter questions and searches it answers' : 'The questions it answers') + '</p><ul class="rv-qs">' + fw.questions.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ul>' : '') + '</section>';
+    if (has(it.approving_does)) out += '<section class="rv-sec"><h3>What approving does</h3><ol class="rv-does">' + it.approving_does.map(function (st, i) {
+      return '<li><span class="n" aria-hidden="true">' + (i + 1) + '</span><span class="l">' + esc(st.label) + '<span class="m">' + esc([OWNER_LABEL[st.owner] || st.owner, whenText(st.when)].filter(Boolean).join(' · ')) + '</span></span></li>';
+    }).join('') + '</ol></section>';
+    else if (has(it.steps)) out += '<section class="rv-sec"><h3>What approving does</h3><ol class="steps">' + it.steps.map(function (st) {
+      return '<li><span class="d">' + esc(relDay(st.when)) + '</span><span class="l">' + esc(st.label) + '</span><span class="c">' + esc(channelName(st.channel)) + '</span></li>';
+    }).join('') + '</ol></section>';
+    else if (has(it.expect)) out += '<section class="rv-sec"><h3>What approving does</h3><p>' + esc(it.expect) + '</p></section>';
+    if (has(it.if_skip)) out += '<section class="rv-sec"><h3>If you skip</h3><p>' + esc(it.if_skip) + '</p></section>';
+    if (it.draft && has(it.draft.body)) out += '<section class="rv-sec"><h3>' + esc(DRAFT_LABEL[it.draft.kind] || 'The draft') + '</h3><div class="rv-draft">' +
+      (has(it.draft.title) ? '<b>' + esc(it.draft.title) + '</b>' : '') + '<div class="body">' + esc(it.draft.body) + '</div></div></section>';
+    if (!why && !has(it.approving_does) && !has(it.steps) && !it.draft) out += '<p class="support">No detail came with this item yet.</p>';
+    return out + entriesHtml('Notes', it.notes) + '<div data-trail>' + entriesHtml('Trail', it.trail) + '</div>';
+  }
+  function reviewFoot(it) {
+    var acts = it.actions || {};
+    if (!acts.approve && !acts.not_now) return '<p class="support">Nothing to decide here — this is ' + esc((STATUS_LABEL[it.status] || 'in motion').toLowerCase()) + '.</p>';
+    if (!canDecide()) return '<div class="foot-row"><p class="support">Approving needs a signed-in account.</p><span class="grow"></span>' + signInLink('Sign in to approve') + '</div>';
+    return '<div class="foot-row">' + (acts.approve ? '<button type="button" class="btn primary" data-rv-approve>' + ic(I.check, 15) + 'Approve</button>' : '') +
+      (acts.not_now ? '<button type="button" class="btn" data-rv-reject aria-expanded="false">Reject</button>' : '') +
+      '<span class="grow"></span><span class="fine">Nothing changes until you approve.</span></div>' +
+      (acts.not_now ? '<div class="reasonbox" data-rv-reasons hidden><p class="h-rail">Why not? One tap.</p><div class="reasons" role="group" aria-label="Why reject">' + reasonChips('data-reason') + '</div></div>' : '') +
+      '<p class="inline-err" role="alert" hidden data-rv-err></p>';
+  }
+  function bindReviewFoot(root, it, onSetAside) {
+    var foot = root.querySelector('[data-rv-foot]'); if (!foot) return;
+    var err = foot.querySelector('[data-rv-err]'), ap = foot.querySelector('[data-rv-approve]'), rj = foot.querySelector('[data-rv-reject]'), box = foot.querySelector('[data-rv-reasons]');
+    if (ap) ap.addEventListener('click', function () { if (it.company_id) setCompany(it.company_id); approveFlow(ap, it.id, err); });
+    if (rj) rj.addEventListener('click', function () {
+      box.hidden = !box.hidden; rj.setAttribute('aria-expanded', String(!box.hidden));
       if (!box.hidden) box.querySelector('[data-reason]').focus();
     });
-    wrap.querySelectorAll('[data-reason]').forEach(function (c) {
+    foot.querySelectorAll('[data-reason]').forEach(function (c) {
       c.addEventListener('click', function () {
         var reason = c.getAttribute('data-reason');
-        wrap.querySelectorAll('[data-reason]').forEach(function (o) { o.setAttribute('aria-pressed', String(o === c)); o.disabled = true; });
+        foot.querySelectorAll('[data-reason]').forEach(function (o) { o.setAttribute('aria-pressed', String(o === c)); o.disabled = true; });
+        if (it.company_id) setCompany(it.company_id);
         decide(it.id, 'not_now', reason).then(function (r) {
           var d = r.data || {}, next = d.item || it;
           if (state.waiting) state.waiting = Math.max(0, state.waiting - 1);
-          wrap.innerHTML = '<div class="actions-row"><p class="h-rail" role="status">Set aside — ' + esc(reasonLabel(reason).toLowerCase()) + '.</p><span class="grow"></span><a class="link" href="#/approvals">Back to approvals</a></div>' +
+          foot.innerHTML = '<p class="h-rail" role="status" tabindex="-1">Set aside — ' + esc(reasonLabel(reason).toLowerCase()) + '.</p>' +
             (d.check_back && d.check_back.text ? '<p class="support">' + esc(d.check_back.text) + '</p>' : '');
-          var t = view.querySelector('[data-trail]'); if (t) t.innerHTML = entriesHtml('Trail', next.trail);
+          foot.firstChild.focus();
+          var t = root.querySelector('[data-trail]'); if (t) t.innerHTML = entriesHtml('Trail', next.trail);
+          renderSide(state.active);
+          if (onSetAside) onSetAside(reason);
         }).catch(function (e) {
-          wrap.querySelectorAll('[data-reason]').forEach(function (o) { o.disabled = false; o.setAttribute('aria-pressed', 'false'); });
+          foot.querySelectorAll('[data-reason]').forEach(function (o) { o.disabled = false; o.setAttribute('aria-pressed', 'false'); });
           if (e && e.status === 401) return;
           err.hidden = false; err.textContent = failText(e, 'That didn’t go through');
         });
       });
     });
   }
+  var drawerRoot = document.createElement('div');
+  drawerRoot.id = 'review-root';
+  document.body.appendChild(drawerRoot);
+  var drawerOpener = null, drawerSeq = 0;
+  function closeReview() {
+    if (!drawerRoot.firstChild) return;
+    drawerSeq++;
+    drawerRoot.innerHTML = '';
+    document.body.classList.remove('drawer-open');
+    if (drawerOpener && document.contains(drawerOpener)) drawerOpener.focus();
+    drawerOpener = null;
+  }
+  function openReview(id, cid, opener) {
+    var my = ++drawerSeq;
+    drawerOpener = opener || document.activeElement;
+    document.body.classList.add('drawer-open');
+    drawerRoot.innerHTML = '<div class="drawer-scrim" data-drawer-close></div>' +
+      '<div class="drawer" role="dialog" aria-modal="true" aria-label="Review"><div class="drawer-head"><span class="h-rail">Review</span><span class="grow"></span>' +
+      '<a class="link quiet" href="#/item/' + encodeURIComponent(id) + '">Open as a page</a>' +
+      '<button type="button" class="iconbtn" data-drawer-close aria-label="Close review">' + ic(I.x, 18) + '</button></div>' +
+      '<div class="drawer-body" data-rv-body><div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading…</div></div>' +
+      '<div class="rv-foot" data-rv-foot hidden></div></div>';
+    var dlg = drawerRoot.querySelector('.drawer');
+    dlg.querySelector('.iconbtn').focus();
+    api('/api/workspace/work/' + encodeURIComponent(id) + '?company_id=' + encodeURIComponent(cid || state.companyId || '')).then(function (r) {
+      if (my !== drawerSeq) return;
+      var it = r.data || {};
+      dlg.removeAttribute('aria-label'); dlg.setAttribute('aria-labelledby', 'rv-title');
+      dlg.querySelector('[data-rv-body]').innerHTML = reviewSections(it);
+      var foot = dlg.querySelector('[data-rv-foot]');
+      foot.innerHTML = reviewFoot(it); foot.hidden = false;
+      bindReviewFoot(dlg, it, function (reason) {
+        document.querySelectorAll('[data-row]').forEach(function (tr) {
+          if (tr.getAttribute('data-row') === it.id) tr.querySelector('.acts').innerHTML = '<span class="done-row" role="status">Set aside — ' + esc(reasonLabel(reason).toLowerCase()) + '</span>';
+        });
+      });
+    }).catch(function (e) {
+      if (my !== drawerSeq) return;
+      if (e && e.status === 401) { closeReview(); return; }
+      dlg.querySelector('[data-rv-body]').innerHTML = '<div class="state" role="alert"><h2>That didn’t load.</h2><p>' + esc((e && e.message) || 'Try again.') + '</p></div>';
+    });
+  }
+  drawerRoot.addEventListener('click', function (e) { if (e.target.closest('[data-drawer-close]')) closeReview(); });
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest && e.target.closest('[data-review]');
+    if (!t) return;
+    e.preventDefault();
+    openReview(t.getAttribute('data-review'), t.getAttribute('data-company'), t);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!drawerRoot.firstChild) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeReview(); return; }
+    if (e.key !== 'Tab') return;
+    var f = Array.prototype.filter.call(drawerRoot.querySelectorAll('a[href],button:not([disabled]),input,textarea,select,[tabindex]:not([tabindex="-1"])'), function (x) { return x.offsetParent !== null; });
+    if (!f.length) return;
+    var first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+  function itemHtml(it) {
+    return '<div class="page stage"><article class="panel" data-rv-root>' + reviewSections(it) + '<div class="rv-foot" data-rv-foot>' + reviewFoot(it) + '</div></article>' +
+      '<p class="afternote">Nothing changes until you approve. <a class="link" href="#/approvals">See everything waiting</a></p></div>';
+  }
+  function bindItem(it) { var root = view.querySelector('[data-rv-root]'); if (root) bindReviewFoot(root, it); }
 
   /* ── Approved + Undo ─────────────────────────────────────────────── */
   function screenApproved(id) {
@@ -1456,7 +1621,7 @@ ol,ul{list-style:none}
   /* ── Properties (GOO-0) ──────────────────────────────────────────── */
   function screenProperties() {
     renderTop('Properties', companies().length + ' properties');
-    guard(api('/api/workspace/dashboard?lens=' + state.lens), 'properties').then(function (r) {
+    guard(api('/api/workspace/dashboard'), 'properties').then(function (r) {
       if (!r) return;
       var d = r.data || {};
       state.loop = d.loop_status || state.loop;
@@ -1470,7 +1635,7 @@ ol,ul{list-style:none}
     var strip = '<div class="kpis">' +
       '<div class="kpi"><span class="eyebrow">Properties</span><span class="v">' + esc(num(list.length)) + '</span></div>' +
       '<div class="kpi"><span class="eyebrow">Total units</span><span class="v">' + esc(num(units)) + '</span></div>' +
-      [['portfolio_occupancy', 'Avg occupancy', function (v) { return pct(v, 1); }, ''], ['identified_savings', 'Identified savings', moneyK, 't-healthy'], ['waiting_on_you', 'Waiting on you', num, 't-brand']].map(function (x) {
+      [['occupancy', 'Occupancy', function (v) { return pct(v, 1); }, ''], ['units_to_lease_90d', 'To lease (90 days)', num, ''], ['leases_this_month', 'Leases this month', num, '']].map(function (x) {
         var r = k[x[0]], v = val(r);
         return '<div class="kpi"' + rtitle(r) + '><span class="eyebrow">' + x[1] + '</span><span class="v ' + x[3] + '">' + (v == null ? '<span class="empty-dash">—</span>' : esc(x[2](v))) + '</span>' + (receipt(r) ? '<span class="rc">' + receipt(r) + '</span>' : '') + '</div>';
       }).join('') + '</div>';
@@ -1480,12 +1645,12 @@ ol,ul{list-style:none}
       var score = p.health != null ? p.health : t.score, b = p.band || t.band || band(score), href = '#/property/' + encodeURIComponent(c.company_id);
       function cell(r, fmt, cls) { var v = val(r); return '<td class="num ' + (cls || '') + '"' + rtitle(r) + '>' + (v == null ? '<span class="empty-dash">—</span>' : esc(fmt(v))) + '</td>'; }
       return '<tr class="rowlink" data-href="' + href + '"><td class="name"><a href="' + href + '">' + esc(c.name) + '</a><span class="fine" style="display:block">' + esc([c.city, c.state].filter(Boolean).join(', ')) + '</span></td>' +
-        '<td class="num">' + esc(num(c.units)) + '</td>' + cell(p.to_lease_90d, num) + cell(p.overspend_per_year, money, 't-critical') +
-        '<td class="num"><span class="healthcell t-' + esc(b) + '">' + (score == null ? '—' : esc(score)) + '</span></td>' +
-        '<td class="num"><span class="pill ' + esc(b) + '"><i></i>' + esc(BAND_LABEL[b]) + '</span></td></tr>';
+        '<td class="num">' + esc(num(c.units)) + '</td>' + cell(p.occupancy, function (v) { return pct(v, 1); }) + cell(p.to_lease_90d, num) + cell(p.leases_month, num) +
+        '<td class="num"><span class="pill ' + esc(b) + '"><i></i>' + (score == null ? 'New' : esc(score) + ' · ' + esc(BAND_LABEL[b])) + '</span></td>' +
+        '<td class="num">' + (has(p.status) ? esc(p.status) : '<span class="empty-dash">—</span>') + '</td></tr>';
     }).join('');
     return '<div class="page"><div class="head"><div class="stack"><h1 class="h-page">Properties</h1><p class="support">Every property you can see, sorted as your account lists them.</p></div>' + staleLabel(d.as_of) + '</div>' + strip +
-      '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Overspend/yr</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">Occupancy</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Leases (month)</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       gapsLine(d.gaps) + '</div>';
   }
 
@@ -1542,8 +1707,8 @@ ol,ul{list-style:none}
     var loop = has(d.loop) ? '<section class="card loopcard2" aria-labelledby="loop-h"><div class="lh"><i aria-hidden="true"></i><b id="loop-h">The loop on this property</b><span class="support">Express · Tailor · Amplify · Evolve</span></div><ol class="stagel">' + d.loop.map(function (s) {
       var when = s.status === 'waiting' ? '<span class="wait">waiting on you' + (s.at ? ' since ' + esc(clock(s.at)) : '') + '</span>' : (s.at ? '<span>' + esc(s.status === 'upcoming' ? 'planned ' + mdy(s.at) : asOf(s.at)) + '</span>' : '<span>upcoming</span>');
       return '<li class="' + esc(s.status) + '"><span class="rl"><span class="node ' + esc(s.status) + '" aria-hidden="true"></span><span class="conn" aria-hidden="true"></span></span><div class="body"><div class="tl"><b>' + esc(LENS_LABEL[s.lens] || s.lens) + '</b>' + when + '</div><p>' + esc(s.text) + '</p>' +
-        (s.status === 'waiting' && (s.item_id || ra) ? '<a class="btn sm primary" href="#/item/' + encodeURIComponent(s.item_id || ra.item_id) + '">Review the decision</a>' :
-          (s.item_id ? '<a class="link" href="#/item/' + encodeURIComponent(s.item_id) + '">Open</a>' : '')) + '</div></li>';
+        (s.status === 'waiting' && (s.item_id || ra) ? reviewBtn(s.item_id || ra.item_id, state.companyId, 'btn sm primary', 'Review the decision') :
+          (s.item_id ? reviewBtn(s.item_id, state.companyId, 'link', 'Review') : '')) + '</div></li>';
     }).join('') + '</ol></section>' : '';
     var page = '<div class="page"><a class="back" href="#/properties">' + ic(I.arrowLeft, 13) + 'All properties</a>' +
       '<div class="proptitle">' + ring(d.health && d.health.score, hb) + '<div class="stack" style="display:flex;flex-direction:column;gap:2px;min-width:0"><h1 class="h-page">' + esc(d.name) + '</h1><p class="support">' + esc(sub) + '</p>' +
@@ -1554,13 +1719,13 @@ ol,ul{list-style:none}
     var rail = '';
     if (has(d.findings)) rail += '<section class="sec"><h2 class="h-rail">Findings</h2>' + d.findings.map(function (f) {
       return '<div class="finding"><p>' + esc(f.text) + '</p>' + (has(f.receipts) ? '<span class="receipt">' + f.receipts.map(function (rc) { return esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : ''); }).join('<br>') + '</span>' : '') +
-        (f.item_id ? '<a class="link" href="#/item/' + encodeURIComponent(f.item_id) + '">Open the item</a>' : '') + '</div>';
+        (f.item_id ? reviewBtn(f.item_id, state.companyId, 'link', 'Review') : '') + '</div>';
     }).join('') + '</section>';
     if (ra || d.draft_email) {
       rail += '<div class="rail-sep"></div><section class="sec"><h2 class="h-rail">Recommended action</h2>' +
-        (ra ? '<a class="btn primary" style="width:100%" href="#/item/' + encodeURIComponent(ra.item_id) + '">' + esc(ra.label) + '</a>' : '') +
+        (ra ? reviewBtn(ra.item_id, state.companyId, 'btn primary wide', ra.label) : '') +
         (d.draft_email ? '<div class="emailcard"><span class="fine">Email preview</span><b>Subject: ' + esc(d.draft_email.subject) + '</b><p>' + esc(d.draft_email.preview) + '</p>' +
-          (d.draft_email.item_id ? '<a class="link" href="#/item/' + encodeURIComponent(d.draft_email.item_id) + '">View full draft →</a>' : '') + '</div>' : '') + '</section>';
+          (d.draft_email.item_id ? reviewBtn(d.draft_email.item_id, state.companyId, 'link', 'View full draft →') : '') + '</div>' : '') + '</section>';
     }
     return { page: page, rail: rail || null };
   }
@@ -1588,6 +1753,14 @@ ol,ul{list-style:none}
       var pdf = view.querySelector('[data-print]'); if (pdf) pdf.addEventListener('click', function () { window.print(); });
     });
   }
+  // Round 4 mix: always-on channels run all year at a flat amount; flighted channels follow exposure.
+  var MODES = [['always_on', 'Always-on', 'Runs all year at a flat monthly amount'], ['flighted', 'Flighted with exposure', 'More spend in the months with more units to lease']];
+  function modeGroups(chans) {
+    var groups = MODES.map(function (m) { return { key: m[0], label: m[1], note: m[2], rows: chans.filter(function (c) { return c.mode === m[0]; }) }; });
+    var other = chans.filter(function (c) { return c.mode !== 'always_on' && c.mode !== 'flighted'; });
+    if (other.length) groups.push({ key: 'other', label: 'Other channels', note: '', rows: other });
+    return groups.filter(function (g) { return g.rows.length; });
+  }
   function mediaPlanHtml(d) {
     var months = d.months || [], max = Math.max.apply(null, months.map(function (m) { return m.units_to_lease; }).concat([1]));
     var head = '<div class="frow mh"><span class="fl"></span><div class="cells">' + months.map(function (m) { return '<span class="' + (m.units_to_lease >= max * .7 ? 'peak' : '') + '">' + esc(monthShort(m.month)) + '</span>'; }).join('') + '</div></div>';
@@ -1595,14 +1768,21 @@ ol,ul{list-style:none}
       var r = m.units_to_lease / max; return '<span><i style="height:' + Math.max(3, Math.round(r * 44)) + 'px;background:' + (r >= .7 ? 'var(--copper)' : 'var(--sage)') + '"></i><span>' + esc(m.units_to_lease) + '</span></span>';
     }).join('') + '</div></div>';
     var chans = d.channels || [];
-    var crow = chans.map(function (c) {
-      return '<div class="frow ch"><span class="fl">' + esc(c.channel) + '</span><div class="cells">' + c.monthly.map(function (v) { return v ? '<span class="on">' + esc(kfmt(v)) + '</span>' : '<span class="off" aria-label="none">—</span>'; }).join('') + '</div></div>';
+    var groups = modeGroups(chans);
+    var crow = groups.map(function (g) {
+      return '<p class="flgrp"><b>' + esc(g.label) + '</b>' + (g.note ? '<span>' + esc(g.note) + '</span>' : '') + '</p>' + g.rows.map(function (c) {
+        return '<div class="frow ch' + (g.key === 'always_on' ? ' flat' : '') + '"><span class="fl">' + esc(c.channel) + '</span><div class="cells">' + c.monthly.map(function (v) { return v ? '<span class="on">' + esc(kfmt(v)) + '</span>' : '<span class="off" aria-label="none">—</span>'; }).join('') + '</div></div>';
+      }).join('');
     }).join('');
     var totals = months.map(function (_, i) { return chans.reduce(function (s, c) { return s + (c.monthly[i] || 0); }, 0); });
     var tot = chans.length ? '<div class="frow tot"><span class="fl">Total</span><div class="cells">' + totals.map(function (t) { return '<span>' + esc(kfmt(t)) + '</span>'; }).join('') + '</div></div>' : '';
     var alloc = val(d.allocated), env = val(d.envelope);
     var breakdown = chans.length ? '<section class="sec"><h2 class="h-rail">Channel breakdown</h2><div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Channel</th><th scope="col" class="num">Monthly avg</th><th scope="col" class="num">Annual</th><th scope="col" class="num">% of budget</th><th scope="col" class="num">CPL target</th></tr></thead><tbody>' +
-      chans.map(function (c) { return '<tr><td class="name">' + esc(c.channel) + '</td><td class="num">' + esc(money(c.monthly_avg)) + '</td><td class="num">' + esc(money(c.annual)) + '</td><td class="num">' + esc(pct(c.share)) + '</td><td class="num">' + (c.cpl_target == null ? '<span class="empty-dash">—</span>' : esc(money(c.cpl_target))) + '</td></tr>'; }).join('') +
+      groups.map(function (g) {
+        var annual = g.rows.reduce(function (sum, c) { return sum + (c.annual || 0); }, 0);
+        return '<tr class="grprow"><th scope="rowgroup" colspan="5">' + esc(g.label) + ' <span class="fine">· ' + esc(money(annual)) + ' a year</span></th></tr>' +
+          g.rows.map(function (c) { return '<tr><td class="name">' + esc(c.channel) + '</td><td class="num">' + esc(money(c.monthly_avg)) + '</td><td class="num">' + esc(money(c.annual)) + '</td><td class="num">' + (c.share == null ? '<span class="empty-dash">—</span>' : esc(pct(c.share))) + '</td><td class="num">' + (c.cpl_target == null ? '<span class="empty-dash">—</span>' : esc(money(c.cpl_target))) + '</td></tr>'; }).join('');
+      }).join('') +
       '</tbody></table></div>' + (function () { var srcs = []; chans.forEach(function (c) { if (c.source && srcs.indexOf(c.source) === -1) srcs.push(c.source); }); return srcs.length ? '<p class="receipt">Channel spend from ' + esc(srcs.map(sourceName).join(', ')) + '</p>' : ''; })() + '</section>' : '';
     var page = '<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Media plan</h1><p class="support">' +
       esc([d.fiscal_year, env != null ? money(env) + ' envelope' : '', d.objective ? 'Objective: ' + d.objective : ''].filter(Boolean).join(' · ')) + '</p></div>' + staleLabel(d.as_of) + '</div>' +
@@ -1624,20 +1804,28 @@ ol,ul{list-style:none}
       if (!r) return;
       var h = visibilityHtml(r.data || {});
       setView(h.page, h.rail);
-      view.querySelectorAll('.briefbox').forEach(function (box) {
-        var open = box.querySelector('[data-brief-open]'), form = box.querySelector('[data-brief-form]'), err = box.querySelector('.inline-err');
-        open.addEventListener('click', function () { form.hidden = !form.hidden; open.setAttribute('aria-expanded', String(!form.hidden)); if (!form.hidden) form.querySelector('input').focus(); });
-        form.addEventListener('submit', function (ev) {
-          ev.preventDefault();
-          var kw = form.querySelector('input').value.trim(), btn = form.querySelector('button');
-          if (kw.length < 2) { err.hidden = false; err.textContent = 'Give the brief a topic of at least two characters.'; return; }
-          btn.disabled = true; btn.textContent = 'Starting…'; err.hidden = true;
-          api('/api/workspace/visibility/create-brief', { method: 'POST', body: { company_id: state.companyId, hub_keyword: kw } }).then(function (res) {
-            box.innerHTML = '<p class="done-row" role="status">Brief started: \u201c' + esc((res.data || {}).hub_keyword || kw) + '\u201d.</p><a class="link" href="#/property/' + encodeURIComponent(state.companyId) + '/content">It shows up in Content when it\u2019s drafted</a>';
-          }).catch(function (e) { btn.disabled = false; btn.textContent = 'Start brief'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'The brief didn\u2019t start'); });
+      view.querySelectorAll('[data-brief-kw]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var box = b.closest('.briefbox'), err = box.querySelector('.inline-err'), kw = b.getAttribute('data-brief-kw');
+          b.disabled = true; b.textContent = 'Starting…'; err.hidden = true;
+          api('/api/workspace/visibility/create-brief', { method: 'POST', body: { company_id: state.companyId, hub_keyword: kw } }).then(function () {
+            box.innerHTML = '<span class="done-row" role="status">Brief started. It shows up under What we’re writing once there’s a draft.</span>';
+          }).catch(function (e) { b.disabled = false; b.textContent = 'Start a brief'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'The brief didn’t start'); });
         });
       });
     });
+  }
+  var INTENT_LABEL = { learn: 'Learning', compare: 'Comparing', decide: 'Deciding', local: 'Local', price: 'Pricing', navigate: 'Finding the property' };
+  function intentLabel(k) { return INTENT_LABEL[k] || (k ? String(k).charAt(0).toUpperCase() + String(k).slice(1) : ''); }
+  function ncCell(r) {
+    if (!r) return '<td><span class="empty-dash">—</span></td>';
+    if (!r.named && !r.cited) return '<td><span class="nc none"><i aria-hidden="true"></i><span aria-hidden="true">—</span><span class="sr-only">Not named</span></span></td>';
+    return '<td><span class="nc ' + (r.cited ? 'cited' : 'named') + '"><i aria-hidden="true"></i>' + (r.cited ? 'Cited' : 'Named') + '</span></td>';
+  }
+  function byTopic(list) {
+    var order = [], map = {};
+    list.forEach(function (x) { var t = x.topic || 'Other'; if (!map[t]) { map[t] = []; order.push(t); } map[t].push(x); });
+    return order.map(function (t) { return { topic: t, rows: map[t] }; });
   }
   var CITE_FILLS = ['var(--copper)', 'var(--juniper)', 'var(--sage)', 'var(--mint)', 'var(--rule)'];
   function visibilityHtml(d) {
@@ -1659,53 +1847,158 @@ ol,ul{list-style:none}
           return '<tr><td class="surface">' + esc(row.surface) + '</td>' + cell(row.values.self, true) + cs.competitors.map(function (n) { return cell(row.values[n], false); }).join('') + '</tr>';
         }).join('') + '</tbody></table></div></section>';
     }
-    var cites = has(d.citation_sources) ? '<section class="sec"><h2 class="h-sec">Citation sources</h2><div class="citebar" role="img" aria-label="' + esc(d.citation_sources.map(function (s) { return s.source + ' ' + pct(s.share); }).join(', ')) + '">' +
+    var cites = has(d.citation_sources) ? '<section class="sec"><h2 class="h-sec">Sources the engines used</h2><div class="citebar" role="img" aria-label="' + esc(d.citation_sources.map(function (s) { return s.source + ' ' + pct(s.share); }).join(', ')) + '">' +
       d.citation_sources.map(function (s, i) { return '<i style="width:' + (s.share * 100).toFixed(1) + '%;background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>'; }).join('') + '</div>' +
       '<div class="legend">' + d.citation_sources.map(function (s, i) { return '<span' + (s.share_source ? ' title="' + esc(sourceName(s.share_source)) + '"' : '') + '><i style="background:' + CITE_FILLS[i % CITE_FILLS.length] + '"></i>' + esc(s.source) + ' ' + esc(pct(s.share)) + '</span>'; }).join('') + '</div>' +
       (function () { var srcs = []; d.citation_sources.forEach(function (s) { if (s.share_source && srcs.indexOf(s.share_source) === -1) srcs.push(s.share_source); }); return srcs.length ? '<p class="receipt">Shares from ' + esc(srcs.map(sourceName).join(', ')) + '</p>' : ''; })() + '</section>' : '';
+    // Round 4, Searchable-style: the audit itself on the main page.
+    var prompts = d.prompts || [], engNames = engines.map(function (e) { return e.engine; });
+    prompts.forEach(function (p) { Object.keys(p.engines || {}).forEach(function (k) { if (engNames.indexOf(k) === -1) engNames.push(k); }); });
+    var qs = prompts.length ? '<section class="sec" aria-labelledby="vq-h"><div class="sec-head"><h2 class="h-sec" id="vq-h">Questions we track</h2><span class="support">' +
+      esc(num(prompts.length)) + ' ' + plural(prompts.length, 'question') + ' · by topic and intent</span></div>' +
+      '<div class="tscroll"><table class="tbl boxed qtbl eng"><thead><tr><th scope="col">Question and intent</th>' + engNames.map(function (n) { return '<th scope="col">' + esc(n) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      byTopic(prompts).map(function (g) {
+        var named = 0, total = 0;
+        g.rows.forEach(function (p) { engNames.forEach(function (n) { var r = (p.engines || {})[n]; if (r) { total++; if (r.named) named++; } }); });
+        return '<tr class="grprow"><th scope="rowgroup" colspan="' + (engNames.length + 1) + '">' + esc(g.topic) + ' <span class="fine">· named in ' + esc(named) + ' of ' + esc(total) + ' answers</span></th></tr>' +
+          g.rows.map(function (p) { return '<tr><td class="q">' + esc(p.text) + (p.intent ? '<span class="fine">' + esc(intentLabel(p.intent)) + '</span>' : '') + '</td>' + engNames.map(function (n) { return ncCell((p.engines || {})[n]); }).join('') + '</tr>'; }).join('');
+      }).join('') + '</tbody></table></div><p class="receipt">Named: the answer mentions ' + esc(c.name || 'the property') + '. Cited: it also links to or quotes one of its pages. A dash: not named.' +
+      (d.last_audit ? ' From the ' + esc(mdy(d.last_audit)) + ' audit.' : '') + '</p></section>' : '';
+    var fan = (d.fanout || []).slice().sort(function (a, b) { return (b.count || 0) - (a.count || 0); });
+    var fanHtml = fan.length ? '<section class="sec" aria-labelledby="vf-h"><div class="sec-head"><h2 class="h-sec" id="vf-h">Follow-up searches the engines ran</h2><span class="support">What they looked up to answer those questions</span></div>' +
+      '<div class="tscroll"><table class="tbl boxed qtbl"><thead><tr><th scope="col">Search</th><th scope="col">Engine</th><th scope="col" class="num">Times</th><th scope="col">What answers it</th></tr></thead><tbody>' +
+      fan.map(function (f) {
+        var ct = f.content, st = ct ? (CSTATUS[ct.status] || [ct.status, 'new']) : null;
+        var ans = ct ? reviewBtn(ct.item_id, state.companyId, 'link', ct.title) + ' <span class="pill ' + st[1] + '">' + esc(st[0]) + '</span>'
+          : (canDecide() ? '<div class="briefbox"><span class="support">Nothing yet.</span> <button type="button" class="link" data-brief-kw="' + esc(f.query) + '">Start a brief</button><p class="inline-err" role="alert" hidden></p></div>' : '<span class="support">Nothing yet</span>');
+        return '<tr><td class="q mono">' + esc(f.query) + '</td><td>' + esc(f.engine) + '</td><td class="num">' + esc(num(f.count)) + '</td><td class="q">' + ans + '</td></tr>';
+      }).join('') + '</tbody></table></div></section>' : '';
+    var writing = d.writing || [];
+    var wHtml = '<section class="sec" aria-labelledby="vw-h"><div class="sec-head"><h2 class="h-sec" id="vw-h">What we’re writing</h2><a class="link" href="#/property/' + encodeURIComponent(state.companyId) + '/content">All content</a></div>' +
+      (writing.length ? '<ul class="card writing">' + writing.map(function (w) {
+        var st = CSTATUS[w.status] || [w.status, 'new'];
+        return '<li class="wrow"><div class="wl">' + (w.topic ? '<span class="eyebrow">' + esc(w.topic) + '</span>' : '') + '<b>' + esc(w.title) + '</b>' +
+          (has(w.answers) ? '<span class="fine">Answers these searches</span><ul class="chipsq">' + w.answers.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ul>' : '') + '</div>' +
+          '<div class="wr"><span class="pill ' + st[1] + '"><i></i>' + esc(st[0]) + '</span>' + (w.item_id ? reviewBtn(w.item_id, state.companyId, 'btn xs outline', 'Review') : '') + '</div></li>';
+      }).join('') + '</ul>' : '<p class="support">Nothing in progress. A piece shows up here once its draft exists.</p>') + '</section>';
     var page = '<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Visibility audit</h1><p class="support">' +
       esc([d.last_audit ? 'Last audit: ' + mdy(d.last_audit) : '', d.next_audit ? 'Next scheduled: ' + mdy(d.next_audit) : ''].filter(Boolean).join(' · ')) + '</p></div></div>' +
-      hero + strip + comp + cites + gapsLine(d.gaps) + '</div>';
+      hero + strip + qs + fanHtml + cites + wHtml + comp + gapsLine(d.gaps) + '</div>';
+    // The rail keeps alerts only; content lives in the main column (Round 4).
     var rail = (d.alerts || []).filter(function (a) { return a.kind === 'exposure'; }).map(function (a) { return '<div class="callout"><b>Exposure</b><p>' + esc(a.text) + '</p></div>'; }).join('') +
-      (has(d.recommendations) ? '<section class="sec"><h2 class="h-rail">Content recommendations</h2><ul class="recs">' + d.recommendations.map(function (rc, i) {
-        var act = rc.action && rc.action.type === 'create_brief' ? (canDecide()
-          ? '<div class="briefbox"><button type="button" class="link" style="align-self:flex-start" data-brief-open aria-expanded="false" aria-controls="bf-' + i + '">Create brief</button>' +
-            '<form class="briefform" id="bf-' + i + '" hidden data-brief-form><label for="bk-' + i + '" class="fine">Topic for the brief</label><div class="briefrow"><input id="bk-' + i + '" name="hub_keyword" minlength="2" maxlength="120" required placeholder="e.g. pet policy">' +
-            '<button type="submit" class="btn xs primary">Start brief</button></div></form><p class="inline-err" role="alert" hidden></p></div>'
-          : signInLink('Sign in to create a brief')) : '';
-        return '<li><p>' + esc(rc.text) + '</p>' + act + '</li>';
-      }).join('') + '</ul></section>' : '') +
       (d.alerts || []).filter(function (a) { return a.kind === 'competitor'; }).map(function (a) { return '<div class="callout competitor"><b>Competitor alert</b><p>' + esc(a.text) + '</p></div>'; }).join('');
     return { page: page, rail: rail || null };
   }
 
   /* ── Content (E4U-1) ─────────────────────────────────────────────── */
   var PRIO = { high: ['High', 'critical'], med: ['Med', 'attention'], low: ['Low', 'healthy'] };
-  var CSTATUS = { draft_ready: ['Draft ready', 'brand'], in_review: ['In review', 'attention'], not_started: ['Not started', 'new'], published: ['Published', 'healthy'] };
+  // Content rows exist once a draft does (Round 4): draft ready, in review or published. Visibility's What we're writing says drafted.
+  var CSTATUS = { draft_ready: ['Draft ready', 'brand'], drafted: ['Drafted', 'brand'], in_review: ['In review', 'attention'], published: ['Published', 'healthy'] };
   function screenContent() {
     var c = company();
     renderTop('Content', c ? c.name : '');
     guard(api('/api/workspace/content?' + cq()), 'content').then(function (r) {
       if (!r) return;
       var d = r.data || {}, k = d.counts || {};
-      var firstHigh = (d.rows || []).map(function (x) { return x.priority; }).indexOf('high');
-      var rows = (d.rows || []).map(function (x, i) {
-        var p = PRIO[x.priority], s = CSTATUS[x.status] || [x.status, 'new'];
+      var list = (d.rows || []).filter(function (x) { return CSTATUS[x.status]; });
+      var firstHigh = list.map(function (x) { return x.priority; }).indexOf('high');
+      var rows = list.map(function (x, i) {
+        var p = PRIO[x.priority] || PRIO.low, s = CSTATUS[x.status];
         var prio = x.priority === 'done' ? '<span class="prio t-healthy">' + ic(I.check, 14) + '<span class="sr-only">Done</span></span>' : '<span class="prio t-' + p[1] + '"><span class="dot ' + p[1] + '" aria-hidden="true"></span>' + p[0] + '</span>';
-        var href = x.item_id ? '#/item/' + encodeURIComponent(x.item_id) : null;
-        return '<tr class="' + (i === firstHigh ? 'top ' : '') + (href ? 'rowlink' : '') + '"' + (href ? ' data-href="' + href + '"' : '') + '><td>' + prio + '</td><td class="support">' + esc(x.type) + '</td>' +
-          '<td class="name">' + (href ? '<a href="' + href + '">' + esc(x.title) + '</a>' : esc(x.title)) + '</td><td class="support">' + esc(x.gap_source || '') + '</td>' +
-          '<td><span class="pill ' + s[1] + '">' + esc(s[0] + (x.status === 'published' && x.published_at ? ' ' + mdy(x.published_at) : '')) + '</span></td></tr>';
+        return '<tr' + (i === firstHigh ? ' class="top"' : '') + ' data-row="' + esc(x.item_id || x.id) + '"><td>' + prio + '</td><td class="support">' + esc(x.type || '') + '</td>' +
+          '<td class="name">' + esc(x.title) + (has(x.keyword) ? '<span class="fine" style="display:block">Answers “' + esc(x.keyword) + '”</span>' : '') + '</td><td class="support">' + esc(x.gap_source || '') + '</td>' +
+          '<td><span class="pill ' + s[1] + '">' + esc(s[0] + (x.status === 'published' && x.published_at ? ' ' + mdy(x.published_at) : '')) + '</span></td>' +
+          '<td class="acts">' + (x.item_id ? reviewBtn(x.item_id, state.companyId, 'btn xs outline', 'Review') : '') + '</td></tr>';
       }).join('');
       setView('<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Content engine</h1><p class="support">' +
-        esc(num(k.recommendations) + ' recommendations · ' + num(k.published) + ' published · ' + num(k.in_review) + ' in review') + '</p></div></div>' +
-        (rows ? '<div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Priority</th><th scope="col">Type</th><th scope="col">Title</th><th scope="col">Gap source</th><th scope="col">Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="support">No content recommendations yet.</p>') +
+        esc(num(k.recommendations) + ' ' + plural(k.recommendations, 'draft') + ' ready · ' + num(k.in_review) + ' in review · ' + num(k.published) + ' published') + '</p>' +
+        '<p class="support">Every row has a draft. Review shows why we wrote it, who it’s for, what approving does and the draft itself.</p></div></div>' +
+        (rows ? '<div class="tscroll"><table class="tbl boxed cards-sm"><thead><tr><th scope="col">Priority</th><th scope="col">Type</th><th scope="col">Title</th><th scope="col">Gap source</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Review</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="support">No drafts yet. A row appears here once its draft exists.</p>') +
         (has(d.impact) ? '<section class="sec"><h2 class="h-sec">Published content impact</h2>' + d.impact.map(function (i) { return '<p>' + esc(i.text) + '</p>'; }).join('') + '</section>' : '') +
         gapsLine(d.gaps) + '</div>');
     });
   }
 
   /* ── Creative (E4S-1) ────────────────────────────────────────────── */
+  // Round 4: drag-and-drop upload straight into the asset library, one request
+  // per file so each file shows its own progress. No ticket form.
+  state.uploads = {};
+  function authHeaders() {
+    return clerkReady.then(function (signedIn) {
+      var h = { 'Accept': 'application/json' };
+      if (linkToken) h['X-Workspace-Link'] = linkToken;
+      if (!signedIn || !window.Clerk || !window.Clerk.session) return h;
+      return window.Clerk.session.getToken().then(function (t) { if (t) h['Authorization'] = 'Bearer ' + t; return h; });
+    });
+  }
+  function uploadOne(cid, file, onProgress) {
+    return authHeaders().then(function (h) {
+      return new Promise(function (resolve, reject) {
+        var xhr = new XMLHttpRequest(), fd = new FormData();
+        fd.append('company_id', cid || '');
+        fd.append('files', file, file.name);
+        xhr.open('POST', '/api/workspace/creative/upload');
+        Object.keys(h).forEach(function (k) { xhr.setRequestHeader(k, h[k]); });
+        xhr.upload.onprogress = function (e) { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+        xhr.onload = function () {
+          var body = null;
+          try { body = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch (e) { body = null; }
+          if (xhr.status >= 200 && xhr.status < 300) resolve(body || {}); else reject(new ApiError(xhr.status, body));
+        };
+        xhr.onerror = function () { reject(new ApiError(0, { detail: 'The connection dropped' })); };
+        xhr.send(fd);
+      });
+    });
+  }
+  function upRow(u) {
+    var cls = u.state === 'done' ? ' done' : (u.state === 'error' || u.state === 'skipped' ? ' err' : '');
+    var fill = u.state === 'waiting' ? 0 : (u.state === 'sending' ? u.pct : 1);
+    var st = { waiting: 'Waiting', sending: 'Uploading · ' + Math.round(u.pct * 100) + '%', done: 'Added to the library' + (u.asset ? ' as ' + u.asset : ''),
+      skipped: 'Skipped — ' + (u.reason || 'not stored'), error: 'Didn’t upload — ' + (u.reason || 'try again') }[u.state];
+    return '<li class="upf' + cls + '"><span class="n">' + esc(u.name) + '</span><span class="bar" role="progressbar" aria-label="' + esc(u.name) + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(fill * 100) + '"><i style="width:' + Math.round(fill * 100) + '%"></i></span>' +
+      '<span class="st">' + esc(st) + '</span></li>';
+  }
+  function uploadHtml(c) {
+    if (!canDecide()) return '<div class="dropzone"><span class="h-rail">Add photos or video</span><span class="support">' + signInLink('Sign in to upload') + '</span></div>';
+    return '<section class="sec" aria-labelledby="up-h"><div class="dropzone" data-drop><span class="h-rail" id="up-h">Drop photos or videos here</span>' +
+      '<span class="support">We name and tag them for ' + esc(c ? c.name : 'this property') + ' and add them to the library. Nothing runs in ads until you approve it.</span>' +
+      '<button type="button" class="btn sm outline" data-pick>' + ic(I.plus, 13) + 'Add videos or photos</button><input type="file" multiple accept="image/*,video/*" data-files hidden></div>' +
+      '<ul class="uplist" data-uplist aria-live="polite">' + (state.uploads[state.companyId] || []).map(upRow).join('') + '</ul></section>';
+  }
+  function bindUpload() {
+    var zone = view.querySelector('[data-drop]'); if (!zone) return;
+    var input = zone.querySelector('[data-files]'), cid = state.companyId;
+    function paint() { var l = view.querySelector('[data-uplist]'); if (l && state.companyId === cid) l.innerHTML = (state.uploads[cid] || []).map(upRow).join(''); }
+    function queue(files) {
+      var list = state.uploads[cid] = state.uploads[cid] || [], fresh = [], added = 0;
+      Array.prototype.forEach.call(files, function (f) {
+        var u = { name: f.name, pct: 0, state: 'waiting', file: f };
+        if (f.type && !/^(image|video)\//.test(f.type)) { u.state = 'skipped'; u.reason = 'only photos and videos'; delete u.file; }
+        list.push(u);
+        if (u.state === 'waiting') fresh.push(u);
+      });
+      paint();
+      fresh.reduce(function (chain, u) {
+        return chain.then(function () {
+          u.state = 'sending'; paint();
+          return uploadOne(cid, u.file, function (frac) { u.pct = frac; paint(); }).then(function (body) {
+            var ok = (body.uploaded || [])[0], sk = (body.skipped || [])[0];
+            if (ok) { u.state = 'done'; u.asset = ok.asset_name; added++; } else { u.state = 'skipped'; u.reason = sk ? sk.reason : 'not stored'; }
+          }, function (e) {
+            if (e && e.status === 401) { u.state = 'error'; u.reason = 'sign in again'; return; }
+            u.state = 'error'; u.reason = (e && e.message) || 'try again';
+          }).then(function () { delete u.file; paint(); });
+        });
+      }, Promise.resolve()).then(function () {
+        if (added && state.companyId === cid && /^#\/property\/[^/]+\/creative|^#\/creative/.test(location.hash)) screenCreative();
+      });
+    }
+    zone.querySelector('[data-pick]').addEventListener('click', function () { input.click(); });
+    input.addEventListener('change', function () { if (input.files && input.files.length) queue(input.files); input.value = ''; });
+    ['dragenter', 'dragover'].forEach(function (ev) { zone.addEventListener(ev, function (e) { e.preventDefault(); zone.classList.add('over'); }); });
+    zone.addEventListener('dragleave', function (e) { if (!zone.contains(e.relatedTarget)) zone.classList.remove('over'); });
+    zone.addEventListener('drop', function (e) { e.preventDefault(); zone.classList.remove('over'); if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) queue(e.dataTransfer.files); });
+  }
   var CTYPES = [['', 'All'], ['photos', 'Photos'], ['videos', 'Videos'], ['ad_creative', 'Ad creative'], ['floor_plans', 'Floor plans'], ['documents', 'Documents']];
   var THUMBS = ['#E7EBE9', '#D9DEDC', '#BDDDD9', '#E8F3F2'];
   function screenCreative() {
@@ -1714,9 +2007,6 @@ ol,ul{list-style:none}
     guard(api('/api/workspace/creative?' + cq() + (type ? '&type=' + type : '')), 'creative').then(function (r) {
       if (!r) return;
       var d = r.data || {}, k = d.counts || {};
-      var summary = esc(num(k.assets) + ' assets · ' + num(k.tracked_in_ads) + ' tracked in ads') +
-        (d.top ? ' · Top creative: <span class="mono t-healthy">' + esc(d.top.name) + (val(d.top.ctr) != null ? ' (' + esc(pct(val(d.top.ctr), 1)) + ' CTR)' : '') + '</span>' : '') +
-        (d.lowest ? ' · Lowest: <span class="mono t-critical">' + esc(d.lowest.name) + (val(d.lowest.ctr) != null ? ' (' + esc(pct(val(d.lowest.ctr), 1)) + ' CTR)' : '') + '</span>' : '');
       var chips = '<div class="chips" role="group" aria-label="Asset type">' + CTYPES.map(function (t) { return '<button type="button" class="chip" data-ctype="' + t[0] + '" aria-pressed="' + (t[0] === type) + '">' + t[1] + '</button>'; }).join('') + '</div>';
       var assets = (d.assets || []).map(function (a, i) {
         var best = d.top && a.name === d.top.name, worst = a.flag === 'underperforming';
@@ -1728,11 +2018,12 @@ ol,ul{list-style:none}
           (a.file_url && /^https:\/\//.test(a.file_url) ? '<a class="link" href="' + esc(a.file_url) + '" target="_blank" rel="noopener noreferrer">Open file<span class="sr-only"> (opens in a new tab)</span></a>' : '') + '</li>';
       }).join('');
       setView('<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Creative library</h1><p class="support">' + esc(c ? c.name : '') + '</p></div></div>' +
-        '<p class="support">' + summary + '</p>' + chips +
+        chips +
         (assets ? '<ul class="assets">' + assets + '</ul>' : '<p class="support">No assets of this type yet.</p>') +
-        '<a class="dropzone" href="#/request"><span class="h-rail">Add photos or video</span><span class="support">Send them with a New request. We’ll name and tag them for you.</span></a>' +
+        uploadHtml(c) +
         gapsLine(d.gaps) + '</div>');
       view.querySelectorAll('[data-ctype]').forEach(function (b) { b.addEventListener('click', function () { state.creativeType = b.getAttribute('data-ctype'); screenCreative(); }); });
+      bindUpload();
     });
   }
 
@@ -1960,6 +2251,7 @@ ol,ul{list-style:none}
   /* ── Router ──────────────────────────────────────────────────────── */
   function route() {
     stopTimer();
+    closeReview();
     var parts = (location.hash || '').replace(/^#\/?/, '').split('?')[0].split('/').map(function (p) { try { return decodeURIComponent(p); } catch (e) { return p; } });
     var name = parts[0] || 'dashboard';
     if (name === 'work' || name === 'client') name = 'approvals';

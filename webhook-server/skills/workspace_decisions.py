@@ -13,6 +13,7 @@ EXISTING handler as a module call (never an HTTP self-call), then writes a
 | content_brief  | routes.seo.approve_content_brief           | loop event only (no dismissed state)     |
 | video_variant  | approval_actions.approve_video_variants    | loop event only (no dismissed state)     |
 | ticket_profile | ticket_profile_sync.accept                 | ticket_profile_sync.reject               |
+| fair_housing_review | files the suggested fixes as a draft ticket for the web team (portal_tickets) | loop event only |
 
 `POST /api/workspace/work/<id>/undo` reverses a decision for 10 minutes, only
 for the person who made it, only where the source has a safe reverse:
@@ -269,6 +270,35 @@ def _profile_not_now(ctx, item, reason, actor):
             "written_down": f"Not now: {wi.REASONS[reason]}. The profile is unchanged."}
 
 
+FH_FIX_TICKET_TYPE = "general"
+
+
+def _fh_approve(ctx, item, reason, actor):
+    """File the review's suggested fixes as a draft for the web team. Nothing publishes."""
+    import portal_tickets
+    raw = item["_raw"]
+    findings = raw.get("findings") or []
+    lines = [f"Monthly Fair Housing review, {str(raw.get('run_at') or '')[:10]}. Draft fixes for the web team; "
+             "nothing publishes automatically."]
+    for f in findings[:25]:
+        verb = "Suggested copy fix" if f.get("kind") == "copy" else "Review"
+        lines.append(f"- {f.get('location')}: “{f.get('excerpt')}” — {f.get('reason')} {verb}: {f.get('suggested_fix')}")
+    body, status = portal_tickets.create_ticket(
+        ctx.company_id, FH_FIX_TICKET_TYPE, subject=f"Fair Housing fixes: {ctx.name or ctx.company_id}",
+        fields={"Details": "\n".join(lines)}, submitted_by=actor, property_uuid=ctx.uuid, internal=False,
+    )
+    task_id = str((body.get("ticket") or {}).get("id") or "") if isinstance(body, dict) else ""
+    if status != 201 or not task_id:
+        raise DecisionError(502, (body or {}).get("error") or "The fixes could not be filed")
+    return {"in_motion": [
+                _motion(f"{len(findings)} suggested fix(es) filed as a draft for the web team", "queued", "done",
+                        task_id, action=_link_for(f"ClickUp web task created: {task_id}")),
+                _motion("Nothing publishes until the web team applies the fixes", "person", "waiting"),
+            ],
+            "outcome": "ok",
+            "written_down": "Approved. The suggested fixes went to the web team as a draft."}
+
+
 HANDLERS: dict[tuple[str, str], Callable] = {
     ("hubdb_rec", "approve"): _hubdb_approve,
     ("hubdb_rec", "not_now"): _hubdb_not_now,
@@ -282,6 +312,8 @@ HANDLERS: dict[tuple[str, str], Callable] = {
     ("video_variant", "not_now"): _record_only_not_now,
     ("ticket_profile", "approve"): _profile_approve,
     ("ticket_profile", "not_now"): _profile_not_now,
+    ("fair_housing_review", "approve"): _fh_approve,
+    ("fair_housing_review", "not_now"): _record_only_not_now,
 }
 
 
@@ -338,6 +370,8 @@ UNDO: dict[tuple[str, str], Callable | str] = {
     ("video_variant", "not_now"): _undo_nothing,
     ("ticket_profile", "approve"): "Accepting wrote the change to the property profile.",
     ("ticket_profile", "not_now"): _undo_profile_not_now,
+    ("fair_housing_review", "approve"): "Approval filed the fixes as a ticket for the web team.",
+    ("fair_housing_review", "not_now"): _undo_nothing,
 }
 
 _recent: dict = {}
@@ -390,6 +424,7 @@ def record_event(ctx, item: dict, action: str, reason: str | None, actor: str, *
             "detail": detail,
             "requires_signature": bool(item.get("_requires_signature")),
             "title": wi.view_item(item, internal=False)["title"],
+            "creative_kind": item.get("_creative_kind"),
         },
     )
 

@@ -134,7 +134,40 @@
       "more_count": 7
     },
     "sparkline": null,
-    "fair_housing_review": null
+    "fair_housing_review": null,
+    "why": {
+      "text": "10 of the 44 units advertised as available have been listed 90 days or more. Six are A1 one-bedrooms asking $1,385 against a floorplan average of $1,370 — we are not the cheapest A1 on our own website.",
+      "receipts": [
+        {
+          "label": "10 of 44 available units listed 90+ days",
+          "source": "aptiq",
+          "as_of": "2026-09-14T13:04:00Z"
+        },
+        {
+          "label": "A1 asking $1,385 vs $1,370 floorplan average",
+          "source": "aptiq",
+          "as_of": "2026-09-14T13:04:00Z"
+        }
+      ]
+    },
+    "for_whom": null,
+    "approving_does": [
+      {
+        "label": "Hide #1321 from the syndication feed",
+        "owner": "RPM Digital",
+        "when": "2026-09-14"
+      },
+      {
+        "label": "Five A1s repriced to $1,362 — $8 under the plan average",
+        "owner": "RPM Digital",
+        "when": "2026-09-15"
+      },
+      {
+        "label": "Concession moves from B plans to A plans for three weeks",
+        "owner": "RPM Digital",
+        "when": "2026-09-17"
+      }
+    ]
   },
   "undone": true
 }

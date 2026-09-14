@@ -7,8 +7,11 @@ HubSpot company id into `property_uuid`, so rows under either key are read.
 
 Per-asset ad performance (impressions, CTR, leads) needs a Google Ads connector,
 which main does not have: those fields, `top`, `lowest`, `flag` and
-`counts.tracked_in_ads` are null with a gap. Uploads use the existing
-`/api/asset-upload` path.
+`counts.tracked_in_ads` are null with a gap.
+
+`POST /api/workspace/creative/upload` (Round 4) takes multipart files behind a
+verified identity and stores them through `asset_uploader.process_asset_upload`,
+the same path `/api/asset-upload` uses. No ticket form.
 """
 
 from __future__ import annotations
@@ -96,3 +99,53 @@ def build_creative(ctx, *, asset_type_filter: str | None = None, internal: bool 
         "assets": assets,
         "gaps": wc.gaps_for(gaps, internal),
     }
+
+
+# ── upload (Round 4) ─────────────────────────────────────────────────────────
+
+MAX_UPLOAD_FILES = 20
+_CATEGORY_BY_EXT = {**{e: "Photography" for e in _IMAGE}, **{e: "Video" for e in _VIDEO},
+                    **{e: "Marketing Collateral" for e in _DOC}}
+
+
+def upload(ctx, files: list, metadata_raw: str | None = None, category: str | None = None) -> dict:
+    """Store uploaded files in the asset library. {uploaded, skipped}."""
+    import asset_uploader
+
+    if not ctx.uuid:
+        raise wc.WorkspaceError(400, "The property has no uuid; the asset library is keyed by uuid")
+    files = [f for f in files or [] if getattr(f, "filename", "")]
+    if not files:
+        raise wc.WorkspaceError(400, "files are required")
+    if len(files) > MAX_UPLOAD_FILES:
+        raise wc.WorkspaceError(400, "Too many files", f"at most {MAX_UPLOAD_FILES} per upload")
+    try:
+        metadata = json.loads(metadata_raw) if metadata_raw else []
+        metadata = metadata if isinstance(metadata, list) else []
+    except ValueError:
+        raise wc.WorkspaceError(400, "metadata must be a JSON list")
+
+    accepted, meta, skipped = [], [], []
+    for i, f in enumerate(files):
+        ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+        m = dict(metadata[i]) if i < len(metadata) and isinstance(metadata[i], dict) else {}
+        m["category"] = m.get("category") or category or _CATEGORY_BY_EXT.get(ext)
+        if not m["category"]:
+            skipped.append({"filename": f.filename, "reason": "Unsupported file type"})
+            continue
+        accepted.append(f)
+        meta.append(m)
+    results = asset_uploader.process_asset_upload(property_uuid=ctx.uuid, files=accepted, metadata=meta) \
+        if accepted else []
+    stored = {r.get("filename") for r in results}
+    for f in accepted:
+        base = f.filename.rsplit(".", 1)[0]
+        if f.filename not in stored and not any(str(s or "").startswith(base) for s in stored):
+            skipped.append({"filename": f.filename, "reason": "Too large, or it could not be stored"})
+    uploaded = [{"filename": r.get("filename"), "file_url": r.get("file_url"),
+                 "thumbnail_url": r.get("thumbnail_url") or None, "asset_name": r.get("asset_name"),
+                 "category": r.get("category"), "subcategory": r.get("subcategory") or None} for r in results]
+    if not uploaded:
+        raise wc.WorkspaceError(400, "No files were uploaded", "; ".join(f"{s['filename']}: {s['reason']}"
+                                                                         for s in skipped))
+    return {"uploaded": uploaded, "skipped": skipped}

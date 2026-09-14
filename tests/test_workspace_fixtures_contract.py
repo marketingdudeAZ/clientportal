@@ -19,7 +19,7 @@ OPT_STR = (str, type(None))
 OPT_NUM = (int, float, type(None))
 
 SOURCES = {"hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
-           "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket"}
+           "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket", "fair_housing_review"}
 LENSES = {"express", "tailor", "amplify", "evolve"}
 KINDS = {"auto", "queued", "person"}
 STATUSES = {"to_do", "in_motion", "done"}
@@ -327,17 +327,21 @@ def test_dashboard():
     d = load("dashboard")
     check(d, {"greeting_name": OPT_STR, "as_of": str, "kpis": dict, "health_tiles": list, "properties": list,
               "activity": list, "waiting": list, "loop_status": dict}, "dashboard")
-    for k in ("ai_visibility", "portfolio_occupancy", "identified_savings", "waiting_on_you"):
-        assert k in d["kpis"], f"dashboard.kpis missing {k}"
+    # Round 4: seven KPIs in this order, no lens, no identified savings.
+    assert list(d["kpis"]) == ["occupancy", "units_to_lease_90d", "leases_this_month", "cost_per_lease",
+                               "ai_visibility", "actions_taken", "waiting_on_you"]
+    assert "lens" not in d and "kpi_order" not in d
+    for k in d["kpis"]:
         check_receipt(d["kpis"][k], f"dashboard.kpis.{k}")
     for t in d["health_tiles"]:
         check(t, {"company_id": str, "name": str, "score": OPT_NUM, "band": str}, "dashboard.health_tiles[]")
         assert t["band"] in BANDS
     for p in d["properties"]:
-        check(p, {"company_id": str, "name": str, "units": OPT_NUM, "to_lease_90d": OPT_RECEIPT,
-                  "overspend_per_year": OPT_RECEIPT, "health": OPT_NUM, "band": str}, "dashboard.properties[]")
-        check_receipt(p["to_lease_90d"], "dashboard.properties[].to_lease_90d")
-        check_receipt(p["overspend_per_year"], "dashboard.properties[].overspend_per_year")
+        check(p, {"company_id": str, "name": str, "units": OPT_NUM, "occupancy": OPT_RECEIPT, "to_lease_90d": OPT_RECEIPT,
+                  "leases_month": OPT_RECEIPT, "status": OPT_STR, "health": OPT_NUM, "band": str}, "dashboard.properties[]")
+        assert "overspend_per_year" not in p
+        for k in ("occupancy", "to_lease_90d", "leases_month"):
+            check_receipt(p[k], f"dashboard.properties[].{k}")
         assert p["band"] in BANDS
     for a in d["activity"]:
         check(a, {"at": str, "text": str, "kind": str, "visibility": str}, "dashboard.activity[]")
@@ -345,7 +349,7 @@ def test_dashboard():
         assert a["visibility"] in {"client", "internal"}
     for w in d["waiting"]:
         check(w, {"item_id": str, "title": str, "subtitle": OPT_STR, "category": str}, "dashboard.waiting[]")
-        assert w["category"] in {"cost", "vendor", "negotiate", "content", "creative", "compliance"}
+        assert w["category"] in {"cost", "vendor", "content", "creative", "compliance"}
     check(d["loop_status"], {"running": bool, "property_count": int, "last_pass": OPT_STR}, "dashboard.loop_status")
     check_gap_entries(d, "dashboard")
 
@@ -358,7 +362,7 @@ def test_approvals(name):
     for i in d["interrupts"]:
         check(i, {"id": str, "kind": str, "title": str, "detail": OPT_STR, "company_id": str, "item_id": OPT_STR,
                   "primary_action": dict, "secondary_action": (dict, type(None))}, f"{name}.interrupts[]")
-        assert i["kind"] in {"compliance", "pacing", "tracking"}
+        assert i["kind"] == "compliance", "clients never see pacing interrupts (Round 4)"
     check(d["batch"], {"label": str, "rows": list}, f"{name}.batch")
     for r in d["batch"]["rows"]:
         check(r, {"item_id": str, "company_id": str, "property": str, "action": str, "category": str,
@@ -410,9 +414,12 @@ def test_media_plan():
     for m in d["months"]:
         check(m, {"month": str, "units_to_lease": int}, "media_plan.months[]")
     for c in d["channels"]:
-        check(c, {"channel": str, "monthly": list, "monthly_avg": NUM, "annual": NUM, "share": NUM, "cpl_target": OPT_NUM}, "media_plan.channels[]")
-        assert len(c["monthly"]) == 12 and all(isinstance(x, (int, float)) for x in c["monthly"])
-        assert c["annual"] == sum(c["monthly"])
+        check(c, {"channel": str, "mode": str, "monthly": list, "monthly_avg": NUM, "annual": NUM, "share": NUM, "cpl_target": OPT_NUM}, "media_plan.channels[]")
+        assert c["mode"] in {"always_on", "flighted"}
+        assert len(c["monthly"]) == 12 and all(x is None or isinstance(x, (int, float)) for x in c["monthly"])
+        assert c["annual"] == sum(x for x in c["monthly"] if x is not None)
+        if c["mode"] == "always_on":
+            assert len({x for x in c["monthly"] if x is not None}) <= 1, "always-on channels are flat"
     check_gap_entries(d, "media_plan")
 
 
@@ -432,6 +439,15 @@ def test_visibility():
         check(s, {"source": str, "share": NUM}, "visibility.citation_sources[]")
     for r in d["recommendations"]:
         check(r, {"text": str, "action": (dict, type(None))}, "visibility.recommendations[]")
+    for pr in d["prompts"]:
+        check(pr, {"id": str, "text": str, "topic": OPT_STR, "intent": OPT_STR, "engines": dict}, "visibility.prompts[]")
+        for e, r in pr["engines"].items():
+            assert isinstance(r.get("named"), (bool, type(None))) and isinstance(r.get("cited"), (bool, type(None))), f"visibility.prompts[].engines.{e}"
+    for f in d["fanout"]:
+        check(f, {"query": str, "engine": OPT_STR, "count": int, "content": (dict, type(None))}, "visibility.fanout[]")
+    for w in d["writing"]:
+        check(w, {"title": str, "answers": list, "status": str, "item_id": OPT_STR}, "visibility.writing[]")
+        assert w["status"] in {"drafted", "in_review", "published"}
     for a in d["alerts"]:
         check(a, {"kind": str, "text": str}, "visibility.alerts[]")
         assert a["kind"] in {"exposure", "competitor"}
@@ -443,10 +459,14 @@ def test_content():
     check(d, {"counts": dict, "rows": list, "impact": list}, "content")
     check(d["counts"], {"recommendations": int, "published": int, "in_review": int}, "content.counts")
     for r in d["rows"]:
-        check(r, {"id": str, "priority": str, "type": str, "title": str, "gap_source": OPT_STR, "status": str,
-                  "published_at": OPT_STR, "item_id": OPT_STR}, "content.rows[]")
+        check(r, {"id": str, "priority": str, "type": str, "title": str, "keyword": OPT_STR, "gap_source": OPT_STR, "status": str,
+                  "published_at": OPT_STR, "item_id": OPT_STR, "why": (dict, type(None)), "for_whom": (dict, type(None)),
+                  "approving_does": list}, "content.rows[]")
         assert r["priority"] in {"high", "med", "low", "done"}
-        assert r["status"] in {"draft_ready", "in_review", "not_started", "published"}
+        # Round 4: a row exists only once its draft does.
+        assert r["status"] in {"draft_ready", "in_review", "published"}
+        if r["status"] != "draft_ready":
+            assert r["approving_does"] == []
     check_gap_entries(d, "content")
 
 

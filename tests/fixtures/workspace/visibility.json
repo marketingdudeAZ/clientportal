@@ -1,14 +1,14 @@
 {
   "as_of": "2026-09-14T13:04:00Z",
   "score": {
-    "value": 68,
-    "source": "ai_mentions",
+    "value": 71,
+    "source": "geo_brand_mentions",
     "as_of": "2026-09-01T08:14:00Z"
   },
   "change": {
-    "value": 4,
+    "value": -2,
     "window": "month",
-    "source": "ai_mentions"
+    "source": "geo_brand_mentions"
   },
   "last_audit": "2026-09-01",
   "next_audit": "2026-10-01",
@@ -16,90 +16,68 @@
     {
       "engine": "ChatGPT",
       "score": {
-        "value": 75,
-        "source": "ai_mentions",
+        "value": 63,
+        "source": "geo_brand_mentions",
         "as_of": "2026-09-01T08:14:00Z"
       },
-      "queries_hit": 15,
-      "queries_total": 20
+      "queries_hit": 6,
+      "queries_total": 7
     },
     {
       "engine": "Claude",
       "score": {
-        "value": 70,
-        "source": "ai_mentions",
+        "value": 62,
+        "source": "geo_brand_mentions",
         "as_of": "2026-09-01T08:14:00Z"
       },
-      "queries_hit": 14,
-      "queries_total": 20
+      "queries_hit": 5,
+      "queries_total": 7
     },
     {
       "engine": "Perplexity",
       "score": {
-        "value": 50,
-        "source": "ai_mentions",
+        "value": 76,
+        "source": "geo_brand_mentions",
         "as_of": "2026-09-01T08:14:00Z"
       },
-      "queries_hit": 10,
-      "queries_total": 20
+      "queries_hit": 5,
+      "queries_total": 7
     },
     {
       "engine": "Google AI",
       "score": {
-        "value": 80,
-        "source": "ai_mentions",
+        "value": 76,
+        "source": "geo_brand_mentions",
         "as_of": "2026-09-01T08:14:00Z"
       },
-      "queries_hit": 16,
-      "queries_total": 20
+      "queries_hit": 4,
+      "queries_total": 7
     },
     {
       "engine": "Copilot",
       "score": {
-        "value": 65,
-        "source": "ai_mentions",
+        "value": 81,
+        "source": "geo_brand_mentions",
         "as_of": "2026-09-01T08:14:00Z"
       },
-      "queries_hit": 13,
-      "queries_total": 20
+      "queries_hit": 4,
+      "queries_total": 7
     }
   ],
   "comp_stack": {
     "competitors": [
       "The Reserve at Carrollton",
-      "Oakmont Station",
-      "Solana Josey",
-      "Haven at Broadway"
+      "Carrollton Station",
+      "Solana Carrollton"
     ],
     "rows": [
       {
         "surface": "AI visibility",
         "values": {
           "self": 71,
-          "The Reserve at Carrollton": 65,
-          "Oakmont Station": 58,
-          "Solana Josey": 72,
-          "Haven at Broadway": 44
-        }
-      },
-      {
-        "surface": "Search (SEO)",
-        "values": {
-          "self": null,
-          "The Reserve at Carrollton": null,
-          "Oakmont Station": null,
-          "Solana Josey": null,
-          "Haven at Broadway": null
-        }
-      },
-      {
-        "surface": "ILS presence",
-        "values": {
-          "self": null,
-          "The Reserve at Carrollton": null,
-          "Oakmont Station": null,
-          "Solana Josey": null,
-          "Haven at Broadway": null
+          "The Reserve at Carrollton": 76,
+          "Carrollton Station": 75,
+          "Solana Carrollton": 60
         }
       }
     ]
@@ -111,7 +89,7 @@
       "share_source": "geo_sources"
     },
     {
-      "source": "Property website",
+      "source": "lyvbroadway.com",
       "share": 0.28,
       "share_source": "geo_sources"
     },
@@ -133,42 +111,342 @@
   ],
   "recommendations": [
     {
-      "text": "Write 3 FAQ pages for the questions Perplexity answers with other properties (score 50, our lowest engine)",
+      "text": "FAQ page: pet policy and breed restrictions at LYV Broadway",
       "action": {
-        "type": "create_brief",
-        "engine": "Perplexity"
+        "type": "open_content",
+        "item_id": "content_brief:00214"
       }
     },
     {
-      "text": "Add schema.org markup to the floorplan pages — Google AI leans on structured data",
+      "text": "Move-in costs and application fees at LYV Broadway",
       "action": {
-        "type": "create_brief",
-        "engine": "Google AI"
+        "type": "open_content",
+        "item_id": "content_brief:00216"
       }
     },
     {
-      "text": "Update the neighborhood page — ChatGPT still quotes the 2024 copy",
+      "text": "Parking and garage options at LYV Broadway",
       "action": {
-        "type": "create_brief",
-        "engine": "ChatGPT"
+        "type": "open_content",
+        "item_id": "content_brief:00217"
       }
     }
   ],
   "alerts": [
     {
       "kind": "exposure",
-      "text": "47 units to lease in 90 days. Every question an AI model can't answer about LYV Broadway is a prospect we don't reach."
-    },
-    {
-      "kind": "competitor",
-      "text": "The Reserve at Carrollton gained 8 points this month after adding four content pages."
+      "text": "48 units to lease at LYV Broadway in 90 days. Every question an AI engine can't answer about LYV Broadway is a renter we don't reach."
     }
   ],
-  "gaps": [
+  "prompts": [
     {
-      "message": "Search and ILS comparisons need a competitor data source we don't have yet.",
-      "field": "comp_stack.rows",
-      "source": "aptiq"
+      "id": "prompt:18234410021:1",
+      "text": "Which apartments in Carrollton allow large dogs?",
+      "topic": "Pets",
+      "intent": "decide",
+      "engines": {
+        "ChatGPT": {
+          "named": true,
+          "cited": false
+        },
+        "Claude": {
+          "named": true,
+          "cited": false
+        },
+        "Perplexity": {
+          "named": false,
+          "cited": false
+        },
+        "Google AI": {
+          "named": true,
+          "cited": true
+        },
+        "Copilot": {
+          "named": false,
+          "cited": false
+        }
+      }
+    },
+    {
+      "id": "prompt:18234410021:2",
+      "text": "Best pet friendly apartments in Carrollton",
+      "topic": "Pets",
+      "intent": "compare",
+      "engines": {
+        "ChatGPT": {
+          "named": true,
+          "cited": true
+        },
+        "Claude": {
+          "named": false,
+          "cited": false
+        },
+        "Perplexity": {
+          "named": true,
+          "cited": true
+        },
+        "Google AI": {
+          "named": false,
+          "cited": false
+        },
+        "Copilot": {
+          "named": false,
+          "cited": false
+        }
+      }
+    },
+    {
+      "id": "prompt:18234410021:3",
+      "text": "What does it cost to move into LYV Broadway?",
+      "topic": "Costs and fees",
+      "intent": "decide",
+      "engines": {
+        "ChatGPT": {
+          "named": true,
+          "cited": false
+        },
+        "Claude": {
+          "named": true,
+          "cited": true
+        },
+        "Perplexity": {
+          "named": true,
+          "cited": true
+        },
+        "Google AI": {
+          "named": false,
+          "cited": false
+        },
+        "Copilot": {
+          "named": true,
+          "cited": true
+        }
+      }
+    },
+    {
+      "id": "prompt:18234410021:4",
+      "text": "Apartments in Carrollton with low move-in fees",
+      "topic": "Costs and fees",
+      "intent": "compare",
+      "engines": {
+        "ChatGPT": {
+          "named": true,
+          "cited": false
+        },
+        "Claude": {
+          "named": false,
+          "cited": false
+        },
+        "Perplexity": {
+          "named": false,
+          "cited": false
+        },
+        "Google AI": {
+          "named": true,
+          "cited": true
+        },
+        "Copilot": {
+          "named": true,
+          "cited": false
+        }
+      }
+    },
+    {
+      "id": "prompt:18234410021:5",
+      "text": "Does LYV Broadway have covered parking?",
+      "topic": "Parking",
+      "intent": "decide",
+      "engines": {
+        "ChatGPT": {
+          "named": true,
+          "cited": true
+        },
+        "Claude": {
+          "named": true,
+          "cited": true
+        },
+        "Perplexity": {
+          "named": true,
+          "cited": true
+        },
+        "Google AI": {
+          "named": true,
+          "cited": true
+        },
+        "Copilot": {
+          "named": true,
+          "cited": true
+        }
+      }
+    },
+    {
+      "id": "prompt:18234410021:6",
+      "text": "What's near LYV Broadway?",
+      "topic": "Neighborhood",
+      "intent": "learn",
+      "engines": {
+        "ChatGPT": {
+          "named": false,
+          "cited": false
+        },
+        "Claude": {
+          "named": true,
+          "cited": true
+        },
+        "Perplexity": {
+          "named": true,
+          "cited": false
+        },
+        "Google AI": {
+          "named": false,
+          "cited": false
+        },
+        "Copilot": {
+          "named": true,
+          "cited": false
+        }
+      }
+    },
+    {
+      "id": "prompt:18234410021:7",
+      "text": "One-bedroom apartments in Carrollton with a washer and dryer",
+      "topic": "Floor plans",
+      "intent": "compare",
+      "engines": {
+        "ChatGPT": {
+          "named": true,
+          "cited": true
+        },
+        "Claude": {
+          "named": true,
+          "cited": true
+        },
+        "Perplexity": {
+          "named": true,
+          "cited": true
+        },
+        "Google AI": {
+          "named": true,
+          "cited": true
+        },
+        "Copilot": {
+          "named": false,
+          "cited": false
+        }
+      }
     }
-  ]
+  ],
+  "fanout": [
+    {
+      "query": "pet friendly apartments carrollton",
+      "engine": "ChatGPT",
+      "count": 9,
+      "topic": "Pets",
+      "content": {
+        "item_id": "content_brief:00214",
+        "title": "FAQ page: pet policy and breed restrictions at LYV Broadway",
+        "status": "draft_ready"
+      }
+    },
+    {
+      "query": "lyv broadway pet policy",
+      "engine": "Claude",
+      "count": 9,
+      "topic": "Pets",
+      "content": {
+        "item_id": "content_brief:00214",
+        "title": "FAQ page: pet policy and breed restrictions at LYV Broadway",
+        "status": "draft_ready"
+      }
+    },
+    {
+      "query": "breed restrictions apartments carrollton",
+      "engine": "Perplexity",
+      "count": 11,
+      "topic": "Pets",
+      "content": {
+        "item_id": "content_brief:00214",
+        "title": "FAQ page: pet policy and breed restrictions at LYV Broadway",
+        "status": "draft_ready"
+      }
+    },
+    {
+      "query": "lyv broadway application fee",
+      "engine": "ChatGPT",
+      "count": 5,
+      "topic": "Costs and fees",
+      "content": {
+        "item_id": "content_brief:00216",
+        "title": "Move-in costs and application fees at LYV Broadway",
+        "status": "in_review"
+      }
+    },
+    {
+      "query": "move in specials carrollton apartments",
+      "engine": "Claude",
+      "count": 6,
+      "topic": "Costs and fees",
+      "content": {
+        "item_id": "content_brief:00216",
+        "title": "Move-in costs and application fees at LYV Broadway",
+        "status": "in_review"
+      }
+    },
+    {
+      "query": "lyv broadway parking",
+      "engine": "ChatGPT",
+      "count": 11,
+      "topic": "Parking",
+      "content": {
+        "item_id": "content_brief:00217",
+        "title": "Parking and garage options at LYV Broadway",
+        "status": "published"
+      }
+    },
+    {
+      "query": "apartments with garages carrollton",
+      "engine": "Claude",
+      "count": 6,
+      "topic": "Parking",
+      "content": {
+        "item_id": "content_brief:00217",
+        "title": "Parking and garage options at LYV Broadway",
+        "status": "published"
+      }
+    }
+  ],
+  "writing": [
+    {
+      "title": "FAQ page: pet policy and breed restrictions at LYV Broadway",
+      "topic": "Pets",
+      "answers": [
+        "pet friendly apartments carrollton",
+        "lyv broadway pet policy",
+        "breed restrictions apartments carrollton"
+      ],
+      "status": "drafted",
+      "item_id": "content_brief:00214"
+    },
+    {
+      "title": "Move-in costs and application fees at LYV Broadway",
+      "topic": "Costs and fees",
+      "answers": [
+        "lyv broadway application fee",
+        "move in specials carrollton apartments"
+      ],
+      "status": "in_review",
+      "item_id": "content_brief:00216"
+    },
+    {
+      "title": "Parking and garage options at LYV Broadway",
+      "topic": "Parking",
+      "answers": [
+        "lyv broadway parking",
+        "apartments with garages carrollton"
+      ],
+      "status": "published",
+      "item_id": "content_brief:00217"
+    }
+  ],
+  "gaps": []
 }

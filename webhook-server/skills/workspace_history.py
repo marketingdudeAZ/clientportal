@@ -159,3 +159,51 @@ def recent_events(uuids: list, *, days: int = 30, limit: int = 50) -> list | Non
     for r in rows:
         r["payload"] = _payload(r.get("payload"))
     return rows
+
+
+AUTOMATIC_ACTION_TYPES = ("recommendation_approved", "workspace_fair_housing_review")
+
+
+def automatic_actions(company_ids: list, uuids: list, since: datetime) -> dict | None:
+    """Changes shipped without anyone's approval, counted from loop_events.
+
+    Counted: `loop_autopilot` approvals (`recommendation_approved` with source
+    loop_autopilot), and monthly Fair Housing reviews that found nothing
+    (`workspace_fair_housing_review` with zero findings). Returns
+    `{total, autopilot_approvals, fair_housing_reviews_clean, events}` or None
+    without BigQuery.
+    """
+    client, table = _client()
+    if client is None:
+        return None
+    from google.cloud import bigquery
+    rows = _query(f"""
+      SELECT event_type, company_id, property_uuid, occurred_at, source, `trigger`, payload
+      FROM `{table}`
+      WHERE event_type IN UNNEST(@types)
+        AND occurred_at >= @since
+        AND (company_id IN UNNEST(@cids) OR property_uuid IN UNNEST(@uuids))
+      ORDER BY occurred_at DESC
+    """, [
+        bigquery.ArrayQueryParameter("types", "STRING", list(AUTOMATIC_ACTION_TYPES)),
+        bigquery.ScalarQueryParameter("since", "TIMESTAMP", since),
+        bigquery.ArrayQueryParameter("cids", "STRING", [str(c) for c in company_ids if c]),
+        bigquery.ArrayQueryParameter("uuids", "STRING", [str(u) for u in uuids if u]),
+    ])
+    return count_automatic(rows)
+
+
+def count_automatic(rows: list) -> dict:
+    autopilot, clean, events = 0, 0, []
+    for ev in rows:
+        p = _payload(ev.get("payload"))
+        if ev.get("event_type") == "recommendation_approved":
+            if ev.get("source") == "loop_autopilot" or ev.get("trigger") == "autopilot":
+                autopilot += 1
+                events.append(ev)
+        elif ev.get("event_type") == "workspace_fair_housing_review":
+            if not (p.get("findings") or []) and not p.get("findings_count"):
+                clean += 1
+                events.append(ev)
+    return {"total": autopilot + clean, "autopilot_approvals": autopilot,
+            "fair_housing_reviews_clean": clean, "events": events}

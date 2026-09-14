@@ -944,6 +944,12 @@ WORKSPACE_LINK_SECRET = os.getenv("WORKSPACE_LINK_SECRET", "")
 WORKSPACE_SIGNED_LINKS_CAN_DECIDE = (
     os.getenv("WORKSPACE_SIGNED_LINKS_CAN_DECIDE", "").strip().lower() in ("1", "true", "yes")
 )
+# Monthly Fair Housing review: the AI-generated / AI-edited image disclosure
+# check. Off until the disclosure requirement is confirmed; the rule is a
+# placeholder that only flags images for review (skills/workspace_fair_housing_review.py).
+WORKSPACE_FH_AI_IMAGE_CHECK = (
+    os.getenv("WORKSPACE_FH_AI_IMAGE_CHECK", "").strip().lower() in ("1", "true", "yes")
+)
 # Hard ceiling on a link's lifetime, in days.
 WORKSPACE_LINK_MAX_DAYS = 7
 
