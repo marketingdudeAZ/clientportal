@@ -98,6 +98,10 @@ LOOP_EVENT_TYPES = {
     "portal_ticket_unmatched", "portal_ticket_recap_failed",
     # operational job tracking
     "job",
+    # Portal Workspace (routes/workspace.py): decisions, their undo, requests
+    # filed from plain words, and the undo of a forecast recommendation decision.
+    "workspace_decision", "workspace_decision_undone", "workspace_request_filed",
+    "recommendation_undone",
 }
 
 

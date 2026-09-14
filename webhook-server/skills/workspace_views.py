@@ -1,25 +1,24 @@
 """Workspace read views — /me, /property, /performance, /plan.
 
-Every number is `{value, source, as_of}` or null with a named gap. Sources:
+Every number is `{value, source, as_of}` or null with a gap. Sources:
 
 * HubSpot company record, one read via `workspace_inbox.load_context`
-  (hubspot_client): name, address, units, people, platform ids, brief override.
-* AptIQ daily CSV and floor-plan CSV (services/fluency_ingestion): advertised
+  (hubspot_client): name, address, units, people, platform ids, brief fields.
+* AptIQ daily CSV and floor-plan CSV (services/fluency_ingestion), served
+  through `workspace_cache` so a cold export never blocks a read: advertised
   occupancy, available units, floor plans with days on market. `as_of` is the
-  export's own "Report Generation Date"; when a row lacks it, the time this
-  process fetched the export.
-* Spend sheet (spend_sheet.get_company_monthly_spend): the contracted monthly
-  line items on the property's deals. `as_of` is when the sheet was built.
+  export's own "Report Generation Date", falling back to the fetch time.
+* Spend sheet (deal line items), also through `workspace_cache`. `as_of` is when
+  the sheet was built.
 
 What no feed on main provides, returned as null with a gap: units vacant 90+
 days, upcoming vacancies as unit counts, coming-open-by-week, cost per lease,
-and what each channel is pointed at.
+what each channel is pointed at, and a planned go-live date.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 
 from skills import workspace_common as wc
 from skills import workspace_inbox as wi
@@ -40,12 +39,19 @@ CHANNEL_LABELS = {
     "fees": "Management and hosting",
 }
 
+PLAN_STATUSES = ("running", "pending", "ended", "paused")
+
 PLAN_CAVEAT = (
     "Amounts are the contracted monthly line items on this property's deals, not "
     "measured spend. Cost per lease is not available as data yet: it exists only "
     "inside the Red Light report PDF. Pending changes counts open, unsigned deals "
     "on the property."
 )
+
+# The brief paragraph (Phase 2 amendment 6): the curated romance paragraph, then
+# these company fields verbatim, joined, then null.
+BRIEF_COMPOSE_FIELDS = ("what_makes_this_property_unique_", "property_voice_and_tone",
+                        "additional_selling_points")
 
 
 # ── /me ──────────────────────────────────────────────────────────────────────
@@ -62,19 +68,22 @@ def _company_summary(props: dict, company_id: str) -> dict:
     }
 
 
-def build_me(email: str, *, verified: bool) -> dict:
-    """Who is calling, their role, and the properties they work on.
+def build_me(email: str, *, verified: bool, can_decide: bool | None = None,
+             preview_role: str | None = None, signed_link: bool = False) -> dict:
+    """Who is calling, their effective role, and the properties they work on.
 
     Internal staff may open any property; `companies` lists the ones HubSpot
-    assigns to them. Clients get the companies they are scoped to.
+    assigns to them. Clients get the companies they are scoped to. In "Preview
+    as client" mode `role` is "client" and `can_decide` is false.
     """
     from feature_access import ROLE_INTERNAL, companies_for, role_for
     from skills import workspace_portfolio
 
-    role = role_for(email)
+    real_role = role_for(email)
+    role = preview_role or real_role
     gaps: list = []
     companies: list = []
-    if role == ROLE_INTERNAL:
+    if real_role == ROLE_INTERNAL:
         try:
             for p in workspace_portfolio.assigned_properties(email):
                 companies.append(_company_summary(p, p.get("hubspot_company_id") or ""))
@@ -89,59 +98,70 @@ def build_me(email: str, *, verified: bool) -> dict:
                 companies.append(_company_summary(props or {}, cid))
             except Exception as exc:  # noqa: BLE001
                 logger.warning("workspace me: company %s unreadable: %s", cid, exc)
-                gaps.append(wc.gap(f"companies:{cid}", "Company record could not be read"))
+                gaps.append(wc.gap("companies", f"Company {cid} could not be read"))
     companies.sort(key=lambda c: (c["name"] or "").lower())
+    decide = bool(verified) if can_decide is None else bool(can_decide)
     return {
         "email": email,
         "role": role,
         "verified": bool(verified),
+        "can_decide": decide and not preview_role,
+        "preview_as": preview_role,
+        "signed_link": bool(signed_link),
         "portfolio_wide": role == ROLE_INTERNAL,
         "companies": companies,
-        "gaps": wc.public(gaps),
+        "gaps": wc.gaps_for(gaps, internal=True),
     }
 
 
 # ── shared readers ───────────────────────────────────────────────────────────
 
 def aptiq_snapshot(ctx: wi.PropertyContext, gaps: list) -> tuple[dict | None, str | None]:
-    """The property's AptIQ daily-CSV row, normalized, plus its fetch time."""
+    """The property's AptIQ daily-CSV row, normalized, plus its as_of."""
+    from skills import workspace_cache
+
     pid = str(ctx.props.get("aptiq_property_id") or "").strip()
     if not pid:
-        gaps.append(wc.gap("aptiq", "No aptiq_property_id on the company record"))
-        return None, None
-    if not os.environ.get("APT_IQ_DAILY_SHEET_URL"):
-        gaps.append(wc.gap("aptiq", "APT_IQ_DAILY_SHEET_URL is not set"))
+        gaps.append(wc.gap("aptiq", "No aptiq_property_id on the company record", source="aptiq"))
         return None, None
     try:
-        from services.fluency_ingestion import apt_iq_csv_client, apt_iq_reader
-        read = apt_iq_reader.read_property({
-            "aptiq_property_id": pid,
-            "aptiq_market_id": ctx.props.get("aptiq_market_id") or "",
-        })
-        loaded = apt_iq_csv_client._cache_loaded_at
+        rows, loaded = workspace_cache.aptiq_daily()
+    except workspace_cache.SourceUnavailable as exc:
+        gaps.append(wc.gap("aptiq", str(exc), source="aptiq"))
+        return None, None
     except Exception as exc:  # noqa: BLE001
         logger.warning("workspace aptiq read failed for %s: %s", ctx.company_id, exc)
-        gaps.append(wc.gap("aptiq", f"AptIQ daily export could not be read ({type(exc).__name__})"))
+        gaps.append(wc.gap("aptiq", f"AptIQ daily export could not be read ({type(exc).__name__})",
+                           source="aptiq"))
         return None, None
-    if not read.get("matched"):
-        gaps.append(wc.gap("aptiq", read.get("reason") or "No AptIQ row for this property"))
+    row = rows.get(pid)
+    if not row:
+        gaps.append(wc.gap("aptiq", f"Property ID {pid} not in the AptIQ daily export", source="aptiq"))
         return None, None
-    report_date = (read.get("raw") or {}).get(REPORT_DATE_COL)
-    return read, (wc.to_iso_ts(report_date) or (wc.to_iso_ts(loaded) if loaded else None))
+    from services.fluency_ingestion import apt_iq_reader
+    read = {
+        "matched": True,
+        "occupancy_pct": wc.to_float(apt_iq_reader._resolve_col(row, "occupancy_pct")),
+        "available_units": wc.to_int(apt_iq_reader._resolve_col(row, "available_units")),
+        "exposure_90d_pct": wc.to_float(apt_iq_reader._resolve_col(row, "exposure_90d_pct")),
+        "raw": row,
+    }
+    as_of = wc.to_iso_ts(row.get(REPORT_DATE_COL)) or loaded
+    return read, as_of
 
 
 def spend(company_id: str, gaps: list, field: str = "monthly_plan") -> tuple[dict | None, str | None]:
+    from skills import workspace_cache
     try:
-        import spend_sheet
-        row = spend_sheet.get_company_monthly_spend(company_id)
-        cached = spend_sheet._cache.get("data")
-        as_of = wc.to_iso_ts(cached[0]) if cached else None
+        row, as_of = workspace_cache.monthly_spend(company_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("workspace spend read failed for %s: %s", company_id, exc)
-        gaps.append(wc.gap(field, f"Spend sheet could not be read ({type(exc).__name__})"))
+        gaps.append(wc.gap(field, f"Spend sheet could not be read ({type(exc).__name__})",
+                           source=SPEND_SOURCE))
         return None, None
-    if not row.get("deal_id") and not row.get("by_sku"):
-        gaps.append(wc.gap(field, "Property is not in the spend sheet (no deal line items)"))
+    if not row.get("deal_id") and not row.get("by_sku") and not row.get("zero_skus"):
+        gaps.append(wc.gap(field, "Property is not in the spend sheet (no deal line items)",
+                           source=SPEND_SOURCE))
         return None, None
     return row, as_of
 
@@ -158,21 +178,35 @@ def channel_amounts(by_sku: dict) -> dict:
     return {k: round(v, 2) for k, v in out.items() if v > 0}
 
 
+def _channel_of(sku: str) -> str:
+    from spend_sheet_to_channels import SKU_TO_CHANNEL
+    return SKU_TO_CHANNEL.get(sku, "fees")
+
+
 # ── /property ────────────────────────────────────────────────────────────────
 
 def _brief(ctx: wi.PropertyContext, gaps: list, internal: bool) -> dict:
     import community_brief
 
+    empty = {"text": None, "curated": False, "edited_by": None, "edited_at": None, "source": None}
     field = next((f for _, fields in community_brief.SECTIONS for f in fields if f.key == "romance"), None)
-    empty = {"text": None, "curated": False, "edited_by": None, "edited_at": None}
-    if field is None:
-        gaps.append(wc.gap("brief", "Community brief has no romance field"))
-        return empty
-    text = community_brief.resolve_value(ctx.props, field.hs_resolved, field.hs_override) or None
-    curated = bool(field.hs_override and community_brief._nonblank(ctx.props.get(field.hs_override)))
+    text, curated, source = None, False, None
+    if field is not None:
+        text = community_brief.resolve_value(ctx.props, field.hs_resolved, field.hs_override) or None
+        curated = bool(text and field.hs_override
+                       and community_brief._nonblank(ctx.props.get(field.hs_override)))
+        source = (field.hs_override or field.hs_resolved) if text else None
     if not text:
-        gaps.append(wc.gap("brief", "No brief paragraph on the property yet"))
+        parts = [str(ctx.props.get(k)).strip() for k in BRIEF_COMPOSE_FIELDS
+                 if community_brief._nonblank(ctx.props.get(k))]
+        if parts:
+            text, curated, source = " ".join(parts), False, "composed"
+    if not text:
+        gaps.append(wc.gap("brief.text",
+                           "No romance paragraph and none of the unique / voice / selling-point "
+                           "fields are filled in", source="hubspot_company"))
         return empty
+
     edited_by = edited_at = None
     if curated:
         try:
@@ -186,47 +220,70 @@ def _brief(ctx: wi.PropertyContext, gaps: list, internal: bool) -> dict:
             edited_by = edit.get("edited_by") or None
             edited_at = wc.to_iso_date(edit.get("edited_at"))
         else:
-            gaps.append(wc.gap("brief.edited_by", "No audit row for the last brief edit"))
-    flags = wc.fair_housing_flags(text)
-    if flags:
-        gaps.append(wc.gap("brief.text", f"Brief held for Fair Housing review: {', '.join(flags)}"))
-        if not internal:
-            text = None
-    return {"text": text, "curated": curated, "edited_by": edited_by, "edited_at": edited_at}
+            gaps.append(wc.gap("brief.edited_by", "No audit row for the last brief edit", internal=True))
+
+    out = {"text": text, "curated": curated, "edited_by": edited_by, "edited_at": edited_at,
+           "source": source}
+    review = wc.fair_housing_review(text)
+    if review:
+        logger.info("workspace fair housing review: brief %s severity=%s terms=%s",
+                    ctx.company_id, review["severity"], review["terms"])
+        gaps.append(wc.gap("brief.text",
+                           f"{review['severity'].capitalize()} severity Fair Housing match in the brief "
+                           f"({', '.join(review['terms'])})", internal=True))
+        if internal:
+            out["fair_housing_review"] = review
+        elif review["severity"] == "high":
+            out["text"] = None
+    return out
 
 
 def _floorplans(ctx: wi.PropertyContext, gaps: list) -> list:
+    from skills import workspace_cache
+
     pid = str(ctx.props.get("aptiq_property_id") or "").strip()
     if not pid:
         return []
-    if not os.environ.get("APT_IQ_FLOOR_PLAN_SHEET_URL"):
-        gaps.append(wc.gap("floorplans", "APT_IQ_FLOOR_PLAN_SHEET_URL is not set"))
-        return []
     try:
-        from services.fluency_ingestion import apt_iq_csv_client, apt_iq_reader
-        plans = apt_iq_reader.read_floor_plans(pid)
-        raw_rows = apt_iq_csv_client.get_floor_plan_rows(pid)
-        loaded = apt_iq_csv_client._fp_loaded_at
+        by_pid, loaded = workspace_cache.aptiq_floor_plans()
+    except workspace_cache.SourceUnavailable as exc:
+        gaps.append(wc.gap("floorplans", str(exc), source="aptiq_floor_plans"))
+        return []
     except Exception as exc:  # noqa: BLE001
         logger.warning("workspace floor plans failed for %s: %s", ctx.company_id, exc)
-        gaps.append(wc.gap("floorplans", f"AptIQ floor-plan export could not be read ({type(exc).__name__})"))
+        gaps.append(wc.gap("floorplans", f"AptIQ floor-plan export could not be read ({type(exc).__name__})",
+                           source="aptiq_floor_plans"))
         return []
-    if not plans:
-        gaps.append(wc.gap("floorplans", "No rows for this property in the AptIQ floor-plan export"))
-    # read_floor_plans normalizes and dedups but drops Days on Market and the
-    # report date, so those come from the raw rows, first row per plan name.
-    days_on_market: dict = {}
-    report_date = None
+    raw_rows = by_pid.get(pid) or []
+    if not raw_rows:
+        gaps.append(wc.gap("floorplans", "No rows for this property in the AptIQ floor-plan export",
+                           source="aptiq_floor_plans"))
+        return []
+    # Same normalization as apt_iq_reader.read_floor_plans, plus the two columns
+    # it drops: Days on Market and the report date.
+    out, seen, report_date = [], set(), None
     for row in raw_rows:
-        name = (row.get("Floor Plan Name") or "").strip()
-        if name and name not in days_on_market:
-            days_on_market[name] = wc.to_int(row.get("Days on Market"))
         report_date = report_date or row.get(REPORT_DATE_COL)
-    as_of = wc.to_iso_ts(report_date) or (wc.to_iso_ts(loaded) if loaded else None)
-    return [{"code": pl.get("name"), "beds": pl.get("beds"), "sqft": pl.get("sqft"),
-             "available": pl.get("available"), "days_on_market": days_on_market.get(pl.get("name")),
-             "source": "aptiq_floor_plans", "as_of": as_of}
-            for pl in plans]
+        name = (row.get("Floor Plan Name") or "").strip()
+        if not name:
+            continue
+        plan = {
+            "code": name,
+            "beds": wc.to_int(row.get("Beds")),
+            "sqft": wc.to_int(row.get("Avg Sq Ft")),
+            "available": wc.to_int(row.get("Available Units")),
+            "days_on_market": wc.to_int(row.get("Days on Market")),
+        }
+        ident = (name, plan["beds"], wc.to_float(row.get("Baths")), plan["sqft"])
+        if ident in seen:
+            continue
+        seen.add(ident)
+        out.append(plan)
+    as_of = wc.to_iso_ts(report_date) or loaded
+    out.sort(key=lambda r: ((r["beds"] if r["beds"] is not None else 99), r["code"]))
+    for plan in out:
+        plan.update({"source": "aptiq_floor_plans", "as_of": as_of})
+    return out
 
 
 def _people(ctx: wi.PropertyContext, gaps: list) -> list:
@@ -280,6 +337,13 @@ def _connections(ctx: wi.PropertyContext, aptiq: dict | None, aptiq_as_of: str |
     return out
 
 
+def hubspot_company_url(company_id: str) -> str | None:
+    from config import HUBSPOT_PORTAL_ID
+    if not HUBSPOT_PORTAL_ID or not company_id:
+        return None
+    return f"https://app.hubspot.com/contacts/{HUBSPOT_PORTAL_ID}/record/0-2/{company_id}"
+
+
 def build_property(ctx: wi.PropertyContext, *, internal: bool = True) -> dict:
     p = ctx.props
     gaps: list = []
@@ -296,17 +360,26 @@ def build_property(ctx: wi.PropertyContext, *, internal: bool = True) -> dict:
     if not managed:
         gaps.append(wc.gap("managed_since", "No management start date on the company record"))
 
+    hubspot_url = hubspot_company_url(ctx.company_id) if internal else None
+    if internal and not hubspot_url:
+        gaps.append(wc.gap("hubspot_url", "HUBSPOT_PORTAL_ID is not configured", internal=True))
+    gaps.append(wc.gap("brief_edit_url",
+                       "The brief editor opens by one-time token; there is no stable edit URL to link",
+                       internal=True))
+
     aptiq, aptiq_as_of = aptiq_snapshot(ctx, gaps)
     return {
         "name": ctx.name or None,
         "address": address,
         "domain": domain.rstrip("/") or None,
         "managed_since": managed[:7] if managed else None,
+        "hubspot_url": hubspot_url,
+        "brief_edit_url": None,
         "brief": _brief(ctx, gaps, internal),
         "floorplans": _floorplans(ctx, gaps),
         "people": _people(ctx, gaps),
         "connections": _connections(ctx, aptiq, aptiq_as_of, gaps),
-        "gaps": wc.public(gaps),
+        "gaps": wc.gaps_for(gaps, internal),
     }
 
 
@@ -315,7 +388,8 @@ def build_property(ctx: wi.PropertyContext, *, internal: bool = True) -> dict:
 RANGES = (30, 90, 365)
 
 
-def build_performance(ctx: wi.PropertyContext, *, range_days: int = 30) -> dict:
+def build_performance(ctx: wi.PropertyContext, *, range_days: int = 30,
+                      internal: bool = True) -> dict:
     p = ctx.props
     gaps: list = []
     aptiq, as_of = aptiq_snapshot(ctx, gaps)
@@ -330,18 +404,18 @@ def build_performance(ctx: wi.PropertyContext, *, range_days: int = 30) -> dict:
         target=wc.ratio(p.get("target_occupancy")),
     )
     if aptiq and occ is None:
-        gaps.append(wc.gap("occupied", "AptIQ row has no occupancy value"))
+        gaps.append(wc.gap("occupied", "AptIQ row has no occupancy value", source="aptiq"))
 
-    avail = wc.to_int(aptiq.get("available_units")) if aptiq else None
+    avail = aptiq.get("available_units") if aptiq else None
     available = wc.metric(avail, APTIQ_SOURCE, as_of, stale_90_plus=None)
     if aptiq and avail is None:
-        gaps.append(wc.gap("available_now", "AptIQ row has no available-units value"))
+        gaps.append(wc.gap("available_now", "AptIQ row has no available-units value", source="aptiq"))
     gaps.append(wc.gap("available_now.stale_90_plus",
-                       "AptIQ reports days on market per floor plan (see /property floorplans), "
-                       "not per unit, so units vacant 90+ days cannot be counted"))
+                       "AptIQ reports days on market per floor plan (see Property floor plans), "
+                       "not per unit, so units vacant 90+ days cannot be counted", source="aptiq"))
     gaps.append(wc.gap("coming_open_90d",
                        "AptIQ reports 90-day exposure as a percentage; no feed on main gives "
-                       "upcoming vacancies as unit counts by bedroom"))
+                       "upcoming vacancies as unit counts by bedroom", source="aptiq"))
     gaps.append(wc.gap("coming_by_week", "No feed on main gives upcoming vacancies by week"))
 
     row, spend_as_of = spend(ctx.company_id, gaps)
@@ -359,13 +433,17 @@ def build_performance(ctx: wi.PropertyContext, *, range_days: int = 30) -> dict:
         "coming_by_week": [],
         "monthly_plan": monthly_plan,
         "note": None,
-        "gaps": wc.public(gaps),
+        "gaps": wc.gaps_for(gaps, internal),
     }
 
 
 # ── /plan ────────────────────────────────────────────────────────────────────
 
-def build_plan(ctx: wi.PropertyContext) -> dict:
+def build_plan(ctx: wi.PropertyContext, *, internal: bool = True) -> dict:
+    """Plan & Spend. Channel `status`: `running` when its line items total more
+    than $0, `ended` when every line item in it is at $0 (cancellations keep
+    their SKUs at $0 under the IO process). `pending` and `paused` need a signal
+    no source carries per channel; open deals are counted in `pending_changes`."""
     gaps: list = []
     row, as_of = spend(ctx.company_id, gaps, field="monthly_total")
     channels = []
@@ -373,21 +451,25 @@ def build_plan(ctx: wi.PropertyContext) -> dict:
     if row:
         total = row.get("total")
         amounts = channel_amounts(row.get("by_sku") or {})
+        ended = {_channel_of(sku) for sku in row.get("zero_skus") or []} - set(amounts)
         order = list(CHANNEL_LABELS)
-        for key in sorted(amounts, key=lambda k: (order.index(k) if k in order else 99)):
-            amt = amounts[key]
+        for key in sorted(set(amounts) | ended, key=lambda k: (order.index(k) if k in order else 99)):
+            amt = amounts.get(key, 0.0)
             channels.append({
                 "channel": CHANNEL_LABELS.get(key, key),
                 "monthly": amt,
                 "share": round(amt / total, 4) if total else None,
                 "cost_per_lease": None,
                 "pointed_at": None,
-                "status": "active",
-                "status_note": None,
+                "status": "running" if amt > 0 else "ended",
+                "status_note": None if amt > 0 else "Line items at $0",
             })
         if channels:
             gaps.append(wc.gap("channels.cost_per_lease", "Cost per lease exists only inside the Red Light report PDF"))
             gaps.append(wc.gap("channels.pointed_at", "No feed on main says which floor plans a channel targets"))
+            gaps.append(wc.gap("channels.status",
+                               "Pending and paused are not tracked per channel; open deals are "
+                               "counted in pending_changes"))
 
     pending = None
     try:
@@ -399,11 +481,11 @@ def build_plan(ctx: wi.PropertyContext) -> dict:
 
     return {
         "monthly_total": total,
-        "channel_count": len(channels),
+        "channel_count": sum(1 for c in channels if c["status"] == "running"),
         "pending_changes": pending,
         "channels": channels,
         "caveat": PLAN_CAVEAT,
         "source": SPEND_SOURCE,
         "as_of": as_of,
-        "gaps": wc.public(gaps),
+        "gaps": wc.gaps_for(gaps, internal),
     }

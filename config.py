@@ -947,6 +947,11 @@ WORKSPACE_SIGNED_LINKS_ENABLED = (
 )
 # HMAC-SHA256 secret for those links. Empty → links cannot be minted or verified.
 WORKSPACE_LINK_SECRET = os.getenv("WORKSPACE_LINK_SECRET", "")
+# Signed links are read-only by default. Only when this is true does a link also
+# count as a verified identity for decisions, requests, start-work and undo.
+WORKSPACE_SIGNED_LINKS_CAN_DECIDE = (
+    os.getenv("WORKSPACE_SIGNED_LINKS_CAN_DECIDE", "").strip().lower() in ("1", "true", "yes")
+)
 # Hard ceiling on a link's lifetime, in days.
 WORKSPACE_LINK_MAX_DAYS = 7
 

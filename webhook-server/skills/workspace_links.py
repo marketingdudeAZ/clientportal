@@ -9,11 +9,14 @@ Two jobs, both about whether a request to /api/workspace/* may proceed:
 2. Signed preview links for internal demos. A link is an HMAC-SHA256 token over
    (email, expiry), minted by `scripts/workspace_link.py` and sent by the page on
    every API call as the `X-Workspace-Link` header. It is honored only when
-   `WORKSPACE_SIGNED_LINKS_ENABLED` is true, only for emails `feature_access`
-   resolves to the internal role, and never for longer than 7 days. A verified
-   link sets the same two request-environ keys the Clerk hook sets, so every gate
-   downstream (`current_portal_email`, `identity_is_verified`) treats it exactly
-   like a verified sign-in.
+   `WORKSPACE_SIGNED_LINKS_ENABLED` is true, only for `@rpmliving.com` emails
+   that `feature_access` also resolves to the internal role, and never for longer
+   than 7 days.
+
+   Links are READ-ONLY (Phase 2 amendment 2). A verified link sets the caller's
+   email and `workspace.signed_link`; it sets `portal.identity_verified` only
+   when `WORKSPACE_SIGNED_LINKS_CAN_DECIDE=true`. Decisions, requests,
+   start-work and undo therefore still need a Clerk session by default.
 
 Token format: ``v1.<payload>.<signature>``
     payload   = base64url(JSON {"email": "...", "exp": <unix seconds>})
@@ -32,6 +35,7 @@ import os
 import time
 
 HEADER = "X-Workspace-Link"
+SIGNED_LINK_ENVIRON = "workspace.signed_link"
 MAX_DAYS = 7
 _VERSION = "v1"
 # A token whose expiry sits further out than MAX_DAYS was not minted by our
@@ -50,6 +54,11 @@ def workspace_enabled() -> bool:
 def signed_links_enabled() -> bool:
     """WORKSPACE_SIGNED_LINKS_ENABLED, read now. Off → the header is ignored."""
     return os.environ.get("WORKSPACE_SIGNED_LINKS_ENABLED", "").strip().lower() in _TRUE
+
+
+def signed_links_can_decide() -> bool:
+    """WORKSPACE_SIGNED_LINKS_CAN_DECIDE, read now. Off (default) → links are read-only."""
+    return os.environ.get("WORKSPACE_SIGNED_LINKS_CAN_DECIDE", "").strip().lower() in _TRUE
 
 
 class LinkError(Exception):
@@ -75,9 +84,11 @@ def _sign(payload: str, key: bytes) -> str:
     return _b64(hmac.new(key, f"{_VERSION}.{payload}".encode("ascii"), hashlib.sha256).digest())
 
 
-def _is_internal(email: str) -> bool:
+def _eligible(email: str) -> bool:
+    """An @rpmliving.com address that feature_access also calls internal."""
+    from config import RPM_EMAIL_DOMAIN
     from feature_access import ROLE_INTERNAL, role_for
-    return role_for(email) == ROLE_INTERNAL
+    return email.endswith("@" + RPM_EMAIL_DOMAIN) and role_for(email) == ROLE_INTERNAL
 
 
 def mint(email: str, days: float = MAX_DAYS, *, now: float | None = None,
@@ -88,8 +99,8 @@ def mint(email: str, days: float = MAX_DAYS, *, now: float | None = None,
         raise ValueError("a valid email is required")
     if not (0 < float(days) <= MAX_DAYS):
         raise ValueError(f"days must be more than 0 and at most {MAX_DAYS}")
-    if not _is_internal(email):
-        raise ValueError("signed links are only for RPM internal emails")
+    if not _eligible(email):
+        raise ValueError("signed links are only for RPM internal @rpmliving.com emails")
     try:
         key = _secret(secret)
     except LinkError as exc:
@@ -120,8 +131,8 @@ def verify(token: str, *, now: float | None = None, secret: str | None = None) -
         raise LinkError("Link expired")
     if exp - t > MAX_DAYS * 86400 + _SKEW_SECONDS:
         raise LinkError(f"Link lifetime exceeds {MAX_DAYS} days")
-    if not _is_internal(email):
-        raise LinkError("Link is not for an internal user")
+    if not _eligible(email):
+        raise LinkError("Link is not for an internal @rpmliving.com user")
     return email
 
 
@@ -146,5 +157,7 @@ def apply_to_request():
     except LinkError as exc:
         return jsonify({"error": "Invalid preview link", "detail": str(exc)}), 401
     request.environ["HTTP_X_PORTAL_EMAIL"] = email
-    request.environ["portal.identity_verified"] = True
+    request.environ[SIGNED_LINK_ENVIRON] = True
+    if signed_links_can_decide():
+        request.environ["portal.identity_verified"] = True
     return None
