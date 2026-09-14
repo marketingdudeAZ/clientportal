@@ -549,3 +549,45 @@ Recorded by the API branch (`feature/portal-workspace-api`). Every change is add
     - Undated items group under `this_week`.
 14. **Decisions on sources with no dismissed state.** `not_now` on a content brief or video variant writes the loop event only. The workspace reads its own `workspace_decision` events back to show the item as done. That overlay needs BigQuery; without it there's a `trail` gap.
 15. **Loop recommendation ids are per forecast run.** `loop_rec:<16-hex>` hashes `forecast_id` plus the recommendation, so the same recommendation gets a new id when the next forecast runs.
+
+### Phase 2 and v3 (API)
+
+16. **Gap entries are `{message, field?, source?}`** everywhere (amendment 1). This supersedes item 1. Gaps about internal sources are removed for client-role callers.
+17. **Preview as client** uses the request header `X-Workspace-Preview-Role: client`. It is honored only for internal callers. Every read is rendered with client-role filtering; every POST returns 403 `preview_read_only`; Portfolio and Signals return 403. `/me` returns `role: "client"`, `can_decide: false` and `preview_as: "client"`. The header is in the CORS allow-list.
+18. **Signed links are read-only by default.** `/me` adds `can_decide` and `signed_link`. `WORKSPACE_SIGNED_LINKS_CAN_DECIDE=true` makes a link a verified identity. Links are honored only for `@rpmliving.com` emails that also resolve to the internal role.
+19. **Items.**
+    - `internal_only` is removed.
+    - `trail[]` and `notes[]` entries carry `visibility`.
+    - `comments_count` counts visible notes: it is `0`, never `null`.
+    - `fair_housing_review` (`{severity, terms}`) is added for internal callers only. A high-severity match replaces the title with a neutral one and nulls `found` / `expect` / `if_skip` for clients.
+    - `evidence` is populated only for onboarding checks.
+    - `sparkline` is always `null`: no per-item series exists.
+20. **Work** adds `summary.needs_approval`, the badge count. **Client view** drops `hidden_open_count`. `changing[].date` is always `null` with a gap: no source records a planned go-live date. Rows add `item_id`.
+21. **Decision response** adds:
+    - `record`: null unless the property has earlier decisions on the same source; `threshold` is always null.
+    - `undo {available, until, reason}`.
+    - `in_motion[].note` and `in_motion[].action {label, href}`. Links exist for a created HubSpot deal (when `HUBSPOT_PORTAL_ID` is set) and a ClickUp task.
+
+    The `workspace_decision` event payload adds `requires_signature` and `title`.
+22. **Undo** returns `{item, undone: true}`.
+    - Undoable: not-now on Red Light cards, call prep, content briefs, video variants and profile proposals; both actions on forecast recommendations.
+    - Approvals that created a deal, a ClickUp task, an asset-library row or a profile write return 409 `{error: "not_undoable", reason}`. So does anything past 10 minutes or with no recorded decision.
+    - A caller who is not the original decider gets 403.
+23. **Portfolio** adds `view`, `scope_label`, `page`, `page_size`, `next_page` and `top_item.needs_approval`. With `view=all`, `top_item` is `null` for quiet properties.
+24. **Property** adds `hubspot_url` (internal callers only, needs `HUBSPOT_PORTAL_ID`), and `brief.source` (`fluency_romance` or `composed`). `brief_edit_url` is always `null`: the editor opens by one-time token.
+25. **Plan** channel `status` is `running`, or `ended` when every line item in the channel is at $0. `pending` and `paused` aren't tracked per channel.
+26. **Signals** add `change.source`. The `data_stale` signal for the Red Light run date carries a `:red_light` suffix on its id, so it stays distinct from the AptIQ one. Start-work returns 201 `{work_item_id, clickup_task_id}`.
+27. **Requests.**
+    - Draft tickets add `team` (the label of the matching portal ticket type) and file under a fixed category-to-type map (creative/listing → Ad Updates; paid/seo → Digital Marketing Review; web/reputation/other → General Ticket).
+    - A high-severity Fair Housing match in the request text returns 400 `fair_housing`, and the model is never called.
+    - Filing goes through the existing portal ticket gate, which by default admits RPM staff only.
+28. **Search** results are ranked in Python. Internal callers search every managed property name, and property-resolver lookups apply only to numeric ids. Work items and reports need `company_id` for internal callers.
+29. **v3 screens.**
+    - `health_tiles[]` and `properties[]` add `source` / `health_source` / `units_source`. The dashboard adds `lens`, `kpi_order` and `scope_label`. `loop_status.running` is `null` when loop events can't be read.
+    - Approvals: `approved_this_month` may be `null`; pacing interrupts add `signal_id`; `primary_action` adds `creates`, `href` and `note`; `can_edit` is `false`.
+    - Property overview adds `objective_reason`, `units_source`, `findings[].item_id`, `loop[].item_id`, and `exposure_forecast.basis` (the months come from AptIQ exposure windows, not `forecasting.py`).
+    - Visibility: `engines[].queries_hit` / `queries_total` are `null` on the ai_mentions fallback; `citation_sources[]` adds `share_source`; `change` adds `source`.
+    - Creative `assets[]` add `type` and `file_url`.
+    - Media plan channels add `source`, and months add `source` when set.
+    - Value rows' `decided_by` adds `"team"` for a colleague's decision.
+    - `POST /visibility/create-brief` (202) and `POST /media-plan/regenerate` (201) are added.
