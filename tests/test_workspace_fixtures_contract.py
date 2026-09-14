@@ -459,10 +459,14 @@ def test_content():
     check(d, {"counts": dict, "rows": list, "impact": list}, "content")
     check(d["counts"], {"recommendations": int, "published": int, "in_review": int}, "content.counts")
     for r in d["rows"]:
-        check(r, {"id": str, "priority": str, "type": str, "title": str, "gap_source": OPT_STR, "status": str,
-                  "published_at": OPT_STR, "item_id": OPT_STR}, "content.rows[]")
+        check(r, {"id": str, "priority": str, "type": str, "title": str, "keyword": OPT_STR, "gap_source": OPT_STR, "status": str,
+                  "published_at": OPT_STR, "item_id": OPT_STR, "why": (dict, type(None)), "for_whom": (dict, type(None)),
+                  "approving_does": list}, "content.rows[]")
         assert r["priority"] in {"high", "med", "low", "done"}
-        assert r["status"] in {"draft_ready", "in_review", "not_started", "published"}
+        # Round 4: a row exists only once its draft does.
+        assert r["status"] in {"draft_ready", "in_review", "published"}
+        if r["status"] != "draft_ready":
+            assert r["approving_does"] == []
     check_gap_entries(d, "content")
 
 

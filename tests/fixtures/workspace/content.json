@@ -1,15 +1,104 @@
 {
   "as_of": "2026-09-14T13:04:00Z",
-  "counts": {"recommendations": 3, "published": 1, "in_review": 1},
+  "counts": {
+    "recommendations": 1,
+    "published": 1,
+    "in_review": 1
+  },
   "rows": [
-    {"id": "brief:77-1", "priority": "high", "type": "FAQ page", "title": "Pet policy and breed restrictions", "gap_source": "Perplexity (0 citations, 4 queries)", "status": "draft_ready", "published_at": null, "item_id": "content_brief:77"},
-    {"id": "brief:77-2", "priority": "med", "type": "FAQ page", "title": "Move-in costs and application fees", "gap_source": "ChatGPT (1 of 6 queries cite outdated fees)", "status": "in_review", "published_at": null, "item_id": null},
-    {"id": "brief:79", "priority": "med", "type": "Schema", "title": "Add floorplan structured data", "gap_source": "Google AI (responds to structured data)", "status": "not_started", "published_at": null, "item_id": null},
-    {"id": "brief:80", "priority": "low", "type": "Guide", "title": "Parks, trails and commute times nearby", "gap_source": "Claude (2 of 4 queries, weak citation)", "status": "not_started", "published_at": null, "item_id": null},
-    {"id": "brief:71", "priority": "done", "type": "FAQ page", "title": "Parking options and garage availability", "gap_source": "Perplexity (was 0, now 3 of 4 queries)", "status": "published", "published_at": "2026-07-20", "item_id": null}
+    {
+      "id": "row:content_brief:00214",
+      "priority": "high",
+      "type": "FAQ page",
+      "title": "FAQ page: pet policy and breed restrictions at LYV Broadway",
+      "keyword": "pet friendly apartments carrollton tx",
+      "gap_source": "Perplexity (0 of 4 questions)",
+      "status": "draft_ready",
+      "published_at": null,
+      "item_id": "content_brief:00214",
+      "why": {
+        "text": "Renters ask AI engines about pets before they tour, and nothing on LYV Broadway's site answers it.",
+        "receipts": [
+          {
+            "label": "0 of 4 Perplexity questions",
+            "source": "geo_brand_mentions",
+            "as_of": "2026-09-14T08:14:00Z"
+          }
+        ]
+      },
+      "for_whom": {
+        "text": "Renters with pets comparing apartments in Carrollton.",
+        "questions": [
+          "Does LYV Broadway allow large dogs?",
+          "pet friendly apartments carrollton tx",
+          "lyv broadway pet rent and deposit",
+          "breed restrictions apartments carrollton"
+        ]
+      },
+      "approving_does": [
+        {
+          "label": "RPM Digital publishes the FAQ to LYV Broadway's site",
+          "owner": "RPM Digital",
+          "when": "Within 5 business days"
+        },
+        {
+          "label": "We re-check the AI answers about LYV Broadway",
+          "owner": "RPM Digital",
+          "when": "30 days after publishing"
+        }
+      ]
+    },
+    {
+      "id": "row:content_brief:00216",
+      "priority": "med",
+      "type": "FAQ page",
+      "title": "Move-in costs and application fees at LYV Broadway",
+      "keyword": "what does it cost to move into lyv broadway",
+      "gap_source": "ChatGPT (1 of 6 answers cite outdated fees)",
+      "status": "in_review",
+      "published_at": null,
+      "item_id": "content_brief:00216",
+      "why": {
+        "text": "Renters ask this before they tour LYV Broadway, and the old answer was missing or out of date.",
+        "receipts": []
+      },
+      "for_whom": {
+        "text": "Renters comparing apartments in Carrollton.",
+        "questions": [
+          "what does it cost to move into lyv broadway",
+          "application fee apartments carrollton"
+        ]
+      },
+      "approving_does": []
+    },
+    {
+      "id": "row:content_brief:00217",
+      "priority": "done",
+      "type": "FAQ page",
+      "title": "Parking and garage options at LYV Broadway",
+      "keyword": "does lyv broadway have covered parking",
+      "gap_source": "Perplexity (was 0, now 3 of 4 questions)",
+      "status": "published",
+      "published_at": "2026-07-20",
+      "item_id": "content_brief:00217",
+      "why": {
+        "text": "Renters ask this before they tour LYV Broadway, and the old answer was missing or out of date.",
+        "receipts": []
+      },
+      "for_whom": {
+        "text": "Renters comparing apartments in Carrollton.",
+        "questions": [
+          "does lyv broadway have covered parking",
+          "apartments with garage parking carrollton"
+        ]
+      },
+      "approving_does": []
+    }
   ],
   "impact": [
-    {"text": "Parking FAQ: Perplexity citations went from 0 to 3 in 14 days."}
+    {
+      "text": "Parking FAQ at LYV Broadway: Perplexity citations went from 0 to 3 in 14 days."
+    }
   ],
   "gaps": []
 }

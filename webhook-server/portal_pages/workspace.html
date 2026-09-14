@@ -1870,25 +1870,28 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 
   /* ── Content (E4U-1) ─────────────────────────────────────────────── */
   var PRIO = { high: ['High', 'critical'], med: ['Med', 'attention'], low: ['Low', 'healthy'] };
-  var CSTATUS = { draft_ready: ['Draft ready', 'brand'], drafted: ['Drafted', 'brand'], in_review: ['In review', 'attention'], not_started: ['Not started', 'new'], published: ['Published', 'healthy'] };
+  // Content rows exist once a draft does (Round 4): draft ready, in review or published. Visibility's What we're writing says drafted.
+  var CSTATUS = { draft_ready: ['Draft ready', 'brand'], drafted: ['Drafted', 'brand'], in_review: ['In review', 'attention'], published: ['Published', 'healthy'] };
   function screenContent() {
     var c = company();
     renderTop('Content', c ? c.name : '');
     guard(api('/api/workspace/content?' + cq()), 'content').then(function (r) {
       if (!r) return;
       var d = r.data || {}, k = d.counts || {};
-      var firstHigh = (d.rows || []).map(function (x) { return x.priority; }).indexOf('high');
-      var rows = (d.rows || []).map(function (x, i) {
-        var p = PRIO[x.priority], s = CSTATUS[x.status] || [x.status, 'new'];
+      var list = (d.rows || []).filter(function (x) { return CSTATUS[x.status]; });
+      var firstHigh = list.map(function (x) { return x.priority; }).indexOf('high');
+      var rows = list.map(function (x, i) {
+        var p = PRIO[x.priority] || PRIO.low, s = CSTATUS[x.status];
         var prio = x.priority === 'done' ? '<span class="prio t-healthy">' + ic(I.check, 14) + '<span class="sr-only">Done</span></span>' : '<span class="prio t-' + p[1] + '"><span class="dot ' + p[1] + '" aria-hidden="true"></span>' + p[0] + '</span>';
-        var href = x.item_id ? '#/item/' + encodeURIComponent(x.item_id) : null;
-        return '<tr class="' + (i === firstHigh ? 'top ' : '') + (href ? 'rowlink' : '') + '"' + (href ? ' data-href="' + href + '"' : '') + '><td>' + prio + '</td><td class="support">' + esc(x.type) + '</td>' +
-          '<td class="name">' + (href ? '<a href="' + href + '">' + esc(x.title) + '</a>' : esc(x.title)) + '</td><td class="support">' + esc(x.gap_source || '') + '</td>' +
-          '<td><span class="pill ' + s[1] + '">' + esc(s[0] + (x.status === 'published' && x.published_at ? ' ' + mdy(x.published_at) : '')) + '</span></td></tr>';
+        return '<tr' + (i === firstHigh ? ' class="top"' : '') + ' data-row="' + esc(x.item_id || x.id) + '"><td>' + prio + '</td><td class="support">' + esc(x.type || '') + '</td>' +
+          '<td class="name">' + esc(x.title) + (has(x.keyword) ? '<span class="fine" style="display:block">Answers “' + esc(x.keyword) + '”</span>' : '') + '</td><td class="support">' + esc(x.gap_source || '') + '</td>' +
+          '<td><span class="pill ' + s[1] + '">' + esc(s[0] + (x.status === 'published' && x.published_at ? ' ' + mdy(x.published_at) : '')) + '</span></td>' +
+          '<td class="acts">' + (x.item_id ? reviewBtn(x.item_id, state.companyId, 'btn xs outline', 'Review') : '') + '</td></tr>';
       }).join('');
       setView('<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Content engine</h1><p class="support">' +
-        esc(num(k.recommendations) + ' recommendations · ' + num(k.published) + ' published · ' + num(k.in_review) + ' in review') + '</p></div></div>' +
-        (rows ? '<div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Priority</th><th scope="col">Type</th><th scope="col">Title</th><th scope="col">Gap source</th><th scope="col">Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="support">No content recommendations yet.</p>') +
+        esc(num(k.recommendations) + ' ' + plural(k.recommendations, 'draft') + ' ready · ' + num(k.in_review) + ' in review · ' + num(k.published) + ' published') + '</p>' +
+        '<p class="support">Every row has a draft. Review shows why we wrote it, who it’s for, what approving does and the draft itself.</p></div></div>' +
+        (rows ? '<div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Priority</th><th scope="col">Type</th><th scope="col">Title</th><th scope="col">Gap source</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Review</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="support">No drafts yet. A row appears here once its draft exists.</p>') +
         (has(d.impact) ? '<section class="sec"><h2 class="h-sec">Published content impact</h2>' + d.impact.map(function (i) { return '<p>' + esc(i.text) + '</p>'; }).join('') + '</section>' : '') +
         gapsLine(d.gaps) + '</div>');
     });

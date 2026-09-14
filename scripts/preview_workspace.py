@@ -301,8 +301,12 @@ def content(company_id: str) -> dict:
             continue
         meta = it.get("_content") or {"status": "draft_ready", "type": "FAQ page", "gap_source": "Perplexity (0 of 4 questions)", "published_at": None}
         prio = "done" if meta["status"] == "published" else ("high" if meta["status"] == "draft_ready" else "med")
-        rows.append({"id": f"row:{it['id']}", "priority": prio, "type": meta["type"], "title": it["title"], "gap_source": meta["gap_source"],
-                     "status": meta["status"], "published_at": meta["published_at"], "item_id": it["id"]})
+        fw = it["for_whom"] or {}
+        keyword = next((q for q in fw.get("questions", []) if not q.endswith("?")), None)
+        rows.append({"id": f"row:{it['id']}", "priority": prio, "type": meta["type"], "title": it["title"], "keyword": keyword,
+                     "gap_source": meta["gap_source"], "status": meta["status"], "published_at": meta["published_at"], "item_id": it["id"],
+                     "why": it["why"], "for_whom": it["for_whom"],
+                     "approving_does": it["approving_does"] if meta["status"] == "draft_ready" else []})
     counts = {s: sum(1 for r in rows if r["status"] == s) for s in ("draft_ready", "published", "in_review")}
     impact = [{"text": f"Parking FAQ at {p['name']}: Perplexity citations went from 0 to 3 in 14 days."}] if any(r["status"] == "published" for r in rows) else []
     gaps = [] if rows else [{"message": f"No drafts yet for {p['name']}. Rows appear once a draft exists.", "field": "rows"}]
