@@ -1,0 +1,15 @@
+{
+  "as_of": "2026-09-14T13:04:00Z",
+  "counts": {"recommendations": 3, "published": 1, "in_review": 1},
+  "rows": [
+    {"id": "brief:77-1", "priority": "high", "type": "FAQ page", "title": "Pet policy and breed restrictions", "gap_source": "Perplexity (0 citations, 4 queries)", "status": "draft_ready", "published_at": null, "item_id": "content_brief:77"},
+    {"id": "brief:77-2", "priority": "med", "type": "FAQ page", "title": "Move-in costs and application fees", "gap_source": "ChatGPT (1 of 6 queries cite outdated fees)", "status": "in_review", "published_at": null, "item_id": null},
+    {"id": "brief:79", "priority": "med", "type": "Schema", "title": "Add floorplan structured data", "gap_source": "Google AI (responds to structured data)", "status": "not_started", "published_at": null, "item_id": null},
+    {"id": "brief:80", "priority": "low", "type": "Guide", "title": "Parks, trails and commute times nearby", "gap_source": "Claude (2 of 4 queries, weak citation)", "status": "not_started", "published_at": null, "item_id": null},
+    {"id": "brief:71", "priority": "done", "type": "FAQ page", "title": "Parking options and garage availability", "gap_source": "Perplexity (was 0, now 3 of 4 queries)", "status": "published", "published_at": "2026-07-20", "item_id": null}
+  ],
+  "impact": [
+    {"text": "Parking FAQ: Perplexity citations went from 0 to 3 in 14 days."}
+  ],
+  "gaps": []
+}

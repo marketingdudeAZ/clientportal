@@ -1,0 +1,105 @@
+{
+  "items": [
+    {
+      "id": "hubdb_rec:1031", "source": "hubdb_rec", "source_id": "1031",
+      "title": "Step down Apartments.com Premium to Standard at LYV Broadway",
+      "found": "LYV Broadway pays $4,300 a month for Apartments.com Premium. Hyly attributes 2 leases to it in the last six months.",
+      "expect": "Standard costs $1,900 a month. We expect lead volume to hold within 10%, and we check again after 60 days.",
+      "if_skip": "Premium renews on Oct 1 at the current rate. Nothing else changes.",
+      "receipts": [
+        {"label": "Premium package, $4,300/mo", "source": "hubspot_line_items", "as_of": "2026-09-14T12:30:00Z"},
+        {"label": "2 leases attributed in 6 months", "source": "hyly", "as_of": "2026-09-14T11:00:00Z"}
+      ],
+      "channels": ["ils"], "lens": "amplify", "start_by": "2026-09-20", "due": "2026-10-01", "status": "to_do",
+      "needs_approval": true, "client_visible": true, "owner": "Marcus J.", "comments_count": 1,
+      "cost_note": "Saves $28,800 a year",
+      "evidence": {"columns": ["", "Running now", "Proposed"], "rows": [["Monthly cost", "$4,300", "$1,900"], ["Package", "Premium", "Standard"], ["Leases, last 6 months", "2", "—"]], "more_count": 0},
+      "sparkline": null,
+      "steps": [
+        {"when": "2026-09-15", "label": "Email the Apartments.com rep to change the package", "channel": "ils", "kind": "person", "status": "pending"},
+        {"when": "2026-10-01", "label": "Standard package starts at renewal", "channel": "ils", "kind": "queued", "status": "pending"}
+      ],
+      "trail": [
+        {"at": "2026-09-14T08:12:00Z", "actor": "vendor audit", "text": "Opened", "visibility": "client"},
+        {"at": "2026-09-14T09:40:00Z", "actor": "Marcus J.", "text": "Checked the contract end date: Oct 1", "visibility": "internal"}
+      ],
+      "notes": [
+        {"at": "2026-09-14T09:41:00Z", "actor": "Marcus J.", "text": "The rep is new. Copy the regional manager on the email.", "visibility": "internal"}
+      ],
+      "fair_housing_review": false,
+      "actions": {"approve": true, "not_now": true}
+    },
+    {
+      "id": "hubdb_rec:1032", "source": "hubdb_rec", "source_id": "1032",
+      "title": "Add Zillow Promoted at Skye Reserve",
+      "found": "Skye Reserve has 52 units to lease in 90 days and no Zillow presence. Zillow sends 18% of cited listings in Tampa AI answers.",
+      "expect": "Zillow Promoted at $480 a month. We measure leads from it for 60 days before renewing.",
+      "if_skip": "Listings stay on Apartments.com and the website only.",
+      "receipts": [{"label": "52 units to lease, 90 days", "source": "forecasting", "as_of": "2026-09-14T08:00:00Z"}],
+      "channels": ["ils"], "lens": "amplify", "start_by": "2026-09-21", "due": null, "status": "to_do",
+      "needs_approval": true, "client_visible": true, "owner": "Dana R.", "comments_count": 0,
+      "cost_note": "Adds $480 a month — drafted for signature",
+      "evidence": null, "sparkline": null, "steps": [],
+      "trail": [{"at": "2026-09-14T08:15:00Z", "actor": "vendor audit", "text": "Opened", "visibility": "client"}],
+      "notes": [], "fair_housing_review": false,
+      "actions": {"approve": true, "not_now": true}
+    },
+    {
+      "id": "call_prep:2231", "source": "call_prep", "source_id": "2231",
+      "title": "Send the rate email to Apartments.com for Remi West Dallas",
+      "found": "Remi West Dallas pays $3,100 a month for Apartments.com Gold. Two nearby RPM properties pay $2,600 for the same package.",
+      "expect": "A $500 a month reduction at the October renewal.",
+      "if_skip": "The package renews at the current rate.",
+      "receipts": [{"label": "Gold package, $3,100/mo", "source": "hubspot_line_items", "as_of": "2026-09-14T12:30:00Z"}],
+      "channels": ["ils"], "lens": "amplify", "start_by": "2026-09-18", "due": "2026-10-15", "status": "to_do",
+      "needs_approval": true, "client_visible": true, "owner": "Marcus J.", "comments_count": 0,
+      "cost_note": "Est. $6,000 a year",
+      "evidence": null, "sparkline": null,
+      "steps": [{"when": "2026-09-18", "label": "RPM Digital sends the drafted email from your AM's address", "channel": "ils", "kind": "person", "status": "pending"}],
+      "trail": [{"at": "2026-09-14T12:46:00Z", "actor": "vendor audit", "text": "Drafted the email", "visibility": "client"}],
+      "notes": [], "fair_housing_review": false,
+      "actions": {"approve": true, "not_now": true}
+    },
+    {
+      "id": "content_brief:77", "source": "content_brief", "source_id": "77",
+      "title": "Three FAQ pages for The Bromley at Brighton Crossing",
+      "found": "Perplexity cited The Bromley in 0 of 4 questions about pet policy, move-in costs and parking.",
+      "expect": "Citations in Perplexity within 30 days of publishing.",
+      "if_skip": "The questions keep going to competitors' pages.",
+      "receipts": [{"label": "0 of 4 Perplexity questions", "source": "ai_mentions", "as_of": "2026-09-14T08:14:00Z"}],
+      "channels": ["website", "seo"], "lens": "tailor", "start_by": "2026-09-22", "due": null, "status": "to_do",
+      "needs_approval": true, "client_visible": true, "owner": "Dana R.", "comments_count": 0, "cost_note": null,
+      "evidence": {"columns": ["Question", "Engine", "Cited us"], "rows": [["Pet policy and breed rules", "Perplexity", "No"], ["Move-in costs and fees", "Perplexity", "No"], ["Parking and garages", "Perplexity", "No"]], "more_count": 1},
+      "sparkline": {"label": "AI visibility score, last 8 weeks", "points": [{"x": "2026-07-20", "y": 58}, {"x": "2026-07-27", "y": 59}, {"x": "2026-08-03", "y": 57}, {"x": "2026-08-10", "y": 60}, {"x": "2026-08-17", "y": 61}, {"x": "2026-08-24", "y": 60}, {"x": "2026-08-31", "y": 62}, {"x": "2026-09-07", "y": 64}], "highlight_index": 7},
+      "steps": [{"when": "2026-09-22", "label": "Draft three FAQ pages", "channel": "website", "kind": "auto", "status": "pending"}, {"when": "2026-09-25", "label": "Fair Housing screen and publish", "channel": "website", "kind": "queued", "status": "pending"}],
+      "trail": [{"at": "2026-09-14T08:14:00Z", "actor": "visibility audit", "text": "Opened", "visibility": "client"}],
+      "notes": [], "fair_housing_review": false,
+      "actions": {"approve": true, "not_now": true}
+    },
+    {
+      "id": "video_variant:14", "source": "video_variant", "source_id": "14",
+      "title": "Refresh the amenity photos at The Maddux at Shadowood",
+      "found": "Six of the eight amenity photos on the website are more than two years old. The pool photo shows furniture that's gone.",
+      "expect": null, "if_skip": null,
+      "receipts": [{"label": "6 of 8 photos older than 2 years", "source": "hubspot", "as_of": "2026-09-13T20:00:00Z"}],
+      "channels": ["creative", "website"], "lens": "express", "start_by": "2026-09-28", "due": null, "status": "to_do",
+      "needs_approval": true, "client_visible": true, "owner": "Creative Services", "comments_count": 0, "cost_note": null,
+      "evidence": null, "sparkline": null, "steps": null,
+      "trail": [{"at": "2026-09-13T20:00:00Z", "actor": "creative audit", "text": "Opened", "visibility": "client"}],
+      "notes": [], "fair_housing_review": false,
+      "actions": {"approve": true, "not_now": true}
+    },
+    {
+      "id": "content_brief:81", "source": "content_brief", "source_id": "81",
+      "title": "Read the flagged neighborhood description for Skye Reserve",
+      "found": "Our Fair Housing screen flagged one sentence in the new neighborhood page. It stays unpublished until a person reads it.",
+      "expect": null, "if_skip": "The page stays unpublished.",
+      "receipts": [], "channels": ["website"], "lens": "tailor", "start_by": "2026-09-14", "due": null, "status": "to_do",
+      "needs_approval": true, "client_visible": true, "owner": "Dana R.", "comments_count": 0, "cost_note": null,
+      "evidence": null, "sparkline": null, "steps": [],
+      "trail": [{"at": "2026-09-14T08:30:00Z", "actor": "Fair Housing screen", "text": "Held before publish", "visibility": "internal"}],
+      "notes": [], "fair_housing_review": true,
+      "actions": {"approve": true, "not_now": true}
+    }
+  ]
+}

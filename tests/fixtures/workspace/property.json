@@ -10,28 +10,112 @@
     "edited_at": "2026-08-12"
   },
   "floorplans": [
-    {"code": "A1", "beds": 1, "sqft": 712, "available": 7},
-    {"code": "A3", "beds": 1, "sqft": 780, "available": 6},
-    {"code": "B1", "beds": 2, "sqft": 1110, "available": 2},
-    {"code": "S1", "beds": 0, "sqft": 540, "available": 1},
-    {"code": "A2", "beds": 1, "sqft": 736, "available": 4},
-    {"code": "A4", "beds": 1, "sqft": 812, "available": 3},
-    {"code": "A5", "beds": 1, "sqft": 845, "available": 2},
-    {"code": "B2", "beds": 2, "sqft": 1164, "available": 1},
-    {"code": "B3", "beds": 2, "sqft": 1208, "available": 0},
-    {"code": "B4", "beds": 2, "sqft": 1265, "available": 0},
-    {"code": "C1", "beds": 3, "sqft": 1402, "available": 0},
-    {"code": "S2", "beds": 0, "sqft": 588, "available": 0}
+    {
+      "code": "A1",
+      "beds": 1,
+      "sqft": 712,
+      "available": 7
+    },
+    {
+      "code": "A3",
+      "beds": 1,
+      "sqft": 780,
+      "available": 6
+    },
+    {
+      "code": "B1",
+      "beds": 2,
+      "sqft": 1110,
+      "available": 2
+    },
+    {
+      "code": "S1",
+      "beds": 0,
+      "sqft": 540,
+      "available": 1
+    },
+    {
+      "code": "A2",
+      "beds": 1,
+      "sqft": 736,
+      "available": 4
+    },
+    {
+      "code": "A4",
+      "beds": 1,
+      "sqft": 812,
+      "available": 3
+    },
+    {
+      "code": "A5",
+      "beds": 1,
+      "sqft": 845,
+      "available": 2
+    },
+    {
+      "code": "B2",
+      "beds": 2,
+      "sqft": 1164,
+      "available": 1
+    },
+    {
+      "code": "B3",
+      "beds": 2,
+      "sqft": 1208,
+      "available": 0
+    },
+    {
+      "code": "B4",
+      "beds": 2,
+      "sqft": 1265,
+      "available": 0
+    },
+    {
+      "code": "C1",
+      "beds": 3,
+      "sqft": 1402,
+      "available": 0
+    },
+    {
+      "code": "S2",
+      "beds": 0,
+      "sqft": 588,
+      "available": 0
+    }
   ],
   "people": [
-    {"name": "Marcus Jennings", "role": "Account manager"},
-    {"name": "Dana Reyes", "role": "Property marketing manager"}
+    {
+      "name": "Marcus Jennings",
+      "role": "Account manager"
+    },
+    {
+      "name": "Dana Reyes",
+      "role": "Property marketing manager"
+    }
   ],
   "connections": [
-    {"name": "ApartmentIQ", "status": "connected", "synced_at": "2026-09-14T13:04:00Z"},
-    {"name": "Hyly", "status": "connected", "synced_at": "2026-09-14T11:00:00Z"},
-    {"name": "Google Ads · GA4", "status": "connected", "synced_at": "2026-09-14T10:00:00Z"},
-    {"name": "Yardi", "status": "not_connected", "synced_at": null}
+    {
+      "name": "ApartmentIQ",
+      "status": "connected",
+      "synced_at": "2026-09-14T13:04:00Z"
+    },
+    {
+      "name": "Hyly",
+      "status": "connected",
+      "synced_at": "2026-09-14T11:00:00Z"
+    },
+    {
+      "name": "Google Ads · GA4",
+      "status": "connected",
+      "synced_at": "2026-09-14T10:00:00Z"
+    },
+    {
+      "name": "Yardi",
+      "status": "not_connected",
+      "synced_at": null
+    }
   ],
-  "gaps": []
+  "gaps": [],
+  "hubspot_url": "https://app.hubspot.com/contacts/20936237/record/0-2/18234410021",
+  "brief_edit_url": "/portal/community-brief?company_id=18234410021"
 }

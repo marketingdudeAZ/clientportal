@@ -53,7 +53,7 @@ ITEM = {
     "found": OPT_STR, "expect": OPT_STR, "if_skip": OPT_STR,
     "receipts": list, "channels": list, "lens": str,
     "start_by": OPT_STR, "due": OPT_STR, "status": str,
-    "needs_approval": bool, "client_visible": bool, "internal_only": bool,
+    "needs_approval": bool, "client_visible": bool,
     "owner": OPT_STR, "comments_count": int, "cost_note": OPT_STR,
     "steps": (list, type(None)), "trail": list, "actions": dict,
 }
@@ -71,8 +71,23 @@ def check_item(it, where):
         check(s, {"when": OPT_STR, "label": str, "channel": OPT_STR, "kind": str, "status": str}, f"{where}.steps[{i}]")
         assert s["kind"] in KINDS, f"{where}.steps[{i}].kind {s['kind']!r}"
     for i, t in enumerate(it["trail"]):
-        check(t, {"at": str, "actor": str, "text": str}, f"{where}.trail[{i}]")
+        check(t, {"at": str, "actor": str, "text": str, "visibility": str}, f"{where}.trail[{i}]")
+        assert t["visibility"] in {"client", "internal"}
     check(it["actions"], {"approve": bool, "not_now": bool}, f"{where}.actions")
+    assert "internal_only" not in it, f"{where}: internal_only is gone (Phase 2)"
+    assert it["client_visible"] is True
+    for n in it.get("notes") or []:
+        check(n, {"at": str, "actor": str, "text": str, "visibility": str}, f"{where}.notes[]")
+        assert n["visibility"] in {"client", "internal"}
+    if it.get("evidence") is not None:
+        check(it["evidence"], {"columns": list, "rows": list, "more_count": int}, f"{where}.evidence")
+        assert all(len(r) == len(it["evidence"]["columns"]) for r in it["evidence"]["rows"])
+    if it.get("sparkline") is not None:
+        check(it["sparkline"], {"label": str, "points": list, "highlight_index": (int, type(None))}, f"{where}.sparkline")
+        for pt in it["sparkline"]["points"]:
+            check(pt, {"x": (str, int, float), "y": NUM}, f"{where}.sparkline.points[]")
+    if "fair_housing_review" in it:
+        assert isinstance(it["fair_housing_review"], bool)
     assert all(isinstance(c, str) for c in it["channels"])
 
 
@@ -86,7 +101,7 @@ def test_all_fixtures_present_and_parse():
 
 def test_me():
     d = load("me")
-    check(d, {"email": str, "role": str, "verified": bool, "companies": list}, "me")
+    check(d, {"email": str, "role": str, "verified": bool, "can_decide": bool, "companies": list}, "me")
     assert d["companies"]
     for i, c in enumerate(d["companies"]):
         check(c, {"company_id": str, "uuid": str, "name": str, "city": OPT_STR, "state": OPT_STR, "units": OPT_NUM}, f"me.companies[{i}]")
@@ -180,7 +195,8 @@ def test_plan():
 
 def test_client_view():
     d = load("client_view")
-    check(d, {"changing": list, "done_this_quarter": list, "done_count": int, "hidden_open_count": int}, "client_view")
+    check(d, {"changing": list, "done_this_quarter": list, "done_count": int}, "client_view")
+    assert "hidden_open_count" not in d, "clients now see all work (Phase 2 amendment 7)"
     for key in ("changing", "done_this_quarter"):
         for i, row in enumerate(d[key]):
             check(row, {"date": str, "title": str, "note": OPT_STR, "status": str}, f"client_view.{key}[{i}]")
@@ -290,3 +306,223 @@ def test_undo():
     check(d, {"item": dict, "undone": bool}, "undo")
     assert d["undone"] is True
     check_item(d["item"], "undo.item")
+
+
+# ── v3 rebuild endpoints ────────────────────────────────────────────────────
+BANDS = {"healthy", "attention", "warning", "critical", "new"}
+OPT_RECEIPT = (dict, type(None))
+
+
+def check_gap_entries(d, where):
+    assert isinstance(d.get("gaps"), list), f"{where}.gaps must be a list"
+    for g in d["gaps"]:
+        check(g, {"message": str}, f"{where}.gaps[]")
+        for k in ("field", "source"):
+            if k in g:
+                assert isinstance(g[k], (str, type(None)))
+
+
+def test_dashboard():
+    d = load("dashboard")
+    check(d, {"greeting_name": OPT_STR, "as_of": str, "kpis": dict, "health_tiles": list, "properties": list,
+              "activity": list, "waiting": list, "loop_status": dict}, "dashboard")
+    for k in ("ai_visibility", "portfolio_occupancy", "identified_savings", "waiting_on_you"):
+        assert k in d["kpis"], f"dashboard.kpis missing {k}"
+        check_receipt(d["kpis"][k], f"dashboard.kpis.{k}")
+    for t in d["health_tiles"]:
+        check(t, {"company_id": str, "name": str, "score": OPT_NUM, "band": str}, "dashboard.health_tiles[]")
+        assert t["band"] in BANDS
+    for p in d["properties"]:
+        check(p, {"company_id": str, "name": str, "units": OPT_NUM, "to_lease_90d": OPT_RECEIPT,
+                  "overspend_per_year": OPT_RECEIPT, "health": OPT_NUM, "band": str}, "dashboard.properties[]")
+        check_receipt(p["to_lease_90d"], "dashboard.properties[].to_lease_90d")
+        check_receipt(p["overspend_per_year"], "dashboard.properties[].overspend_per_year")
+        assert p["band"] in BANDS
+    for a in d["activity"]:
+        check(a, {"at": str, "text": str, "kind": str, "visibility": str}, "dashboard.activity[]")
+        assert a["kind"] in {"audit", "draft", "check", "flag", "forecast", "decision", "publish"}
+        assert a["visibility"] in {"client", "internal"}
+    for w in d["waiting"]:
+        check(w, {"item_id": str, "title": str, "subtitle": OPT_STR, "category": str}, "dashboard.waiting[]")
+        assert w["category"] in {"cost", "vendor", "negotiate", "content", "creative", "compliance"}
+    check(d["loop_status"], {"running": bool, "property_count": int, "last_pass": OPT_STR}, "dashboard.loop_status")
+    check_gap_entries(d, "dashboard")
+
+
+@pytest.mark.parametrize("name", ["approvals", "approvals_empty"])
+def test_approvals(name):
+    d = load(name)
+    check(d, {"waiting": int, "interrupts_count": int, "approved_this_month": int, "interrupts": list,
+              "batch": dict, "stats": dict}, name)
+    for i in d["interrupts"]:
+        check(i, {"id": str, "kind": str, "title": str, "detail": OPT_STR, "company_id": str, "item_id": OPT_STR,
+                  "primary_action": dict, "secondary_action": (dict, type(None))}, f"{name}.interrupts[]")
+        assert i["kind"] in {"compliance", "pacing", "tracking"}
+    check(d["batch"], {"label": str, "rows": list}, f"{name}.batch")
+    for r in d["batch"]["rows"]:
+        check(r, {"item_id": str, "company_id": str, "property": str, "action": str, "category": str,
+                  "savings_per_year": OPT_RECEIPT, "can_edit": bool}, f"{name}.batch.rows[]")
+        check_receipt(r["savings_per_year"], f"{name}.batch.rows[].savings_per_year")
+    check(d["stats"], {"approval_rate": OPT_RECEIPT, "edit_rate": OPT_RECEIPT, "auto_approve_candidates": list}, f"{name}.stats")
+    assert d["waiting"] == len(d["batch"]["rows"])
+    check_gap_entries(d, name)
+
+
+def test_property_overview():
+    d = load("property_overview")
+    check(d, {"name": str, "city": OPT_STR, "state": OPT_STR, "units": OPT_NUM, "objective": OPT_STR,
+              "health": dict, "kpis": dict, "exposure_forecast": (dict, type(None)), "vendor_audit": list,
+              "visibility_by_engine": list, "findings": list, "recommended_action": (dict, type(None)),
+              "draft_email": (dict, type(None)), "loop": list, "links": dict}, "property_overview")
+    check(d["health"], {"score": OPT_NUM, "band": str, "source": str, "as_of": OPT_STR}, "property_overview.health")
+    for k in ("ai_visibility", "renewal_rate", "units_to_lease", "lead_to_lease"):
+        check_receipt(d["kpis"].get(k), f"property_overview.kpis.{k}")
+    if d["exposure_forecast"]:
+        check(d["exposure_forecast"], {"months": list, "source": str, "as_of": OPT_STR}, "property_overview.exposure_forecast")
+        for m in d["exposure_forecast"]["months"]:
+            check(m, {"month": str, "units_to_lease": int}, "property_overview.exposure_forecast.months[]")
+    for v in d["vendor_audit"]:
+        check(v, {"vendor": str, "package": OPT_STR, "monthly": OPT_RECEIPT, "verdict": str, "basis": OPT_STR}, "property_overview.vendor_audit[]")
+        assert v["verdict"] in {"over", "fair", "under", "unknown"}
+        if v["verdict"] != "unknown":
+            assert v["basis"], "a vendor verdict other than unknown needs a market-rate basis"
+    if any(v["verdict"] == "unknown" for v in d["vendor_audit"]):
+        assert any(g.get("field", "").startswith("vendor_audit") for g in d["gaps"]), "unknown verdicts come with a gap"
+    for e in d["visibility_by_engine"]:
+        check(e, {"engine": str, "score": OPT_RECEIPT}, "property_overview.visibility_by_engine[]")
+    for f in d["findings"]:
+        check(f, {"text": str, "receipts": list}, "property_overview.findings[]")
+    for step in d["loop"]:
+        check(step, {"lens": str, "status": str, "at": OPT_STR, "text": str}, "property_overview.loop[]")
+        assert step["lens"] in LENSES and step["status"] in {"done", "waiting", "upcoming"}
+    for k in ("media_plan", "visibility", "content", "creative", "report"):
+        assert isinstance(d["links"].get(k), str)
+    check_gap_entries(d, "property_overview")
+
+
+def test_media_plan():
+    d = load("media_plan")
+    check(d, {"fiscal_year": str, "envelope": OPT_RECEIPT, "objective": OPT_STR, "generated_at": str,
+              "months": list, "channels": list, "allocated": OPT_RECEIPT, "notes": list}, "media_plan")
+    check_receipt(d["envelope"], "media_plan.envelope")
+    assert len(d["months"]) == 12
+    for m in d["months"]:
+        check(m, {"month": str, "units_to_lease": int}, "media_plan.months[]")
+    for c in d["channels"]:
+        check(c, {"channel": str, "monthly": list, "monthly_avg": NUM, "annual": NUM, "share": NUM, "cpl_target": OPT_NUM}, "media_plan.channels[]")
+        assert len(c["monthly"]) == 12 and all(isinstance(x, (int, float)) for x in c["monthly"])
+        assert c["annual"] == sum(c["monthly"])
+    check_gap_entries(d, "media_plan")
+
+
+def test_visibility():
+    d = load("visibility")
+    check(d, {"score": OPT_RECEIPT, "change": (dict, type(None)), "last_audit": OPT_STR, "next_audit": OPT_STR,
+              "engines": list, "comp_stack": (dict, type(None)), "citation_sources": list,
+              "recommendations": list, "alerts": list}, "visibility")
+    check_receipt(d["score"], "visibility.score")
+    for e in d["engines"]:
+        check(e, {"engine": str, "score": OPT_RECEIPT, "queries_hit": int, "queries_total": int}, "visibility.engines[]")
+    if d["comp_stack"]:
+        check(d["comp_stack"], {"competitors": list, "rows": list}, "visibility.comp_stack")
+        for r in d["comp_stack"]["rows"]:
+            check(r, {"surface": str, "values": dict}, "visibility.comp_stack.rows[]")
+    for s in d["citation_sources"]:
+        check(s, {"source": str, "share": NUM}, "visibility.citation_sources[]")
+    for r in d["recommendations"]:
+        check(r, {"text": str, "action": (dict, type(None))}, "visibility.recommendations[]")
+    for a in d["alerts"]:
+        check(a, {"kind": str, "text": str}, "visibility.alerts[]")
+        assert a["kind"] in {"exposure", "competitor"}
+    check_gap_entries(d, "visibility")
+
+
+def test_content():
+    d = load("content")
+    check(d, {"counts": dict, "rows": list, "impact": list}, "content")
+    check(d["counts"], {"recommendations": int, "published": int, "in_review": int}, "content.counts")
+    for r in d["rows"]:
+        check(r, {"id": str, "priority": str, "type": str, "title": str, "gap_source": OPT_STR, "status": str,
+                  "published_at": OPT_STR, "item_id": OPT_STR}, "content.rows[]")
+        assert r["priority"] in {"high", "med", "low", "done"}
+        assert r["status"] in {"draft_ready", "in_review", "not_started", "published"}
+    check_gap_entries(d, "content")
+
+
+def test_creative():
+    d = load("creative")
+    check(d, {"counts": dict, "top": (dict, type(None)), "lowest": (dict, type(None)), "assets": list}, "creative")
+    check(d["counts"], {"assets": int, "tracked_in_ads": int}, "creative.counts")
+    for a in d["assets"]:
+        check(a, {"id": str, "name": str, "thumbnail_url": OPT_STR, "tags": list, "origin": str,
+                  "impressions": OPT_RECEIPT, "ctr": OPT_RECEIPT, "leads": OPT_RECEIPT, "flag": OPT_STR}, "creative.assets[]")
+        assert a["origin"] in {"generated", "inherited", "uploaded"}
+    check_gap_entries(d, "creative")
+
+
+def test_value():
+    d = load("value")
+    check(d, {"period": str, "headline": dict, "rows": list, "totals": dict}, "value")
+    for k in ("savings_captured", "savings_identified", "changes_shipped"):
+        check_receipt(d["headline"].get(k), f"value.headline.{k}")
+    for r in d["rows"]:
+        check(r, {"change": str, "property": str, "annual_value": OPT_RECEIPT, "decided_by": str, "decided_at": str}, "value.rows[]")
+        assert r["decided_by"] in {"you", "automatic"}
+    check(d["totals"], {"annual_value": OPT_RECEIPT, "changes": int, "automatic_share": OPT_RECEIPT}, "value.totals")
+    text = json.dumps(d).lower()
+    assert "noi" not in text and "asset value" not in text, "no asset-value-at-multiple figure until Kyle confirms it"
+    check_gap_entries(d, "value")
+
+
+
+def test_decision_resolutions():
+    d = load("decision")
+    check(d["record"], {"label": str, "approved_unedited": int, "total": int, "threshold": NUM, "pct": NUM}, "decision.record")
+    for m in d["in_motion"]:
+        assert "note" in m and "action" in m
+        if m["action"] is not None:
+            check(m["action"], {"label": str, "href": str}, "decision.in_motion[].action")
+
+
+def test_portfolio_and_property_resolutions():
+    p = load("portfolio")
+    assert isinstance(p["scope_label"], str)
+    for prop in p["properties"]:
+        assert isinstance(prop["top_item"]["needs_approval"], bool)
+    pr = load("property")
+    for k in ("hubspot_url", "brief_edit_url"):
+        assert k in pr and isinstance(pr[k], (str, type(None)))
+
+
+def test_plan_status_enum():
+    for c in load("plan")["channels"]:
+        assert c["status"] in {"running", "pending", "ended", "paused"}
+
+
+def test_approval_items():
+    d = load("approval_items")
+    ids = set()
+    for i, it in enumerate(d["items"]):
+        check_item(it, f"approval_items.items[{i}]")
+        ids.add(it["id"])
+    for r in load("approvals")["batch"]["rows"]:
+        assert r["item_id"] in ids, f"approval row {r['item_id']} has no item fixture"
+    assert any(it.get("fair_housing_review") for it in d["items"])
+
+
+WORKSPACE_FIXTURES = sorted(p.stem for p in FIXTURES.glob("*.json") if not p.stem.startswith("report_"))
+
+
+@pytest.mark.parametrize("name", WORKSPACE_FIXTURES)
+def test_gap_shape_everywhere(name):
+    d = load(name)
+    if isinstance(d, dict) and "gaps" in d:
+        for g in d["gaps"]:
+            assert isinstance(g, dict) and isinstance(g.get("message"), str), f"{name}: gaps are {{message, field?, source?}}"
+
+
+@pytest.mark.parametrize("name", WORKSPACE_FIXTURES)
+def test_new_fixture_copy_avoids_targeting_language(name):
+    text = json.dumps(load(name)).lower()
+    for phrase in ("radius", "zip code", "zip targeting", "audience layer", "lookalike", "families", "family"):
+        assert phrase not in text, f"{name}.json mentions {phrase!r}"

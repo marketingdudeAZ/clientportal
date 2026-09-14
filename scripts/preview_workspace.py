@@ -21,15 +21,60 @@ from flask import Flask, Response, abort, jsonify, request
 
 REPO = Path(__file__).resolve().parent.parent
 PAGE = REPO / "webhook-server" / "portal_pages" / "workspace.html"
+REPORT_PAGE = REPO / "webhook-server" / "portal_pages" / "workspace_report.html"
 FIXTURES = REPO / "tests" / "fixtures" / "workspace"
 PORT = 5057
 
 app = Flask(__name__)
 
+# Demo switches for screenshots, flipped at /__preview/<name>?on=1|0.
+SWITCHES = {"approvals_empty": False, "cannot_decide": False}
+
+
+@app.get("/__preview/<name>")
+def preview_switch(name: str):
+    if name not in SWITCHES:
+        abort(404)
+    SWITCHES[name] = request.args.get("on", "1") in ("1", "true", "yes")
+    return jsonify(SWITCHES)
+
 
 def _fixture(name: str):
     with open(FIXTURES / f"{name}.json", encoding="utf-8") as fh:
         return json.load(fh)
+
+
+PREVIEW_ROLE_HEADER = "X-Workspace-Preview-Role"
+INTERNAL_ONLY_PATHS = ("/api/workspace/portfolio", "/api/workspace/signals")
+
+
+def _as_client() -> bool:
+    return request.headers.get(PREVIEW_ROLE_HEADER, "").strip().lower() == "client"
+
+
+def _client_filter(obj):
+    """What a client-role caller gets: no internal entries, no Fair Housing review flag."""
+    if isinstance(obj, list):
+        return [_client_filter(x) for x in obj if not (isinstance(x, dict) and x.get("visibility") == "internal")]
+    if isinstance(obj, dict):
+        return {k: _client_filter(v) for k, v in obj.items() if k != "fair_housing_review"}
+    return obj
+
+
+@app.before_request
+def _preview_role_gate():
+    # Mirrors the API contract: the header is honored on reads only, and /me ignores it.
+    if request.method == "GET" and _as_client() and request.path.startswith(INTERNAL_ONLY_PATHS):
+        return jsonify({"error": "forbidden", "detail": "Internal only."}), 403
+    return None
+
+
+@app.after_request
+def _preview_role_filter(resp):
+    if (request.method == "GET" and _as_client() and resp.is_json and resp.status_code == 200
+            and request.path.startswith(("/api/workspace/", "/api/ask/")) and request.path != "/api/workspace/me"):
+        resp.set_data(json.dumps(_client_filter(resp.get_json())))
+    return resp
 
 
 @app.get("/")
@@ -45,7 +90,10 @@ def workspace():
 
 @app.get("/api/workspace/me")
 def me():
-    return jsonify(_fixture("me"))
+    data = _fixture("me")
+    if SWITCHES["cannot_decide"]:
+        data["can_decide"] = False
+    return jsonify(data)
 
 
 @app.get("/api/workspace/portfolio")
@@ -74,7 +122,7 @@ def work_item(item_id: str):
     detail = _fixture("item")
     if item_id == detail["id"]:
         return jsonify(detail)
-    for it in _all_items(_fixture("work")):
+    for it in _all_items(_fixture("work")) + _fixture("approval_items")["items"]:
         if it["id"] == item_id:
             return jsonify(it)
     abort(404)
@@ -91,7 +139,7 @@ def decision(item_id: str):
     now = datetime.now(timezone.utc)
     data["decided_at"] = now.isoformat()
     data["undo"]["until"] = (now + timedelta(minutes=10)).isoformat()
-    for it in _all_items(_fixture("work")):
+    for it in _all_items(_fixture("work")) + _fixture("approval_items")["items"]:
         if it["id"] == item_id:
             data["item"]["id"] = it["id"]
             data["item"]["title"] = it["title"]
@@ -182,6 +230,97 @@ def undo(item_id: str):
         # Demonstrates the 409 path: this source has already pushed its change out.
         return jsonify({"error": "not_undoable", "reason": "The listing change already went out to the feeds, so it can't be pulled back from here."}), 409
     return jsonify(_fixture("undo"))
+
+
+def _company(company_id: str | None) -> dict:
+    for c in _fixture("me")["companies"]:
+        if c["company_id"] == company_id:
+            return c
+    return {}
+
+
+@app.get("/api/workspace/dashboard")
+def dashboard():
+    return jsonify(_fixture("dashboard"))
+
+
+@app.get("/api/workspace/approvals")
+def approvals():
+    data = _fixture("approvals_empty" if SWITCHES["approvals_empty"] else "approvals")
+    category = request.args.get("category")
+    if category:
+        data["batch"]["rows"] = [r for r in data["batch"]["rows"] if r["category"] == category]
+    return jsonify(data)
+
+
+@app.get("/api/workspace/property-overview")
+def property_overview():
+    # One demo property's data serves every property; name and size follow the one asked for.
+    data = _fixture("property_overview")
+    company_id = request.args.get("company_id")
+    c = _company(company_id)
+    if c:
+        data.update({k: c[k] for k in ("name", "city", "state", "units") if k in c})
+        data["links"] = {k: v.replace("<id>", company_id) for k, v in data["links"].items()}
+    return jsonify(data)
+
+
+def _scoped(name: str) -> dict:
+    return _fixture(name)
+
+
+@app.get("/api/workspace/media-plan")
+def media_plan():
+    return jsonify(_scoped("media_plan"))
+
+
+@app.get("/api/workspace/visibility")
+def visibility():
+    return jsonify(_scoped("visibility"))
+
+
+@app.get("/api/workspace/content")
+def content():
+    return jsonify(_scoped("content"))
+
+
+@app.get("/api/workspace/creative")
+def creative():
+    data = _scoped("creative")
+    kind = request.args.get("type")
+    tag = {"photos": "photo", "videos": "video", "ad_creative": "ad", "floor_plans": "floor plan", "documents": "document"}.get(kind or "")
+    if tag:
+        data["assets"] = [a for a in data["assets"] if tag in a["tags"]]
+    return jsonify(data)
+
+
+@app.get("/api/workspace/value")
+def value():
+    return jsonify(_fixture("value"))
+
+
+# The monthly report page and its API, at the same paths production uses.
+@app.get("/workspace/report")
+def report_page():
+    return Response(REPORT_PAGE.read_text(encoding="utf-8"), mimetype="text/html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/workspace/report")
+def report_api():
+    company_id = (request.args.get("company_id") or "").strip()
+    if not company_id:
+        return jsonify({"error": "company_id required"}), 400
+    reports = {}
+    for path in sorted(FIXTURES.glob("report_*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        reports[(str(data["property"]["company_id"]), data["month"])] = data
+    months = sorted(m for (cid, m) in reports if cid == company_id)
+    if not months:
+        return jsonify({"error": "report_unavailable", "detail": "No report for this property yet."}), 404
+    month = (request.args.get("month") or "").strip() or months[-1]
+    if (company_id, month) not in reports:
+        return jsonify({"error": "month_unavailable", "detail": f"No report for {month}."}), 404
+    return jsonify(reports[(company_id, month)])
 
 
 @app.get("/api/ask/questions")

@@ -1,0 +1,24 @@
+{
+  "as_of": "2026-09-14T13:04:00Z",
+  "period": "Sep 2025 – Aug 2026",
+  "headline": {
+    "savings_captured": {"value": 214000, "source": "workspace_decisions", "as_of": "2026-09-14T13:04:00Z"},
+    "savings_identified": {"value": 340000, "source": "hubdb_rec", "as_of": "2026-09-14T13:04:00Z"},
+    "changes_shipped": {"value": 214, "source": "workspace_decisions", "as_of": "2026-09-14T13:04:00Z"}
+  },
+  "rows": [
+    {"change": "Stepped Apartments.com down from Premium to Standard after 2 leases in six months", "company_id": "18234410021", "property": "LYV Broadway", "annual_value": {"value": 18000, "source": "workspace_decisions", "as_of": "2026-08-12T15:00:00Z"}, "decided_by": "you", "decided_at": "2026-08-12T15:00:00Z"},
+    {"change": "Moved flat annual budget into the weeks ahead of each lease-expiration cluster", "company_id": null, "property": "All 8 properties", "annual_value": {"value": 61200, "source": "workspace_decisions", "as_of": "2026-07-01T15:00:00Z"}, "decided_by": "you", "decided_at": "2026-07-01T15:00:00Z"},
+    {"change": "Stopped 6 ad creatives that had run past 90 days and returned no leads", "company_id": null, "property": "5 properties", "annual_value": {"value": 28300, "source": "workspace_decisions", "as_of": "2026-06-09T08:00:00Z"}, "decided_by": "automatic", "decided_at": "2026-06-09T08:00:00Z"},
+    {"change": "Renegotiated the Zillow rate at the October renewal", "company_id": "18234410087", "property": "Skye Reserve", "annual_value": {"value": 7200, "source": "workspace_decisions", "as_of": "2025-10-02T15:00:00Z"}, "decided_by": "you", "decided_at": "2025-10-02T15:00:00Z"},
+    {"change": "Rewrote 41 amenity descriptions so AI models can read them", "company_id": null, "property": "6 properties", "annual_value": null, "decided_by": "automatic", "decided_at": "2026-05-18T08:00:00Z"}
+  ],
+  "totals": {
+    "annual_value": {"value": 214000, "source": "workspace_decisions", "as_of": "2026-09-14T13:04:00Z"},
+    "changes": 214,
+    "automatic_share": {"value": 0.94, "source": "workspace_decisions", "as_of": "2026-09-14T13:04:00Z"}
+  },
+  "gaps": [
+    {"message": "31 changes have no savings recorded on their recommendation, so they count as changes but add nothing to the total.", "field": "rows[].annual_value"}
+  ]
+}

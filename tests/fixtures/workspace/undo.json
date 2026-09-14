@@ -29,8 +29,7 @@
     "due": "2026-08-24",
     "status": "to_do",
     "needs_approval": true,
-    "client_visible": false,
-    "internal_only": true,
+    "client_visible": true,
     "owner": "Dana R.",
     "comments_count": 3,
     "cost_note": null,
@@ -61,33 +60,81 @@
       {
         "at": "2026-08-24T14:10:00Z",
         "actor": "availability monitor",
-        "text": "Opened"
+        "text": "Opened",
+        "visibility": "client"
       },
       {
         "at": "2026-09-02T16:32:00Z",
         "actor": "Dana R.",
-        "text": "Not now — discuss on our call"
+        "text": "Not now — discuss on our call",
+        "visibility": "internal"
       },
       {
         "at": "2026-09-04T15:00:00Z",
         "actor": "Marcus J.",
-        "text": "Discussed on the Sep 4 call · plan revised"
+        "text": "Discussed on the Sep 4 call · plan revised",
+        "visibility": "internal"
       },
       {
         "at": "2026-09-14T14:14:00Z",
         "actor": "Marcus J.",
-        "text": "Approved"
+        "text": "Approved",
+        "visibility": "client"
       },
       {
         "at": "2026-09-14T14:17:00Z",
         "actor": "Marcus J.",
-        "text": "Undone — back in the queue"
+        "text": "Undone — back in the queue",
+        "visibility": "client"
       }
     ],
     "actions": {
       "approve": true,
       "not_now": true
-    }
+    },
+    "notes": [
+      {
+        "at": "2026-09-04T15:05:00Z",
+        "actor": "Marcus J.",
+        "text": "The owner wants the pricing team to sign off before the concession moves.",
+        "visibility": "internal"
+      }
+    ],
+    "evidence": {
+      "columns": [
+        "Unit",
+        "Plan",
+        "Days listed",
+        "Rent",
+        "vs plan avg"
+      ],
+      "rows": [
+        [
+          "#1321",
+          "S1",
+          "306",
+          "$1,294",
+          "+$14"
+        ],
+        [
+          "#1238",
+          "A1",
+          "103",
+          "$1,380",
+          "+$10"
+        ],
+        [
+          "#1317",
+          "A1",
+          "63",
+          "$1,385",
+          "+$15"
+        ]
+      ],
+      "more_count": 7
+    },
+    "sparkline": null,
+    "fair_housing_review": false
   },
   "undone": true
 }

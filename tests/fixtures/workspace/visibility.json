@@ -1,0 +1,41 @@
+{
+  "as_of": "2026-09-14T13:04:00Z",
+  "score": {"value": 71, "source": "ai_mentions", "as_of": "2026-09-01T08:14:00Z"},
+  "change": {"value": 4, "window": "month"},
+  "last_audit": "2026-09-01",
+  "next_audit": "2026-10-01",
+  "engines": [
+    {"engine": "ChatGPT", "score": {"value": 74, "source": "ai_mentions", "as_of": "2026-09-01T08:14:00Z"}, "queries_hit": 12, "queries_total": 20},
+    {"engine": "Claude", "score": {"value": 68, "source": "ai_mentions", "as_of": "2026-09-01T08:14:00Z"}, "queries_hit": 10, "queries_total": 20},
+    {"engine": "Perplexity", "score": {"value": 52, "source": "ai_mentions", "as_of": "2026-09-01T08:14:00Z"}, "queries_hit": 6, "queries_total": 20},
+    {"engine": "Google AI", "score": {"value": 81, "source": "ai_mentions", "as_of": "2026-09-01T08:14:00Z"}, "queries_hit": 15, "queries_total": 20},
+    {"engine": "Copilot", "score": {"value": 63, "source": "ai_mentions", "as_of": "2026-09-01T08:14:00Z"}, "queries_hit": 9, "queries_total": 20}
+  ],
+  "comp_stack": {
+    "competitors": ["The Reserve at Carrollton", "Oakmont Station", "Solana Josey", "Haven at Broadway"],
+    "rows": [
+      {"surface": "AI visibility", "values": {"self": 71, "The Reserve at Carrollton": 65, "Oakmont Station": 58, "Solana Josey": 72, "Haven at Broadway": 44}},
+      {"surface": "Search (SEO)", "values": {"self": null, "The Reserve at Carrollton": null, "Oakmont Station": null, "Solana Josey": null, "Haven at Broadway": null}},
+      {"surface": "ILS presence", "values": {"self": null, "The Reserve at Carrollton": null, "Oakmont Station": null, "Solana Josey": null, "Haven at Broadway": null}}
+    ]
+  },
+  "citation_sources": [
+    {"source": "Apartments.com", "share": 0.34},
+    {"source": "Property website", "share": 0.28},
+    {"source": "Zillow", "share": 0.18},
+    {"source": "Google Maps", "share": 0.12},
+    {"source": "Other", "share": 0.08}
+  ],
+  "recommendations": [
+    {"text": "Write 3 FAQ pages for the questions Perplexity answers with other properties (score 52, our lowest engine)", "action": {"type": "create_brief"}},
+    {"text": "Add schema.org markup to the floorplan pages — Google AI leans on structured data", "action": {"type": "create_brief"}},
+    {"text": "Update the neighborhood page — ChatGPT still quotes the 2024 copy", "action": {"type": "create_brief"}}
+  ],
+  "alerts": [
+    {"kind": "exposure", "text": "47 units to lease in 90 days. Every question an AI model can't answer about LYV Broadway is a prospect we don't reach."},
+    {"kind": "competitor", "text": "The Reserve at Carrollton gained 8 points this month after adding four content pages."}
+  ],
+  "gaps": [
+    {"message": "Search and ILS comparisons need a competitor data source we don't have yet.", "field": "comp_stack.rows", "source": "aptiq"}
+  ]
+}
