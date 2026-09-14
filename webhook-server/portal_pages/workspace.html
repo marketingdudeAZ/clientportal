@@ -213,6 +213,9 @@ ol,ul{list-style:none}
 .tbl.boxed td{padding:12px 16px}
 .tbl.boxed tr:last-child td{border-bottom:0}
 .tbl.boxed td:first-child,.tbl.boxed th{white-space:nowrap}
+/* The page allows breaking long strings anywhere; tables keep whole words so column labels never split mid-word. */
+.tbl{overflow-wrap:normal}
+.tbl td.surface{white-space:nowrap}
 .empty-dash{color:var(--color-fg-muted)}
 
 /* States */
@@ -1593,7 +1596,7 @@ ol,ul{list-style:none}
       comp = '<section class="sec"><h2 class="h-sec">Comp stack — position vs competitors</h2><div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Surface</th><th scope="col" class="self">' + esc(c.name || 'You') + '</th>' +
         cs.competitors.map(function (n) { return '<th scope="col">' + esc(n) + '</th>'; }).join('') + '</tr></thead><tbody>' + cs.rows.map(function (row) {
           function cell(v, self) { return '<td class="' + (self ? 'self' : '') + '">' + (v == null ? '<span class="empty-dash">—</span>' : esc(v)) + '</td>'; }
-          return '<tr><td>' + esc(row.surface) + '</td>' + cell(row.values.self, true) + cs.competitors.map(function (n) { return cell(row.values[n], false); }).join('') + '</tr>';
+          return '<tr><td class="surface">' + esc(row.surface) + '</td>' + cell(row.values.self, true) + cs.competitors.map(function (n) { return cell(row.values[n], false); }).join('') + '</tr>';
         }).join('') + '</tbody></table></div></section>';
     }
     var cites = has(d.citation_sources) ? '<section class="sec"><h2 class="h-sec">Citation sources</h2><div class="citebar" role="img" aria-label="' + esc(d.citation_sources.map(function (s) { return s.source + ' ' + pct(s.share); }).join(', ')) + '">' +
