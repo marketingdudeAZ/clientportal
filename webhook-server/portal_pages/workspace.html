@@ -714,6 +714,9 @@ ol,ul{list-style:none}
   function ApiError(status, body) {
     this.status = status; this.body = body;
     this.message = (body && (body.detail || body.reason || body.error)) || ('Request failed (' + status + ')');
+    if (body && body.error === 'fair_housing') this.message = body.reason || 'The wording includes language Fair Housing rules don\u2019t allow in housing marketing. Reword it and try again';
+    if (body && body.error === 'preview_read_only') this.message = 'Previewing as a client is read-only';
+    if (body && body.error === 'not_undoable' && body.reason) this.message = body.reason;
   }
   function api(path, opts) {
     opts = opts || {};
@@ -817,8 +820,11 @@ ol,ul{list-style:none}
   try { state.preview = sessionStorage.getItem(PREVIEW_KEY) === '1'; } catch (e) {}
   function realInternal() { return !!(state.me && state.me.role === 'internal'); }
   function viewInternal() { return realInternal() && !state.preview; }
-  function canDecide() { return !state.me || state.me.can_decide !== false; }
-  function signInLink(label) { return '<a href="#" class="link" data-signin>' + esc(label) + '</a>'; }
+  function canDecide() { return !state.preview && (!state.me || state.me.can_decide !== false); }
+  function signInLink(label) {
+    if (state.preview) return '<span class="support">Actions are off while you preview as a client</span>';
+    return '<a href="#" class="link" data-signin>' + esc(label) + '</a>';
+  }
   function companies() { return (state.me && state.me.companies) || []; }
   function companyById(id) { var l = companies(); for (var i = 0; i < l.length; i++) if (String(l[i].company_id) === String(id)) return l[i]; return null; }
   function company() { return companyById(state.companyId) || companies()[0] || null; }
@@ -900,7 +906,7 @@ ol,ul{list-style:none}
     if (viewInternal()) html += '<p class="nav-label">RPM only</p>' + link({ key: 'signals', href: '#/signals', label: 'Signals', icon: 'signal' });
     html += '</div><div class="side-grow"></div>';
     if (state.loop) {
-      html += '<div class="loopcard" role="status"><i class="' + (state.loop.running ? 'on' : '') + '" aria-hidden="true"></i><div><b>' + (state.loop.running ? 'Loop running' : 'Loop paused') + '</b>' +
+      html += '<div class="loopcard" role="status"><i class="' + (state.loop.running ? 'on' : '') + '" aria-hidden="true"></i><div><b>' + (state.loop.running === true ? 'Loop running' : (state.loop.running === false ? 'Loop paused' : 'Loop status unavailable')) + '</b>' +
         '<span>' + esc(num(state.loop.property_count)) + ' properties' + (state.loop.last_pass ? ' · last pass ' + esc(clock(state.loop.last_pass)) : '') + '</span></div></div>';
     }
     var me = state.me;
@@ -982,7 +988,7 @@ ol,ul{list-style:none}
       if (q.length < 2) { seq++; opts = []; box.innerHTML = ''; close(); return; }
       var my = ++seq;
       box.innerHTML = '<p class="sempty" role="status">Searching…</p>'; opts = []; open();
-      api('/api/workspace/search?q=' + encodeURIComponent(q)).then(function (r) {
+      api('/api/workspace/search?q=' + encodeURIComponent(q) + (state.companyId ? '&' + cq() : '')).then(function (r) {
         if (my === seq) render(q, ((r.data || {}).results || []).slice(0, 20));
       }).catch(function (e) { if (my !== seq || (e && e.status === 401)) return; box.innerHTML = '<p class="sempty">Search didn’t load. Try again.</p>'; });
     }
@@ -1081,6 +1087,7 @@ ol,ul{list-style:none}
       if (!r) return;
       var d = r.data || {};
       state.loop = d.loop_status || state.loop;
+      if (d.scope_label) renderTop('Dashboard', d.scope_label);
       renderSide('dashboard');
       var h = dashboardHtml(d);
       setView(h.page, h.rail);
@@ -1118,7 +1125,7 @@ ol,ul{list-style:none}
         '<td class="num t-critical"' + rtitle(p.overspend_per_year) + '>' + (val(p.overspend_per_year) == null ? '<span class="empty-dash">—</span>' : esc(money(val(p.overspend_per_year)))) + '</td>' +
         '<td><span class="healthcell t-' + esc(b) + '"><span class="dot ' + esc(b) + '" aria-hidden="true"></span>' + (p.health == null ? 'new' : esc(p.health)) + '</span></td></tr>';
     }).join('');
-    var order = LENS_ORDER[state.lens] || LENS_ORDER.asset_manager;
+    var order = (Array.isArray(d.kpi_order) && d.kpi_order.length ? d.kpi_order : (LENS_ORDER[state.lens] || LENS_ORDER.asset_manager)).filter(function (k) { return KPI_DEFS[k]; });
     var page = '<div class="page">' +
       '<div class="greet"><div class="stack"><h1 class="h-greet">' + esc(greeting() + name) + '.</h1>' + staleLabel(d.as_of) + '</div>' + lens + '</div>' +
       hero + kpiStrip(d.kpis || {}, order, true) +
@@ -1160,7 +1167,7 @@ ol,ul{list-style:none}
   }
   function approvalsHtml(d, cat) {
     var head = '<div class="head"><div class="stack"><h1 class="h-page">Approvals</h1>' +
-      '<p class="meta-line">' + esc(num(d.waiting)) + ' waiting · <span class="warn">' + esc(num(d.interrupts_count)) + ' ' + plural(d.interrupts_count, 'interrupt') + '</span> · ' + esc(num(d.approved_this_month)) + ' approved this month</p>' +
+      '<p class="meta-line">' + esc(num(d.waiting)) + ' waiting · <span class="warn">' + esc(num(d.interrupts_count)) + ' ' + plural(d.interrupts_count, 'interrupt') + '</span>' + (d.approved_this_month != null ? ' · ' + esc(num(d.approved_this_month)) + ' approved this month' : '') + '</p>' +
       '<p class="support">RPM Digital drafted these. Nothing changes until you approve.</p></div>' + staleLabel(d.as_of) + '</div>';
     var interrupts = (d.interrupts || []).filter(function (i) { return !state.hidden[i.id]; });
     var rows = (d.batch && d.batch.rows) || [];
@@ -1317,7 +1324,8 @@ ol,ul{list-style:none}
     return '<div class="page stage"><article class="panel"><div class="panel-head"><div class="pills">' +
       '<span class="pill brand"><i></i>' + esc(SOURCE_LABEL[it.source] || 'Item') + '</span>' +
       (it.status && it.status !== 'to_do' ? '<span class="pill new">' + esc(STATUS_LABEL[it.status] || it.status) + '</span>' : '') +
-      (viewInternal() && it.fair_housing_review ? '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review</span>' : '') + '</div>' +
+      (viewInternal() && it.fair_housing_review ? '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review' + (it.fair_housing_review.severity === 'high' ? ' · held from clients' : '') + '</span>' +
+        (has(it.fair_housing_review.terms) ? '<span class="support">Flagged: ' + esc(it.fair_housing_review.terms.join(', ')) + '</span>' : '') : '') + '</div>' +
       '<h1 class="qtitle">' + esc(it.title) + '</h1>' + (meta.length ? '<p class="support">' + esc(meta.join(' · ')) + '</p>' : '') + '</div>' +
       (why ? '<div class="why">' + why + '</div>' : '') + evidenceHtml(it.evidence) + sparkHtml(it.sparkline) + steps +
       (!why && !steps && !it.evidence ? '<p class="support">No detail came with this item yet.</p>' : '') +
@@ -1440,7 +1448,7 @@ ol,ul{list-style:none}
       }).catch(function (e) {
         if (e && e.status === 401) return;
         stopTimer();
-        var reason = (e && e.body && (e.body.reason || e.body.detail)) || (e && e.status === 409 ? 'This one can’t be undone.' : 'Undo didn’t go through.');
+        var reason = (e && e.body && (e.body.reason || e.body.detail || e.body.error)) || (e && e.status === 409 ? 'This one can\u2019t be undone.' : 'Undo didn\u2019t go through.');
         var w = btn.closest('.undo-wrap'); if (w) w.outerHTML = '<span class="undo-note">' + esc(reason) + '</span>';
       });
     });
@@ -1517,7 +1525,7 @@ ol,ul{list-style:none}
     var fc = d.exposure_forecast, fHtml = '';
     if (fc && has(fc.months)) {
       var max = Math.max.apply(null, fc.months.map(function (m) { return m.units_to_lease; })) || 1;
-      fHtml = '<section class="sec"><div class="sec-head"><h2 class="h-sec">Exposure forecast</h2><span class="receipt">' + receipt(fc) + '</span></div>' +
+      fHtml = '<section class="sec"><div class="sec-head"><h2 class="h-sec">Exposure forecast</h2><span class="receipt">' + receipt(fc) + '</span></div>' + (has(fc.basis) ? '<p class="receipt">' + esc(fc.basis) + '</p>' : '') +
         '<div class="forecast" role="img" aria-label="' + esc('Units to lease by month: ' + fc.months.map(function (m) { return monthShort(m.month) + ' ' + m.units_to_lease; }).join(', ')) + '">' +
         fc.months.map(function (m) {
           var r = m.units_to_lease / max, col = r >= .75 ? 'var(--copper)' : (r >= .5 ? 'var(--sage)' : 'var(--juniper)');
@@ -1535,16 +1543,19 @@ ol,ul{list-style:none}
     var loop = has(d.loop) ? '<section class="card loopcard2" aria-labelledby="loop-h"><div class="lh"><i aria-hidden="true"></i><b id="loop-h">The loop on this property</b><span class="support">Express · Tailor · Amplify · Evolve</span></div><ol class="stagel">' + d.loop.map(function (s) {
       var when = s.status === 'waiting' ? '<span class="wait">waiting on you' + (s.at ? ' since ' + esc(clock(s.at)) : '') + '</span>' : (s.at ? '<span>' + esc(s.status === 'upcoming' ? 'planned ' + mdy(s.at) : asOf(s.at)) + '</span>' : '<span>upcoming</span>');
       return '<li class="' + esc(s.status) + '"><span class="rl"><span class="node ' + esc(s.status) + '" aria-hidden="true"></span><span class="conn" aria-hidden="true"></span></span><div class="body"><div class="tl"><b>' + esc(LENS_LABEL[s.lens] || s.lens) + '</b>' + when + '</div><p>' + esc(s.text) + '</p>' +
-        (s.status === 'waiting' && ra ? '<a class="btn sm primary" href="#/item/' + encodeURIComponent(ra.item_id) + '">Review the one decision</a>' : '') + '</div></li>';
+        (s.status === 'waiting' && (s.item_id || ra) ? '<a class="btn sm primary" href="#/item/' + encodeURIComponent(s.item_id || ra.item_id) + '">Review the decision</a>' :
+          (s.item_id ? '<a class="link" href="#/item/' + encodeURIComponent(s.item_id) + '">Open</a>' : '')) + '</div></li>';
     }).join('') + '</ol></section>' : '';
     var page = '<div class="page"><a class="back" href="#/properties">' + ic(I.arrowLeft, 13) + 'All properties</a>' +
       '<div class="proptitle">' + ring(d.health && d.health.score, hb) + '<div class="stack" style="display:flex;flex-direction:column;gap:2px;min-width:0"><h1 class="h-page">' + esc(d.name) + '</h1><p class="support">' + esc(sub) + '</p>' +
+      (has(d.objective_reason) ? '<span class="receipt">Objective: ' + esc(d.objective_reason) + '</span>' : '') +
       (d.health ? '<span class="receipt">Health ' + receipt(d.health) + '</span>' : '') + '</div></div>' +
       (links ? '<div class="scoped-links">' + links + '</div>' : '') +
       '<div class="kpis">' + kp + '</div>' + fHtml + vend + eng + loop + gapsLine(d.gaps) + '</div>';
     var rail = '';
     if (has(d.findings)) rail += '<section class="sec"><h2 class="h-rail">Findings</h2>' + d.findings.map(function (f) {
-      return '<div class="finding"><p>' + esc(f.text) + '</p>' + (has(f.receipts) ? '<span class="receipt">' + f.receipts.map(function (rc) { return esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : ''); }).join('<br>') + '</span>' : '') + '</div>';
+      return '<div class="finding"><p>' + esc(f.text) + '</p>' + (has(f.receipts) ? '<span class="receipt">' + f.receipts.map(function (rc) { return esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : ''); }).join('<br>') + '</span>' : '') +
+        (f.item_id ? '<a class="link" href="#/item/' + encodeURIComponent(f.item_id) + '">Open the item</a>' : '') + '</div>';
     }).join('') + '</section>';
     if (ra || d.draft_email) {
       rail += '<div class="rail-sep"></div><section class="sec"><h2 class="h-rail">Recommended action</h2>' +
@@ -1593,7 +1604,7 @@ ol,ul{list-style:none}
     var alloc = val(d.allocated), env = val(d.envelope);
     var breakdown = chans.length ? '<section class="sec"><h2 class="h-rail">Channel breakdown</h2><div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Channel</th><th scope="col" class="num">Monthly avg</th><th scope="col" class="num">Annual</th><th scope="col" class="num">% of budget</th><th scope="col" class="num">CPL target</th></tr></thead><tbody>' +
       chans.map(function (c) { return '<tr><td class="name">' + esc(c.channel) + '</td><td class="num">' + esc(money(c.monthly_avg)) + '</td><td class="num">' + esc(money(c.annual)) + '</td><td class="num">' + esc(pct(c.share)) + '</td><td class="num">' + (c.cpl_target == null ? '<span class="empty-dash">—</span>' : esc(money(c.cpl_target))) + '</td></tr>'; }).join('') +
-      '</tbody></table></div></section>' : '';
+      '</tbody></table></div>' + (function () { var srcs = []; chans.forEach(function (c) { if (c.source && srcs.indexOf(c.source) === -1) srcs.push(c.source); }); return srcs.length ? '<p class="receipt">Channel spend from ' + esc(srcs.map(sourceName).join(', ')) + '</p>' : ''; })() + '</section>' : '';
     var page = '<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Media plan</h1><p class="support">' +
       esc([d.fiscal_year, env != null ? money(env) + ' envelope' : '', d.objective ? 'Objective: ' + d.objective : ''].filter(Boolean).join(' · ')) + '</p></div>' + staleLabel(d.as_of) + '</div>' +
       (months.length ? '<section class="card flight" aria-label="Exposure forecast and flighting"><h2 class="h-rail">Exposure forecast</h2>' + head + bars + crow + tot +
@@ -1633,12 +1644,13 @@ ol,ul{list-style:none}
   function visibilityHtml(d) {
     var c = company() || {}, sv = val(d.score), sb = engineBand(sv);
     var engines = d.engines || [];
-    var hits = engines.reduce(function (s, e) { return s + (e.queries_hit || 0); }, 0), total = engines.reduce(function (s, e) { return s + (e.queries_total || 0); }, 0);
+    var counted = engines.filter(function (e) { return e.queries_hit != null && e.queries_total != null; });
+    var hits = counted.reduce(function (s, e) { return s + e.queries_hit; }, 0), total = counted.reduce(function (s, e) { return s + e.queries_total; }, 0);
     var hero = '<div class="vhero"><div style="display:flex;flex-direction:column;align-items:center"' + rtitle(d.score) + '><span class="big t-' + sb + '">' + (sv == null ? '—' : esc(sv)) + '</span><span class="support">AI visibility score</span></div>' +
-      '<div class="stack" style="display:flex;flex-direction:column;gap:4px">' + (d.change ? '<b class="' + (d.change.value >= 0 ? 't-healthy' : 't-critical') + '" style="font-size:13px;font-weight:500">' + esc((d.change.value >= 0 ? '+' : '') + d.change.value + ' from last ' + (d.change.window || 'month')) + '</b>' : '') +
-      (total ? '<p class="support">Named in ' + esc(hits) + ' of ' + esc(total) + ' prospect questions across ' + esc(engines.length) + ' AI engines.</p>' : '') + (receipt(d.score) ? '<span class="receipt">' + receipt(d.score) + '</span>' : '') + '</div></div>';
+      '<div class="stack" style="display:flex;flex-direction:column;gap:4px">' + (d.change ? '<b class="' + (d.change.value >= 0 ? 't-healthy' : 't-critical') + '" style="font-size:13px;font-weight:500"' + (d.change.source ? ' title="' + esc(sourceName(d.change.source)) + '"' : '') + '>' + esc((d.change.value >= 0 ? '+' : '') + d.change.value + ' from last ' + (d.change.window || 'month')) + '</b>' : '') +
+      (total ? '<p class="support">Named in ' + esc(hits) + ' of ' + esc(total) + ' prospect questions across ' + esc(counted.length) + ' AI engines.</p>' : '') + (receipt(d.score) ? '<span class="receipt">' + receipt(d.score) + '</span>' : '') + '</div></div>';
     var strip = engines.length ? '<div class="card engines">' + engines.map(function (e) {
-      var v = val(e.score); return '<div class="cell"' + rtitle(e.score) + '><span>' + esc(e.engine) + '</span><b class="t-' + engineBand(v) + '">' + (v == null ? '—' : esc(v)) + '</b><em>' + esc(e.queries_hit + '/' + e.queries_total) + ' questions</em></div>';
+      var v = val(e.score); return '<div class="cell"' + rtitle(e.score) + '><span>' + esc(e.engine) + '</span><b class="t-' + engineBand(v) + '">' + (v == null ? '—' : esc(v)) + '</b>' + (e.queries_hit != null && e.queries_total != null ? '<em>' + esc(e.queries_hit + '/' + e.queries_total) + ' questions</em>' : '<em>' + esc(sourceName(e.score && e.score.source)) + '</em>') + '</div>';
     }).join('') + '</div>' : '';
     var cs = d.comp_stack, comp = '';
     if (cs && has(cs.rows)) {
@@ -1713,7 +1725,8 @@ ol,ul{list-style:none}
         return '<li class="asset' + (best ? ' best' : '') + (worst ? ' worst' : '') + '"><div class="thumb" style="background:' + THUMBS[i % THUMBS.length] + '" role="img" aria-label="' + esc(a.name) + ' (no preview available)"><span>' + esc(a.tags[0] || '') + '</span></div>' +
           '<div class="fn">' + esc(a.name) + (worst ? '<span class="pill critical">Underperforming</span>' : '') + '</div>' +
           '<div class="tags">' + a.tags.slice(1).map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '<span class="' + esc(a.origin) + '">' + esc(a.origin) + '</span></div>' +
-          '<span class="fine"' + rtitle(a.ctr) + '>' + esc(metrics) + '</span></li>';
+          '<span class="fine"' + rtitle(a.ctr) + '>' + esc(metrics) + '</span>' +
+          (a.file_url && /^https:\/\//.test(a.file_url) ? '<a class="link" href="' + esc(a.file_url) + '" target="_blank" rel="noopener noreferrer">Open file<span class="sr-only"> (opens in a new tab)</span></a>' : '') + '</li>';
       }).join('');
       setView('<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Creative library</h1><p class="support">' + esc(c ? c.name : '') + '</p></div></div>' +
         '<p class="support">' + summary + '</p>' + chips +
