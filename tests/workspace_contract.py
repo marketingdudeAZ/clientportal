@@ -321,9 +321,12 @@ CREATE_BRIEF = {"status": enum("generating"), "hub_keyword": STR}
 CONTENT = {
     "counts": {"recommendations": INT, "published": INT, "in_review": INT},
     "rows": [{"id": STR, "priority": opt(enum("high", "med", "low", "done")), "type": opt(STR), "title": STR,
-              "gap_source": opt(STR),
-              "status": enum("draft_ready", "in_review", "not_started", "published"),
-              "published_at": opt(STR), "item_id": opt(STR)}],
+              "keyword": opt(STR), "gap_source": opt(STR),
+              "status": enum("draft_ready", "in_review", "published"),
+              "published_at": opt(STR), "item_id": opt(STR),
+              "why": opt({"text": STR, "receipts": [RECEIPT]}),
+              "for_whom": opt({"text": STR, "questions": [STR]}),
+              "approving_does": [{"label": STR, "owner": enum("RPM Digital", "vendor", "you"), "when": opt(STR)}]}],
     "impact": [{"text": STR}], "gaps": [GAP],
 }
 

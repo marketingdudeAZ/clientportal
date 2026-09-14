@@ -330,8 +330,11 @@ def create_brief(ctx, hub_keyword: str, actor: str) -> dict:
 # ── /content ─────────────────────────────────────────────────────────────────
 
 _TYPE_BY_SCHEMA = (("faq", "FAQ page"), ("howto", "Guide"), ("blogposting", "Blog"), ("article", "Blog"))
+# Round 4: three statuses only, and a row exists only once a draft exists. A
+# brief that is queued or still generating has no draft, so it is not a row.
 _STATUS = {"generated": "draft_ready", "approved": "in_review", "in_review": "in_review",
-           "in_production": "in_review", "published": "published", "complete": "published"}
+           "in_production": "in_review", "published": "published", "complete": "published",
+           "completed": "published", "done": "published"}
 
 
 def _brief_type(schema_types: str | None) -> str | None:
@@ -361,7 +364,10 @@ def build_content(ctx, *, internal: bool) -> dict:
                 continue
             keyword = str(r.get("hub_keyword") or "").strip()
             h1, _ = wc.verified_text(r.get("h1"), wc.number_forms([keyword, r.get("target_word_count")]))
-            status = _STATUS.get(str(r.get("status") or "").strip().lower(), "not_started")
+            status = _STATUS.get(str(r.get("status") or "").strip().lower())
+            if not status:
+                continue
+            generated_at = wc.to_iso_ts(r.get("generated_at"))
             rows.append({
                 "id": brief_id,
                 "priority": "done" if status == "published" else None,
@@ -371,8 +377,14 @@ def build_content(ctx, *, internal: bool) -> dict:
                 "gap_source": None,
                 "status": status,
                 "published_at": None,
-                "generated_at": wc.to_iso_ts(r.get("generated_at")),
+                "generated_at": generated_at,
                 "item_id": wi.item_id("content_brief", brief_id) if status == "draft_ready" else None,
+                "why": {"text": f"Written for renters searching “{keyword}”.",
+                        "receipts": [{"label": f"Brief generated for “{keyword}”", "source": "content_briefs",
+                                      "as_of": generated_at}]} if keyword else None,
+                "for_whom": {"text": f"Renters searching for “{keyword}”", "questions": [keyword]}
+                if keyword else None,
+                "approving_does": wi.approving_does(wi.content_brief_steps()) if status == "draft_ready" else [],
             })
     rows.sort(key=lambda x: (x["status"] == "published", str(x.get("generated_at") or "")), reverse=False)
     if rows:

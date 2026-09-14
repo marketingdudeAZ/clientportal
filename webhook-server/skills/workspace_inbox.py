@@ -545,6 +545,18 @@ def _call_prep(ctx: PropertyContext, gaps: list, today: date) -> list:
     return items
 
 
+def content_brief_steps() -> list:
+    """What approving a content brief draft does. Shared with the content screen."""
+    return [
+        _step("SEO content task opened in ClickUp", "queued", "seo"),
+        _step("Account manager task logged in HubSpot", "person"),
+    ]
+
+
+def approving_does(steps: list) -> list:
+    return [{"label": s["label"], "owner": _owner_for(s), "when": _when_for(s, _owner_for(s))} for s in steps]
+
+
 def _content_briefs(ctx: PropertyContext, gaps: list, today: date) -> list:
     from config import HUBDB_CONTENT_BRIEFS_TABLE_ID
     if not HUBDB_CONTENT_BRIEFS_TABLE_ID or not ctx.uuid:
@@ -579,10 +591,7 @@ def _content_briefs(ctx: PropertyContext, gaps: list, today: date) -> list:
             channels=["seo"],
             status=status,
             needs_approval=status_raw == "generated",
-            steps=[
-                _step("SEO content task opened in ClickUp", "queued", "seo"),
-                _step("Account manager task logged in HubSpot", "person"),
-            ],
+            steps=content_brief_steps(),
             trail=[trail(generated_at, "content planner", "Generated")] if generated_at else [],
             _created=generated_at,
             _raw={"brief_id": brief_id, "hub_keyword": keyword, "h1": row.get("h1") or ""},
@@ -1006,11 +1015,7 @@ def enrich(item: dict, ctx: "PropertyContext") -> dict:
         if goal:
             item["for_whom"] = {"text": f"The property's leasing goal: {wc.truncate(goal, 300)}", "questions": []}
     if not item.get("approving_does") and item["source"] in DECIDABLE:
-        rows = []
-        for step in item.get("steps") or []:
-            owner = _owner_for(step)
-            rows.append({"label": step["label"], "owner": owner, "when": _when_for(step, owner)})
-        item["approving_does"] = rows
+        item["approving_does"] = approving_does(item.get("steps") or [])
     return item
 
 
