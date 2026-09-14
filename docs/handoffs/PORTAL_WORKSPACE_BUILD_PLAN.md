@@ -351,6 +351,8 @@ Copy these into the plan doc too, directly under "Phase 2 contract".
 
 ## Contract changes (API)
 
+The Phase 2 amendments above supersede this section where they conflict: gap entries are now `{message, field?, source?}` (item 1 below), and `hidden_open_count` is gone from `/client-view`.
+
 Recorded by the API branch (`feature/portal-workspace-api`). Every change is additive or makes a field nullable; nothing in the shapes above was renamed or removed. `tests/workspace_contract.py` encodes the contract with these changes, so fixtures can be checked against it.
 
 1. **`gaps[]` entries are `{field, reason}`.** The contract showed `gaps: []` without an entry shape. `/me` and `/client-view` also return `gaps`.
