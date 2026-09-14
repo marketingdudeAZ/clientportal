@@ -455,6 +455,13 @@ a{color:inherit;text-decoration:none}
 .link.quiet{color:var(--muted);font-weight:400;font-size:12px}
 .req-foot{border-top:1px solid var(--border-2);padding-top:14px;font-size:12px;line-height:18px;color:var(--faint)}
 
+/* Undo */
+.undo-wrap{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.undo-note{font-size:13px;line-height:16px;color:var(--green);font-variant-numeric:tabular-nums;max-width:360px;text-align:right}
+.banner.undone{background:var(--surface);border-bottom-color:var(--line)}
+.banner.undone .btxt b{color:var(--ink)}
+.banner.undone .btxt span{color:var(--text-2)}
+
 /* Mobile (Paper artboard L, 390px) */
 @media (max-width:760px){
   .app{flex-direction:column}
@@ -639,6 +646,7 @@ a{color:inherit;text-decoration:none}
   /* ── API ─────────────────────────────────────────────────────────── */
   function ApiError(status, body) {
     this.status = status;
+    this.body = body;
     this.message = (body && (body.detail || body.error)) || ('Request failed (' + status + ')');
   }
 
@@ -1150,6 +1158,7 @@ a{color:inherit;text-decoration:none}
     var d = state.lastDecision[id];
     if (!d) { location.replace('#/item/' + encodeURIComponent(id)); return; }
     setMain(approvedHtml(d));
+    bindUndo(id, d);
   }
 
   function motionIcon(m) {
@@ -1186,13 +1195,54 @@ a{color:inherit;text-decoration:none}
     return '<div class="banner" role="status"><span class="bcheck" aria-hidden="true">' + ICON.check + '</span>' +
       '<div class="btxt"><b>Approved' + (who ? ' by ' + esc(who) : '') + (d.decided_at ? ' · ' + esc(clock(d.decided_at)) : '') + '</b>' +
       (sub ? '<span>' + esc(sub) + '</span>' : '') + '</div>' +
-      '<button type="button" class="btn undo" disabled aria-disabled="true" title="Undo is not available yet">Undo</button></div>' +
+      undoHtml(d) + '</div>' +
       '<div class="page approved"><div class="stack6"><h1 class="h1 sm">' + esc(it.title) + '</h1><div class="row9">' +
       '<span class="pill green caps">' + esc((STATUS_LABEL[it.status] || 'In motion').toUpperCase()) + '</span>' +
       '<span class="caption">Moved out of your queue</span></div></div>' +
       (rows ? '<ol class="motions">' + rows + '</ol>' : '') +
       (panes ? '<div class="panes">' + panes + '</div>' : '') +
       '<p><a class="link" href="#/work">Back to Work</a></p></div>';
+  }
+
+  /* ── Undo ────────────────────────────────────────────────────────── */
+  function stopTimer() { if (state.timer) { clearInterval(state.timer); state.timer = null; } }
+  function undoLive(u) { return !!(u && u.available && (!u.until || new Date(u.until) > new Date())); }
+  function undoHtml(d) {
+    var u = d.undo;
+    if (!undoLive(u)) return u && has(u.reason) ? '<span class="undo-note">' + esc(u.reason) + '</span>' : '';
+    if (!canDecide()) return '<span class="undo-note">' + signInLink('Sign in to undo') + '</span>';
+    return '<span class="undo-wrap"><span class="undo-note" data-undo-left></span><button type="button" class="btn undo" data-undo>Undo</button></span>';
+  }
+  function fmtLeft(ms) { var s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+  function bindUndo(id, d) {
+    var btn = main.querySelector('[data-undo]'), left = main.querySelector('[data-undo-left]');
+    if (!btn) return;
+    var until = d.undo && d.undo.until ? new Date(d.undo.until) : null;
+    function tick() {
+      if (!until) return;
+      var ms = until - new Date();
+      if (ms <= 0) { stopTimer(); var w = btn.closest('.undo-wrap'); if (w) w.outerHTML = '<span class="undo-note">Undo window closed</span>'; return; }
+      left.textContent = 'Undo for ' + fmtLeft(ms);
+    }
+    stopTimer(); tick();
+    if (until) state.timer = setInterval(tick, 1000);
+    btn.addEventListener('click', function () {
+      btn.disabled = true; btn.textContent = 'Undoing…';
+      api('/api/workspace/work/' + encodeURIComponent(id) + '/undo', { method: 'POST', body: { company_id: state.companyId } }).then(function (r) {
+        stopTimer(); delete state.lastDecision[id];
+        var it = (r.data || {}).item || d.item || {};
+        var banner = main.querySelector('.banner');
+        banner.classList.add('undone');
+        banner.innerHTML = '<div class="btxt"><b>Undone</b><span>' + esc(it.title || 'This item') + ' is back in the queue.</span></div>' +
+          '<a class="btn undo" href="#/item/' + encodeURIComponent(id) + '">Open it</a>';
+        main.querySelectorAll('.page.approved .motions, .page.approved .panes').forEach(function (x) { x.remove(); });
+      }).catch(function (e) {
+        if (e && e.status === 401) return;
+        stopTimer();
+        var reason = (e && e.body && (e.body.reason || e.body.detail)) || (e && e.status === 409 ? 'This one can’t be undone.' : 'Undo didn’t go through.');
+        var w = btn.closest('.undo-wrap'); if (w) w.outerHTML = '<span class="undo-note">' + esc(reason) + '</span>';
+      });
+    });
   }
 
   /* ── Portfolio ───────────────────────────────────────────────────── */
@@ -1762,6 +1812,7 @@ a{color:inherit;text-decoration:none}
 
   /* ── Router ──────────────────────────────────────────────────────── */
   function route() {
+    stopTimer();
     var h = (location.hash || '').replace(/^#\/?/, '');
     var parts = h.split('?')[0].split('/');
     var name = parts[0] || (isInternal() ? 'portfolio' : 'work');

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, request
@@ -87,6 +88,9 @@ def decision(item_id: str):
     if body.get("action") == "not_now" and not body.get("reason"):
         return jsonify({"error": "reason is required when the action is not_now"}), 400
     data = copy.deepcopy(_fixture("decision"))
+    now = datetime.now(timezone.utc)
+    data["decided_at"] = now.isoformat()
+    data["undo"]["until"] = (now + timedelta(minutes=10)).isoformat()
     for it in _all_items(_fixture("work")):
         if it["id"] == item_id:
             data["item"]["id"] = it["id"]
@@ -160,6 +164,24 @@ def request_file():
 @app.get("/api/workspace/requests")
 def requests_recent():
     return jsonify(_fixture("requests_recent"))
+
+
+@app.get("/api/workspace/search")
+def search():
+    q = (request.args.get("q") or "").strip().lower()
+    results = [r for r in _fixture("search")["results"] if q and q in f"{r['title']} {r['subtitle']}".lower()]
+    return jsonify({"as_of": _fixture("search")["as_of"], "results": results[:20]})
+
+
+@app.post("/api/workspace/work/<path:item_id>/undo")
+def undo(item_id: str):
+    body = request.get_json(silent=True) or {}
+    if not body.get("company_id"):
+        return jsonify({"error": "company_id is required"}), 400
+    if item_id != _fixture("item")["id"]:
+        # Demonstrates the 409 path: this source has already pushed its change out.
+        return jsonify({"error": "not_undoable", "reason": "The listing change already went out to the feeds, so it can't be pulled back from here."}), 409
+    return jsonify(_fixture("undo"))
 
 
 @app.get("/api/ask/questions")

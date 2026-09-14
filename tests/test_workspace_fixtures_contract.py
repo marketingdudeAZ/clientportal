@@ -268,3 +268,25 @@ def test_requests_recent():
     for r in d["recent"]:
         check(r, {"title": str, "status": str, "status_date": OPT_STR, "work_item_id": OPT_STR}, "requests_recent.recent[]")
         assert r["status"] in {"done", "in_progress", "new"}
+
+
+def test_search():
+    d = load("search")
+    check(d, {"results": list}, "search")
+    assert 0 < len(d["results"]) <= 20
+    for i, r in enumerate(d["results"]):
+        check(r, {"type": str, "id": str, "title": str, "subtitle": OPT_STR, "company_id": OPT_STR, "href": str}, f"search.results[{i}]")
+        assert r["type"] in {"property", "work_item", "report", "question"}
+        assert r["href"].startswith("#/"), "search hrefs are in-page routes"
+
+
+def test_decision_undo():
+    d = load("decision")
+    check(d["undo"], {"available": bool, "until": OPT_STR, "reason": OPT_STR}, "decision.undo")
+
+
+def test_undo():
+    d = load("undo")
+    check(d, {"item": dict, "undone": bool}, "undo")
+    assert d["undone"] is True
+    check_item(d["item"], "undo.item")
