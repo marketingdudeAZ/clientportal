@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Monthly report · RPM Workspace</title>
+<script>window.__CLERK_PK__ = '';</script>
+<script>
+/* ── Identity (same approach as client-portal.html's Clerk gate, ADR 0002) ──
+   - A signed preview link arrives as ?t=. It moves to sessionStorage, leaves
+     the URL, and rides on every API call as X-Workspace-Link.
+   - With a Clerk publishable key and no preview link, API calls wait for the
+     Clerk session and carry Authorization: Bearer <session JWT>.
+   - There is no ?email= identity on this page. */
+(function () {
+  var LINK_KEY = 'workspace_link';
+  try {
+    var u = new URL(window.location.href);
+    var t = u.searchParams.get('t');
+    if (t) {
+      sessionStorage.setItem(LINK_KEY, t);
+      u.searchParams.delete('t');
+      window.history.replaceState(null, '', u.pathname + u.search + u.hash);
+    }
+  } catch (e) {}
+  function linkToken() { try { return sessionStorage.getItem(LINK_KEY) || ''; } catch (e) { return ''; } }
+  function isApi(url) {
+    try { var p = new URL(url, window.location.href); return p.origin === window.location.origin && p.pathname.indexOf('/api/') === 0; }
+    catch (e) { return false; }
+  }
+  var CLERK_PK = window.__CLERK_PK__ || '';
+  var clerkOn = CLERK_PK.indexOf('pk_') === 0 && !linkToken();
+  var readyResolve;
+  var ready = clerkOn ? new Promise(function (res) { readyResolve = res; }) : Promise.resolve(true);
+  var _fetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    var url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (!isApi(url)) return _fetch(input, init);
+    return ready.then(function () {
+      var tok = (clerkOn && window.Clerk && window.Clerk.session) ? window.Clerk.session.getToken() : Promise.resolve('');
+      return tok.then(function (tk) {
+        init = init || {};
+        var h = new Headers(init.headers || {});
+        if (tk) h.set('Authorization', 'Bearer ' + tk);
+        if (window.__PORTAL_EMAIL__) h.set('X-Portal-Email', window.__PORTAL_EMAIL__);
+        var link = linkToken();
+        if (link) h.set('X-Workspace-Link', link);
+        init.headers = h;
+        init.credentials = 'same-origin';
+        return _fetch(url, init);
+      });
+    });
+  };
+  if (!clerkOn) return;
+  function finishAuth() {
+    var usr = window.Clerk.user;
+    window.__PORTAL_EMAIL__ = (usr && usr.primaryEmailAddress && usr.primaryEmailAddress.emailAddress) || '';
+    var g = document.getElementById('clerk-gate'); if (g) g.remove();
+    readyResolve(true);
+  }
+  function showGate() {
+    var d = document.createElement('div');
+    d.id = 'clerk-gate';
+    d.style.cssText = 'position:fixed;inset:0;background:#444E4C;z-index:2147483000;display:flex;align-items:center;justify-content:center;';
+    var m = document.createElement('div'); m.id = 'clerk-signin-mount'; d.appendChild(m);
+    document.body.appendChild(d);
+    window.Clerk.mountSignIn(m, {
+      forceRedirectUrl: window.location.href, fallbackRedirectUrl: window.location.href,
+      afterSignInUrl: window.location.href, afterSignUpUrl: window.location.href
+    });
+    window.Clerk.addListener(function (r) { if (r.user) finishAuth(); });
+  }
+  function boot() {
+    var domain = '';
+    try { domain = atob(CLERK_PK.split('_').pop() + '='.repeat((4 - CLERK_PK.split('_').pop().length % 4) % 4)).replace(/\$$/, ''); } catch (e) {}
+    var s = document.createElement('script');
+    s.src = 'https://' + (domain || 'cdn.jsdelivr.net/npm') + (domain ? '' : '/@clerk/clerk-js@5/dist') + (domain ? '/npm/@clerk/clerk-js@5/dist/clerk.browser.js' : '/clerk.browser.js');
+    s.async = true; s.crossOrigin = 'anonymous';
+    s.setAttribute('data-clerk-publishable-key', CLERK_PK);
+    document.head.appendChild(s);
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      var C = window.Clerk;
+      if (C && (typeof C.load === 'function')) {
+        clearInterval(timer);
+        C.load({ publishableKey: CLERK_PK }).then(function () { C.user ? finishAuth() : showGate(); })
+          .catch(function (e) { console.warn('Clerk load failed', e); });
+      } else if (C && typeof C === 'function') {
+        clearInterval(timer);
+        var inst = new C(CLERK_PK);
+        window.Clerk = inst;
+        inst.load().then(function () { inst.user ? finishAuth() : showGate(); })
+          .catch(function (e) { console.warn('Clerk load failed', e); });
+      } else if (tries > 100) { clearInterval(timer); console.warn('Clerk never initialized'); }
+    }, 150);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#FBFAF7; --paper:#FFFFFF; --ink:#282D27; --body:#3C4240; --muted:#5A5E5C; --soft:#76797A;
+  --faint:#8C8677; --eyebrow:#A09884; --line:#E3DFD4; --line2:#E9E5DB; --accent:#AB784A;
+  --panel:#F4F1EA; --bar1:#6B2E2E; --bar2:#8A4646; --bar3:#B08383;
+  --side:#444E4C; --side-card:#3B4442; --side-active:#525C5A; --side-muted:#98A5A2; --side-text:#D3DAD8; --side-icon:#B4BFBC;
+  --chip:#F1ECE2; --chip-ink:#7A5A33; --good:#2F6B57;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif; --display:"Montserrat",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--ground);color:var(--body);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-wrap:anywhere}
+button,select{font:inherit;color:inherit}
+.app{display:flex;min-height:100vh}
+
+/* Sidebar — artboard A "Sidebar" */
+.side{width:216px;flex-shrink:0;background:var(--side);display:flex;flex-direction:column;gap:30px;padding:26px 0 22px;position:sticky;top:0;align-self:flex-start;min-height:100vh}
+.wm{display:flex;flex-direction:column;gap:3px;padding:0 22px}
+.wm b{color:#fff;font:700 16px/20px var(--display);letter-spacing:.16em}
+.wm span{color:var(--side-muted);font-size:12px;line-height:16px;letter-spacing:.04em}
+.prop{background:var(--side-card);border-left:3px solid var(--accent);display:flex;flex-direction:column;gap:5px;padding:14px 22px}
+.prop .k{color:var(--side-muted);font-size:11px;font-weight:600;letter-spacing:.14em;line-height:14px}
+.prop .n{color:#fff;font:600 16px/20px var(--display);letter-spacing:-.01em;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.prop .m{color:var(--side-muted);font-size:12px;line-height:16px}
+.nav{display:flex;flex-direction:column;gap:1px;padding:0 12px}
+.nav a{display:flex;align-items:center;gap:11px;padding:10px;border-radius:5px;color:var(--side-text);font-size:14px;line-height:18px;text-decoration:none}
+.nav a:hover{background:rgba(255,255,255,.05)}
+.nav a.on{background:var(--side-active);color:#fff;font-weight:600}
+.nav svg{width:16px;flex-shrink:0}
+
+/* Report column — artboard D "Report" */
+.report{flex:1;min-width:0;padding:38px 72px 44px}
+.wrap{max-width:1080px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:20px;padding-bottom:30px}
+.eyebrow{color:var(--eyebrow);font-size:12px;font-weight:600;letter-spacing:.16em;line-height:16px;text-transform:uppercase}
+.ctl{display:flex;gap:9px;align-items:center}
+.pill{display:flex;align-items:center;gap:7px;background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:7px 13px;color:var(--body);font-size:13px;font-weight:500;line-height:16px;cursor:pointer}
+.pill:hover{border-color:#CFC9BB}
+.pill select{appearance:none;-webkit-appearance:none;border:0;background:transparent;font-size:13px;font-weight:500;line-height:16px;color:var(--body);cursor:pointer;padding-right:2px}
+.pill select:focus{outline:none}
+.pill:focus-within,.pill:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.head{display:flex;flex-direction:column;gap:18px;padding-bottom:34px;border-bottom:1px solid var(--line)}
+.head h1{color:var(--ink);font:600 52px/60px var(--display);letter-spacing:-.03em;max-width:880px}
+.head p{color:var(--muted);font-size:19px;line-height:31px;max-width:800px}
+
+.verdict{display:flex;gap:46px;align-items:flex-start;padding:34px 0;border-bottom:1px solid var(--line)}
+.lead{width:210px;flex-shrink:0;display:flex;flex-direction:column;gap:4px}
+.lead .num{display:flex;align-items:baseline;gap:10px}
+.lead .num b{color:var(--ink);font:600 88px/88px var(--display);letter-spacing:-.04em}
+.lead .num span{color:var(--faint);font-size:20px;line-height:24px}
+.lead .sub{color:var(--accent);font-size:13px;font-weight:600;letter-spacing:.1em;line-height:16px;text-transform:uppercase}
+.verdict .text{flex:1;min-width:0;color:var(--body);font-size:17px;line-height:29px}
+
+.keys{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-bottom:1px solid var(--line)}
+.keys .kn{padding:24px 20px 24px 0;display:flex;flex-direction:column;gap:6px}
+.keys .kn+.kn{padding-left:20px;border-left:1px solid var(--line)}
+.kn .v{color:var(--ink);font:600 32px/38px var(--display);letter-spacing:-.02em;white-space:nowrap}
+.kn .l{color:var(--faint);font-size:11px;font-weight:600;letter-spacing:.14em;line-height:14px;text-transform:uppercase}
+.kn .s{color:var(--soft);font-size:13px;line-height:17px}
+
+.sec-title{display:flex;flex-direction:column;gap:5px}
+.sec-label{color:var(--accent);font-size:12px;font-weight:600;letter-spacing:.16em;line-height:16px;text-transform:uppercase}
+.sec-desc{color:var(--soft);font-size:15px;line-height:23px;max-width:720px}
+
+/* Funnel — artboard D "Funnel" */
+.funnel{display:flex;flex-direction:column;gap:16px;padding-top:32px}
+.fpanel{background:var(--panel);border-left:3px solid var(--bar1);border-radius:0 8px 8px 0;padding:22px 26px;display:flex;flex-direction:column}
+.frow{display:flex;align-items:center;gap:16px}
+.frow .fl{width:118px;flex-shrink:0;text-align:right;color:var(--body);font-size:14px;font-weight:500;line-height:18px}
+.frow .track{flex:1;min-width:0;max-width:600px}
+.frow .fb{height:34px;border-radius:3px;display:flex;align-items:center;padding-left:14px;min-width:40px;color:#fff;font-size:15px;font-weight:700;line-height:18px}
+.frow .fr{width:70px;flex-shrink:0;color:var(--muted);font-size:14px;line-height:18px}
+.frow .fr.none{color:var(--eyebrow)}
+.fdays{display:flex;gap:16px;padding:6px 0}
+.fdays .sp{width:118px;flex-shrink:0}
+.fdays span{color:var(--faint);font-size:13px;line-height:16px}
+.fdays span.long{color:var(--bar1);font-weight:700}
+.fnote{padding:18px 0 0 134px;color:var(--muted);font-size:15px;line-height:24px;max-width:754px}
+
+/* Next month */
+.next{padding-top:38px;display:flex;flex-direction:column;gap:6px}
+.acts{list-style:none;margin-top:10px;border-top:1px solid var(--line)}
+.act{display:grid;grid-template-columns:48px minmax(0,1fr);gap:4px 12px;padding:20px 0;border-bottom:1px solid var(--line)}
+.act .rk{grid-row:span 3;color:var(--accent);font:600 30px/34px var(--display)}
+.act .stake{color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.12em;line-height:14px;text-transform:uppercase}
+.act h3{color:var(--ink);font-size:17px;font-weight:600;line-height:24px}
+.act p{color:var(--muted);font-size:15px;line-height:24px;max-width:760px}
+
+/* Collapsible sections */
+.details{margin-top:44px;border-top:1px solid var(--ink)}
+.details-h{padding:16px 0 4px;color:var(--eyebrow);font-size:12px;font-weight:600;letter-spacing:.16em;line-height:16px;text-transform:uppercase}
+.sec{border-bottom:1px solid var(--line)}
+.sec-head{width:100%;display:grid;grid-template-columns:200px minmax(0,1fr) 20px;gap:24px;align-items:baseline;text-align:left;background:none;border:0;padding:20px 0;cursor:pointer}
+.sec-head:hover .sec-take{color:var(--ink)}
+.sec-head:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.sec-take{color:var(--body);font-size:15px;line-height:23px}
+.chev{width:12px;height:8px;align-self:center;transition:transform .15s}
+.sec-head[aria-expanded="true"] .chev{transform:rotate(180deg)}
+.sec-body{padding:4px 0 30px}
+.sec-body[hidden]{display:none}
+.note{color:var(--muted);font-size:15px;line-height:24px;max-width:800px;margin-top:16px}
+
+/* Stat cells */
+.cells{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.cell{padding:18px 18px 18px 0;display:flex;flex-direction:column;gap:5px}
+.cell+.cell{padding-left:18px;border-left:1px solid var(--line)}
+.cell .v{color:var(--ink);font:600 28px/34px var(--display);letter-spacing:-.02em;white-space:nowrap}
+.cell .l{color:var(--faint);font-size:11px;font-weight:600;letter-spacing:.14em;line-height:14px;text-transform:uppercase}
+.cell .s{color:var(--soft);font-size:13px;line-height:17px}
+.subline{color:var(--muted);font-size:15px;line-height:24px;margin:16px 0 0}
+
+/* Tables */
+.tw{overflow-x:auto;margin-top:18px;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:14px;line-height:18px;font-variant-numeric:tabular-nums}
+th{color:var(--faint);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;text-align:right;padding:0 0 10px 14px;border-bottom:1px solid var(--ink);white-space:nowrap}
+td{padding:12px 0 12px 14px;border-bottom:1px solid var(--line2);text-align:right;color:var(--body);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;padding-left:0;white-space:normal}
+tr.em td{font-weight:600;color:var(--ink)}
+.dash{color:var(--eyebrow)}
+.badge{display:inline-block;margin-left:8px;padding:2px 6px;border-radius:3px;background:var(--chip);color:var(--chip-ink);font-size:10.5px;font-weight:600;letter-spacing:.08em;line-height:14px;text-transform:uppercase;vertical-align:1px}
+
+/* Attribution — Paper D "Sources" + widgets E (cards) and A (flow) */
+.attr-top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;flex-shrink:0}
+.seg button{border:0;background:var(--paper);color:var(--muted);font-size:13px;line-height:16px;padding:7px 14px;cursor:pointer}
+.seg button.on{background:var(--ink);color:#fff;font-weight:500}
+.cards{display:flex;gap:14px;margin-top:16px;flex-wrap:wrap}
+.card{background:var(--paper);border:1px solid var(--line2);border-radius:8px;padding:16px 17px;display:flex;flex-direction:column;gap:12px;width:236px}
+.card .t{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:14px;font-weight:600;line-height:18px}
+.card .dot{width:9px;height:9px;border-radius:5px;flex-shrink:0}
+.card .s{color:var(--soft);font-size:13px;line-height:16px}
+.card .bars{display:flex;align-items:flex-end;gap:5px;height:46px}
+.card .bars i{display:block;width:32px;border-radius:2px}
+.card .shape{color:var(--good);font-size:12px;font-weight:600;letter-spacing:.06em;line-height:16px;text-transform:uppercase}
+.card .shape.early_stages{color:var(--muted)}
+.card .shape.later_stages{color:#9A5B22}
+.card .shape.single_stage{color:var(--faint)}
+.card.more{border-style:dashed;border-color:var(--line);background:transparent;align-items:center;justify-content:center;gap:6px;min-width:110px;width:auto;flex:1;cursor:pointer}
+.card.more b{color:var(--body);font-size:15px;font-weight:600;line-height:18px}
+.card.more span{color:var(--faint);font-size:13px;line-height:16px;text-align:center}
+.legend-line{color:var(--faint);font-size:12.5px;line-height:18px;margin-top:10px}
+.flow{margin-top:16px}
+.flow svg{display:block;width:100%;height:auto}
+.flow .stgl{font:600 12px var(--sans);fill:var(--ink)}
+.flow .stgn{font:11px var(--sans);fill:var(--soft)}
+.flow .nlab{font:600 10.5px var(--sans);fill:#fff;pointer-events:none}
+.flow .rib,.flow .node{transition:opacity .15s}
+.flow .faded{opacity:.1}
+.flow-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px}
+.flow-legend span{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--body);cursor:default}
+.flow-legend i{width:10px;height:10px;border-radius:3px;display:block}
+.mediums{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:14px;color:var(--muted);font-size:14px;line-height:22px}
+.mediums b{color:var(--ink);font-weight:600}
+.linkbtn{background:none;border:0;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:10px 0 0}
+
+/* Website floor plans */
+.web-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:40px;align-items:start}
+.fp-h{color:var(--faint);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;margin:18px 0 12px}
+.fp{display:grid;grid-template-columns:34px minmax(0,1fr) 40px;gap:10px;align-items:center;margin-bottom:9px;font-size:13px}
+.fp b{color:var(--ink);font-weight:600}
+.fp i{display:block;height:12px;border-radius:2px;background:var(--bar2)}
+.fp span{color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+
+/* Reputation */
+.rep{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;margin-top:4px}
+.rep div{background:var(--panel);padding:16px 12px;text-align:center;display:flex;flex-direction:column;gap:4px}
+.rep .n{color:var(--faint);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+.rep .v{color:var(--ink);font:600 34px/40px var(--display)}
+.rep .s{color:var(--soft);font-size:12.5px;line-height:17px}
+.rep .off{background:repeating-linear-gradient(135deg,#F4F1EA 0 8px,#EFEBE2 8px 16px)}
+.rep .off .v{color:var(--eyebrow)}
+.empty{border:1px dashed var(--line);border-radius:6px;padding:22px;text-align:center;color:var(--soft);font-size:14px;line-height:22px;margin-top:4px}
+.empty b{display:block;color:var(--body);font-weight:600;margin-bottom:4px}
+
+/* Footer */
+.foot{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);color:var(--soft);font-size:12.5px;line-height:20px;display:flex;flex-direction:column;gap:8px;max-width:960px}
+.foot b{color:var(--body);font-weight:600}
+.foot ul{list-style:none;display:flex;flex-direction:column;gap:4px;margin-top:2px}
+.foot li{padding-left:12px;position:relative}
+.foot li:before{content:"·";position:absolute;left:2px}
+.state{padding:80px 0;color:var(--soft);font-size:16px;line-height:26px}
+.state b{display:block;color:var(--ink);font:600 24px/32px var(--display);margin-bottom:6px}
+
+@media (max-width:1100px){
+  .report{padding:32px 40px 40px}
+  .keys{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .keys .kn:nth-child(4){padding-left:0;border-left:0}
+  .web-grid{grid-template-columns:1fr;gap:0}
+}
+@media (max-width:760px){
+  .app{flex-direction:column}
+  .side{width:auto;min-height:0;position:static;flex-direction:row;align-items:center;gap:14px;padding:12px 16px}
+  .wm{padding:0}
+  .prop{background:transparent;border-left:0;padding:0 0 0 14px;border-left:1px solid #5B6563;gap:1px}
+  .prop .k{display:none}
+  .prop .n{font-size:14px;line-height:18px}
+  .nav{display:none}
+  .report{padding:22px 16px 32px}
+  .bar{padding-bottom:20px}
+  .bar .eyebrow{font-size:10.5px;letter-spacing:.12em}
+  .head{gap:10px;padding-bottom:22px}
+  .head h1{font-size:32px;line-height:38px}
+  .head p{font-size:15px;line-height:24px}
+  .verdict{flex-direction:column;gap:12px;padding:24px 0}
+  .lead .num b{font-size:64px;line-height:64px}
+  .verdict .text{font-size:16px;line-height:26px}
+  .keys{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .keys .kn,.keys .kn+.kn{padding:16px 12px 16px 0;border-left:0}
+  .keys .kn:nth-child(even){padding-left:14px;border-left:1px solid var(--line)}
+  .keys .kn:nth-child(n+3){border-top:1px solid var(--line)}
+  .kn .v{font-size:26px;line-height:32px}
+  .fpanel{padding:16px 14px}
+  .frow{gap:10px}
+  .frow .fl{width:74px;font-size:13px}
+  .frow .fr{width:48px;font-size:13px}
+  .fdays{gap:10px}
+  .fdays .sp{width:74px}
+  .fnote{padding:14px 0 0}
+  .act{grid-template-columns:36px minmax(0,1fr)}
+  .act .rk{font-size:24px}
+  .sec-head{grid-template-columns:minmax(0,1fr) 16px;gap:4px 12px}
+  .sec-head .sec-label{grid-column:1}
+  .sec-head .sec-take{grid-column:1;grid-row:2}
+  .sec-head .chev{grid-column:2;grid-row:1 / span 2}
+  .attr-top{flex-direction:column;align-items:flex-start;gap:12px}
+  .card{width:calc(50% - 7px);padding:14px}
+  .card .bars i{width:calc((100% - 20px) / 5)}
+  .card.more{width:calc(50% - 7px);flex:none}
+  .rep{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cell,.cell+.cell{padding:14px 10px 14px 0;border-left:0}
+}
+@page{margin:12mm}
+@media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body{background:#fff;font-size:12.5px}
+  .side,.ctl,.seg,.linkbtn,.chev,.card.more,.flow,.flow-legend{display:none!important}
+  .report{padding:0}
+  .wrap{max-width:none}
+  .bar{padding-bottom:14px}
+  .head h1{font-size:34px;line-height:40px}
+  .verdict,.keys,.fpanel,.act,.card,.rep,table,tr,.cells{break-inside:avoid;page-break-inside:avoid}
+  .sec-body,.sec-body[hidden]{display:block!important}
+  .cards-view{display:flex!important}
+  .cards .card.extra{display:flex!important}
+  tr.extra{display:table-row!important}
+  .sec-head{cursor:default;padding:18px 0 10px}
+  .details{break-before:auto}
+  .sec{break-inside:auto}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" aria-label="Workspace">
+    <div class="wm"><b>RPM</b><span>Digital</span></div>
+    <div class="prop">
+      <div class="k">PROPERTY</div>
+      <div class="n"><span id="side-name">—</span>
+        <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1L5 5L9 1" fill="none" stroke="#98A5A2" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+      <div class="m" id="side-meta"></div>
+    </div>
+    <nav class="nav" id="nav">
+      <a href="/workspace#work" data-nav="work"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><rect x="1.6" y="2.4" width="11.8" height="10.2" rx="1.6" fill="none" stroke="#B4BFBC" stroke-width="1.3"/><path d="M4.6 6.2h5.8M4.6 9.1h3.6" fill="none" stroke="#B4BFBC" stroke-width="1.3" stroke-linecap="round"/></svg>Work</a>
+      <a href="/workspace#property" data-nav="property"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><path d="M2.2 6.4L7.5 2.2l5.3 4.2v6.1a.9.9 0 0 1-.9.9H3.1a.9.9 0 0 1-.9-.9V6.4z" fill="none" stroke="#B4BFBC" stroke-width="1.3" stroke-linejoin="round"/></svg>Property</a>
+      <a href="/workspace#performance" data-nav="performance"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><path d="M2 11.4l3.4-3.9 2.6 2.2 4.9-5.5" fill="none" stroke="#B4BFBC" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Performance</a>
+      <a href="/workspace#plan" data-nav="plan"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><circle cx="7.5" cy="7.5" r="5.4" fill="none" stroke="#B4BFBC" stroke-width="1.3"/><path d="M7.5 4.4v3.1l2.1 1.5" fill="none" stroke="#B4BFBC" stroke-width="1.3" stroke-linecap="round"/></svg>Plan &amp; Spend</a>
+      <a href="/workspace#ask" data-nav="ask"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><path d="M2.3 3.6a1.2 1.2 0 0 1 1.2-1.2h8a1.2 1.2 0 0 1 1.2 1.2v5a1.2 1.2 0 0 1-1.2 1.2H6.1L3.4 12.4V9.8h-1.1V3.6z" fill="none" stroke="#B4BFBC" stroke-width="1.3" stroke-linejoin="round"/></svg>Ask</a>
+      <a class="on" aria-current="page" data-nav="reports"><svg viewBox="0 0 15 15" height="15" aria-hidden="true"><path d="M3.6 1.9h5l3 3v8.2a.8.8 0 0 1-.8.8H3.6a.8.8 0 0 1-.8-.8V2.7a.8.8 0 0 1 .8-.8z" fill="none" stroke="#FFFFFF" stroke-width="1.3" stroke-linejoin="round"/><path d="M8.4 2v3.1h3" fill="none" stroke="#FFFFFF" stroke-width="1.3" stroke-linejoin="round"/></svg>Reports</a>
+    </nav>
+  </aside>
+
+  <main class="report" id="main">
+    <div class="wrap">
+      <div class="bar">
+        <div class="eyebrow">RPM Living · Marketing report</div>
+        <div class="ctl">
+          <label class="pill" title="Month">
+            <select id="month" aria-label="Report month"></select>
+            <svg width="9" height="6" viewBox="0 0 9 6" aria-hidden="true"><path d="M1 1l3.5 3.5L8 1" fill="none" stroke="#8C8677" stroke-width="1.3" stroke-linecap="round"/></svg>
+          </label>
+          <button class="pill" id="pdf" type="button" aria-label="Save as PDF">
+            <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M6.5 1.6v7M3.7 5.8l2.8 2.8 2.8-2.8M2 10.9h9" fill="none" stroke="#5A5E5C" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>PDF
+          </button>
+        </div>
+      </div>
+      <div id="content"><div class="state">Loading report…</div></div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── formatting (mirrors skills/workspace_report.py) ─────────────────── */
+  var MINUS = '−';
+  function v(r) { return r && typeof r === 'object' && 'value' in r ? r.value : null; }
+  function has(r) { var x = v(r); return x !== null && x !== undefined; }
+  function halfUp(x, dp) { var m = Math.pow(10, dp || 0); return Math.sign(x) * Math.round(Math.abs(x) * m + 1e-9) / m; }
+  function fInt(x) { var n = halfUp(x, 0); return (n < 0 ? MINUS : '') + Math.abs(n).toLocaleString('en-US'); }
+  function fMoney(x, dp) { dp = dp || 0; var n = halfUp(Math.abs(x), dp); return (x < 0 ? MINUS : '') + '$' + n.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp }); }
+  function fPct(frac, dp) { dp = dp === undefined ? 1 : dp; return halfUp(frac * 100, dp).toFixed(dp) + '%'; }
+  function fDec(x, dp) { return halfUp(x, dp).toFixed(dp); }
+  function fCompact(x) { return Math.abs(x) >= 1000 ? fDec(x / 1000, 1) + 'K' : fInt(x); }
+  function esc(s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var DASH = '<span class="dash" title="Not available yet">—</span>';
+  function show(r, fmt) { return has(r) ? esc(fmt(v(r))) : DASH; }
+  function title(r) { return r && r.source ? ' title="' + esc(r.source + (r.as_of ? ' · ' + r.as_of : '')) + '"' : ''; }
+  function cellNum(r, fmt) { return '<td' + title(r) + '>' + show(r, fmt) + '</td>'; }
+
+  var CHEV = '<svg class="chev" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1.5l5 5 5-5" fill="none" stroke="#8C8677" stroke-width="1.5" stroke-linecap="round"/></svg>';
+  var STAGES = ['created', 'scheduled', 'toured', 'applied', 'leased'];
+  var STAGE_LABEL = { created: 'Created', scheduled: 'Scheduled', toured: 'Toured', applied: 'Applied', leased: 'Leased' };
+  var SHAPE_LABEL = { present_throughout: 'Present throughout', early_stages: 'Mostly early stages', later_stages: 'Mostly later stages', single_stage: 'One stage only' };
+  var DAYS_STEP = { created: 'to schedule', scheduled: 'to tour', toured: 'to apply', applied: 'to lease' };
+
+  var params = new URLSearchParams(window.location.search);
+  var companyId = params.get('company_id') || '';
+  var content = document.getElementById('content');
+  var monthSel = document.getElementById('month');
+  var attrMode = 'cards';
+  try { attrMode = sessionStorage.getItem('ws_attr_mode') || 'cards'; } catch (e) {}
+
+  document.getElementById('pdf').addEventListener('click', function () { window.print(); });
+  monthSel.addEventListener('change', function () {
+    params.set('month', monthSel.value);
+    window.history.replaceState(null, '', window.location.pathname + '?' + params.toString());
+    load();
+  });
+
+  function state(head, body) { content.innerHTML = '<div class="state"><b>' + esc(head) + '</b>' + esc(body || '') + '</div>'; }
+
+  function load() {
+    if (!companyId) { state('Choose a property', 'Open this report from a property in the Workspace.'); return; }
+    var q = new URLSearchParams({ company_id: companyId });
+    if (params.get('month')) q.set('month', params.get('month'));
+    content.setAttribute('aria-busy', 'true');
+    fetch('/api/workspace/report?' + q.toString()).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) { return { status: res.status, body: body }; });
+    }).then(function (r) {
+      content.removeAttribute('aria-busy');
+      if (r.status === 200) return render(r.body);
+      if (r.status === 401) return state('Sign in to view this report', '');
+      if (r.status === 403) return state("This report isn't shared with you", 'Ask your RPM account manager for access.');
+      if (r.status === 404) return state('No report for this month', (r.body && r.body.detail) || 'Choose another month.');
+      if (r.status === 400) return state('That month isn\'t valid', 'Choose a month from the list.');
+      return state('A data source didn\'t respond', 'Please try again in a few minutes.');
+    }).catch(function () { state('The report couldn\'t load', 'Check your connection and try again.'); });
+  }
+
+  /* ── sections ─────────────────────────────────────────────────────────── */
+  function header(d) {
+    var p = d.property || {};
+    document.title = (p.name || 'Property') + ' · ' + d.month_label + ' report';
+    document.getElementById('side-name').textContent = p.name || '—';
+    var meta = [p.city && p.state ? p.city + ', ' + p.state : (p.city || p.state || ''), has(p.units) ? fInt(v(p.units)) + ' units' : ''].filter(Boolean).join(' · ');
+    document.getElementById('side-meta').textContent = meta;
+    monthSel.innerHTML = (d.available_months || [d.month]).slice().reverse().map(function (m) {
+      var parts = m.split('-'); var label = new Date(Date.UTC(+parts[0], +parts[1] - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+      return '<option value="' + esc(m) + '"' + (m === d.month ? ' selected' : '') + '>' + esc(label) + '</option>';
+    }).join('');
+    var sub = [d.month_label, has(p.units) ? fInt(v(p.units)) + ' units' : '', p.city && p.state ? p.city + ', ' + p.state : ''].filter(Boolean).join(' · ');
+    return '<header class="head"><h1>' + esc(p.name || 'Property') + '</h1><p>' + esc(sub) + '</p></header>';
+  }
+
+  function verdict(d) {
+    var s = d.summary || {}; var lead = s.lead || {};
+    return '<section class="verdict" aria-label="Summary"><div class="lead"><div class="num"><b' + title(lead.value) + '>' + show(lead.value, fInt) +
+      '</b><span>' + esc(lead.label || '') + '</span></div>' + (lead.sub ? '<div class="sub">' + esc(lead.sub) + '</div>' : '') +
+      '</div><p class="text">' + esc(s.text || '') + '</p></section>';
+  }
+
+  var KEY_FMT = { leased_rate: fPct, occupied_rate: fPct, net_move_ins: fInt, leads_created: fInt, cost_per_lease: function (x) { return fMoney(x); } };
+  function keyNumbers(d) {
+    return '<section class="keys" aria-label="Key numbers">' + (d.key_numbers || []).map(function (k) {
+      return '<div class="kn"><div class="v"' + title(k.value) + '>' + show(k.value, KEY_FMT[k.key] || fInt) + '</div><div class="l">' + esc(k.label) + '</div>' +
+        (k.sub ? '<div class="s">' + esc(k.sub) + '</div>' : '') + '</div>';
+    }).join('') + '</section>';
+  }
+
+  function funnel(d) {
+    var f = d.funnel || {}; var stages = f.stages || [];
+    var max = Math.max.apply(null, stages.map(function (s) { return v(s.count) || 0; }).concat([1]));
+    var longest = null;
+    stages.forEach(function (s) { if (has(s.days_to_next) && (!longest || v(s.days_to_next) > v(longest.days_to_next))) longest = s; });
+    var colors = ['var(--bar1)', 'var(--bar1)', 'var(--bar2)', 'var(--bar3)', 'var(--bar3)'];
+    var rows = stages.map(function (s, i) {
+      var w = has(s.count) ? Math.max(6.5, (v(s.count) / max) * 100) : 0;
+      var row = '<div class="frow"><div class="fl">' + esc(s.name) + '</div><div class="track"><div class="fb" style="width:' + w.toFixed(2) + '%;background:' + colors[i] + '"' + title(s.count) + '>' +
+        (has(s.count) ? esc(fInt(v(s.count))) : '—') + '</div></div><div class="fr' + (has(s.rate) ? '' : ' none') + '"' + title(s.rate) + '>' + (has(s.rate) ? esc(fPct(v(s.rate))) : '—') + '</div></div>';
+      if (i < stages.length - 1) {
+        var txt = has(s.days_to_next) ? fDec(v(s.days_to_next), 1) + ' days ' + DAYS_STEP[s.key] : '';
+        row += '<div class="fdays"><div class="sp"></div><span class="' + (longest === s ? 'long' : '') + '"' + title(s.days_to_next) + '>' + esc(txt) + '</span></div>';
+      }
+      return row;
+    }).join('');
+    return '<section class="funnel" aria-labelledby="h-funnel"><div class="sec-title"><div class="sec-label" id="h-funnel">Leasing funnel</div><div class="sec-desc">' +
+      esc(f.takeaway || '') + '</div></div><div class="fpanel">' + rows + (f.note ? '<p class="fnote">' + esc(f.note) + '</p>' : '') + '</div></section>';
+  }
+
+  function nextMonth(d) {
+    var acts = d.actions || [];
+    var body = acts.length ? '<ol class="acts">' + acts.map(function (a) {
+      return '<li class="act"><div class="rk">' + esc(a.rank) + '</div>' + (a.stake_label ? '<div class="stake">' + esc(a.stake_label) + '</div>' : '<div></div>') +
+        '<h3>' + esc(a.title) + '</h3><p>' + esc(a.detail) + '</p></li>';
+    }).join('') + '</ol>' : '<div class="empty">No new steps this month.</div>';
+    return '<section class="next" aria-labelledby="h-next"><div class="sec-title"><div class="sec-label" id="h-next">Next month</div><div class="sec-desc">' +
+      esc(d.actions_takeaway || '') + '</div></div>' + body + '</section>';
+  }
+
+  function collapsible(key, sec, bodyHtml) {
+    if (!sec) return '';
+    return '<section class="sec" data-sec="' + key + '"><button class="sec-head" type="button" aria-expanded="false" aria-controls="b-' + key + '"><span class="sec-label">' +
+      esc(sec.label) + '</span><span class="sec-take">' + esc(sec.takeaway || '') + '</span>' + CHEV + '</button><div class="sec-body" id="b-' + key + '" hidden>' + bodyHtml + '</div></section>';
+  }
+  function note(t) { return t ? '<p class="note">' + esc(t) + '</p>' : ''; }
+  function cell(r, fmt, label, sub) {
+    return '<div class="cell"><div class="v"' + title(r) + '>' + show(r, fmt) + '</div><div class="l">' + esc(label) + '</div>' + (sub ? '<div class="s">' + esc(sub) + '</div>' : '') + '</div>';
+  }
+
+  function occupancy(o) {
+    return '<div class="cells">' +
+      cell(o.leased_rate, fPct, 'Leased', has(o.total_units) ? fInt(v(o.total_units)) + ' units' : '') +
+      cell(o.occupied_rate, fPct, 'Occupied', has(o.occupied) ? fInt(v(o.occupied)) + ' of ' + fInt(v(o.total_units)) : '') +
+      cell(o.exposure_rate, fPct, 'Exposure', has(o.available) ? fInt(v(o.available)) + ' available' : '') +
+      cell(o.future_leases, fInt, 'Future leases', 'signed, moving in') +
+      cell(o.net_move_ins, fInt, 'Net move-ins', has(o.move_ins) ? fInt(v(o.move_ins)) + ' in / ' + fInt(v(o.move_outs)) + ' out' : '') +
+      '</div><div class="tw"><table><thead><tr><th>Units</th><th>Rented</th><th>Unrented</th><th>Total</th></tr></thead><tbody>' +
+      '<tr><td>Vacant</td>' + cellNum(o.vacant_rented, fInt) + cellNum(o.vacant_unrented, fInt) + cellNum(o.vacant, fInt) + '</tr>' +
+      '<tr><td>Delayed move-ins</td><td class="dash">—</td><td class="dash">—</td>' + cellNum(o.delayed_move_ins, fInt) + '</tr>' +
+      '</tbody></table></div>' + note(o.note);
+  }
+
+  function spend(s) {
+    if (!s.vendors || !s.vendors.length) return '<div class="empty"><b>Spend isn\'t connected yet</b>Vendor spend will appear here once the spend feed is connected.</div>' + note(s.note);
+    var rows = s.vendors.map(function (r) {
+      var em = r.label === 'Unpaid' ? ' class="em"' : '';
+      return '<tr' + em + '><td>' + esc(r.name) + (r.label ? '<span class="badge">' + esc(r.label) + '</span>' : '') + '</td>' + cellNum(r.spend, function (x) { return fMoney(x); }) +
+        cellNum(r.share, fPct) + cellNum(r.leads, fInt) + cellNum(r.cost_per_lead, function (x) { return fMoney(x); }) + cellNum(r.leases, fInt) + '</tr>';
+    }).join('');
+    return '<div class="tw"><table><thead><tr><th>Vendor</th><th>Spend</th><th>Share</th><th>Leads</th><th>Cost / lead</th><th>Leases</th></tr></thead><tbody>' + rows +
+      '</tbody></table></div>' + note(s.note);
+  }
+
+  function totalInfluence(src) { return STAGES.reduce(function (a, k) { return a + (src.stages ? (v(src.stages[k]) || 0) : 0); }, 0); }
+  function reach(src) { var r = -1; STAGES.forEach(function (k, i) { if (src.stages && v(src.stages[k])) r = i; }); return r; }
+
+  function attribution(a) {
+    var srcs = (a.sources || []).filter(function (s) { return s.stages; });
+    var stageSum = {};
+    STAGES.forEach(function (k) { stageSum[k] = srcs.reduce(function (acc, s) { return acc + (v(s.stages[k]) || 0); }, 0); });
+    var html = '';
+    if (srcs.length) {
+      html += '<div class="attr-top"><div class="sec-desc">Each card shows how one source\'s influence moves across the five stages, scaled to its own peak.</div>' +
+        '<div class="seg" role="tablist" aria-label="Attribution view"><button type="button" role="tab" data-mode="cards"' + (attrMode === 'cards' ? ' class="on" aria-selected="true"' : ' aria-selected="false"') + '>Cards</button>' +
+        '<button type="button" role="tab" data-mode="flow"' + (attrMode === 'flow' ? ' class="on" aria-selected="true"' : ' aria-selected="false"') + '>Flow</button></div></div>';
+      var cards = srcs.map(function (s, i) {
+        var shares = STAGES.map(function (k) { return stageSum[k] ? (v(s.stages[k]) || 0) / stageSum[k] : 0; });
+        var peak = Math.max.apply(null, shares.concat([0.0001]));
+        var bars = STAGES.map(function (k, j) {
+          var n = v(s.stages[k]) || 0;
+          var h = n ? Math.max(4, shares[j] / peak * 46) : 2;
+          return '<i style="height:' + h.toFixed(1) + 'px;background:' + (n ? s.color : s.color + '33') + '" title="' + esc(STAGE_LABEL[k] + ': ' + fInt(n) + (stageSum[k] ? ' (' + fPct(shares[j]) + ' of stage)' : '')) + '"></i>';
+        }).join('');
+        var r = reach(s);
+        return '<div class="card' + (i >= 4 ? ' extra' : '') + '"' + (i >= 4 ? ' hidden' : '') + '><div class="t"><i class="dot" style="background:' + s.color + '"></i>' + esc(s.name) + '</div>' +
+          '<div class="s">' + fInt(totalInfluence(s)) + ' influences · reaches ' + (r >= 0 ? STAGE_LABEL[STAGES[r]].toLowerCase() : '—') + '</div>' +
+          '<div class="bars">' + bars + '</div><div class="shape ' + esc(s.shape || '') + '">' + esc(SHAPE_LABEL[s.shape] || '') + '</div></div>';
+      }).join('');
+      var more = srcs.length > 4 ? '<button type="button" class="card more" data-more><b>+' + (srcs.length - 4) + '</b><span>more sources</span></button>' : '';
+      html += '<div class="cards-view"' + (attrMode === 'flow' ? ' hidden' : '') + '><div class="cards">' + cards + more + '</div>' +
+        '<div class="legend-line">Bars run created · scheduled · toured · applied · leased. A prospect touched by several sources counts once for each.</div></div>';
+      html += '<div class="flow"' + (attrMode === 'cards' ? ' hidden' : '') + '><svg viewBox="0 0 1080 440" role="img" aria-label="Flow of influence across stages"></svg><div class="flow-legend"></div></div>';
+    }
+    var all = a.sources || [];
+    var rows = all.map(function (s, i) {
+      return '<tr' + (i >= 8 ? ' class="extra" hidden' : '') + '><td>' + esc(s.name) + '</td>' + cellNum(s.created, fInt) + cellNum(s.influenced, fInt) + cellNum(s.toured, fInt) + cellNum(s.leased, fInt) + '</tr>';
+    }).join('');
+    html += '<div class="tw"><table><thead><tr><th>Source</th><th>First touch</th><th>Influenced</th><th>Toured</th><th>Leased</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    if (all.length > 8) html += '<button type="button" class="linkbtn" data-rows>Show all ' + all.length + ' sources</button>';
+    var med = (a.by_medium || {}).created || [];
+    if (med.length) {
+      html += '<div class="mediums"><span>New leads by medium:</span>' + med.map(function (m) { return '<span><b>' + esc(m.name) + '</b> ' + (has(m.share) ? esc(fPct(v(m.share))) : '—') + '</span>'; }).join('') + '</div>';
+    }
+    return html + note(a.note);
+  }
+
+  function drawFlow(root, a) {
+    var svg = root.querySelector('.flow svg'); if (!svg || svg.getAttribute('data-drawn')) return;
+    svg.setAttribute('data-drawn', '1');
+    var NS = 'http://www.w3.org/2000/svg';
+    var srcs = (a.sources || []).filter(function (s) { return s.stages; }).slice();
+    var TOP = 8;
+    var list = srcs.slice(0, TOP);
+    if (srcs.length > TOP) {
+      var other = { name: 'Other sources', color: '#A7A29A', stages: {} };
+      STAGES.forEach(function (k) { other.stages[k] = { value: srcs.slice(TOP).reduce(function (acc, s) { return acc + (v(s.stages[k]) || 0); }, 0) }; });
+      list.push(other);
+    }
+    var W = 1080, H = 440, T = 44, B = 18, PH = H - T - B, COLW = 22, GAP = 2.5;
+    var xs = STAGES.map(function (_, i) { return 60 + i * ((W - 140) / (STAGES.length - 1)); });
+    function el(n, attrs) { var e = document.createElementNS(NS, n); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+    var pos = {};
+    STAGES.forEach(function (k) {
+      var sum = list.reduce(function (acc, s) { return acc + (v(s.stages[k]) || 0); }, 0) || 1;
+      var active = list.filter(function (s) { return v(s.stages[k]) > 0; });
+      var avail = PH - Math.max(0, active.length - 1) * GAP, y = T; pos[k] = {};
+      list.forEach(function (s, i) {
+        var n = v(s.stages[k]) || 0;
+        if (n <= 0) { pos[k][i] = { y: null, h: 0 }; return; }
+        var h = Math.max(2, n / sum * avail); pos[k][i] = { y: y, h: h }; y += h + GAP;
+      });
+    });
+    list.forEach(function (s, i) {
+      for (var j = 0; j < STAGES.length - 1; j++) {
+        var p = pos[STAGES[j]][i], q = pos[STAGES[j + 1]][i];
+        if (p.h <= 0 && q.h <= 0) continue;
+        var x1 = xs[j] + COLW, x2 = xs[j + 1], cx = (x1 + x2) / 2;
+        var ay = p.h > 0 ? p.y : q.y + q.h / 2, ah = p.h > 0 ? p.h : 0.6;
+        var by = q.h > 0 ? q.y : p.y + p.h / 2, bh = q.h > 0 ? q.h : 0.6;
+        var d = 'M' + x1 + ',' + ay + ' C' + cx + ',' + ay + ' ' + cx + ',' + by + ' ' + x2 + ',' + by + ' L' + x2 + ',' + (by + bh) + ' C' + cx + ',' + (by + bh) + ' ' + cx + ',' + (ay + ah) + ' ' + x1 + ',' + (ay + ah) + ' Z';
+        svg.appendChild(el('path', { d: d, fill: s.color, 'fill-opacity': 0.3, 'class': 'rib', 'data-s': i }));
+      }
+    });
+    STAGES.forEach(function (k, j) {
+      list.forEach(function (s, i) {
+        var n = pos[k][i]; if (n.h <= 0) return;
+        var r = el('rect', { x: xs[j], y: n.y, width: COLW, height: n.h, rx: 3, fill: s.color, 'class': 'node', 'data-s': i });
+        var t = el('title', {}); t.textContent = s.name + ' · ' + STAGE_LABEL[k] + ': ' + fInt(v(s.stages[k])); r.appendChild(t);
+        svg.appendChild(r);
+        if (n.h > 14) { var lab = el('text', { x: xs[j] + COLW / 2, y: n.y + n.h / 2 + 3.5, 'text-anchor': 'middle', 'class': 'nlab' }); lab.textContent = fInt(v(s.stages[k])); svg.appendChild(lab); }
+      });
+      var t1 = el('text', { x: xs[j] + COLW / 2, y: 16, 'text-anchor': 'middle', 'class': 'stgl' }); t1.textContent = STAGE_LABEL[k]; svg.appendChild(t1);
+      var p = (a.prospects || {})[k];
+      if (has(p)) { var t2 = el('text', { x: xs[j] + COLW / 2, y: 31, 'text-anchor': 'middle', 'class': 'stgn' }); t2.textContent = fInt(v(p)) + ' prospects'; svg.appendChild(t2); }
+    });
+    var lg = root.querySelector('.flow-legend');
+    function focus(i) { svg.querySelectorAll('.rib,.node').forEach(function (n) { n.classList.toggle('faded', i !== null && n.getAttribute('data-s') !== String(i)); }); }
+    list.forEach(function (s, i) {
+      var sp = document.createElement('span'); sp.innerHTML = '<i style="background:' + s.color + '"></i>' + esc(s.name);
+      sp.addEventListener('mouseenter', function () { focus(i); }); sp.addEventListener('mouseleave', function () { focus(null); });
+      lg.appendChild(sp);
+    });
+    svg.querySelectorAll('.node').forEach(function (n) {
+      n.addEventListener('mouseenter', function () { focus(n.getAttribute('data-s')); });
+      n.addEventListener('mouseleave', function () { focus(null); });
+    });
+  }
+
+  function website(w) {
+    if (!has(w.sessions)) return '<div class="empty"><b>Website analytics aren\'t connected yet</b>Sessions, engagement and floor plan demand will appear here.</div>' + note(w.note);
+    var srcRows = (w.sources || []).map(function (r) {
+      return '<tr><td>' + esc(r.name) + (r.label ? '<span class="badge">' + esc(r.label) + '</span>' : '') + '</td>' + cellNum(r.sessions, fInt) + cellNum(r.engaged_sessions, fInt) +
+        cellNum(r.bounce_rate, fPct) + cellNum(r.conversions, fInt) + '</tr>';
+    }).join('');
+    var fps = w.floorplans || [];
+    var fmax = Math.max.apply(null, fps.map(function (f) { return v(f.views_per_user) || 0; }).concat([0.0001]));
+    var fpHtml = fps.length ? '<div><div class="fp-h">Floor plan demand · views per user</div>' + fps.map(function (f) {
+      return '<div class="fp"' + title(f.views_per_user) + '><b>' + esc(f.code) + '</b><i style="width:' + ((v(f.views_per_user) || 0) / fmax * 100).toFixed(1) + '%"></i><span>' + esc(fDec(v(f.views_per_user), 2)) + '</span></div>';
+    }).join('') + '</div>' : '';
+    return '<div class="cells">' + cell(w.sessions, fInt, 'Sessions', '') + cell(w.users, fInt, 'Users', '') + cell(w.engagement_rate, fPct, 'Engaged', has(w.engaged_sessions) ? fInt(v(w.engaged_sessions)) + ' sessions' : '') +
+      cell(w.avg_engagement_seconds, function (x) { return fInt(x) + 's'; }, 'Avg. engagement', '') + cell(w.conversions, fInt, 'Conversions', '') + '</div>' +
+      '<div class="web-grid"><div class="tw"><table><thead><tr><th>Traffic source</th><th>Sessions</th><th>Engaged</th><th>Bounce</th><th>Conv.</th></tr></thead><tbody>' + srcRows +
+      '</tbody></table></div>' + fpHtml + '</div>' + note(w.note);
+  }
+
+  function paidSearch(p) {
+    if (!has(p.ctr) && !has(p.clicks)) return '<div class="empty"><b>Paid search isn\'t connected yet</b>Clicks, cost and conversions will appear here.</div>' + note(p.note);
+    var b = p.benchmark || {};
+    var bench = has(b.ctr_low) && has(b.ctr_high) ? 'benchmark ' + fDec(v(b.ctr_low) * 100, 0) + '–' + fPct(v(b.ctr_high), 0) : '';
+    var impressions = has(p.impressions) ? fCompact(v(p.impressions)) + ' impressions' : '';
+    return '<div class="cells">' + cell(p.ctr, function (x) { return fPct(x, 2); }, 'Click-through', bench) + cell(p.cpc, function (x) { return fMoney(x, 2); }, 'Cost / click', has(p.clicks) ? fInt(v(p.clicks)) + ' clicks' : '') +
+      cell(p.ad_conversions, fInt, 'Ad conversions', has(p.cost_per_conversion) ? fMoney(v(p.cost_per_conversion), 2) + ' each' : '') +
+      cell(p.leads, fInt, 'Leads', 'first source Google Ads') + cell(p.leases, fInt, 'Leases', impressions) + '</div>' +
+      '<div class="tw"><table><thead><tr><th>Measure</th><th>' + esc(document.title.split(' · ')[1] ? 'This month' : 'Month') + '</th><th>Benchmark</th></tr></thead><tbody>' +
+      '<tr><td>Click-through rate</td>' + cellNum(p.ctr, function (x) { return fPct(x, 2); }) + '<td>' + esc(bench.replace('benchmark ', '')) + '</td></tr>' +
+      '<tr><td>Cost per click</td>' + cellNum(p.cpc, function (x) { return fMoney(x, 2); }) + '<td class="dash">—</td></tr>' +
+      '<tr><td>Cost per conversion</td>' + cellNum(p.cost_per_conversion, function (x) { return fMoney(x, 2); }) + cellNum(b.cost_per_conversion, function (x) { return fMoney(x); }) + '</tr>' +
+      '<tr><td>Platform spend</td>' + cellNum(p.platform_spend, function (x) { return fMoney(x); }) + '<td class="dash">—</td></tr>' +
+      '</tbody></table></div>' + note(p.note);
+  }
+
+  function reputation(r) {
+    var ps = r.platforms || [];
+    if (!ps.length) return '<div class="empty"><b>Reputation isn\'t connected yet</b>Scores by platform will appear here.</div>';
+    return '<div class="rep">' + ps.map(function (p) {
+      var off = !has(p.score);
+      return '<div class="' + (off ? 'off' : '') + '"><span class="n">' + esc(p.name) + '</span><span class="v"' + title(p.score) + '>' + (off ? '—' : esc(fDec(v(p.score), 1))) + '</span>' +
+        '<span class="s">' + (has(p.reviews) ? esc(fInt(v(p.reviews)) + ' reviews') + '<br>' : '') + esc(p.status) + '</span></div>';
+    }).join('') + '</div>' + note(r.note);
+  }
+
+  function listings(l) {
+    if (!l.placements || !l.placements.length) return '<div class="empty"><b>No listing placement data yet</b>' + esc(l.note || '') + '</div>';
+    return '<div class="tw"><table><thead><tr><th>Listing</th><th>Impressions</th><th>Leads</th><th>Media views</th><th>Tier</th><th>Cost</th></tr></thead><tbody>' +
+      l.placements.map(function (p) {
+        return '<tr><td>' + esc(p.name) + '</td>' + cellNum(p.impressions, fInt) + cellNum(p.leads, fInt) + cellNum(p.media_views, fInt) +
+          '<td>' + (p.tier ? esc(p.tier) : DASH) + '</td>' + cellNum(p.cost, function (x) { return fMoney(x); }) + '</tr>';
+      }).join('') + '</tbody></table></div>' + note(l.note);
+  }
+
+  function footer(d) {
+    var disc = (d.discrepancies || []).map(function (x) { return '<li>' + esc(x.text) + '</li>'; }).join('');
+    var seen = {};
+    var gaps = (d.gaps || []).filter(function (g) { if (seen[g.reason]) return false; seen[g.reason] = 1; return true; })
+      .map(function (g) { return '<li>' + esc(g.reason) + '</li>'; }).join('');
+    return '<footer class="foot"><div><b>Sources.</b> ' + esc(d.sources_note || '') + '</div>' +
+      (disc ? '<div><b>Known discrepancies.</b><ul>' + disc + '</ul></div>' : '') +
+      (gaps ? '<div><b>Not yet available.</b><ul>' + gaps + '</ul></div>' : '') + '<div>RPM | Confidential</div></footer>';
+  }
+
+  function render(d) {
+    var html = header(d) + verdict(d) + keyNumbers(d) + funnel(d) + nextMonth(d) +
+      '<div class="details"><div class="details-h">Details</div>' +
+      collapsible('occupancy', d.occupancy, occupancy(d.occupancy || {})) +
+      collapsible('spend', d.spend, spend(d.spend || {})) +
+      collapsible('attribution', d.attribution, attribution(d.attribution || {})) +
+      collapsible('website', d.website, website(d.website || {})) +
+      collapsible('paid_search', d.paid_search, paidSearch(d.paid_search || {})) +
+      collapsible('reputation', d.reputation, reputation(d.reputation || {})) +
+      collapsible('listings', d.listings, listings(d.listings || {})) +
+      '</div>' + footer(d);
+    content.innerHTML = html;
+
+    content.querySelectorAll('.sec-head').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var open = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', String(!open));
+        document.getElementById(btn.getAttribute('aria-controls')).hidden = open;
+        if (!open && btn.parentNode.getAttribute('data-sec') === 'attribution' && attrMode === 'flow') drawFlow(btn.parentNode, d.attribution || {});
+      });
+    });
+    var attrSec = content.querySelector('[data-sec="attribution"]');
+    if (attrSec) {
+      attrSec.querySelectorAll('.seg button').forEach(function (b) {
+        b.addEventListener('click', function () {
+          attrMode = b.getAttribute('data-mode');
+          try { sessionStorage.setItem('ws_attr_mode', attrMode); } catch (e) {}
+          attrSec.querySelectorAll('.seg button').forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', String(on)); });
+          attrSec.querySelector('.cards-view').hidden = attrMode !== 'cards';
+          attrSec.querySelector('.flow').hidden = attrMode !== 'flow';
+          if (attrMode === 'flow') drawFlow(attrSec, d.attribution || {});
+        });
+      });
+      var more = attrSec.querySelector('[data-more]');
+      if (more) more.addEventListener('click', function () { attrSec.querySelectorAll('.card.extra').forEach(function (c) { c.hidden = false; }); more.remove(); });
+      var rowsBtn = attrSec.querySelector('[data-rows]');
+      if (rowsBtn) rowsBtn.addEventListener('click', function () { attrSec.querySelectorAll('tr.extra').forEach(function (r) { r.hidden = false; }); rowsBtn.remove(); });
+    }
+  }
+
+  window.addEventListener('beforeprint', function () {
+    content.querySelectorAll('.sec-head').forEach(function (b) { b.setAttribute('aria-expanded', 'true'); });
+    content.querySelectorAll('.sec-body').forEach(function (s) { s.hidden = false; });
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>
