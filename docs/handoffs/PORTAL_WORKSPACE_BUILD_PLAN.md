@@ -177,6 +177,96 @@ Response:
  "done_count": 11, "hidden_open_count": 4}
 ```
 
+## Report contract
+
+The monthly property marketing report (Paper artboard **D — Reporting** for layout, the sidebar from **A — Work**). Its content follows the June 2026 Bromley report designs; its tone follows Kyle's feedback below. Blueprint `workspace_report_bp` in `routes/workspace_report.py`; assembly in `skills/workspace_report.py`.
+
+### Routes
+
+| Route | Gate | Serves |
+|---|---|---|
+| `GET /api/workspace/report?company_id=&month=YYYY-MM` | 404 unless `WORKSPACE_ENABLED`; then `require_access("workspace")` and `require_company_access(company_id)` | the report JSON below |
+| `GET /workspace/report?company_id=&month=` | 404 unless `WORKSPACE_ENABLED` | `portal_pages/workspace_report.html`; identity from Clerk Bearer or the signed preview link, never `?email=` |
+
+- `month` defaults to the last complete month. A malformed month is `400`; a month outside `available_months` is `404`.
+- The page sends the signed preview link (`?t=`, moved to sessionStorage and stripped from the URL) as header `X-Workspace-Link` on every API call. Verifying that header belongs to the Workspace auth layer (API workstream).
+- A connector that is configured but fails is `502 {error, detail}`, never an empty report.
+
+### Shape
+
+Every number is a **receipt**, `{value, source, as_of}`, or `null` with an entry in `gaps[]`. Rates and shares are fractions (`0.9431`), recomputed from their components, never averaged. Every section carries a one-line `takeaway` for its collapsed header.
+
+```json
+{"property": {"company_id": "123", "name": "The Bromley at Brighton Crossing", "city": "Brighton", "state": "CO", "units": R},
+ "month": "2026-06", "month_label": "June 2026", "available_months": ["2026-06"], "as_of": "2026-06-30",
+ "summary": {"lead": {"value": R, "label": "leases", "sub": "$1,964 average cost per lease"},
+             "text": "8 leases in June at $1,964 average cost per lease. 94.3% leased, with 16 signed residents moving in. …",
+             "polished": false},
+ "key_numbers": [{"key": "pct_leased", "label": "Leased", "value": R, "sub": "299 units"}],
+ "occupancy": {"takeaway": "…", "leased_rate": R, "occupied_rate": R, "exposure_rate": R, "average_occupancy_rate": R,
+               "total_units": R, "occupied": R, "available": R, "future_leases": R, "move_ins": R, "move_outs": R, "net_move_ins": R,
+               "vacant": R, "vacant_rented": R, "vacant_unrented": R, "delayed_move_ins": R, "note": "…"},
+ "funnel": {"takeaway": "…", "stages": [{"key": "created", "name": "Leads created", "count": R, "rate": R|null, "days_to_next": R|null}],
+            "lead_to_lease_days": R|null, "net_applied": R, "note": "…"},
+ "spend": {"takeaway": "…", "total": R|null,
+           "vendors": [{"name": "Google Ads", "spend": R, "share": R, "leads": R, "cost_per_lead": R, "leases": R, "label": "Reviewing"}],
+           "note": "…"},
+ "attribution": {"takeaway": "…", "prospects": {"created": R, "scheduled": R, "toured": R, "applied": R, "leased": R},
+                 "sources": [{"name": "Zillow", "color": "#1E8E77", "created": R, "influenced": R, "toured": R, "leased": R,
+                              "stages": {"created": R, "scheduled": R, "toured": R, "applied": R, "leased": R}, "shape": "present_throughout"}],
+                 "by_medium": {"created": [{"name": "Organic", "count": R, "share": R}], "leased": []},
+                 "note": "…"},
+ "website": {"takeaway": "…", "sessions": R, "users": R, "engaged_sessions": R, "engagement_rate": R, "avg_engagement_seconds": R,
+             "conversions": R, "floorplan_page_views": R,
+             "sources": [{"name": "Zillow", "sessions": R, "engaged_sessions": R, "bounce_rate": R, "conversions": R, "label": "Low engagement"}],
+             "floorplans": [{"code": "B2", "views_per_user": R}], "note": "…"},
+ "paid_search": {"takeaway": "…", "impressions": R, "clicks": R, "ctr": R, "cpc": R, "platform_spend": R, "ad_conversions": R,
+                 "cost_per_conversion": R, "leads": R, "leases": R,
+                 "benchmark": {"ctr_low": R, "ctr_high": R, "cost_per_conversion": R}, "note": "…"},
+ "reputation": {"takeaway": "…", "target": R, "platforms": [{"name": "Google", "score": R|null, "reviews": R|null, "target": R, "status": "At target|Below target|Not connected"}]},
+ "listings": {"takeaway": "…", "placements": [{"name": "Apartments.com", "tier": null, "impressions": R, "leads": R, "media_views": R, "cost": null}] | null, "note": "…"},
+ "actions": [{"rank": 1, "title": "…", "detail": "…", "stake_label": "$12,140 monthly budget", "lens": "evolve", "work_item_id": null}],
+ "sources_note": "…",
+ "discrepancies": [{"key": "google_ads_spend", "text": "Google Ads spend differs between the spend manager ($12,140) and the ad platform ($5,269); we're reconciling before renewal.", "values": [R, R]}],
+ "gaps": [{"section": "reputation", "metric": "yelp", "reason": "Not connected"}]}
+```
+`R` is a receipt, `{"value": 0.9431, "source": "derived:(total_units-available)/total_units", "as_of": "2026-06-30"}`. A receipt may add `"approx": true` when the source itself rounded (the export reports impressions as "21.5K").
+
+### Sources and definitions
+
+Definitions come from the Halo metric library (Hyly). The live assembler reads **only** the library's allowlisted objects, through the portal's BigQuery client, read-only:
+
+| Section | Live source | Status |
+|---|---|---|
+| Occupancy | `t_oc_agg_occupancy_property` (month-end reading), `t_ot_agg_resident_activity_property`, `t_oc_agg_occupancy_operational`, `t_occupancy_rate` | live |
+| Funnel counts | `t_contact_activity` milestones, `pai_journey_*` `h_ms_lease`, `prospect_journey` (net applied) | live |
+| Days per step | Hyly velocity cards; not defined in the library | gap live, fixture only |
+| First touch by source / medium | `t_contact_activity.mta_first_source_name` / `mta_first_medium_name` | live |
+| Multi-touch influence | not defined in the library | gap live, fixture only |
+| Spend by vendor | `vendor_spend_ledger` is outside the library allowlist; `/api/budget` is the contracted plan, not spend | gap live, fixture only |
+| Website | GA4 has no connector on `main` | gap live, fixture only |
+| Paid search | Google Ads API has no connector on `main` | gap live, fixture only |
+| Reputation | no connector | gap live, fixture only |
+| Listings | `apartmentscom_ils_resolved_v1` (ADR 0021), by `uuid` | live when configured |
+
+Aggregation rules that the assembler enforces (and tests assert): shares and rates are recomputed from counts (for example, bounce rate = `(sessions − engaged) ÷ sessions`); a share's denominator is its parent metric, not the breakdown sum; stocks read the month-end snapshot; flows sum over the month; June 2026 figures carry the notice-data caveat (no notice fields before 2026-07-27) and the June 1–5 backfill caveat.
+
+### Narrative and tone
+
+Kyle's rule: the report goes to clients and owners, so it is calm and constructive, and it never hides or softens a number.
+
+- **Headings** are plain section labels: Occupancy, Leasing funnel, Spend and leases, Where leads came from, Website, Paid search, Reputation, Listings, Next month.
+- **The summary** leads with results and progress, then the main thing we're acting on, stated as the step RPM is taking.
+- **Badges** are neutral: "Reviewing", "Unpaid", "Low engagement".
+- **Banned in generated text** (a test enforces it): "leak", "none of them", "out the door", "flatters", "cannot all be right", "problem", "failing", "wasted", "burned".
+- **Discrepancies stay**, phrased neutrally.
+
+Narrative v1 is deterministic templates. The optional LLM polish (`WORKSPACE_REPORT_LLM_POLISH`, off by default, through `skills/llm_gateway.py` only) is accepted only when every number in its text appears in the input data and it passes the banned-phrase check; otherwise the template stands. Actions pass `fair_housing.py` and never propose radius tightening, ZIP targeting or audience layering.
+
+### Page behaviour
+
+The default view shows the summary, one row of key numbers, the funnel and Next month. Every other section starts collapsed, showing its heading and takeaway. The attribution section has a **Cards / Flow** toggle (Cards by default; Flow is an inline SVG). A month selector reloads the report. **PDF** is the browser's print, and the print stylesheet expands every section.
+
 ## Workstreams (run in parallel)
 
 **API (`feature/portal-workspace-api`):**
