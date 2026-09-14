@@ -455,8 +455,14 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 
 /* ── Media plan (DM0-1, GJQ-1) ──────────────────────────────────────── */
 .flight{padding:20px;display:flex;flex-direction:column;gap:10px;overflow-x:auto}
-.frow{display:flex;align-items:center;min-width:720px}
-.frow .fl{width:112px;flex-shrink:0;font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-muted)}
+.frow{display:flex;align-items:center;min-width:820px}
+.frow .fl{width:200px;flex-shrink:0;padding-right:12px;font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-muted)}
+.flgrp{min-width:820px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:14px 0 4px;border-top:1px solid var(--color-border)}
+.flgrp b{font-size:11px;line-height:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--juniper)}
+.flgrp span{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.frow.ch.flat .on{background:var(--color-muted);color:var(--gray-ink-strong)}
+.tbl.boxed tr.grprow th{background:var(--color-muted);color:var(--juniper);font-size:12px;line-height:16px;letter-spacing:0;text-transform:none}
+.tbl.boxed tr.grprow th .fine{color:var(--gray-ink-strong)}
 .frow .cells{flex:1;display:grid;grid-template-columns:repeat(12,1fr)}
 .frow .cells>*{text-align:center;font-size:11px;line-height:14px;padding:5px 2px}
 .frow.mh .cells>*{font-weight:600;color:var(--color-fg-muted)}
@@ -1711,6 +1717,14 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       var pdf = view.querySelector('[data-print]'); if (pdf) pdf.addEventListener('click', function () { window.print(); });
     });
   }
+  // Round 4 mix: always-on channels run all year at a flat amount; flighted channels follow exposure.
+  var MODES = [['always_on', 'Always-on', 'Runs all year at a flat monthly amount'], ['flighted', 'Flighted with exposure', 'More spend in the months with more units to lease']];
+  function modeGroups(chans) {
+    var groups = MODES.map(function (m) { return { key: m[0], label: m[1], note: m[2], rows: chans.filter(function (c) { return c.mode === m[0]; }) }; });
+    var other = chans.filter(function (c) { return c.mode !== 'always_on' && c.mode !== 'flighted'; });
+    if (other.length) groups.push({ key: 'other', label: 'Other channels', note: '', rows: other });
+    return groups.filter(function (g) { return g.rows.length; });
+  }
   function mediaPlanHtml(d) {
     var months = d.months || [], max = Math.max.apply(null, months.map(function (m) { return m.units_to_lease; }).concat([1]));
     var head = '<div class="frow mh"><span class="fl"></span><div class="cells">' + months.map(function (m) { return '<span class="' + (m.units_to_lease >= max * .7 ? 'peak' : '') + '">' + esc(monthShort(m.month)) + '</span>'; }).join('') + '</div></div>';
@@ -1718,14 +1732,21 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       var r = m.units_to_lease / max; return '<span><i style="height:' + Math.max(3, Math.round(r * 44)) + 'px;background:' + (r >= .7 ? 'var(--copper)' : 'var(--sage)') + '"></i><span>' + esc(m.units_to_lease) + '</span></span>';
     }).join('') + '</div></div>';
     var chans = d.channels || [];
-    var crow = chans.map(function (c) {
-      return '<div class="frow ch"><span class="fl">' + esc(c.channel) + '</span><div class="cells">' + c.monthly.map(function (v) { return v ? '<span class="on">' + esc(kfmt(v)) + '</span>' : '<span class="off" aria-label="none">—</span>'; }).join('') + '</div></div>';
+    var groups = modeGroups(chans);
+    var crow = groups.map(function (g) {
+      return '<p class="flgrp"><b>' + esc(g.label) + '</b>' + (g.note ? '<span>' + esc(g.note) + '</span>' : '') + '</p>' + g.rows.map(function (c) {
+        return '<div class="frow ch' + (g.key === 'always_on' ? ' flat' : '') + '"><span class="fl">' + esc(c.channel) + '</span><div class="cells">' + c.monthly.map(function (v) { return v ? '<span class="on">' + esc(kfmt(v)) + '</span>' : '<span class="off" aria-label="none">—</span>'; }).join('') + '</div></div>';
+      }).join('');
     }).join('');
     var totals = months.map(function (_, i) { return chans.reduce(function (s, c) { return s + (c.monthly[i] || 0); }, 0); });
     var tot = chans.length ? '<div class="frow tot"><span class="fl">Total</span><div class="cells">' + totals.map(function (t) { return '<span>' + esc(kfmt(t)) + '</span>'; }).join('') + '</div></div>' : '';
     var alloc = val(d.allocated), env = val(d.envelope);
     var breakdown = chans.length ? '<section class="sec"><h2 class="h-rail">Channel breakdown</h2><div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Channel</th><th scope="col" class="num">Monthly avg</th><th scope="col" class="num">Annual</th><th scope="col" class="num">% of budget</th><th scope="col" class="num">CPL target</th></tr></thead><tbody>' +
-      chans.map(function (c) { return '<tr><td class="name">' + esc(c.channel) + '</td><td class="num">' + esc(money(c.monthly_avg)) + '</td><td class="num">' + esc(money(c.annual)) + '</td><td class="num">' + esc(pct(c.share)) + '</td><td class="num">' + (c.cpl_target == null ? '<span class="empty-dash">—</span>' : esc(money(c.cpl_target))) + '</td></tr>'; }).join('') +
+      groups.map(function (g) {
+        var annual = g.rows.reduce(function (sum, c) { return sum + (c.annual || 0); }, 0);
+        return '<tr class="grprow"><th scope="rowgroup" colspan="5">' + esc(g.label) + ' <span class="fine">· ' + esc(money(annual)) + ' a year</span></th></tr>' +
+          g.rows.map(function (c) { return '<tr><td class="name">' + esc(c.channel) + '</td><td class="num">' + esc(money(c.monthly_avg)) + '</td><td class="num">' + esc(money(c.annual)) + '</td><td class="num">' + (c.share == null ? '<span class="empty-dash">—</span>' : esc(pct(c.share))) + '</td><td class="num">' + (c.cpl_target == null ? '<span class="empty-dash">—</span>' : esc(money(c.cpl_target))) + '</td></tr>'; }).join('');
+      }).join('') +
       '</tbody></table></div>' + (function () { var srcs = []; chans.forEach(function (c) { if (c.source && srcs.indexOf(c.source) === -1) srcs.push(c.source); }); return srcs.length ? '<p class="receipt">Channel spend from ' + esc(srcs.map(sourceName).join(', ')) + '</p>' : ''; })() + '</section>' : '';
     var page = '<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Media plan</h1><p class="support">' +
       esc([d.fiscal_year, env != null ? money(env) + ' envelope' : '', d.objective ? 'Objective: ' + d.objective : ''].filter(Boolean).join(' · ')) + '</p></div>' + staleLabel(d.as_of) + '</div>' +

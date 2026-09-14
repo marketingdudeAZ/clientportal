@@ -414,9 +414,12 @@ def test_media_plan():
     for m in d["months"]:
         check(m, {"month": str, "units_to_lease": int}, "media_plan.months[]")
     for c in d["channels"]:
-        check(c, {"channel": str, "monthly": list, "monthly_avg": NUM, "annual": NUM, "share": NUM, "cpl_target": OPT_NUM}, "media_plan.channels[]")
-        assert len(c["monthly"]) == 12 and all(isinstance(x, (int, float)) for x in c["monthly"])
-        assert c["annual"] == sum(c["monthly"])
+        check(c, {"channel": str, "mode": str, "monthly": list, "monthly_avg": NUM, "annual": NUM, "share": NUM, "cpl_target": OPT_NUM}, "media_plan.channels[]")
+        assert c["mode"] in {"always_on", "flighted"}
+        assert len(c["monthly"]) == 12 and all(x is None or isinstance(x, (int, float)) for x in c["monthly"])
+        assert c["annual"] == sum(x for x in c["monthly"] if x is not None)
+        if c["mode"] == "always_on":
+            assert len({x for x in c["monthly"] if x is not None}) <= 1, "always-on channels are flat"
     check_gap_entries(d, "media_plan")
 
 
