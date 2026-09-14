@@ -82,8 +82,8 @@ ol,ul{list-style:none}
 .side-bottom{border-top:1px solid var(--color-border);padding-top:12px;display:flex;flex-direction:column;gap:6px}
 .userrow{display:flex;align-items:center;gap:10px;min-height:44px;padding-inline:10px}
 .avatar{width:24px;height:24px;border-radius:50%;background:var(--juniper);color:#fff;font-size:10px;line-height:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.userrow b{display:block;font-size:12px;line-height:16px;font-weight:600}
-.userrow span{display:block;font-size:11px;line-height:14px;color:var(--color-fg-muted)}
+.userrow div b{display:block;font-size:12px;line-height:16px;font-weight:600}
+.userrow div span{display:block;font-size:11px;line-height:14px;color:var(--color-fg-muted)}
 .previewtoggle{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:6px 10px;border-radius:var(--radius-sm);font-size:12px;line-height:16px;font-weight:500;color:var(--color-fg-2);width:100%;text-align:left}
 .previewtoggle:hover{background:var(--color-muted)}
 .switch{width:28px;height:16px;border-radius:999px;background:var(--rule);position:relative;flex-shrink:0;transition:background-color .15s}
@@ -212,6 +212,7 @@ ol,ul{list-style:none}
 .tbl.boxed th{background:var(--color-bg);padding:10px 16px;font-size:11px;line-height:14px;font-weight:600;letter-spacing:.05em}
 .tbl.boxed td{padding:12px 16px}
 .tbl.boxed tr:last-child td{border-bottom:0}
+.tbl.boxed td:first-child,.tbl.boxed th{white-space:nowrap}
 .empty-dash{color:var(--color-fg-muted)}
 
 /* States */
@@ -252,7 +253,8 @@ ol,ul{list-style:none}
 .feed li{display:flex;gap:8px;align-items:flex-start}
 .feed li .dot{width:6px;height:6px;margin-top:6px}
 .feed li b{display:block;font-size:13px;line-height:18px;font-weight:400}
-.feed li span{display:block;font-size:11px;line-height:14px;color:var(--color-fg-muted)}
+.feed li div>span{display:block;font-size:11px;line-height:14px;color:var(--color-fg-muted)}
+.feed li .tag{margin-left:6px;vertical-align:middle}
 .rail-sep{border-top:1px solid var(--color-border)}
 .wcard{border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:6px}
 .wcard .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
@@ -351,7 +353,7 @@ ol,ul{list-style:none}
 .panes{display:flex;gap:16px;align-items:stretch}
 .pane{background:var(--color-muted);border-radius:var(--radius-md);padding:18px 20px;display:flex;flex-direction:column;gap:9px}
 .pane.grow{flex:1;min-width:0}
-.pane.side{width:360px;flex-shrink:0}
+.pane.aside{width:360px;flex-shrink:0}
 .pane p{font-size:14px;line-height:22px;color:var(--color-fg-2)}
 .record{display:flex;align-items:center;gap:9px}
 .record .track{flex:1;height:6px;border-radius:3px;background:var(--rule)}
@@ -556,6 +558,11 @@ ol,ul{list-style:none}
 .req-foot{border-top:1px solid var(--color-border);padding-top:14px;font-size:12px;line-height:18px;color:var(--color-fg-muted)}
 .spacer{flex:1;min-height:8px}
 
+/* AA on tinted surfaces: small muted text steps down to the strong gray shade */
+.pane .eyebrow,.pane .support,.finding .receipt,.receipts .support,.receipts .eyebrow,.tbl tr.top td.support,.tbl .self,
+.tbl tr.rowlink:hover .fine,.tbl tr.rowlink:hover .empty-dash,.kbd,.chip:hover,.sopt:hover span,.sopt[aria-selected="true"] span,.hero .support{color:var(--gray-ink-strong)}
+.hero .link{color:var(--attention-text)}
+
 /* ── Mobile (≤760px) ────────────────────────────────────────────────── */
 @media (max-width:760px){
   .app{flex-direction:column}
@@ -591,7 +598,7 @@ ol,ul{list-style:none}
   .motions li{flex-wrap:wrap}
   .motions .ms{width:100%;text-align:left;padding-left:44px}
   .panes{flex-direction:column}
-  .pane.side{width:auto}
+  .pane.aside{width:auto}
   .banner{padding:14px 16px;flex-wrap:wrap}
   .vrows .n,.vrows .p{width:auto;flex:1}
   .forecast .col em{font-size:9px}
@@ -1352,7 +1359,7 @@ ol,ul{list-style:none}
     }
     var panes = '';
     if (has(d.written_down) || recHtml) panes += '<section class="pane grow"><h2 class="eyebrow">What got written down</h2>' + (has(d.written_down) ? '<p>' + esc(d.written_down) + '</p>' : '') + recHtml + '</section>';
-    if (d.check_back && has(d.check_back.text)) panes += '<section class="pane side"><h2 class="eyebrow">When we’ll know</h2><p>' + esc(d.check_back.text) + '</p>' + (d.check_back.date ? '<span class="support">Check-back ' + esc(mdy(d.check_back.date)) + '</span>' : '') + '</section>';
+    if (d.check_back && has(d.check_back.text)) panes += '<section class="pane aside"><h2 class="eyebrow">When we’ll know</h2><p>' + esc(d.check_back.text) + '</p>' + (d.check_back.date ? '<span class="support">Check-back ' + esc(mdy(d.check_back.date)) + '</span>' : '') + '</section>';
     var who = shortName(d.decided_by);
     return '<div style="flex:1;min-width:0;display:flex;flex-direction:column"><div class="banner" role="status"><span class="bcheck" aria-hidden="true">' + ic(I.check, 15).replace('currentColor', '#FFFFFF') + '</span>' +
       '<div class="btxt"><b>Approved' + (who ? ' by ' + esc(who) : '') + (d.decided_at ? ' · ' + esc(clock(d.decided_at)) : '') + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '') + '</div>' + undoHtml(d) + '</div>' +
