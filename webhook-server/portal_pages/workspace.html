@@ -31,6 +31,7 @@ button,input,select{font:inherit;color:inherit}
 button{background:none;border:0;cursor:pointer}
 a{color:inherit;text-decoration:none}
 :focus-visible{outline:2px solid var(--copper-fill);outline-offset:2px;border-radius:4px}
+[hidden]{display:none !important}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .skip{position:absolute;left:-999px;top:8px;z-index:50;background:var(--white);padding:8px 12px;border-radius:6px}
 .skip:focus{left:8px}
@@ -310,7 +311,8 @@ a{color:inherit;text-decoration:none}
 .seg{display:flex;align-items:center;padding-left:14px;min-width:0;overflow:hidden;white-space:nowrap}
 .seg span{font-size:13px;line-height:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis}
 .tscroll{overflow-x:auto}
-.ctable{width:100%;border-collapse:collapse;min-width:640px}
+.ctable{width:100%;border-collapse:collapse;min-width:720px}
+.ctable th,.ctable td{overflow-wrap:normal;white-space:nowrap}
 .ctable th,.ctable td{text-align:left;padding:14px 0;border-bottom:1px solid var(--line-2);font-size:15px;line-height:18px;color:var(--ink);font-weight:400}
 .ctable thead th{padding:0 0 9px;border-bottom-color:var(--line);font-size:12px;line-height:16px;font-weight:500;color:var(--faint)}
 .ctable tbody th{font-weight:500;width:210px}
@@ -400,7 +402,9 @@ a{color:inherit;text-decoration:none}
   .h1.lg{font-size:26px;line-height:32px}
   .topbar{padding:20px 16px 14px}
   .tools .btn.primary{display:none}
-  .search{height:44px}
+  .tools{width:100%}
+  .search{height:44px;flex:1}
+  .search input,.search input:focus,.search input:not(:placeholder-shown){width:100%}
   .filters{padding:12px 16px}
   .legend{display:none}
   .chip,.rchip,.btn{min-height:44px}
@@ -431,7 +435,7 @@ a{color:inherit;text-decoration:none}
   .pane.side-pane{width:auto}
   .phead{display:none}
   .prow{flex-wrap:wrap;gap:6px 16px;padding:14px 12px}
-  .pc.name,.pc.what{width:100%}
+  .pc.name,.pc.what{flex:1 1 100%;width:100%}
   .pc.by,.pc.risk{width:auto;text-align:left;font-size:13px}
   .m-lbl{display:inline;font-weight:400;color:var(--faint)}
   .two{flex-direction:column}
@@ -710,10 +714,11 @@ a{color:inherit;text-decoration:none}
     var list = state.me.companies || [];
     var c = company();
     var sw;
+    var pcount = state.portfolioProps != null ? state.portfolioProps : list.length;
     if (portfolio) {
       sw = '<div class="switcher"><span class="lbl" id="sw-lbl">Scope</span>' +
         '<div class="row"><span class="name">My properties</span>' + ICON.chevron + '</div>' +
-        '<span class="sub">' + esc(list.length) + ' ' + plural(list.length, 'property', 'properties') + '</span>' +
+        '<span class="sub">' + esc(num(pcount)) + ' ' + plural(pcount, 'property', 'properties') + '</span>' +
         selectHtml(list, '__portfolio__') + '</div>';
     } else if (c) {
       sw = '<div class="switcher"><span class="lbl" id="sw-lbl">Property</span>' +
@@ -1095,6 +1100,7 @@ a{color:inherit;text-decoration:none}
       if (!r) return;
       var d = r.data || {};
       state.portfolioCount = d.item_count;
+      state.portfolioProps = d.property_count;
       renderSide('portfolio');
       setMain(portfolioHtml(d));
       main.querySelectorAll('[data-open-company]').forEach(function (a) {

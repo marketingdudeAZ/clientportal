@@ -35,7 +35,7 @@
   "decided_by": "marcus@rpmliving.com",
   "decided_at": "2026-09-14T14:14:00Z",
   "in_motion": [
-    {"label": "#1321 hidden from the syndication feed", "kind": "auto", "status": "done", "detail": "Done at 9:14am, six seconds after you approved. Pushed to Zillow, Apartments.com and the property site."},
+    {"label": "#1321 hidden from the syndication feed", "kind": "auto", "status": "done", "detail": "Done six seconds after you approved. Pushed to Zillow, Apartments.com and the property site."},
     {"label": "Five A1s repriced to $1,362", "kind": "queued", "status": "pending", "detail": "Staged for Tue 9/15. Rent changes wait for the nightly pricing run — we don't write to the rent roll."},
     {"label": "Concession moves from B plans to A plans", "kind": "person", "status": "pending", "detail": "This one changes what we spend, so it does not fire on a click. A deal and an IO are drafted for signature; the budget moves once it's signed."}
   ],
