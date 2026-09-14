@@ -61,9 +61,15 @@ def _parse_dt(value: Any) -> datetime | None:
     try:
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
     except ValueError:
-        try:
-            dt = datetime.strptime(s[:10], "%Y-%m-%d")
-        except ValueError:
+        dt = None
+        # "%m/%d/%Y" is the AptIQ exports' "Report Generation Date" (09/13/2026).
+        for fmt, width in (("%Y-%m-%d", 10), ("%m/%d/%Y", 10)):
+            try:
+                dt = datetime.strptime(s[:width], fmt)
+                break
+            except ValueError:
+                continue
+        if dt is None:
             return None
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 

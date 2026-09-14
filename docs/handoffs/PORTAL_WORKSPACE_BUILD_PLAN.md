@@ -206,3 +206,34 @@ Response:
 - GA4 and the Google Ads API aren't wired on `main`; `/api/benchmarks` is seeded data.
 - Only portal tickets and Ask check `require_company_access` today; every other legacy endpoint checks email presence only.
 - `scripts/deploy_template.py` and the GitHub workflow only know `client-portal.html`.
+
+## Contract changes (API)
+
+Recorded by the API branch (`feature/portal-workspace-api`). Every change is additive or makes a field nullable; nothing in the shapes above was renamed or removed. `tests/workspace_contract.py` encodes the contract with these changes, so fixtures can be checked against it.
+
+1. **`gaps[]` entries are `{field, reason}`.** The contract showed `gaps: []` without an entry shape. `/me` and `/client-view` also return `gaps`.
+2. **`check_back` may be `null`.** No approval source on main carries a re-check date, and inventing one breaks the receipts rule. The decision response always returns `check_back: null` until a source provides one.
+3. **`units_at_risk` (portfolio) is AptIQ advertised available units, not units vacant 90+ days.** No feed gives days vacant per unit: the AptIQ floor-plan export reports `Days on Market` per floor plan, not per unit. Ranking by available units is the closest real signal. `available_now.stale_90_plus` stays `null` with a gap for the same reason.
+4. **Floor plans carry `days_on_market`, `source` and `as_of`.** Days on market came from the live floor-plan export. `source`/`as_of` exist so no number leaves without a receipt.
+5. **AptIQ `as_of` is the export's own `Report Generation Date`.** If a row lacks it, `as_of` falls back to when the server fetched the export. `occupied.value` is AptIQ **advertised** occupancy (the export has no physical-occupancy column).
+6. **`occupied` carries `total_source: "hubspot_company"`.** `total` (unit count) comes from the company record, while `value` comes from AptIQ.
+7. **`/performance` echoes `range`.** Occupancy history isn't available as data, so `range=90|365` returns current values plus a gap. `coming_open_90d` is `null` and `coming_by_week` is `[]`, each with a gap: AptIQ reports 90-day exposure only as a percentage.
+8. **`/plan` adds `source` and `as_of`.**
+   - `source: "hubspot_line_items"` for the spend sheet; `as_of` is when the sheet was built.
+   - `pending_changes` counts open (unsigned) deals on the company and is `null` if they can't be read.
+   - `cost_per_lease` and `pointed_at` are `null` with gaps.
+   - Management fee and hosting SKUs appear as a "Management and hosting" channel row, so shares sum to 1 over `monthly_total`.
+9. **`/me` adds `portfolio_wide`.**
+   - `companies[]` rows carry `source: "hubspot_company"`.
+   - For internal users, `companies` are the properties that list the email as marketing manager, director or RVP. Internal users can still open any property.
+10. **Portfolio rows carry `units_source: "hubspot_company"`.** Portfolio item counts cover recommendation cards, call prep, video variants and onboarding gaps only (a standing gap says so). Tickets, forecast recommendations and profile proposals appear on each property's Work screen.
+11. **Connection `status` adds `"linked"`.** It means an id is on the company record but nothing verifies a sync (Hyly, GA4, Google Ads). `"connected"` is used only when a feed returned data (ApartmentIQ).
+12. **People rows add `email`.** Marketing director and RVP rows use the email as `name`, because the company record only stores emails for those roles. The account manager is the HubSpot record owner.
+13. **Item fields the sources can't fill:**
+    - `start_by` is always `null`: no source carries a start-by date.
+    - `comments_count` is always `null`.
+    - `cost_note` is always `null`.
+    - `due` is set only for call prep: the last day of its cycle month, when the item is replaced.
+    - Undated items group under `this_week`.
+14. **Decisions on sources with no dismissed state.** `not_now` on a content brief or video variant writes the loop event only. The workspace reads its own `workspace_decision` events back to show the item as done. That overlay needs BigQuery; without it there's a `trail` gap.
+15. **Loop recommendation ids are per forecast run.** `loop_rec:<16-hex>` hashes `forecast_id` plus the recommendation, so the same recommendation gets a new id when the next forecast runs.

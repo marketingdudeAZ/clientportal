@@ -4,9 +4,10 @@ Every number is `{value, source, as_of}` or null with a named gap. Sources:
 
 * HubSpot company record, one read via `workspace_inbox.load_context`
   (hubspot_client): name, address, units, people, platform ids, brief override.
-* AptIQ daily CSV and floor-plan CSV (services/fluency_ingestion): occupancy,
-  available units, floor plans. `as_of` is when this process fetched the export,
-  because the export carries no date of its own.
+* AptIQ daily CSV and floor-plan CSV (services/fluency_ingestion): advertised
+  occupancy, available units, floor plans with days on market. `as_of` is the
+  export's own "Report Generation Date"; when a row lacks it, the time this
+  process fetched the export.
 * Spend sheet (spend_sheet.get_company_monthly_spend): the contracted monthly
   line items on the property's deals. `as_of` is when the sheet was built.
 
@@ -27,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 SPEND_SOURCE = "hubspot_line_items"
 APTIQ_SOURCE = "aptiq"
+# Both AptIQ exports stamp every row with the date AptIQ produced it.
+REPORT_DATE_COL = "Report Generation Date"
 
 CHANNEL_LABELS = {
     "paid_search": "Paid search",
@@ -123,7 +126,8 @@ def aptiq_snapshot(ctx: wi.PropertyContext, gaps: list) -> tuple[dict | None, st
     if not read.get("matched"):
         gaps.append(wc.gap("aptiq", read.get("reason") or "No AptIQ row for this property"))
         return None, None
-    return read, (wc.to_iso_ts(loaded) if loaded else None)
+    report_date = (read.get("raw") or {}).get(REPORT_DATE_COL)
+    return read, (wc.to_iso_ts(report_date) or (wc.to_iso_ts(loaded) if loaded else None))
 
 
 def spend(company_id: str, gaps: list, field: str = "monthly_plan") -> tuple[dict | None, str | None]:
@@ -201,6 +205,7 @@ def _floorplans(ctx: wi.PropertyContext, gaps: list) -> list:
     try:
         from services.fluency_ingestion import apt_iq_csv_client, apt_iq_reader
         plans = apt_iq_reader.read_floor_plans(pid)
+        raw_rows = apt_iq_csv_client.get_floor_plan_rows(pid)
         loaded = apt_iq_csv_client._fp_loaded_at
     except Exception as exc:  # noqa: BLE001
         logger.warning("workspace floor plans failed for %s: %s", ctx.company_id, exc)
@@ -208,9 +213,19 @@ def _floorplans(ctx: wi.PropertyContext, gaps: list) -> list:
         return []
     if not plans:
         gaps.append(wc.gap("floorplans", "No rows for this property in the AptIQ floor-plan export"))
-    as_of = wc.to_iso_ts(loaded) if loaded else None
+    # read_floor_plans normalizes and dedups but drops Days on Market and the
+    # report date, so those come from the raw rows, first row per plan name.
+    days_on_market: dict = {}
+    report_date = None
+    for row in raw_rows:
+        name = (row.get("Floor Plan Name") or "").strip()
+        if name and name not in days_on_market:
+            days_on_market[name] = wc.to_int(row.get("Days on Market"))
+        report_date = report_date or row.get(REPORT_DATE_COL)
+    as_of = wc.to_iso_ts(report_date) or (wc.to_iso_ts(loaded) if loaded else None)
     return [{"code": pl.get("name"), "beds": pl.get("beds"), "sqft": pl.get("sqft"),
-             "available": pl.get("available"), "source": "aptiq_floor_plans", "as_of": as_of}
+             "available": pl.get("available"), "days_on_market": days_on_market.get(pl.get("name")),
+             "source": "aptiq_floor_plans", "as_of": as_of}
             for pl in plans]
 
 
@@ -321,7 +336,9 @@ def build_performance(ctx: wi.PropertyContext, *, range_days: int = 30) -> dict:
     available = wc.metric(avail, APTIQ_SOURCE, as_of, stale_90_plus=None)
     if aptiq and avail is None:
         gaps.append(wc.gap("available_now", "AptIQ row has no available-units value"))
-    gaps.append(wc.gap("available_now.stale_90_plus", "No feed on main reports how long a unit has been vacant"))
+    gaps.append(wc.gap("available_now.stale_90_plus",
+                       "AptIQ reports days on market per floor plan (see /property floorplans), "
+                       "not per unit, so units vacant 90+ days cannot be counted"))
     gaps.append(wc.gap("coming_open_90d",
                        "AptIQ reports 90-day exposure as a percentage; no feed on main gives "
                        "upcoming vacancies as unit counts by bedroom"))

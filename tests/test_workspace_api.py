@@ -166,6 +166,7 @@ def readers(monkeypatch):
                         lambda cid, uuid="", status=None, limit=100: [dict(PROPOSAL)])
     monkeypatch.setattr(portal_tickets, "list_tickets",
                         lambda cid, property_uuid="", limit=50: [dict(PORTAL_TICKET)])
+    monkeypatch.setattr(portal_tickets, "tracking_degraded", lambda: False)
     monkeypatch.setattr(ticket_manager, "list_tickets",
                         lambda cid, include_closed=False: [dict(SERVICE_TICKET)])
     monkeypatch.setattr(loop_writer, "_bq", lambda: None)
@@ -662,13 +663,16 @@ def aptiq(monkeypatch):
     monkeypatch.setenv("APT_IQ_DAILY_SHEET_URL", "https://example.invalid/daily.csv")
     monkeypatch.setenv("APT_IQ_FLOOR_PLAN_SHEET_URL", "https://example.invalid/fp.csv")
     monkeypatch.setattr(apt_iq_reader, "read_property", lambda company: {
-        "matched": True, "occupancy_pct": 91.8, "available_units": 44, "exposure_90d_pct": 9.1})
+        "matched": True, "occupancy_pct": 91.8, "available_units": 44, "exposure_90d_pct": 9.1,
+        "raw": {"Report Generation Date": "09/13/2026"}})
+    monkeypatch.setattr(apt_iq_csv_client, "get_floor_plan_rows", lambda pid: [
+        {"Floor Plan Name": "A1", "Days on Market": "96", "Report Generation Date": "09/13/2026"}])
     monkeypatch.setattr(apt_iq_reader, "read_floor_plans", lambda pid: [
         {"name": "A1", "beds": 1, "baths": 1.0, "sqft": 712, "total_units": 40, "available": 7}])
     monkeypatch.setattr(apt_iq_csv_client, "_cache_loaded_at", 1757830000.0)
     monkeypatch.setattr(apt_iq_csv_client, "_fp_loaded_at", 1757830000.0)
     monkeypatch.setattr(apt_iq_csv_client, "get_all_rows", lambda: {
-        "ap-1": {"Property ID": "ap-1", "Occupancy %": "76", "Available Units": "108"}})
+        "ap-1": {"Property ID": "ap-1", "Advertised Occupancy %": "76", "Available Units": "108"}})
 
 
 @pytest.fixture
@@ -755,12 +759,15 @@ class TestContractShapes:
                                  "edited_by": "AM", "edited_at": "2026-08-12"}
         assert body["people"][0] == {"name": "Marcus Jennings", "role": "Account manager", "email": None}
         assert body["floorplans"][0]["code"] == "A1"
+        assert body["floorplans"][0]["days_on_market"] == 96
+        assert body["floorplans"][0]["as_of"] == "2026-09-13T00:00:00Z"
         assert {c["name"]: c["status"] for c in body["connections"]}["ApartmentIQ"] == "connected"
 
     def test_performance(self, client, ctx, aptiq, spend):
         body = client.get(f"/api/workspace/performance?company_id={CID}&range=90", headers=_h()).get_json()
         _shape_ok(body, "performance")
         assert body["occupied"]["value"] == 0.918 and body["occupied"]["units"] == 358
+        assert body["occupied"]["as_of"] == "2026-09-13T00:00:00Z"
         assert body["occupied"]["target"] == 0.95
         assert body["available_now"]["value"] == 44 and body["available_now"]["stale_90_plus"] is None
         assert body["coming_open_90d"] is None and body["coming_by_week"] == []

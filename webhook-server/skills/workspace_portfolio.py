@@ -107,6 +107,7 @@ def build_portfolio(email: str, *, today: date | None = None) -> dict:
         row = aptiq.get(str(p.get("aptiq_property_id") or "").strip()) if aptiq else None
         occ = wc.ratio(apt_iq_reader._resolve_col(row, "occupancy_pct")) if row else None
         avail = wc.to_int(apt_iq_reader._resolve_col(row, "available_units")) if row else None
+        row_as_of = (wc.to_iso_ts(row.get("Report Generation Date")) if row else None) or aptiq_as_of
         rows.append({
             "company_id": str(p.get("hubspot_company_id") or ""),
             "name": p.get("name") or None,
@@ -114,12 +115,14 @@ def build_portfolio(email: str, *, today: date | None = None) -> dict:
             "state": p.get("state") or None,
             "units": wc.to_int(p.get("totalunits")),
             "units_source": "hubspot_company",
-            "occupancy": wc.metric(occ, "aptiq", aptiq_as_of),
+            "occupancy": wc.metric(occ, "aptiq", row_as_of),
             "top_item": {"id": top["id"], "title": top["title"]},
             "more_items": len(to_do) - 1,
             "start_by": top_date.isoformat() if top_date else None,
             "overdue": bool(top_date and top_date < today),
-            "units_at_risk": wc.metric(avail, "aptiq", aptiq_as_of),
+            # AptIQ advertised available units. The contract's "units at risk"
+            # (units vacant 90+ days) has no per-unit feed; see Contract changes.
+            "units_at_risk": wc.metric(avail, "aptiq", row_as_of),
         })
     if failed:
         gaps.append(wc.gap("properties", f"{failed} propert(ies) could not be read and are not listed"))

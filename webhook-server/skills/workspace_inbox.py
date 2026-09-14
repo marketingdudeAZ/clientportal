@@ -676,6 +676,13 @@ def _portal_tickets(ctx: PropertyContext, gaps: list, today: date) -> list:
             _created=created,
             _raw={"status": r.get("status"), "url": r.get("url")},
         ))
+    if portal_tickets.tracking_degraded():
+        # list_tickets returns [] both for "no requests" and for "the mapping
+        # store could not be read"; only the second is a gap.
+        gaps.append(wc.gap("source:portal_ticket",
+                           "The portal ticket store could not be read, so requests filed "
+                           "through the portal may be missing",
+                           source="portal_ticket"))
     if unresolved:
         gaps.append(wc.gap("source:portal_ticket",
                            f"ClickUp did not return live status for {unresolved} request(s)",

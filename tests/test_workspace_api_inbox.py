@@ -101,6 +101,9 @@ class TestCommon:
         assert wc.to_iso_date(1757808000000) == "2025-09-14"
         assert wc.to_iso_ts("2026-09-10T00:00:00+00:00") == "2026-09-10T00:00:00Z"
         assert wc.month_end("2026-02") == "2026-02-28"
+        # AptIQ's "Report Generation Date" format, taken from the live export.
+        assert wc.to_iso_ts("09/13/2026") == "2026-09-13T00:00:00Z"
+        assert wc.to_iso_date("13/09/2026") is None
         assert wc.quarter_start(date(2026, 9, 14)) == date(2026, 7, 1)
 
     def test_metric_is_null_when_unknown(self):
@@ -288,8 +291,17 @@ class TestOnboarding:
 
 
 class TestTickets:
+    def test_unreadable_ticket_store_is_a_gap(self, monkeypatch):
+        import portal_tickets
+        monkeypatch.setattr(portal_tickets, "list_tickets", lambda *a, **k: [])
+        monkeypatch.setattr(portal_tickets, "tracking_degraded", lambda: True)
+        gaps = []
+        assert wi._portal_tickets(_ctx(), gaps, TODAY) == []
+        assert "could not be read" in gaps[0]["reason"]
+
     def test_portal_ticket_statuses(self, monkeypatch):
         import portal_tickets
+        monkeypatch.setattr(portal_tickets, "tracking_degraded", lambda: False)
         monkeypatch.setattr(portal_tickets, "list_tickets", lambda *a, **k: [
             {"id": "a", "subject": "A", "status": "Needs your approval"},
             {"id": "b", "subject": "B", "status": "Done"},
@@ -511,7 +523,7 @@ class TestPortfolio:
             {"hubspot_company_id": "4", "aptiq_property_id": "a4"}])
         monkeypatch.setattr(apt_iq_csv_client, "get_all_rows", lambda: {
             "a1": {"Available Units": "10", "Occupancy %": "90"},
-            "a2": {"Available Units": "40", "Occupancy %": "80"},
+            "a2": {"Available Units": "40", "Occupancy %": "80", "Report Generation Date": "09/13/2026"},
             "a4": {"Available Units": "99"}})
         monkeypatch.setattr(apt_iq_csv_client, "_cache_loaded_at", 1757830000.0)
         monkeypatch.setattr(wi, "load_context", lambda cid: _ctx())
@@ -528,3 +540,4 @@ class TestPortfolio:
         assert out["quiet_count"] == 1 and out["item_count"] == 4
         assert out["properties"][1]["more_items"] == 1
         assert out["properties"][2]["units_at_risk"] is None
+        assert out["properties"][0]["units_at_risk"]["as_of"] == "2026-09-13T00:00:00Z"
