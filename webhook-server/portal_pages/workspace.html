@@ -51,7 +51,7 @@ a{color:inherit;text-decoration:none}
 .switcher select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;appearance:none}
 .nav{display:flex;flex-direction:column;gap:1px;padding-inline:12px}
 .nav a{display:flex;align-items:center;gap:11px;padding:10px;border-radius:5px;color:var(--side-text);font-size:14px;line-height:18px}
-.nav a:hover{background:rgba(255,255,255,.05)}
+@media (hover:hover){.nav a:not([aria-current="page"]):hover{color:var(--white)}.nav a:not([aria-current="page"]):hover .ico svg{stroke:var(--white)}}
 .nav a[aria-current="page"]{background:var(--side-active);color:var(--white);font-weight:600}
 .nav .ico{width:16px;display:flex;justify-content:center;flex-shrink:0}
 .nav .ico svg{stroke:var(--side-icon)}
