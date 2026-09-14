@@ -531,8 +531,18 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .asset .tags span{height:20px;padding-inline:8px;border-radius:999px;font-size:11px;line-height:20px;background:var(--color-muted);color:var(--gray-ink-strong)}
 .asset .tags span.generated{background:var(--color-brand-soft);color:var(--juniper)}
 .asset .tags span.uploaded{background:var(--healthy-soft);color:var(--healthy-text)}
-.dropzone{border:2px dashed var(--color-border);border-radius:var(--radius-md);padding:24px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
-.dropzone:hover{background:var(--color-muted)}
+.dropzone{border:2px dashed var(--color-border);border-radius:var(--radius-md);padding:24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.dropzone.over{background:var(--color-brand-soft);border-color:var(--copper)}
+.uplist{display:flex;flex-direction:column;gap:10px}
+.upf{display:grid;grid-template-columns:minmax(0,1fr) minmax(80px,200px);gap:4px 12px;align-items:center}
+.upf .n{font-family:var(--font-mono);font-size:12px;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upf .bar{height:6px;border-radius:3px;background:var(--rule);overflow:hidden}
+.upf .bar i{display:block;height:100%;background:var(--copper-fill);transition:width .15s}
+.upf.done .bar i{background:var(--healthy-text)}
+.upf.err .bar i{background:var(--critical)}
+.upf .st{grid-column:1/-1;font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.upf.done .st{color:var(--healthy-text)}
+.upf.err .st{color:var(--critical-text)}
 
 /* ── Value (GC6-1) ──────────────────────────────────────────────────── */
 .vhead{display:flex;flex-direction:column;gap:10px}
@@ -1898,6 +1908,85 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   }
 
   /* ── Creative (E4S-1) ────────────────────────────────────────────── */
+  // Round 4: drag-and-drop upload straight into the asset library, one request
+  // per file so each file shows its own progress. No ticket form.
+  state.uploads = {};
+  function authHeaders() {
+    return clerkReady.then(function (signedIn) {
+      var h = { 'Accept': 'application/json' };
+      if (linkToken) h['X-Workspace-Link'] = linkToken;
+      if (!signedIn || !window.Clerk || !window.Clerk.session) return h;
+      return window.Clerk.session.getToken().then(function (t) { if (t) h['Authorization'] = 'Bearer ' + t; return h; });
+    });
+  }
+  function uploadOne(cid, file, onProgress) {
+    return authHeaders().then(function (h) {
+      return new Promise(function (resolve, reject) {
+        var xhr = new XMLHttpRequest(), fd = new FormData();
+        fd.append('company_id', cid || '');
+        fd.append('files', file, file.name);
+        xhr.open('POST', '/api/workspace/creative/upload');
+        Object.keys(h).forEach(function (k) { xhr.setRequestHeader(k, h[k]); });
+        xhr.upload.onprogress = function (e) { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+        xhr.onload = function () {
+          var body = null;
+          try { body = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch (e) { body = null; }
+          if (xhr.status >= 200 && xhr.status < 300) resolve(body || {}); else reject(new ApiError(xhr.status, body));
+        };
+        xhr.onerror = function () { reject(new ApiError(0, { detail: 'The connection dropped' })); };
+        xhr.send(fd);
+      });
+    });
+  }
+  function upRow(u) {
+    var cls = u.state === 'done' ? ' done' : (u.state === 'error' || u.state === 'skipped' ? ' err' : '');
+    var fill = u.state === 'waiting' ? 0 : (u.state === 'sending' ? u.pct : 1);
+    var st = { waiting: 'Waiting', sending: 'Uploading · ' + Math.round(u.pct * 100) + '%', done: 'Added to the library' + (u.asset ? ' as ' + u.asset : ''),
+      skipped: 'Skipped — ' + (u.reason || 'not stored'), error: 'Didn’t upload — ' + (u.reason || 'try again') }[u.state];
+    return '<li class="upf' + cls + '"><span class="n">' + esc(u.name) + '</span><span class="bar" role="progressbar" aria-label="' + esc(u.name) + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(fill * 100) + '"><i style="width:' + Math.round(fill * 100) + '%"></i></span>' +
+      '<span class="st">' + esc(st) + '</span></li>';
+  }
+  function uploadHtml(c) {
+    if (!canDecide()) return '<div class="dropzone"><span class="h-rail">Add photos or video</span><span class="support">' + signInLink('Sign in to upload') + '</span></div>';
+    return '<section class="sec" aria-labelledby="up-h"><div class="dropzone" data-drop><span class="h-rail" id="up-h">Drop photos or videos here</span>' +
+      '<span class="support">We name and tag them for ' + esc(c ? c.name : 'this property') + ' and add them to the library. Nothing runs in ads until you approve it.</span>' +
+      '<button type="button" class="btn sm outline" data-pick>' + ic(I.plus, 13) + 'Add videos or photos</button><input type="file" multiple accept="image/*,video/*" data-files hidden></div>' +
+      '<ul class="uplist" data-uplist aria-live="polite">' + (state.uploads[state.companyId] || []).map(upRow).join('') + '</ul></section>';
+  }
+  function bindUpload() {
+    var zone = view.querySelector('[data-drop]'); if (!zone) return;
+    var input = zone.querySelector('[data-files]'), cid = state.companyId;
+    function paint() { var l = view.querySelector('[data-uplist]'); if (l && state.companyId === cid) l.innerHTML = (state.uploads[cid] || []).map(upRow).join(''); }
+    function queue(files) {
+      var list = state.uploads[cid] = state.uploads[cid] || [], fresh = [], added = 0;
+      Array.prototype.forEach.call(files, function (f) {
+        var u = { name: f.name, pct: 0, state: 'waiting', file: f };
+        if (f.type && !/^(image|video)\//.test(f.type)) { u.state = 'skipped'; u.reason = 'only photos and videos'; delete u.file; }
+        list.push(u);
+        if (u.state === 'waiting') fresh.push(u);
+      });
+      paint();
+      fresh.reduce(function (chain, u) {
+        return chain.then(function () {
+          u.state = 'sending'; paint();
+          return uploadOne(cid, u.file, function (frac) { u.pct = frac; paint(); }).then(function (body) {
+            var ok = (body.uploaded || [])[0], sk = (body.skipped || [])[0];
+            if (ok) { u.state = 'done'; u.asset = ok.asset_name; added++; } else { u.state = 'skipped'; u.reason = sk ? sk.reason : 'not stored'; }
+          }, function (e) {
+            if (e && e.status === 401) { u.state = 'error'; u.reason = 'sign in again'; return; }
+            u.state = 'error'; u.reason = (e && e.message) || 'try again';
+          }).then(function () { delete u.file; paint(); });
+        });
+      }, Promise.resolve()).then(function () {
+        if (added && state.companyId === cid && /^#\/property\/[^/]+\/creative|^#\/creative/.test(location.hash)) screenCreative();
+      });
+    }
+    zone.querySelector('[data-pick]').addEventListener('click', function () { input.click(); });
+    input.addEventListener('change', function () { if (input.files && input.files.length) queue(input.files); input.value = ''; });
+    ['dragenter', 'dragover'].forEach(function (ev) { zone.addEventListener(ev, function (e) { e.preventDefault(); zone.classList.add('over'); }); });
+    zone.addEventListener('dragleave', function (e) { if (!zone.contains(e.relatedTarget)) zone.classList.remove('over'); });
+    zone.addEventListener('drop', function (e) { e.preventDefault(); zone.classList.remove('over'); if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) queue(e.dataTransfer.files); });
+  }
   var CTYPES = [['', 'All'], ['photos', 'Photos'], ['videos', 'Videos'], ['ad_creative', 'Ad creative'], ['floor_plans', 'Floor plans'], ['documents', 'Documents']];
   var THUMBS = ['#E7EBE9', '#D9DEDC', '#BDDDD9', '#E8F3F2'];
   function screenCreative() {
@@ -1906,9 +1995,6 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     guard(api('/api/workspace/creative?' + cq() + (type ? '&type=' + type : '')), 'creative').then(function (r) {
       if (!r) return;
       var d = r.data || {}, k = d.counts || {};
-      var summary = esc(num(k.assets) + ' assets · ' + num(k.tracked_in_ads) + ' tracked in ads') +
-        (d.top ? ' · Top creative: <span class="mono t-healthy">' + esc(d.top.name) + (val(d.top.ctr) != null ? ' (' + esc(pct(val(d.top.ctr), 1)) + ' CTR)' : '') + '</span>' : '') +
-        (d.lowest ? ' · Lowest: <span class="mono t-critical">' + esc(d.lowest.name) + (val(d.lowest.ctr) != null ? ' (' + esc(pct(val(d.lowest.ctr), 1)) + ' CTR)' : '') + '</span>' : '');
       var chips = '<div class="chips" role="group" aria-label="Asset type">' + CTYPES.map(function (t) { return '<button type="button" class="chip" data-ctype="' + t[0] + '" aria-pressed="' + (t[0] === type) + '">' + t[1] + '</button>'; }).join('') + '</div>';
       var assets = (d.assets || []).map(function (a, i) {
         var best = d.top && a.name === d.top.name, worst = a.flag === 'underperforming';
@@ -1920,11 +2006,12 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
           (a.file_url && /^https:\/\//.test(a.file_url) ? '<a class="link" href="' + esc(a.file_url) + '" target="_blank" rel="noopener noreferrer">Open file<span class="sr-only"> (opens in a new tab)</span></a>' : '') + '</li>';
       }).join('');
       setView('<div class="page">' + scopedBack() + '<div class="head"><div class="stack"><h1 class="h-page">Creative library</h1><p class="support">' + esc(c ? c.name : '') + '</p></div></div>' +
-        '<p class="support">' + summary + '</p>' + chips +
+        chips +
         (assets ? '<ul class="assets">' + assets + '</ul>' : '<p class="support">No assets of this type yet.</p>') +
-        '<a class="dropzone" href="#/request"><span class="h-rail">Add photos or video</span><span class="support">Send them with a New request. We’ll name and tag them for you.</span></a>' +
+        uploadHtml(c) +
         gapsLine(d.gaps) + '</div>');
       view.querySelectorAll('[data-ctype]').forEach(function (b) { b.addEventListener('click', function () { state.creativeType = b.getAttribute('data-ctype'); screenCreative(); }); });
+      bindUpload();
     });
   }
 

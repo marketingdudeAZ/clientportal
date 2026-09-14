@@ -31,7 +31,7 @@ SPEC_BY_FIXTURE = {
     "dashboard": wc.DASHBOARD, "approvals": wc.APPROVALS, "approvals_empty": wc.APPROVALS,
     "property_overview": wc.PROPERTY_OVERVIEW, "media_plan": wc.MEDIA_PLAN,
     "visibility": wc.VISIBILITY_SCREEN, "content": wc.CONTENT, "creative": wc.CREATIVE, "value": wc.VALUE,
-    "create_brief": wc.CREATE_BRIEF, "media_plan_regenerate": REGENERATE_RESULT,
+    "create_brief": wc.CREATE_BRIEF, "media_plan_regenerate": REGENERATE_RESULT, "creative_upload": wc.CREATIVE_UPLOAD,
 }
 # Fixtures that hold a list of one shape under a key.
 LIST_FIXTURES = {"approval_items": ("items", wc.ITEM)}
@@ -89,3 +89,24 @@ def test_every_preview_item_matches_item_spec():
         if it.get("review"):
             problems += [f"{it['id']}.review: {p}" for p in wc.check(it["review"], wc.FAIR_HOUSING_REVIEW)]
     assert not problems, "\n  ".join(problems)
+
+
+def test_preview_creative_upload_matches_api_spec():
+    """The preview fakes storage but answers exactly as the API does."""
+    import importlib.util
+    import io
+    root = pathlib.Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("preview_workspace_upload", root / "scripts" / "preview_workspace.py")
+    pw = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pw)
+    client = pw.app.test_client()
+    resp = client.post("/api/workspace/creative/upload", content_type="multipart/form-data", data={
+        "company_id": "18234410021",
+        "files": [(io.BytesIO(b"jpg"), "Pool at dusk.jpg", "image/jpeg"), (io.BytesIO(b"mp4"), "tour.mp4", "video/mp4"),
+                  (io.BytesIO(b"zip"), "plans.zip", "application/zip")]})
+    assert resp.status_code == 201
+    body = resp.get_json()
+    assert not wc.check(body, wc.CREATIVE_UPLOAD), wc.check(body, wc.CREATIVE_UPLOAD)
+    assert [u["asset_name"] for u in body["uploaded"]] == ["lyvbroadway-pool-at-dusk", "lyvbroadway-tour"]
+    assert body["skipped"] == [{"filename": "plans.zip", "reason": "only photos and videos"}]
+    assert client.post("/api/workspace/creative/upload", data={"company_id": "18234410021"}).status_code == 400

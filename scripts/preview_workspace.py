@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -882,17 +883,29 @@ def creative_route():
 
 @app.post("/api/workspace/creative/upload")
 def creative_upload():
-    # Accepts multipart uploads and fakes success; nothing is stored.
+    """Multipart company_id + files, as the API takes them. Fakes storage and
+    answers in the contract's shape (tests/workspace_contract.CREATIVE_UPLOAD)."""
     company_id = (request.form.get("company_id") or "").strip()
-    if not prop(company_id):
+    p = prop(company_id)
+    if not p:
         return jsonify({"error": "company_id is required"}), 400
-    files = request.files.getlist("files") or request.files.getlist("file")
+    files = request.files.getlist("files")
     if not files:
-        return jsonify({"error": "files are required"}), 400
-    slug = prop(company_id)["slug"]
-    uploaded = [{"asset_id": f"asset:{company_id[-4:]}u{i}", "name": f"{slug}-{Path(f.filename or 'upload').stem}".lower().replace(" ", "-"),
-                 "filename": f.filename, "status": "processing"} for i, f in enumerate(files)]
-    return jsonify({"uploaded": uploaded, "failed": []}), 201
+        return jsonify({"error": "no_files", "detail": "Add at least one photo or video."}), 400
+    uploaded, skipped = [], []
+    for i, f in enumerate(files):
+        name = f.filename or f"upload-{i + 1}"
+        kind = (f.mimetype or "").split("/")[0]
+        if kind not in ("image", "video"):
+            skipped.append({"filename": name, "reason": "only photos and videos"})
+            continue
+        stem = re.sub(r"[^a-z0-9]+", "-", Path(name).stem.lower()).strip("-") or "upload"
+        asset = f"{p['slug']}-{stem}"
+        uploaded.append({"filename": name, "file_url": f"https://files.preview.invalid/{p['slug']}/{asset}{Path(name).suffix.lower()}",
+                         "thumbnail_url": None, "asset_name": asset, "category": "photos" if kind == "image" else "videos", "subcategory": None})
+    if not uploaded:
+        return jsonify({"error": "nothing_stored", "detail": "None of those files could be stored.", "skipped": skipped}), 400
+    return jsonify({"uploaded": uploaded, "skipped": skipped}), 201
 
 
 @app.post("/api/workspace/visibility/create-brief")
