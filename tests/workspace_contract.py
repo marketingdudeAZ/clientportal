@@ -37,6 +37,16 @@ class enum:  # noqa: N801
         self.values = values
 
 
+class omittable:  # noqa: N801
+    """A key the API always sends but a fixture or older payload may leave out.
+
+    Missing is allowed; present must match `spec`. API tests assert presence
+    separately (see tests/test_workspace_api_r4_drafts.py).
+    """
+    def __init__(self, spec: Any):
+        self.spec = spec
+
+
 class absent:  # noqa: N801
     def __init__(self, key: str):
         self.key = key
@@ -81,6 +91,10 @@ def check(value: Any, spec: Any, path: str = "$") -> list[str]:
                 if sub.key in value:
                     errs.append(f"{path}.{sub.key}: must not be present")
                 continue
+            if isinstance(sub, omittable):
+                if key in value:
+                    errs += check(value[key], sub.spec, f"{path}.{key}")
+                continue
             if key not in value:
                 errs.append(f"{path}.{key}: missing")
             else:
@@ -109,6 +123,8 @@ NOTE = {"at": opt(STR), "actor": opt(STR), "text": STR, "visibility": VISIBILITY
 EVIDENCE = {"columns": [STR], "rows": [[ANY]], "more_count": INT}
 SPARKLINE = {"label": STR, "points": [{"x": ANY, "y": NUM}], "highlight_index": opt(INT)}
 ACTION_LINK = {"label": STR, "href": STR}
+# The Review panel's draft (workspace.html DRAFT_LABEL kinds). Only stored drafts.
+ITEM_DRAFT = {"kind": enum("email", "faq", "page", "post", "ad"), "title": opt(STR), "body": STR}
 
 ITEM = {
     "id": STR, "source": SOURCES, "source_id": STR, "title": STR,
@@ -123,6 +139,7 @@ ITEM = {
     "why": opt({"text": STR, "receipts": [RECEIPT]}),
     "for_whom": opt({"text": STR, "questions": [STR]}),
     "approving_does": [{"label": STR, "owner": enum("RPM Digital", "vendor", "you"), "when": opt(STR)}],
+    "draft": omittable(opt(ITEM_DRAFT)),
     "actions": {"approve": BOOL, "not_now": BOOL},
 }
 
