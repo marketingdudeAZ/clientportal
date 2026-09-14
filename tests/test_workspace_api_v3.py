@@ -496,3 +496,48 @@ class TestContent:
         monkeypatch.setattr(seo_entitlement, "has_feature", lambda tier, f: False)
         body = client.get(f"/api/workspace/content?company_id={CID}", headers=_h()).get_json()
         assert body["rows"] == [] and any("tier" in g["message"] for g in body["gaps"])
+
+
+# ── 6. creative ──────────────────────────────────────────────────────────────
+
+class TestCreative:
+    @pytest.fixture
+    def assets(self, monkeypatch, scope):
+        import config
+        import hubdb_helpers
+        monkeypatch.setattr(config, "HUBDB_ASSET_TABLE_ID", "t-assets", raising=False)
+        rows = {
+            "u-123": [{"id": 1, "asset_name": "parkline-pool-03", "category": "Photography", "subcategory": "Amenity",
+                       "file_type": "jpg", "file_url": "https://cdn/pool.jpg", "source": "photography", "status": "live"},
+                      {"id": 2, "asset_name": "Parkline brochure", "category": "Marketing Collateral",
+                       "file_type": "pdf", "file_url": "https://cdn/b.pdf", "source": "client_upload", "status": "live"},
+                      {"id": 3, "asset_name": "old", "category": "Photography", "file_type": "jpg", "status": "archived"}],
+            CID: [{"id": 4, "asset_name": "2026-09 - Courtyard", "category": "Video", "subcategory": "Ad Creative",
+                   "file_type": "mp4", "file_url": "https://cdn/v.mp4", "source": "video_pipeline", "status": "live"},
+                  {"id": 1, "asset_name": "parkline-pool-03", "category": "Photography", "file_type": "jpg",
+                   "status": "live"}],
+        }
+        monkeypatch.setattr(hubdb_helpers, "read_rows",
+                            lambda t, filters=None, limit=500: [dict(r) for r in rows.get(filters["property_uuid"], [])])
+        scope[CID].props["video_variants_json"] = json.dumps([
+            {"variant_id": "v9", "title": "Courtyard evening", "status": "pending_review", "poster_url": "https://p"},
+            {"variant_id": "v8", "title": "Failed", "status": "failed"}])
+
+    def test_assets_origins_and_performance_gap(self, client, assets):
+        body = client.get(f"/api/workspace/creative?company_id={CID}", headers=_h()).get_json()
+        _ok(body, "creative")
+        by_id = {a["id"]: a for a in body["assets"]}
+        assert set(by_id) == {"asset:1", "asset:2", "asset:4", "video_variant:v9"}
+        assert (by_id["asset:1"]["type"], by_id["asset:1"]["origin"], by_id["asset:1"]["thumbnail_url"]) == \
+            ("photos", "inherited", "https://cdn/pool.jpg")
+        assert (by_id["asset:2"]["type"], by_id["asset:2"]["origin"]) == ("documents", "uploaded")
+        assert (by_id["asset:4"]["type"], by_id["asset:4"]["origin"]) == ("ad_creative", "generated")
+        assert all(a["ctr"] is None and a["impressions"] is None for a in body["assets"])
+        assert body["counts"] == {"assets": 4, "tracked_in_ads": None} and body["top"] is None
+        assert any(g.get("source") == "google_ads" for g in body["gaps"])
+
+    def test_type_filter(self, client, assets):
+        body = client.get(f"/api/workspace/creative?company_id={CID}&type=ad_creative", headers=_h()).get_json()
+        assert {a["id"] for a in body["assets"]} == {"asset:4", "video_variant:v9"}
+        assert body["counts"]["assets"] == 4
+        assert client.get(f"/api/workspace/creative?company_id={CID}&type=gifs", headers=_h()).status_code == 400

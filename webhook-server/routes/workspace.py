@@ -650,3 +650,24 @@ def workspace_content():
         return jsonify(wvis.build_content(ctx, internal=_is_internal()))
     except Exception as exc:  # noqa: BLE001
         return _failed("content", exc)
+
+
+# ── v3: creative library ─────────────────────────────────────────────────────
+
+@workspace_bp.route("/api/workspace/creative", methods=["GET", "OPTIONS"])
+def workspace_creative():
+    company_id = _company_id()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    from skills import workspace_creative as wcre
+    kind = (request.args.get("type") or "").strip() or None
+    if kind and kind not in wcre.TYPES:
+        return jsonify({"error": "Invalid type", "detail": "|".join(wcre.TYPES)}), 400
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    try:
+        return jsonify(wcre.build_creative(ctx, asset_type_filter=kind, internal=_is_internal()))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("creative", exc)
