@@ -308,6 +308,11 @@ VISIBILITY_SCREEN = {
     "comp_stack": opt({"competitors": [STR], "rows": [{"surface": STR, "values": ANY}]}),
     "citation_sources": [{"source": STR, "share": NUM}],
     "recommendations": [{"text": STR, "action": {"type": STR}}],
+    "prompts": [{"id": STR, "text": STR, "topic": opt(STR), "intent": opt(STR), "engines": ANY}],
+    "fanout": [{"query": STR, "engine": opt(STR), "count": INT,
+                "content": opt({"item_id": opt(STR), "title": STR, "status": STR})}],
+    "writing": [{"title": STR, "answers": [STR], "status": enum("drafted", "in_review", "published"),
+                 "item_id": opt(STR)}],
     "alerts": [{"kind": enum("exposure", "competitor"), "text": STR}],
     "gaps": [GAP],
 }

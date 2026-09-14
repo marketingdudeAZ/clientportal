@@ -15,12 +15,23 @@ prompt gets an FAQ brief recommendation); no model writes them. "Create brief"
 starts a content brief through the existing content brief path
 (`routes.seo.start_content_brief`), behind verified identity and the SEO tier.
 
+Round 4 adds the audit itself. `prompts` are the tracked questions with, per
+engine, whether the property is named or cited; `fanout` is the follow-up
+searches the engines ran, each linked to the content piece that answers it;
+`writing` is every drafted, in-review or published piece and the questions it
+answers. From `geo_prompts`, `geo_responses`, `geo_brand_mentions`,
+`geo_fanout` and `geo_plans` when the property has GEO rows; from the
+`ai_mentions` audit detail otherwise (citation only, no topic, intent or
+fan-out); gaps when neither has rows.
+
 Content lists the property's HubDB content briefs. Impact lines need measured
 before/after data, which nothing records yet, so `impact` is empty with a gap.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 
 from skills import workspace_common as wc
@@ -139,6 +150,7 @@ def build_visibility(ctx, *, internal: bool) -> dict:
                         "Draft an FAQ brief for those questions.",
                 "action": {"type": "create_brief", "engine": e["engine"]},
             })
+    audit = build_audit(ctx, gaps, geo_present=bool(geo), internal=internal)
     gaps.append(wc.gap("next_audit", "Audit scheduling is not recorded"))
     gaps.append(wc.gap("alerts", "No exposure or competitor alert feed exists yet"))
     return {
@@ -150,9 +162,149 @@ def build_visibility(ctx, *, internal: bool) -> dict:
         "comp_stack": body["comp_stack"],
         "citation_sources": body["citation_sources"],
         "recommendations": recommendations,
+        "prompts": audit["prompts"],
+        "fanout": audit["fanout"],
+        "writing": audit["writing"],
         "alerts": [],
         "gaps": wc.gaps_for(gaps, internal),
     }
+
+
+# ── the audit: prompts, fan-out, what we're writing (Round 4) ────────────────
+
+PLAN_STATUS = {"draft": "drafted", "pending_approval": "in_review", "approved": "in_review",
+               "in_production": "in_review", "published": "published", "measuring": "published",
+               "hit": "published", "missed": "published"}
+CONTENT_STATUS = {"draft_ready": "drafted", "in_review": "in_review", "published": "published"}
+
+
+def geo_audit(ctx, gaps: list) -> dict | None:
+    """Prompts with per-engine named/cited, fan-out queries and GEO plans."""
+    import bigquery_client
+    from google.cloud import bigquery
+    base = f"{bigquery_client.BIGQUERY_PROJECT_ID}.{bigquery_client._dataset()}"
+    params = [bigquery.ScalarQueryParameter("uuid", "STRING", ctx.uuid),
+              bigquery.ScalarQueryParameter("days", "INT64", GEO_WINDOW_DAYS)]
+    window = "created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)"
+    try:
+        prompts = bigquery_client.query(f"""
+            WITH p AS (SELECT * FROM `{base}.geo_prompts` WHERE property_uuid = @uuid
+                       QUALIFY ROW_NUMBER() OVER (PARTITION BY prompt_id ORDER BY created_at DESC) = 1),
+                 r AS (SELECT response_id, prompt_id, engine FROM `{base}.geo_responses`
+                       WHERE property_uuid = @uuid AND {window}),
+                 m AS (SELECT response_id, LOGICAL_OR(mentioned) AS named, LOGICAL_OR(cited) AS cited
+                       FROM `{base}.geo_brand_mentions` WHERE property_uuid = @uuid AND is_self AND {window}
+                       GROUP BY response_id)
+            SELECT p.prompt_id, p.prompt_text, p.topic, p.intent, r.engine,
+                   LOGICAL_OR(IFNULL(m.named, FALSE)) AS named, LOGICAL_OR(IFNULL(m.cited, FALSE)) AS cited
+            FROM p LEFT JOIN r USING (prompt_id) LEFT JOIN m USING (response_id)
+            WHERE p.status = 'active'
+            GROUP BY 1, 2, 3, 4, 5 ORDER BY p.topic, p.prompt_text LIMIT 1000""", params)
+        fanout = bigquery_client.query(f"""
+            SELECT query_text, engine, COUNT(*) AS n FROM `{base}.geo_fanout`
+            WHERE property_uuid = @uuid AND {window}
+            GROUP BY query_text, engine ORDER BY n DESC LIMIT 50""", params)
+        plans = bigquery_client.query(f"""
+            SELECT plan_id, prompt_ids, status, diagnosis, created_at FROM `{base}.geo_plans`
+            WHERE property_uuid = @uuid
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY plan_id ORDER BY created_at DESC) = 1
+            ORDER BY created_at DESC LIMIT 50""", params)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("geo audit tables unavailable for %s: %s", ctx.uuid, exc)
+        gaps.append(wc.gap("prompts", "The GEO audit tables could not be read", source="geo_prompts", internal=True))
+        return None
+    return {"prompts": prompts, "fanout": fanout, "plans": plans}
+
+
+def _group_prompts(rows: list) -> list:
+    by_id: dict = {}
+    for r in rows:
+        pid = str(r.get("prompt_id") or "")
+        entry = by_id.setdefault(pid, {"id": pid, "text": r.get("prompt_text") or "", "topic": r.get("topic"),
+                                       "intent": r.get("intent"), "engines": {}})
+        if r.get("engine"):
+            label = ENGINE_LABELS.get(r["engine"], r["engine"])
+            entry["engines"][label] = {"named": bool(r.get("named")), "cited": bool(r.get("cited"))}
+    return sorted(by_id.values(), key=lambda p: ((p["topic"] or "~"), (p["intent"] or "~"), p["text"]))
+
+
+def ai_mentions_prompts(ctx, gaps: list) -> list:
+    """Tracked prompts from the latest ai_mentions audit (citation per engine only)."""
+    from config import HUBDB_AI_MENTIONS_TABLE_ID
+    if not HUBDB_AI_MENTIONS_TABLE_ID or not ctx.uuid:
+        return []
+    from hubdb_helpers import read_rows
+    try:
+        rows = read_rows(HUBDB_AI_MENTIONS_TABLE_ID, filters={"property_uuid": ctx.uuid}, limit=30)
+    except Exception as exc:  # noqa: BLE001
+        gaps.append(wc.gap("prompts", f"The AI mentions audit could not be read ({type(exc).__name__})",
+                           source="ai_mentions"))
+        return []
+    if not rows:
+        return []
+    latest = sorted(rows, key=lambda r: str(r.get("scanned_at") or ""), reverse=True)[0]
+    try:
+        detail = json.loads(latest.get("detail_json") or "{}")
+    except ValueError:
+        return []
+    by_text: dict = {}
+    for engine, data in (detail or {}).items():
+        for p in (data or {}).get("prompts") or []:
+            text = str(p.get("prompt") or "").strip()
+            if not text:
+                continue
+            entry = by_text.setdefault(text, {"id": hashlib.sha1(text.encode("utf-8")).hexdigest()[:12],
+                                              "text": text, "topic": None, "intent": None, "engines": {}})
+            entry["engines"][ENGINE_LABELS.get(engine, engine)] = {"named": None, "cited": bool(p.get("cited"))}
+    if by_text:
+        gaps.append(wc.gap("prompts.topic", "The AI mentions audit records citations per prompt, not topic, intent "
+                                            "or whether the property was named", source="ai_mentions"))
+    return list(by_text.values())
+
+
+def _content_for(query: str, rows: list) -> dict | None:
+    q = (query or "").lower()
+    for row in rows:
+        keyword = (row.get("keyword") or "").lower()
+        if keyword and (keyword in q or all(w in q for w in keyword.split())):
+            return {"item_id": row.get("item_id"), "title": row["title"], "status": row["status"]}
+    return None
+
+
+def build_audit(ctx, gaps: list, *, geo_present: bool, internal: bool) -> dict:
+    content_rows = [r for r in build_content(ctx, internal=internal)["rows"] if r["status"] in CONTENT_STATUS]
+    geo = geo_audit(ctx, gaps) if geo_present else None
+    prompts, fanout, writing = [], [], []
+    if geo:
+        prompts = _group_prompts(geo["prompts"])
+        for f in geo["fanout"]:
+            fanout.append({"query": f.get("query_text") or "", "engine": ENGINE_LABELS.get(f.get("engine"), f.get("engine")),
+                           "count": int(f.get("n") or 0), "content": _content_for(f.get("query_text"), content_rows)})
+        text_by_id = {p["id"]: p["text"] for p in prompts}
+        for plan in geo["plans"]:
+            status = PLAN_STATUS.get(str(plan.get("status") or ""))
+            if not status:
+                continue
+            ids = plan.get("prompt_ids") or []
+            answers = [text_by_id[i] for i in ids if i in text_by_id]
+            first = answers[0] if answers else (plan.get("diagnosis") or "tracked questions")
+            writing.append({"title": f"Answer page for “{first}”", "answers": answers, "status": status,
+                            "item_id": None, "plan_id": plan.get("plan_id")})
+    else:
+        prompts = ai_mentions_prompts(ctx, gaps)
+        gaps.append(wc.gap("fanout", "Follow-up searches the engines ran need the GEO tracking tables, which have "
+                                     "no rows for this property", source="geo_fanout"))
+    for row in content_rows:
+        answers = [row["keyword"]] if row.get("keyword") else []
+        answers += [f["query"] for f in fanout if f["content"] and f["content"]["item_id"] == row.get("item_id")
+                    and f["query"] not in answers]
+        writing.append({"title": row["title"], "answers": answers, "status": CONTENT_STATUS[row["status"]],
+                        "item_id": row.get("item_id")})
+    if not prompts:
+        gaps.append(wc.gap("prompts", "No tracked questions have been audited for this property yet"))
+    if not writing:
+        gaps.append(wc.gap("writing", "No content has been drafted for this property yet"))
+    return {"prompts": prompts, "fanout": fanout, "writing": writing}
 
 
 def create_brief(ctx, hub_keyword: str, actor: str) -> dict:
@@ -215,6 +367,7 @@ def build_content(ctx, *, internal: bool) -> dict:
                 "priority": "done" if status == "published" else None,
                 "type": _brief_type(r.get("schema_types")),
                 "title": h1 or keyword or brief_id,
+                "keyword": keyword or None,
                 "gap_source": None,
                 "status": status,
                 "published_at": None,
