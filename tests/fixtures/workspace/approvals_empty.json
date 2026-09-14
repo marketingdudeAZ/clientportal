@@ -4,10 +4,21 @@
   "interrupts_count": 0,
   "approved_this_month": 12,
   "interrupts": [],
-  "batch": {"label": "Monthly batch — September 2026", "rows": []},
+  "batch": {
+    "label": "Monthly batch — September 2026",
+    "rows": []
+  },
   "stats": {
-    "approval_rate": {"value": 0.89, "source": "workspace_decisions", "as_of": "2026-09-14T13:04:00Z"},
-    "edit_rate": {"value": 0.23, "source": "workspace_decisions", "as_of": "2026-09-14T13:04:00Z"},
+    "approval_rate": {
+      "value": 0.89,
+      "source": "workspace_decisions",
+      "as_of": "2026-09-14T13:04:00Z"
+    },
+    "edit_rate": {
+      "value": 0.23,
+      "source": "workspace_decisions",
+      "as_of": "2026-09-14T13:04:00Z"
+    },
     "auto_approve_candidates": []
   },
   "gaps": []

@@ -225,7 +225,7 @@ def _items_for(p: dict) -> list:
                  "reason": "The image is AI-edited and has no disclosure. A state disclosure rule may apply; this check is flagged pending confirmation.",
                  "severity": "low", "suggested_fix": "Add the 'Image digitally enhanced' caption wherever this photo runs, or use the unedited original."},
             ]
-            review = {"property": n, "run_at": "2026-09-01T06:00:00Z", "next_run": "2026-10-01T06:00:00Z", "pages_checked": 42, "assets_checked": 118, "findings": findings}
+            review = {"property": {"company_id": p["company_id"], "name": n}, "run_at": "2026-09-01T06:00:00Z", "next_run": "2026-10-01T06:00:00Z", "pages_checked": 42, "assets_checked": 118, "findings": findings}
             out.append(_base_item(
                 p, "fair_housing_review", f"{tail}-2026-09", category="compliance", lens="tailor", channels=["website", "listing"], owner="Dana R.",
                 title=f"Your monthly Fair Housing review for {n} found {len(findings)} items",

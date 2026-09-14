@@ -19,7 +19,7 @@ OPT_STR = (str, type(None))
 OPT_NUM = (int, float, type(None))
 
 SOURCES = {"hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
-           "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket"}
+           "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket", "fair_housing_review"}
 LENSES = {"express", "tailor", "amplify", "evolve"}
 KINDS = {"auto", "queued", "person"}
 STATUSES = {"to_do", "in_motion", "done"}
@@ -362,7 +362,7 @@ def test_approvals(name):
     for i in d["interrupts"]:
         check(i, {"id": str, "kind": str, "title": str, "detail": OPT_STR, "company_id": str, "item_id": OPT_STR,
                   "primary_action": dict, "secondary_action": (dict, type(None))}, f"{name}.interrupts[]")
-        assert i["kind"] in {"compliance", "pacing", "tracking"}
+        assert i["kind"] == "compliance", "clients never see pacing interrupts (Round 4)"
     check(d["batch"], {"label": str, "rows": list}, f"{name}.batch")
     for r in d["batch"]["rows"]:
         check(r, {"item_id": str, "company_id": str, "property": str, "action": str, "category": str,

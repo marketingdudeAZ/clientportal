@@ -1,95 +1,105 @@
 {
   "as_of": "2026-09-14T13:04:00Z",
-  "waiting": 5,
-  "interrupts_count": 2,
+  "waiting": 9,
+  "interrupts_count": 0,
   "approved_this_month": 12,
-  "interrupts": [
-    {
-      "id": "interrupt:compliance:81",
-      "kind": "compliance",
-      "title": "Fair Housing review — Skye Reserve",
-      "detail": "Our screen flagged a sentence in the new neighborhood description. It stays unpublished until a person reads it.",
-      "company_id": "18234410087",
-      "item_id": "content_brief:81",
-      "primary_action": {
-        "label": "Review now",
-        "href": "#/item/content_brief:81"
-      },
-      "secondary_action": {
-        "label": "Dismiss"
-      }
-    },
-    {
-      "id": "pacing:spend_pacing:18234410150:2026-09-14",
-      "kind": "pacing",
-      "title": "Pacing — The Maddux at Shadowood",
-      "detail": "Google Ads is at 140% of monthly pace: $840 over with 11 days left.",
-      "company_id": "18234410150",
-      "item_id": null,
-      "primary_action": {
-        "label": "Pause campaign",
-        "creates": "work_item",
-        "href": "/api/workspace/signals/spend_pacing:18234410150:2026-09-14/start-work",
-        "note": "Creates an Ad Updates work item for a person. Nothing is paused automatically."
-      },
-      "secondary_action": {
-        "label": "Dismiss"
-      },
-      "signal_id": "spend_pacing:18234410150:2026-09-14"
-    }
-  ],
+  "interrupts": [],
   "batch": {
-    "label": "Monthly batch — September 2026",
+    "label": "Waiting on you — September 2026",
     "rows": [
       {
-        "item_id": "hubdb_rec:1031",
+        "item_id": "hubdb_rec:00211",
         "company_id": "18234410021",
         "property": "LYV Broadway",
-        "action": "Step down Apartments.com Premium → Standard",
+        "action": "Step down Apartments.com Premium to Standard at LYV Broadway",
         "category": "cost",
         "savings_per_year": {
-          "value": 28800,
+          "value": 25200,
           "source": "hubspot_line_items",
-          "as_of": "2026-09-14T12:30:00Z"
+          "as_of": "2026-09-14T13:04:00Z"
         },
         "can_edit": false
       },
       {
-        "item_id": "hubdb_rec:1032",
-        "company_id": "18234410087",
-        "property": "Skye Reserve",
-        "action": "Add Zillow Promoted, $480/mo",
+        "item_id": "call_prep:00213",
+        "company_id": "18234410021",
+        "property": "LYV Broadway",
+        "action": "Send the Apartments.com rate email for LYV Broadway",
         "category": "vendor",
-        "savings_per_year": null,
-        "can_edit": false
-      },
-      {
-        "item_id": "call_prep:2231",
-        "company_id": "18234410112",
-        "property": "Remi West Dallas",
-        "action": "Rep email: negotiate the Apartments.com rate",
-        "category": "negotiate",
         "savings_per_year": {
           "value": 6000,
-          "source": "hubdb_rec",
-          "as_of": "2026-09-14T08:20:00Z"
+          "source": "hubspot_line_items",
+          "as_of": "2026-09-14T13:04:00Z"
         },
         "can_edit": false
       },
       {
-        "item_id": "content_brief:77",
-        "company_id": "26136316506",
-        "property": "The Bromley at Brighton Crossing",
-        "action": "Content brief: 3 FAQ pages for citation gaps",
+        "item_id": "content_brief:00214",
+        "company_id": "18234410021",
+        "property": "LYV Broadway",
+        "action": "FAQ page: pet policy and breed restrictions at LYV Broadway",
         "category": "content",
         "savings_per_year": null,
         "can_edit": false
       },
       {
-        "item_id": "video_variant:14",
+        "item_id": "content_brief:65064",
+        "company_id": "26136316506",
+        "property": "The Bromley at Brighton Crossing",
+        "action": "FAQ page: pet policy and breed restrictions at The Bromley at Brighton Crossing",
+        "category": "content",
+        "savings_per_year": null,
+        "can_edit": false
+      },
+      {
+        "item_id": "call_prep:01123",
+        "company_id": "18234410112",
+        "property": "Remi West Dallas",
+        "action": "Send the Apartments.com rate email for Remi West Dallas",
+        "category": "vendor",
+        "savings_per_year": {
+          "value": 6000,
+          "source": "hubspot_line_items",
+          "as_of": "2026-09-14T13:04:00Z"
+        },
+        "can_edit": false
+      },
+      {
+        "item_id": "hubdb_rec:00872",
+        "company_id": "18234410087",
+        "property": "Skye Reserve",
+        "action": "Add Zillow Promoted at Skye Reserve",
+        "category": "vendor",
+        "savings_per_year": null,
+        "can_edit": false
+      },
+      {
+        "item_id": "fair_housing_review:0087-2026-09",
+        "company_id": "18234410087",
+        "property": "Skye Reserve",
+        "action": "Your monthly Fair Housing review for Skye Reserve found 2 items",
+        "category": "compliance",
+        "savings_per_year": null,
+        "can_edit": false
+      },
+      {
+        "item_id": "hubdb_rec:02031",
+        "company_id": "18234410203",
+        "property": "Arbor Hills Flats",
+        "action": "Step down Apartments.com Premium to Standard at Arbor Hills Flats",
+        "category": "cost",
+        "savings_per_year": {
+          "value": 30000,
+          "source": "hubspot_line_items",
+          "as_of": "2026-09-14T13:04:00Z"
+        },
+        "can_edit": false
+      },
+      {
+        "item_id": "video_variant:01505",
         "company_id": "18234410150",
         "property": "The Maddux at Shadowood",
-        "action": "Site refresh: update amenity photos",
+        "action": "Build new pool and clubhouse ad creative for The Maddux at Shadowood from existing assets",
         "category": "creative",
         "savings_per_year": null,
         "can_edit": false

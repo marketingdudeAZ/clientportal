@@ -119,7 +119,7 @@ ol,ul{list-style:none}
 .previewbar .grow{flex:1}
 
 /* Content + right rail */
-.content{display:flex;flex:1;min-height:0;align-items:stretch}
+main.content{display:flex;flex:1;min-height:0;align-items:stretch}
 .page{flex:1;min-width:0;display:flex;flex-direction:column;gap:24px;padding:28px 32px 48px}
 .rail{width:340px;flex-shrink:0;background:var(--color-card);border-left:1px solid var(--color-border);padding:28px 24px;display:flex;flex-direction:column;gap:20px}
 .page.narrow{max-width:1140px}
@@ -334,6 +334,51 @@ ol,ul{list-style:none}
 .trail .x{flex:1;min-width:0;font-size:13px;line-height:19px;color:var(--color-fg-2)}
 .trail .who{color:var(--color-fg-muted)}
 .afternote{font-size:13px;line-height:16px;color:var(--color-fg-muted)}
+
+/* ── Review panel (Round 4): side drawer on desktop, full screen on mobile ─ */
+body.drawer-open{overflow:hidden}
+.drawer-scrim{position:fixed;inset:0;background:rgba(40,45,39,.32);z-index:40}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(580px,100%);background:var(--color-card);border-left:1px solid var(--color-border);box-shadow:-12px 0 32px rgba(40,45,39,.14);z-index:41;display:flex;flex-direction:column}
+.drawer-head{display:flex;align-items:center;gap:12px;padding:10px 16px 10px 24px;border-bottom:1px solid var(--color-border);min-height:56px}
+.drawer-head .grow{flex:1}
+.iconbtn{width:44px;height:44px;border-radius:var(--radius-sm);display:inline-flex;align-items:center;justify-content:center;color:var(--color-fg-muted)}
+.iconbtn:hover{background:var(--color-muted);color:var(--color-fg)}
+.drawer-body{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:24px}
+.rv-foot{display:flex;flex-direction:column;gap:12px}
+.drawer .rv-foot{border-top:1px solid var(--color-border);padding:16px 24px;background:var(--color-card)}
+.panel .rv-foot{border-top:1px solid var(--color-border);padding-top:20px}
+.foot-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.foot-row .grow{flex:1}
+.rv-title{font-size:20px;line-height:28px;font-weight:600;letter-spacing:-.01em}
+.panel .rv-title{font-size:26px;line-height:34px;letter-spacing:-.02em}
+.rv-sec{display:flex;flex-direction:column;gap:8px}
+.rv-sec>h3{font-size:12px;line-height:16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--color-fg-muted)}
+.rv-sec>p{font-size:14px;line-height:22px;color:var(--color-fg-2)}
+.rv-pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.rv-receipts{display:flex;flex-direction:column;gap:2px}
+.rv-receipts li{font-size:12px;line-height:18px;color:var(--color-fg-muted)}
+.rv-qs{display:flex;flex-wrap:wrap;gap:6px}
+.rv-qs li{font-size:13px;line-height:18px;background:var(--color-muted);border-radius:var(--radius-sm);padding:4px 10px;color:var(--color-fg-2)}
+.rv-does li{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--color-line)}
+.rv-does li:first-child{border-top:0;padding-top:2px}
+.rv-does .n{width:22px;height:22px;border-radius:50%;background:var(--color-brand-soft);color:var(--juniper);font-size:12px;line-height:22px;font-weight:600;text-align:center;flex-shrink:0}
+.rv-does .l{flex:1;min-width:0;font-size:14px;line-height:20px}
+.rv-does .m{display:block;font-size:12px;line-height:16px;color:var(--color-fg-muted);margin-top:2px}
+.rv-draft{border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg);padding:16px}
+.rv-draft b{display:block;font-size:14px;line-height:20px;font-weight:600;margin-bottom:8px}
+.rv-draft .body{font-size:14px;line-height:22px;white-space:pre-wrap;color:var(--color-fg)}
+.fh-meta{font-size:13px;line-height:18px;color:var(--color-fg-muted)}
+.fh-finds{display:flex;flex-direction:column;gap:12px}
+.fh-find{border:1px solid var(--color-border);border-left:3px solid var(--critical);border-radius:var(--radius-sm);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fh-find.attention{border-left-color:var(--attention)}
+.fh-find.new{border-left-color:var(--gray)}
+.fh-find .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fh-find .top b{font-size:13px;line-height:18px;font-weight:600;flex:1;min-width:0}
+.fh-find blockquote{font-size:14px;line-height:21px;color:var(--color-fg);background:var(--color-muted);border-radius:4px;padding:6px 10px}
+.fh-find p{font-size:13px;line-height:20px;color:var(--color-fg-2)}
+.fh-find .k{display:block;font-size:12px;line-height:16px;font-weight:600;color:var(--gray-ink-strong)}
+button.link{text-align:left;align-self:flex-start;min-height:24px}
+.btn.wide{width:100%}
 
 /* ── Approved ───────────────────────────────────────────────────────── */
 .banner{display:flex;align-items:center;gap:14px;padding:18px 32px;background:var(--healthy-soft);border-bottom:1px solid var(--color-border)}
@@ -600,7 +645,7 @@ ol,ul{list-style:none}
   .greet{align-items:flex-start}
   .sresults{width:100%}
   .topbar .btn{height:44px}
-  .content{flex-direction:column}
+  main.content{flex-direction:column}
   .page{padding:20px 16px 32px;gap:20px}
   .rail{width:auto;border-left:0;border-top:1px solid var(--color-border);padding:20px 16px}
   .kpi{padding-inline:16px}
@@ -612,6 +657,12 @@ ol,ul{list-style:none}
   .hero .r{width:auto}
   .btn,.chip,.rchip,.textbtn{min-height:44px}
   .intr{flex-direction:column}
+  .drawer{width:100%;border-left:0;box-shadow:none}
+  .drawer-head{padding-left:16px}
+  .drawer-body{padding:20px 16px}
+  .drawer .rv-foot{padding:12px 16px}
+  .foot-row .btn{flex:1}
+  .foot-row .fine{flex-basis:100%;order:3}
   .stage{padding:16px}
   .panel{padding:22px 18px}
   .why .row{flex-direction:column;gap:6px}
@@ -875,7 +926,8 @@ ol,ul{list-style:none}
     check: '<path d="M20 6 9 17l-5-5"/>',
     lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     arrowLeft: '<path d="m12 19-7-7 7-7M19 12H5"/>',
-    history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>'
+    history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>'
   };
 
   /* ── Sidebar ─────────────────────────────────────────────────────── */
@@ -1041,8 +1093,12 @@ ol,ul{list-style:none}
   /* ── Shared decision pieces ──────────────────────────────────────── */
   var REASONS = [['wrong_data', 'Wrong read of the data'], ['already_handled', 'Already handled'], ['not_priority', 'Not a priority this month'], ['discuss_on_call', 'Discuss on our call']];
   function reasonLabel(k) { for (var i = 0; i < REASONS.length; i++) if (REASONS[i][0] === k) return REASONS[i][1]; return k; }
-  var CAT_LABEL = { cost: 'Cost', vendor: 'Vendor', negotiate: 'Negotiate', content: 'Content', creative: 'Creative', compliance: 'Compliance' };
-  var SOURCE_LABEL = { hubdb_rec: 'Recommendation', loop_rec: 'Loop recommendation', call_prep: 'Call prep', content_brief: 'Content brief', video_variant: 'Creative', ticket_profile: 'Ticket profile', onboarding_gap: 'Onboarding', portal_ticket: 'Request', service_ticket: 'Service ticket' };
+  var CAT_LABEL = { cost: 'Cost', vendor: 'Vendor', content: 'Content', creative: 'Creative', compliance: 'Compliance' };
+  // Round 4: negotiate is no longer its own category; it reads as a vendor item.
+  function catKey(c) { return c === 'negotiate' ? 'vendor' : c; }
+  // Every decision opens the Review panel first: one button, one place to decide.
+  function reviewBtn(id, cid, cls, label) { return '<button type="button" class="' + cls + '" data-review="' + esc(id) + '" data-company="' + esc(cid || '') + '">' + esc(label || 'Review') + '</button>'; }
+  var SOURCE_LABEL = { hubdb_rec: 'Recommendation', loop_rec: 'Loop recommendation', call_prep: 'Call prep', content_brief: 'Content brief', video_variant: 'Creative', ticket_profile: 'Ticket profile', onboarding_gap: 'Onboarding', portal_ticket: 'Request', service_ticket: 'Service ticket', fair_housing_review: 'Fair Housing review' };
   var STATUS_LABEL = { to_do: 'Needs you', in_motion: 'In motion', done: 'Done' };
   function reasonChips(attr) { return REASONS.map(function (r) { return '<button type="button" class="rchip" aria-pressed="false" ' + attr + '="' + r[0] + '">' + esc(r[1]) + '</button>'; }).join(''); }
   function approveFlow(btn, id, errEl) {
@@ -1106,7 +1162,6 @@ ol,ul{list-style:none}
       renderSide('dashboard');
       var h = dashboardHtml(d);
       setView(h.page, h.rail);
-      view.querySelectorAll('[data-approve]').forEach(function (b) { b.addEventListener('click', function () { approveFlow(b, b.getAttribute('data-approve'), b.closest('[data-err-scope]').querySelector('.inline-err')); }); });
     });
   }
   function dashboardHtml(d) {
@@ -1115,14 +1170,11 @@ ol,ul{list-style:none}
     var top = waiting[0];
     var hero = '';
     if (top) {
-      var acts = canDecide()
-        ? '<button type="button" class="btn primary" data-approve="' + esc(top.item_id) + '">Approve</button><a class="btn" href="#/item/' + encodeURIComponent(top.item_id) + '">Not now</a>'
-        : '<p class="support">' + signInLink('Sign in to approve') + '</p>';
+      var topCat = catKey(top.category);
       hero = '<section class="sec" aria-labelledby="needs-h"><div class="sec-head"><h2 class="eyebrow" id="needs-h">Needs you</h2><span class="support">1 of ' + esc(num(waiting.length)) + ' waiting</span></div>' +
-        '<div class="hero" data-err-scope><div class="l"><span class="pill attention"><i></i>' + esc(CAT_LABEL[top.category] || top.category) + '</span>' +
-        '<p class="q">' + esc(top.title) + '</p>' + (has(top.subtitle) ? '<p class="body">' + esc(top.subtitle) + '. Nothing changes until you approve.</p>' : '') +
-        '<p class="inline-err" role="alert" hidden></p></div>' +
-        '<div class="r">' + acts + '<a class="link" href="#/item/' + encodeURIComponent(top.item_id) + '">See the full evidence</a></div></div></section>';
+        '<div class="hero"><div class="l"><span class="pill attention"><i></i>' + esc(CAT_LABEL[topCat] || topCat) + '</span>' +
+        '<p class="q">' + esc(top.title) + '</p><p class="body">' + (has(top.subtitle) ? esc(top.subtitle) + '. ' : '') + 'Nothing changes until you approve.</p></div>' +
+        '<div class="r">' + reviewBtn(top.item_id, top.company_id, 'btn primary') + '</div></div></section>';
     }
     var tiles = (d.health_tiles || []).map(function (t) {
       var b = t.band || band(t.score);
@@ -1139,7 +1191,7 @@ ol,ul{list-style:none}
     }).join('');
     var page = '<div class="page">' +
       '<div class="greet"><div class="stack"><h1 class="h-greet">' + esc(greeting() + name) + '.</h1>' + staleLabel(d.as_of) + '</div></div>' +
-      kpiStrip(d.kpis || {}) + hero +
+      hero + kpiStrip(d.kpis || {}) +
       (tiles ? '<section class="sec"><h2 class="h-sec">Portfolio health</h2><div class="tiles">' + tiles + '</div></section>' : '') +
       (rows ? '<section class="sec" aria-labelledby="dp-h"><div class="sec-head"><h2 class="h-sec" id="dp-h">Lowest health first</h2>' +
         (allProps.length > DASH_ROWS ? '<a class="link" href="#/properties">All ' + esc(num(allProps.length)) + ' properties</a>' : '') + '</div>' +
@@ -1150,11 +1202,10 @@ ol,ul{list-style:none}
       return '<li><span class="dot ' + dotc + '" aria-hidden="true"></span><div><b>' + esc(a.text) + (a.visibility === 'internal' ? internalTag() : '') + '</b><span>' + esc(ago(a.at)) + '</span></div></li>';
     }).join('');
     var cards = waiting.slice(0, 3).map(function (w) {
-      var href = '#/item/' + encodeURIComponent(w.item_id);
-      return '<li class="wcard" data-err-scope><div class="top"><b>' + esc(w.title) + '</b><span class="tag ' + esc(w.category) + '">' + esc((CAT_LABEL[w.category] || w.category).toLowerCase()) + '</span></div>' +
+      var wk = catKey(w.category);
+      return '<li class="wcard"><div class="top"><b>' + esc(w.title) + '</b><span class="tag ' + esc(wk) + '">' + esc((CAT_LABEL[wk] || wk).toLowerCase()) + '</span></div>' +
         (has(w.subtitle) ? '<p>' + esc(w.subtitle) + '</p>' : '') +
-        '<div class="acts">' + (canDecide() ? '<button type="button" class="btn xs outline" data-approve="' + esc(w.item_id) + '">Approve</button>' : signInLink('Sign in to approve')) +
-        '<a class="textbtn" href="' + href + '">Review</a></div><p class="inline-err" role="alert" hidden></p></li>';
+        '<div class="acts">' + reviewBtn(w.item_id, w.company_id, 'btn xs outline') + '</div></li>';
     }).join('');
     var rail = '<section class="sec"><h2 class="h-rail"><span class="dot healthy" aria-hidden="true"></span> What we did on our own</h2><ol class="feed">' + (feed || '<li class="support">Nothing yet today.</li>') + '</ol></section>' +
       '<div class="rail-sep"></div>' +
@@ -1165,7 +1216,8 @@ ol,ul{list-style:none}
   }
 
   /* ── Approvals (DDE-0, 1HM-0) ────────────────────────────────────── */
-  var CATS = [['', 'All'], ['cost', 'Cost'], ['vendor', 'Vendor'], ['negotiate', 'Negotiate'], ['content', 'Content'], ['creative', 'Creative'], ['compliance', 'Compliance']];
+  // Grouped by what is being approved (Round 4).
+  var CATS = [['', 'All'], ['cost', 'Cost'], ['vendor', 'Vendors'], ['content', 'Content'], ['creative', 'Creative'], ['compliance', 'Compliance']];
   function screenApprovals() {
     renderTop('Approvals', '');
     var cat = state.approvalCat || '';
@@ -1180,9 +1232,10 @@ ol,ul{list-style:none}
   }
   function approvalsHtml(d, cat) {
     var head = '<div class="head"><div class="stack"><h1 class="h-page">Approvals</h1>' +
-      '<p class="meta-line">' + esc(num(d.waiting)) + ' waiting · <span class="warn">' + esc(num(d.interrupts_count)) + ' ' + plural(d.interrupts_count, 'interrupt') + '</span>' + (d.approved_this_month != null ? ' · ' + esc(num(d.approved_this_month)) + ' approved this month' : '') + '</p>' +
+      '<p class="meta-line">' + esc(num(d.waiting)) + ' waiting' + (d.approved_this_month != null ? ' · ' + esc(num(d.approved_this_month)) + ' approved this month' : '') + '</p>' +
       '<p class="support">RPM Digital drafted these. Nothing changes until you approve.</p></div>' + staleLabel(d.as_of) + '</div>';
-    var interrupts = (d.interrupts || []).filter(function (i) { return !state.hidden[i.id]; });
+    // Clients never see pacing or a pause-campaign control (Round 4); pacing stays an internal Signal.
+    var interrupts = (d.interrupts || []).filter(function (i) { return i.kind === 'compliance' && !state.hidden[i.id]; });
     var rows = (d.batch && d.batch.rows) || [];
     if (!cat && !rows.length && !interrupts.length) {
       return '<div class="page">' + head + '<div class="emptybox"><span class="ic">' + ic(I.check, 24).replace('currentColor', '#5B7265') + '</span><b>All caught up</b>' +
@@ -1192,24 +1245,16 @@ ol,ul{list-style:none}
       return '<button type="button" class="chip" data-cat="' + c[0] + '" aria-pressed="' + (c[0] === cat) + '">' + esc(c[1]) + '</button>';
     }).join('') + '</div>';
     var intr = interrupts.map(function (i) {
-      var pa = i.primary_action || {}, href = pa.href || (i.item_id ? '#/item/' + encodeURIComponent(i.item_id) : ''), primary = '';
-      if (href.indexOf('#/') === 0) primary = '<a class="btn sm" href="' + esc(href) + '" data-set-company="' + esc(i.company_id) + '">' + esc(pa.label || 'Review now') + '</a>';
-      else if (href.indexOf('/api/workspace/') === 0) primary = canDecide() ? '<button type="button" class="btn sm" data-intr-post="' + esc(href) + '" data-company="' + esc(i.company_id) + '">' + esc(pa.label || 'Create a work item') + '</button>' : signInLink('Sign in to act on this');
-      return '<div class="intr ' + esc(i.kind) + '"><div class="l"><b>' + esc(i.title) + '</b>' + (has(i.detail) ? '<p>' + esc(i.detail) + '</p>' : '') +
-        (has(pa.note) ? '<p class="fine">' + esc(pa.note) + '</p>' : '') + '<p class="inline-err" role="alert" hidden></p></div>' +
-        '<div class="r">' + primary + (i.secondary_action ? '<button type="button" class="textbtn" data-dismiss="' + esc(i.id) + '">' + esc(i.secondary_action.label) + '</button>' : '') + '</div></div>';
+      return '<div class="intr compliance"><div class="l"><b>' + esc(i.title) + '</b>' + (has(i.detail) ? '<p>' + esc(i.detail) + '</p>' : '') + '</div>' +
+        '<div class="r">' + (i.item_id ? reviewBtn(i.item_id, i.company_id, 'btn sm') : '') +
+        (i.secondary_action ? '<button type="button" class="textbtn" data-dismiss="' + esc(i.id) + '">' + esc(i.secondary_action.label) + '</button>' : '') + '</div></div>';
     }).join('');
     var body = rows.map(function (row) {
-      var href = '#/item/' + encodeURIComponent(row.item_id), sv = val(row.savings_per_year);
-      var acts = canDecide()
-        ? '<button type="button" class="btn xs outline" data-row-approve="' + esc(row.item_id) + '" data-company="' + esc(row.company_id) + '">Approve</button>' +
-          '<a class="textbtn" href="' + href + '" data-set-company="' + esc(row.company_id) + '">' + (row.can_edit ? 'Edit' : 'Review') + '</a>' +
-          '<button type="button" class="textbtn danger" data-row-reject="' + esc(row.item_id) + '" data-company="' + esc(row.company_id) + '" aria-expanded="false">Reject</button>'
-        : signInLink('Sign in to approve') + ' <a class="textbtn" href="' + href + '" data-set-company="' + esc(row.company_id) + '">Review</a>';
-      return '<tr data-row="' + esc(row.item_id) + '"><td class="name"><a href="' + href + '" data-set-company="' + esc(row.company_id) + '">' + esc(row.property) + '</a></td>' +
-        '<td>' + esc(row.action) + '</td><td><span class="tag ' + esc(row.category) + '">' + esc((CAT_LABEL[row.category] || row.category).toLowerCase()) + '</span></td>' +
+      var sv = val(row.savings_per_year), cat = catKey(row.category);
+      return '<tr data-row="' + esc(row.item_id) + '"><td class="name"><a href="#/property/' + encodeURIComponent(row.company_id) + '">' + esc(row.property) + '</a></td>' +
+        '<td>' + esc(row.action) + '</td><td><span class="tag ' + esc(cat) + '">' + esc((CAT_LABEL[cat] || cat).toLowerCase()) + '</span></td>' +
         '<td class="sav"' + rtitle(row.savings_per_year) + '>' + (sv == null ? '<span class="empty-dash">—</span>' : esc(money(sv)) + '/yr') + '</td>' +
-        '<td class="acts">' + acts + '</td></tr>';
+        '<td class="acts">' + reviewBtn(row.item_id, row.company_id, 'btn xs outline') + '</td></tr>';
     }).join('');
     var st = d.stats || {};
     var stats = [];
@@ -1223,46 +1268,8 @@ ol,ul{list-style:none}
       '<a class="link" href="#/value">View approved history →</a>' + (stats.length ? '<p class="statline">' + esc(stats.join(' · ')) + '</p>' : '') + gapsLine(d.gaps) + '</div>';
   }
   function bindApprovals() {
-    var err = view.querySelector('[data-approvals-err]');
     view.querySelectorAll('[data-cat]').forEach(function (b) { b.addEventListener('click', function () { state.approvalCat = b.getAttribute('data-cat'); screenApprovals(); }); });
     view.querySelectorAll('[data-dismiss]').forEach(function (b) { b.addEventListener('click', function () { state.hidden[b.getAttribute('data-dismiss')] = true; b.closest('.intr').remove(); }); });
-    view.querySelectorAll('[data-intr-post]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var box = b.closest('.intr'), e2 = box.querySelector('.inline-err'), cid = b.getAttribute('data-company'), label = b.textContent;
-        b.disabled = true; b.textContent = 'Creating…';
-        api(b.getAttribute('data-intr-post'), { method: 'POST', body: { company_id: cid } }).then(function (res) {
-          var id = (res.data || {}).work_item_id;
-          b.outerHTML = id ? '<a class="btn sm" href="#/item/' + encodeURIComponent(id) + '" data-set-company="' + esc(cid) + '">Open the work item</a>' : '<span class="done-row" role="status">Work item created</span>';
-        }).catch(function (e) { b.disabled = false; b.textContent = label; if (e && e.status === 401) return; e2.hidden = false; e2.textContent = failText(e, 'That didn\u2019t go through'); });
-      });
-    });
-    view.querySelectorAll('[data-row-approve]').forEach(function (b) {
-      b.addEventListener('click', function () { setCompany(b.getAttribute('data-company')); approveFlow(b, b.getAttribute('data-row-approve'), err); });
-    });
-    view.querySelectorAll('[data-row-reject]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var tr = b.closest('tr'), next = tr.nextElementSibling;
-        if (next && next.classList.contains('reasonrow')) { next.remove(); b.setAttribute('aria-expanded', 'false'); return; }
-        b.setAttribute('aria-expanded', 'true');
-        var rr = document.createElement('tr'); rr.className = 'reasonrow';
-        rr.innerHTML = '<td colspan="5"><div class="reasons" role="group" aria-label="Why not now"><span class="q">Not now — which is it?</span>' + reasonChips('data-reason') + '</div><p class="inline-err" role="alert" hidden></p></td>';
-        tr.parentNode.insertBefore(rr, tr.nextSibling);
-        rr.querySelector('[data-reason]').focus();
-        rr.querySelectorAll('[data-reason]').forEach(function (c) {
-          c.addEventListener('click', function () {
-            var reason = c.getAttribute('data-reason'), e2 = rr.querySelector('.inline-err');
-            setCompany(b.getAttribute('data-company'));
-            c.setAttribute('aria-pressed', 'true');
-            decide(b.getAttribute('data-row-reject'), 'not_now', reason).then(function () {
-              if (state.waiting) state.waiting = Math.max(0, state.waiting - 1);
-              rr.remove();
-              tr.querySelector('.acts').innerHTML = '<span class="done-row" role="status">Set aside — ' + esc(reasonLabel(reason).toLowerCase()) + '</span>';
-              renderSide('approvals');
-            }).catch(function (e) { c.setAttribute('aria-pressed', 'false'); if (e && e.status === 401) return; e2.hidden = false; e2.textContent = failText(e, 'That didn’t go through'); });
-          });
-        });
-      });
-    });
   }
 
   /* ── Item detail (existing screen, restyled) ─────────────────────── */
@@ -1311,68 +1318,167 @@ ol,ul{list-style:none}
       return '<li><span class="d">' + esc(mdy(t.at)) + '</span><span class="x">' + esc(t.text) + (t.actor ? ' <span class="who">· ' + esc(t.actor) + '</span>' : '') + (t.visibility === 'internal' ? internalTag() : '') + '</span></li>';
     }).join('') + '</ol></section>';
   }
-  function itemHtml(it) {
-    var opened = (it.trail || [])[0], meta = [];
-    if (it.company_id || company()) meta.push((companyById(it.company_id) || company()).name);
-    if (opened) meta.push('opened ' + mdy(opened.at) + (opened.actor ? ' by the ' + opened.actor : ''));
-    if (it.owner) meta.push('owner ' + it.owner);
-    if (it.cost_note) meta.push(it.cost_note);
-    var why = '';
-    function row(k, v, extra) { return '<div class="row"><span class="k">' + esc(k) + '</span><div class="v">' + esc(v) + (extra || '') + '</div></div>'; }
-    if (has(it.found) || has(it.receipts)) why += row('Found', it.found || '', (it.receipts || []).map(function (rc) { return '<span class="rc">' + esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : '') + '</span>'; }).join(''));
-    if (has(it.expect)) why += row('Expect', it.expect);
-    if (has(it.if_skip)) why += row('If you skip', it.if_skip);
-    var steps = has(it.steps) ? '<section class="sec"><h2 class="eyebrow">If approved</h2><ol class="steps">' + it.steps.map(function (s) {
-      return '<li><span class="d">' + esc(relDay(s.when)) + '</span><span class="l">' + esc(s.label) + '</span><span class="c">' + esc(channelName(s.channel)) + '</span></li>';
-    }).join('') + '</ol></section>' : '';
-    var acts = it.actions || {}, call;
-    if (!acts.approve && !acts.not_now) call = '<div class="actions-row"><p class="support">Nothing to decide here — this is ' + esc((STATUS_LABEL[it.status] || 'in motion').toLowerCase()) + '.</p></div>';
-    else if (!canDecide()) call = '<div class="actions-row"><p class="support">Approving needs a signed-in account.</p><span class="grow"></span>' + signInLink('Sign in to approve') + '</div>';
-    else call = '<div class="actions-row" data-call>' +
-      (acts.approve ? '<button type="button" class="btn big primary" data-item-approve>' + ic(I.check, 15) + 'Approve</button>' : '') +
-      (acts.not_now ? '<button type="button" class="btn big" data-item-notnow aria-expanded="false" aria-controls="reasonbox">Not now</button>' : '') +
-      '<span class="grow"></span><a class="link quiet" href="#/approvals">Back to approvals</a></div>' +
-      (acts.not_now ? '<div class="reasonbox" id="reasonbox" hidden><p class="h-rail">If not now, which is it?</p><div class="reasons" role="group" aria-label="Why not now">' + reasonChips('data-reason') + '</div><p class="hint">One tap, no typing.</p></div>' : '') +
-      '<p class="inline-err" role="alert" hidden data-item-err></p>';
-    return '<div class="page stage"><article class="panel"><div class="panel-head"><div class="pills">' +
-      '<span class="pill brand"><i></i>' + esc(SOURCE_LABEL[it.source] || 'Item') + '</span>' +
-      (it.status && it.status !== 'to_do' ? '<span class="pill new">' + esc(STATUS_LABEL[it.status] || it.status) + '</span>' : '') +
-      (viewInternal() && it.fair_housing_review ? '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review' + (it.fair_housing_review.severity === 'high' ? ' · held from clients' : '') + '</span>' +
-        (has(it.fair_housing_review.terms) ? '<span class="support">Flagged: ' + esc(it.fair_housing_review.terms.join(', ')) + '</span>' : '') : '') + '</div>' +
-      '<h1 class="qtitle">' + esc(it.title) + '</h1>' + (meta.length ? '<p class="support">' + esc(meta.join(' · ')) + '</p>' : '') + '</div>' +
-      (why ? '<div class="why">' + why + '</div>' : '') + evidenceHtml(it.evidence) + sparkHtml(it.sparkline) + steps +
-      (!why && !steps && !it.evidence ? '<p class="support">No detail came with this item yet.</p>' : '') +
-      '<div data-call-wrap>' + call + '</div>' + entriesHtml('Notes', it.notes) + '<div data-trail>' + entriesHtml('Trail', it.trail) + '</div></article>' +
-      '<p class="afternote">Nothing changes until you approve. <a class="link" href="#/approvals">See everything waiting</a></p></div>';
+  /* ── Review panel (Round 4) ───────────────────────────────────────────
+     Why we propose it (with receipts), who it is for, what approving does
+     (steps, owner, when), what happens if you skip, the draft itself, and
+     Approve / Reject with the one-tap reasons. The drawer and the item page
+     render the same sections. */
+  var OWNER_LABEL = { 'RPM Digital': 'RPM Digital', vendor: 'The vendor', you: 'You' };
+  var SEV = { high: ['High', 'critical'], medium: ['Medium', 'attention'], review: ['Needs a look', 'attention'], low: ['Low', 'new'] };
+  var DRAFT_LABEL = { email: 'The email draft', faq: 'The FAQ draft', page: 'The page draft', post: 'The post draft', ad: 'The ad copy draft' };
+  function whenText(w) { if (!w) return ''; return /^\d{4}-\d{2}-\d{2}/.test(String(w)) ? mdy(w) : String(w); }
+  function receiptList(list) {
+    return has(list) ? '<ul class="rv-receipts">' + list.map(function (rc) { return '<li>' + esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : '') + '</li>'; }).join('') + '</ul>' : '';
   }
-  function bindItem(it) {
-    var wrap = view.querySelector('[data-call-wrap]'); if (!wrap) return;
-    var err = wrap.querySelector('[data-item-err]');
-    var ap = wrap.querySelector('[data-item-approve]');
-    if (ap) ap.addEventListener('click', function () { approveFlow(ap, it.id, err); });
-    var nn = wrap.querySelector('[data-item-notnow]'), box = wrap.querySelector('#reasonbox');
-    if (nn) nn.addEventListener('click', function () {
-      box.hidden = !box.hidden; nn.setAttribute('aria-expanded', String(!box.hidden));
+  function fhTag(it) {
+    if (!viewInternal() || !it.fair_housing_review) return '';
+    return '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review' + (it.fair_housing_review.severity === 'high' ? ' · held from clients' : '') + '</span>' +
+      (has(it.fair_housing_review.terms) ? '<span class="support">Flagged: ' + esc(it.fair_housing_review.terms.join(', ')) + '</span>' : '');
+  }
+  function fhReviewHtml(rv) {
+    if (!rv || typeof rv !== 'object') return '';
+    var counts = [rv.pages_checked != null ? num(rv.pages_checked) + ' ' + plural(rv.pages_checked, 'page') : '', rv.assets_checked != null ? num(rv.assets_checked) + ' ' + plural(rv.assets_checked, 'image') : ''].filter(Boolean).join(' and ');
+    var meta = [rv.run_at ? 'Run ' + mdy(String(rv.run_at).slice(0, 10)) : '', rv.next_run ? 'next run ' + mdy(String(rv.next_run).slice(0, 10)) : '', counts ? counts + ' checked' : ''].filter(Boolean).join(' · ');
+    var finds = (rv.findings || []).map(function (f) {
+      var sv = SEV[f.severity] || ['Needs a look', 'attention'];
+      return '<li class="fh-find ' + sv[1] + '"><div class="top"><span class="tag ' + (f.kind === 'image' ? 'creative' : 'content') + '">' + (f.kind === 'image' ? 'Image' : 'Copy') + '</span><b>' + esc(f.location) + '</b><span class="pill ' + sv[1] + '">' + esc(sv[0]) + '</span></div>' +
+        '<blockquote>' + esc(f.excerpt) + '</blockquote>' +
+        '<p><span class="k">Why it was flagged</span>' + esc(f.reason) + '</p>' +
+        '<p><span class="k">Suggested fix</span>' + esc(f.suggested_fix) + '</p></li>';
+    }).join('');
+    return '<section class="rv-sec"><h3>What the review found</h3>' + (meta ? '<p class="fh-meta">' + esc(meta) + '</p>' : '') +
+      (finds ? '<ol class="fh-finds">' + finds + '</ol>' : '<p>Nothing was flagged.</p>') + '</section>';
+  }
+  function reviewSections(it) {
+    var c = companyById(it.company_id), cat = catKey(it.category), out = '';
+    var meta = [c ? c.name : '', it.owner ? 'Owner ' + it.owner : '', it.cost_note || ''].filter(Boolean).join(' · ');
+    out += '<div class="rv-sec"><div class="rv-pills">' + (CAT_LABEL[cat] ? '<span class="tag ' + esc(cat) + '">' + esc(CAT_LABEL[cat]) + '</span>' : '<span class="pill brand"><i></i>' + esc(SOURCE_LABEL[it.source] || 'Item') + '</span>') +
+      (it.status && it.status !== 'to_do' ? '<span class="pill new">' + esc(STATUS_LABEL[it.status] || it.status) + '</span>' : '') + fhTag(it) + '</div>' +
+      '<h2 class="rv-title" id="rv-title">' + esc(it.title) + '</h2>' + (meta ? '<p class="support">' + esc(meta) + '</p>' : '') + '</div>';
+    var why = it.why || (has(it.found) || has(it.receipts) ? { text: it.found || '', receipts: it.receipts || [] } : null);
+    if (why) out += '<section class="rv-sec"><h3>Why we’re proposing this</h3>' + (has(why.text) ? '<p>' + esc(why.text) + '</p>' : '') + receiptList(why.receipts) +
+      (it.review ? '' : evidenceHtml(it.evidence) + sparkHtml(it.sparkline)) + '</section>';
+    out += fhReviewHtml(it.review);
+    var fw = it.for_whom;
+    if (fw && (has(fw.text) || has(fw.questions))) out += '<section class="rv-sec"><h3>Who it’s for</h3>' + (has(fw.text) ? '<p>' + esc(fw.text) + '</p>' : '') +
+      (has(fw.questions) ? '<p class="fine">' + (cat === 'content' ? 'The renter questions and searches it answers' : 'The questions it answers') + '</p><ul class="rv-qs">' + fw.questions.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ul>' : '') + '</section>';
+    if (has(it.approving_does)) out += '<section class="rv-sec"><h3>What approving does</h3><ol class="rv-does">' + it.approving_does.map(function (st, i) {
+      return '<li><span class="n" aria-hidden="true">' + (i + 1) + '</span><span class="l">' + esc(st.label) + '<span class="m">' + esc([OWNER_LABEL[st.owner] || st.owner, whenText(st.when)].filter(Boolean).join(' · ')) + '</span></span></li>';
+    }).join('') + '</ol></section>';
+    else if (has(it.steps)) out += '<section class="rv-sec"><h3>What approving does</h3><ol class="steps">' + it.steps.map(function (st) {
+      return '<li><span class="d">' + esc(relDay(st.when)) + '</span><span class="l">' + esc(st.label) + '</span><span class="c">' + esc(channelName(st.channel)) + '</span></li>';
+    }).join('') + '</ol></section>';
+    else if (has(it.expect)) out += '<section class="rv-sec"><h3>What approving does</h3><p>' + esc(it.expect) + '</p></section>';
+    if (has(it.if_skip)) out += '<section class="rv-sec"><h3>If you skip</h3><p>' + esc(it.if_skip) + '</p></section>';
+    if (it.draft && has(it.draft.body)) out += '<section class="rv-sec"><h3>' + esc(DRAFT_LABEL[it.draft.kind] || 'The draft') + '</h3><div class="rv-draft">' +
+      (has(it.draft.title) ? '<b>' + esc(it.draft.title) + '</b>' : '') + '<div class="body">' + esc(it.draft.body) + '</div></div></section>';
+    if (!why && !has(it.approving_does) && !has(it.steps) && !it.draft) out += '<p class="support">No detail came with this item yet.</p>';
+    return out + entriesHtml('Notes', it.notes) + '<div data-trail>' + entriesHtml('Trail', it.trail) + '</div>';
+  }
+  function reviewFoot(it) {
+    var acts = it.actions || {};
+    if (!acts.approve && !acts.not_now) return '<p class="support">Nothing to decide here — this is ' + esc((STATUS_LABEL[it.status] || 'in motion').toLowerCase()) + '.</p>';
+    if (!canDecide()) return '<div class="foot-row"><p class="support">Approving needs a signed-in account.</p><span class="grow"></span>' + signInLink('Sign in to approve') + '</div>';
+    return '<div class="foot-row">' + (acts.approve ? '<button type="button" class="btn primary" data-rv-approve>' + ic(I.check, 15) + 'Approve</button>' : '') +
+      (acts.not_now ? '<button type="button" class="btn" data-rv-reject aria-expanded="false">Reject</button>' : '') +
+      '<span class="grow"></span><span class="fine">Nothing changes until you approve.</span></div>' +
+      (acts.not_now ? '<div class="reasonbox" data-rv-reasons hidden><p class="h-rail">Why not? One tap.</p><div class="reasons" role="group" aria-label="Why reject">' + reasonChips('data-reason') + '</div></div>' : '') +
+      '<p class="inline-err" role="alert" hidden data-rv-err></p>';
+  }
+  function bindReviewFoot(root, it, onSetAside) {
+    var foot = root.querySelector('[data-rv-foot]'); if (!foot) return;
+    var err = foot.querySelector('[data-rv-err]'), ap = foot.querySelector('[data-rv-approve]'), rj = foot.querySelector('[data-rv-reject]'), box = foot.querySelector('[data-rv-reasons]');
+    if (ap) ap.addEventListener('click', function () { if (it.company_id) setCompany(it.company_id); approveFlow(ap, it.id, err); });
+    if (rj) rj.addEventListener('click', function () {
+      box.hidden = !box.hidden; rj.setAttribute('aria-expanded', String(!box.hidden));
       if (!box.hidden) box.querySelector('[data-reason]').focus();
     });
-    wrap.querySelectorAll('[data-reason]').forEach(function (c) {
+    foot.querySelectorAll('[data-reason]').forEach(function (c) {
       c.addEventListener('click', function () {
         var reason = c.getAttribute('data-reason');
-        wrap.querySelectorAll('[data-reason]').forEach(function (o) { o.setAttribute('aria-pressed', String(o === c)); o.disabled = true; });
+        foot.querySelectorAll('[data-reason]').forEach(function (o) { o.setAttribute('aria-pressed', String(o === c)); o.disabled = true; });
+        if (it.company_id) setCompany(it.company_id);
         decide(it.id, 'not_now', reason).then(function (r) {
           var d = r.data || {}, next = d.item || it;
           if (state.waiting) state.waiting = Math.max(0, state.waiting - 1);
-          wrap.innerHTML = '<div class="actions-row"><p class="h-rail" role="status">Set aside — ' + esc(reasonLabel(reason).toLowerCase()) + '.</p><span class="grow"></span><a class="link" href="#/approvals">Back to approvals</a></div>' +
+          foot.innerHTML = '<p class="h-rail" role="status" tabindex="-1">Set aside — ' + esc(reasonLabel(reason).toLowerCase()) + '.</p>' +
             (d.check_back && d.check_back.text ? '<p class="support">' + esc(d.check_back.text) + '</p>' : '');
-          var t = view.querySelector('[data-trail]'); if (t) t.innerHTML = entriesHtml('Trail', next.trail);
+          foot.firstChild.focus();
+          var t = root.querySelector('[data-trail]'); if (t) t.innerHTML = entriesHtml('Trail', next.trail);
+          renderSide(state.active);
+          if (onSetAside) onSetAside(reason);
         }).catch(function (e) {
-          wrap.querySelectorAll('[data-reason]').forEach(function (o) { o.disabled = false; o.setAttribute('aria-pressed', 'false'); });
+          foot.querySelectorAll('[data-reason]').forEach(function (o) { o.disabled = false; o.setAttribute('aria-pressed', 'false'); });
           if (e && e.status === 401) return;
           err.hidden = false; err.textContent = failText(e, 'That didn’t go through');
         });
       });
     });
   }
+  var drawerRoot = document.createElement('div');
+  drawerRoot.id = 'review-root';
+  document.body.appendChild(drawerRoot);
+  var drawerOpener = null, drawerSeq = 0;
+  function closeReview() {
+    if (!drawerRoot.firstChild) return;
+    drawerSeq++;
+    drawerRoot.innerHTML = '';
+    document.body.classList.remove('drawer-open');
+    if (drawerOpener && document.contains(drawerOpener)) drawerOpener.focus();
+    drawerOpener = null;
+  }
+  function openReview(id, cid, opener) {
+    var my = ++drawerSeq;
+    drawerOpener = opener || document.activeElement;
+    document.body.classList.add('drawer-open');
+    drawerRoot.innerHTML = '<div class="drawer-scrim" data-drawer-close></div>' +
+      '<div class="drawer" role="dialog" aria-modal="true" aria-label="Review"><div class="drawer-head"><span class="h-rail">Review</span><span class="grow"></span>' +
+      '<a class="link quiet" href="#/item/' + encodeURIComponent(id) + '">Open as a page</a>' +
+      '<button type="button" class="iconbtn" data-drawer-close aria-label="Close review">' + ic(I.x, 18) + '</button></div>' +
+      '<div class="drawer-body" data-rv-body><div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading…</div></div>' +
+      '<div class="rv-foot" data-rv-foot hidden></div></div>';
+    var dlg = drawerRoot.querySelector('.drawer');
+    dlg.querySelector('.iconbtn').focus();
+    api('/api/workspace/work/' + encodeURIComponent(id) + '?company_id=' + encodeURIComponent(cid || state.companyId || '')).then(function (r) {
+      if (my !== drawerSeq) return;
+      var it = r.data || {};
+      dlg.removeAttribute('aria-label'); dlg.setAttribute('aria-labelledby', 'rv-title');
+      dlg.querySelector('[data-rv-body]').innerHTML = reviewSections(it);
+      var foot = dlg.querySelector('[data-rv-foot]');
+      foot.innerHTML = reviewFoot(it); foot.hidden = false;
+      bindReviewFoot(dlg, it, function (reason) {
+        document.querySelectorAll('[data-row]').forEach(function (tr) {
+          if (tr.getAttribute('data-row') === it.id) tr.querySelector('.acts').innerHTML = '<span class="done-row" role="status">Set aside — ' + esc(reasonLabel(reason).toLowerCase()) + '</span>';
+        });
+      });
+    }).catch(function (e) {
+      if (my !== drawerSeq) return;
+      if (e && e.status === 401) { closeReview(); return; }
+      dlg.querySelector('[data-rv-body]').innerHTML = '<div class="state" role="alert"><h2>That didn’t load.</h2><p>' + esc((e && e.message) || 'Try again.') + '</p></div>';
+    });
+  }
+  drawerRoot.addEventListener('click', function (e) { if (e.target.closest('[data-drawer-close]')) closeReview(); });
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest && e.target.closest('[data-review]');
+    if (!t) return;
+    e.preventDefault();
+    openReview(t.getAttribute('data-review'), t.getAttribute('data-company'), t);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!drawerRoot.firstChild) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeReview(); return; }
+    if (e.key !== 'Tab') return;
+    var f = Array.prototype.filter.call(drawerRoot.querySelectorAll('a[href],button:not([disabled]),input,textarea,select,[tabindex]:not([tabindex="-1"])'), function (x) { return x.offsetParent !== null; });
+    if (!f.length) return;
+    var first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+  function itemHtml(it) {
+    return '<div class="page stage"><article class="panel" data-rv-root>' + reviewSections(it) + '<div class="rv-foot" data-rv-foot>' + reviewFoot(it) + '</div></article>' +
+      '<p class="afternote">Nothing changes until you approve. <a class="link" href="#/approvals">See everything waiting</a></p></div>';
+  }
+  function bindItem(it) { var root = view.querySelector('[data-rv-root]'); if (root) bindReviewFoot(root, it); }
 
   /* ── Approved + Undo ─────────────────────────────────────────────── */
   function screenApproved(id) {
@@ -1556,8 +1662,8 @@ ol,ul{list-style:none}
     var loop = has(d.loop) ? '<section class="card loopcard2" aria-labelledby="loop-h"><div class="lh"><i aria-hidden="true"></i><b id="loop-h">The loop on this property</b><span class="support">Express · Tailor · Amplify · Evolve</span></div><ol class="stagel">' + d.loop.map(function (s) {
       var when = s.status === 'waiting' ? '<span class="wait">waiting on you' + (s.at ? ' since ' + esc(clock(s.at)) : '') + '</span>' : (s.at ? '<span>' + esc(s.status === 'upcoming' ? 'planned ' + mdy(s.at) : asOf(s.at)) + '</span>' : '<span>upcoming</span>');
       return '<li class="' + esc(s.status) + '"><span class="rl"><span class="node ' + esc(s.status) + '" aria-hidden="true"></span><span class="conn" aria-hidden="true"></span></span><div class="body"><div class="tl"><b>' + esc(LENS_LABEL[s.lens] || s.lens) + '</b>' + when + '</div><p>' + esc(s.text) + '</p>' +
-        (s.status === 'waiting' && (s.item_id || ra) ? '<a class="btn sm primary" href="#/item/' + encodeURIComponent(s.item_id || ra.item_id) + '">Review the decision</a>' :
-          (s.item_id ? '<a class="link" href="#/item/' + encodeURIComponent(s.item_id) + '">Open</a>' : '')) + '</div></li>';
+        (s.status === 'waiting' && (s.item_id || ra) ? reviewBtn(s.item_id || ra.item_id, state.companyId, 'btn sm primary', 'Review the decision') :
+          (s.item_id ? reviewBtn(s.item_id, state.companyId, 'link', 'Review') : '')) + '</div></li>';
     }).join('') + '</ol></section>' : '';
     var page = '<div class="page"><a class="back" href="#/properties">' + ic(I.arrowLeft, 13) + 'All properties</a>' +
       '<div class="proptitle">' + ring(d.health && d.health.score, hb) + '<div class="stack" style="display:flex;flex-direction:column;gap:2px;min-width:0"><h1 class="h-page">' + esc(d.name) + '</h1><p class="support">' + esc(sub) + '</p>' +
@@ -1568,13 +1674,13 @@ ol,ul{list-style:none}
     var rail = '';
     if (has(d.findings)) rail += '<section class="sec"><h2 class="h-rail">Findings</h2>' + d.findings.map(function (f) {
       return '<div class="finding"><p>' + esc(f.text) + '</p>' + (has(f.receipts) ? '<span class="receipt">' + f.receipts.map(function (rc) { return esc(rc.label) + (receipt(rc) ? ' · ' + receipt(rc) : ''); }).join('<br>') + '</span>' : '') +
-        (f.item_id ? '<a class="link" href="#/item/' + encodeURIComponent(f.item_id) + '">Open the item</a>' : '') + '</div>';
+        (f.item_id ? reviewBtn(f.item_id, state.companyId, 'link', 'Review') : '') + '</div>';
     }).join('') + '</section>';
     if (ra || d.draft_email) {
       rail += '<div class="rail-sep"></div><section class="sec"><h2 class="h-rail">Recommended action</h2>' +
-        (ra ? '<a class="btn primary" style="width:100%" href="#/item/' + encodeURIComponent(ra.item_id) + '">' + esc(ra.label) + '</a>' : '') +
+        (ra ? reviewBtn(ra.item_id, state.companyId, 'btn primary wide', ra.label) : '') +
         (d.draft_email ? '<div class="emailcard"><span class="fine">Email preview</span><b>Subject: ' + esc(d.draft_email.subject) + '</b><p>' + esc(d.draft_email.preview) + '</p>' +
-          (d.draft_email.item_id ? '<a class="link" href="#/item/' + encodeURIComponent(d.draft_email.item_id) + '">View full draft →</a>' : '') + '</div>' : '') + '</section>';
+          (d.draft_email.item_id ? reviewBtn(d.draft_email.item_id, state.companyId, 'link', 'View full draft →') : '') + '</div>' : '') + '</section>';
     }
     return { page: page, rail: rail || null };
   }
@@ -1974,6 +2080,7 @@ ol,ul{list-style:none}
   /* ── Router ──────────────────────────────────────────────────────── */
   function route() {
     stopTimer();
+    closeReview();
     var parts = (location.hash || '').replace(/^#\/?/, '').split('?')[0].split('/').map(function (p) { try { return decodeURIComponent(p); } catch (e) { return p; } });
     var name = parts[0] || 'dashboard';
     if (name === 'work' || name === 'client') name = 'approvals';
