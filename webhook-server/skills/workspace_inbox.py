@@ -153,7 +153,7 @@ PROPERTY_FIELDS = (
     "ga4_property_id", "google_ads_customer_id",
     "marketing_manager", "marketing_manager_email", "marketing_director_email",
     "marketing_rvp_email", "hubspot_owner_id",
-    "fluency_romance", "what_makes_this_property_unique_",
+    "overarching_goals", "fluency_romance", "what_makes_this_property_unique_",
     "property_voice_and_tone", "additional_selling_points",
     "red_light_run_date",
     "callprep_data_json", "callprep_cycle_month",
@@ -261,6 +261,10 @@ def _new_item(source: str, source_id: Any, title: str, **fields: Any) -> dict:
         "trail": [],
         "notes": [],
         "fair_housing_review": None,
+        # Round 4 review panel: why, who it's for, what approving does.
+        "why": None,
+        "for_whom": None,
+        "approving_does": [],
         "actions": {"approve": False, "not_now": False},
         # internal bookkeeping, stripped by workspace_common.public()
         "_created": None,
@@ -869,6 +873,7 @@ def decision_history(ctx: PropertyContext, gaps: list) -> dict | None:
             "reason": payload.get("reason"),
             "actor": payload.get("actor"),
             "outcome": payload.get("outcome", "ok"),
+            "creative_kind": payload.get("creative_kind"),
             "undone": False,
             "undone_at": None,
         })
@@ -910,6 +915,55 @@ def apply_decisions(items: list, history: dict | None) -> None:
             item["_closed"] = last.get("at")
 
 
+# ── review panel fields (Round 4) ────────────────────────────────────────────
+
+_GOAL_SOURCES = frozenset({"hubdb_rec", "loop_rec", "call_prep"})
+
+
+def _owner_for(step: dict) -> str:
+    label = str(step.get("label") or "").lower()
+    if step.get("kind") == "person" and ("sign" in label or "you review" in label or "on-site" in label):
+        return "you"
+    return "RPM Digital"
+
+
+def _when_for(step: dict, owner: str) -> str:
+    label = str(step.get("label") or "").lower()
+    if step.get("kind") == "person" and "sign" in label:
+        return "Before anything is billed or spent"
+    if owner == "you":
+        return "After you approve"
+    return "When you approve" if step.get("kind") in ("auto", "queued") else "After you approve"
+
+
+def enrich(item: dict, ctx: "PropertyContext") -> dict:
+    """Fill why / for_whom / approving_does from the fields the item already carries.
+
+    why            the finding text and its receipts, when the source has either;
+    for_whom       content briefs: the renter search they answer; recommendation
+                   sources: the property's leasing goal, verbatim from HubSpot
+                   `overarching_goals` (no model involved); otherwise null;
+    approving_does the existing handler's steps with an owner and a when.
+    """
+    if item.get("found") or item.get("receipts"):
+        item["why"] = {"text": item.get("found") or item["title"], "receipts": list(item.get("receipts") or [])}
+    if item["source"] == "content_brief":
+        keyword = str((item.get("_raw") or {}).get("hub_keyword") or "").strip()
+        if keyword:
+            item["for_whom"] = {"text": f"Renters searching for “{keyword}”", "questions": [keyword]}
+    elif item["source"] in _GOAL_SOURCES:
+        goal = str(ctx.props.get("overarching_goals") or "").strip()
+        if goal:
+            item["for_whom"] = {"text": f"The property's leasing goal: {wc.truncate(goal, 300)}", "questions": []}
+    if not item.get("approving_does") and item["source"] in DECIDABLE:
+        rows = []
+        for step in item.get("steps") or []:
+            owner = _owner_for(step)
+            rows.append({"label": step["label"], "owner": owner, "when": _when_for(step, owner)})
+        item["approving_does"] = rows
+    return item
+
+
 def finalize(item: dict) -> dict:
     """Derive the fields that depend on final status."""
     actionable = item["status"] == "to_do" and item["needs_approval"] and item["source"] in DECIDABLE
@@ -933,6 +987,39 @@ def _fair_housing_pass(items: list, gaps: list) -> None:
                            f"({', '.join(review['terms'])})"
                            + ("; copy is hidden from clients" if item["_fh_high"] else ""),
                            internal=True))
+
+
+def shoot_dates(history: dict | None) -> list | None:
+    """Dates of approved photo-shoot recommendations, or None when unknown."""
+    if history is None:
+        return None
+    out = []
+    for decisions in history.values():
+        for d in decisions:
+            if (d.get("creative_kind") == "photo_shoot" and d.get("action") == "approve"
+                    and d.get("outcome", "ok") in ("ok", "partial") and not d.get("undone")):
+                day = wc.to_date(d.get("at"))
+                if day:
+                    out.append(day)
+    return out
+
+
+def _apply_creative_rule(ctx: "PropertyContext", items: list, history: dict | None, today: date,
+                         gaps: list) -> None:
+    from skills import workspace_creative_rules as rules
+    candidates = [i for i in items if i["status"] == "to_do" and rules.proposes_shoot(
+        i.get("title"), i.get("found"), (i.get("_raw") or {}).get("title"), (i.get("_raw") or {}).get("body"))]
+    if not candidates:
+        return
+    try:
+        from skills import workspace_creative
+        assets = workspace_creative._asset_rows(ctx, gaps)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("workspace creative rule: assets unreadable for %s: %s", ctx.company_id, exc)
+        assets = []
+    dates = shoot_dates(history)
+    for item in candidates:
+        rules.apply_rule(item, assets, dates, today, gaps)
 
 
 def view_item(item: dict, internal: bool = True) -> dict:
@@ -987,15 +1074,19 @@ def collect(ctx: PropertyContext, *, sources: tuple | list | None = None,
         items += src_items
         gaps += src_gaps
 
+    history = None
     if with_history:
         try:
-            apply_decisions(items, decision_history(ctx, gaps))
+            history = decision_history(ctx, gaps)
+            apply_decisions(items, history)
         except Exception as exc:  # noqa: BLE001
             logger.warning("workspace inbox: decision history failed for %s: %s", ctx.company_id, exc)
             gaps.append(wc.gap("trail", f"Decision history could not be read ({type(exc).__name__})",
                                internal=True))
 
+    _apply_creative_rule(ctx, items, history if with_history else None, today, gaps)
     for item in items:
+        enrich(item, ctx)
         finalize(item)
     _fair_housing_pass(items, gaps)
     return items, gaps

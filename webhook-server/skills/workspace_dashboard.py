@@ -68,6 +68,7 @@ ACTIVITY = {
 
 CATEGORY_BY_REC_TYPE = {"budget_change": "cost", "package_upgrade": "vendor", "strategy_change": "content"}
 CATEGORY_BY_SOURCE = {"loop_rec": "cost", "call_prep": "content", "content_brief": "content",
+                      "fair_housing_review": "compliance",
                       "video_variant": "creative", "ticket_profile": "content",
                       "onboarding_gap": "compliance", "portal_ticket": "content", "service_ticket": "content"}
 
@@ -77,6 +78,8 @@ def category_for(item: dict) -> str:
         return CATEGORY_BY_REC_TYPE.get((item.get("_raw") or {}).get("rec_type"), "cost")
     if item.get("fair_housing_review") and item["fair_housing_review"].get("severity") == "high":
         return "compliance"
+    if item.get("_creative_kind") in ("build_from_assets", "photo_shoot"):
+        return "creative"
     return CATEGORY_BY_SOURCE.get(item["source"], "content")
 
 

@@ -6,10 +6,8 @@ row call the existing decision endpoint; nothing here decides anything.
 
 Interrupts (internal callers only):
 * compliance — an item held at high Fair Housing severity;
-* pacing — a high-severity `spend_pacing` signal. Its primary action creates a
-  work item for a person through the signal start-work path. Nothing pauses or
-  changes a campaign (money rule);
-* tracking — no tracking data on main; listed in gaps.
+* Pacing is not an approval (Round 4): clients never manage pacing and never see
+  a pause control. `spend_pacing` stays an internal Signal.
 
 Stats come from decision history (BigQuery loop_events): approval rate, and
 `auto_approve_candidates`, the kinds of item decided at least 20 times with at
@@ -29,43 +27,8 @@ from skills import workspace_scope as wscope
 
 logger = logging.getLogger(__name__)
 
-CATEGORIES = ("cost", "vendor", "negotiate", "content", "creative", "compliance")
-MAX_PACING_PROPERTIES = 10
-
-
-def _pacing_interrupts(props: list, gaps: list, today: date) -> list:
-    import bigquery_client
-    from skills import workspace_signals
-    if not bigquery_client.is_bigquery_configured():
-        gaps.append(wc.gap("interrupts", "Pacing interrupts need BigQuery spend data, which is not configured here",
-                           source="bigquery", internal=True))
-        return []
-    out = []
-    for p in wscope.worst_first(props)[:MAX_PACING_PROPERTIES]:
-        try:
-            ctx = wi.load_context(str(p.get("hubspot_company_id") or ""))
-            signals = workspace_signals.signals_for_property(ctx, [], today)
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("pacing interrupt read failed: %s", exc)
-            continue
-        for s in signals:
-            if s["kind"] != "spend_pacing" or s["severity"] != "high":
-                continue
-            out.append({
-                "id": f"pacing:{s['id']}", "kind": "pacing", "title": f"Pacing — {ctx.name}",
-                "detail": s["detail"], "company_id": ctx.company_id, "item_id": None, "signal_id": s["id"],
-                "primary_action": {
-                    "label": "Pause campaign",
-                    "creates": "work_item",
-                    "href": f"/api/workspace/signals/{s['id']}/start-work",
-                    "note": "Creates an Ad Updates work item for a person. Nothing is paused automatically.",
-                },
-                "secondary_action": {"label": "Dismiss"},
-            })
-    if len(props) > MAX_PACING_PROPERTIES:
-        gaps.append(wc.gap("interrupts", f"Pacing was checked for the {MAX_PACING_PROPERTIES} lowest-health "
-                                         "properties", internal=True))
-    return out
+# Round 4: negotiate folds into vendor.
+CATEGORIES = ("cost", "vendor", "content", "creative", "compliance")
 
 
 def build_approvals(email: str, *, internal: bool, category: str | None = None,
@@ -105,10 +68,6 @@ def build_approvals(email: str, *, internal: bool, category: str | None = None,
         gaps.append(wc.gap("batch.rows.savings_per_year", "No recommendation source records a savings amount yet"))
         gaps.append(wc.gap("batch.rows.can_edit", "Editing an item before approving it is not available yet"))
 
-    if internal:
-        interrupts += _pacing_interrupts(props, gaps, today) if props else []
-        gaps.append(wc.gap("interrupts", "Tracking interrupts need GA4 and GTM, which are not wired on main",
-                           source="ga4", internal=True))
 
     since = datetime.now(timezone.utc) - timedelta(days=365)
     approved_this_month = approval_rate = None

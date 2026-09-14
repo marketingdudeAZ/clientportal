@@ -5083,6 +5083,8 @@ CALLPREP_SYSTEM_PROMPT = (
     "- Generate exactly 2 recommendations: one strategy_change and one budget_change.\n"
     "- Generate 5-7 questions. Each targeted to what the AM should ask the client based on the data.\n"
     "- Base everything on the property data provided. Never invent numbers.\n"
+    "- Never recommend a photo shoot. For creative, recommend building new creative from the "
+    "property's existing assets (new crops, video cuts, ad variants).\n"
     "- Plain language. No jargon. No pricing/rent amounts ever.\n"
     "- If a metric is missing, reference it as 'not available' rather than inventing.\n"
 )

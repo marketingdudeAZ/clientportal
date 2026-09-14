@@ -120,6 +120,9 @@ ITEM = {
     "internal_only": absent("internal_only"),
     "owner": opt(STR), "comments_count": INT, "cost_note": opt(STR),
     "steps": opt([STEP]), "trail": [TRAIL], "notes": [NOTE],
+    "why": opt({"text": STR, "receipts": [RECEIPT]}),
+    "for_whom": opt({"text": STR, "questions": [STR]}),
+    "approving_does": [{"label": STR, "owner": enum("RPM Digital", "vendor", "you"), "when": opt(STR)}],
     "actions": {"approve": BOOL, "not_now": BOOL},
 }
 
@@ -240,7 +243,7 @@ SHAPES = {
 # ── v3 rebuild screens ───────────────────────────────────────────────────────
 
 BAND = enum("healthy", "attention", "warning", "critical", "new")
-APPROVAL_CATEGORY = enum("cost", "vendor", "negotiate", "content", "creative", "compliance")
+APPROVAL_CATEGORY = enum("cost", "vendor", "content", "creative", "compliance")
 LOOP_LENS = enum("express", "tailor", "amplify", "evolve")
 
 DASHBOARD = {
@@ -262,7 +265,7 @@ DASHBOARD = {
 
 APPROVALS = {
     "waiting": INT, "interrupts_count": INT, "approved_this_month": opt(INT),
-    "interrupts": [{"id": STR, "kind": enum("compliance", "pacing", "tracking"), "title": STR, "detail": STR,
+    "interrupts": [{"id": STR, "kind": enum("compliance"), "title": STR, "detail": STR,
                     "company_id": STR, "item_id": opt(STR), "primary_action": {"label": STR},
                     "secondary_action": {"label": STR}}],
     "batch": {"label": STR, "rows": [{"item_id": STR, "company_id": STR, "property": opt(STR), "action": STR,

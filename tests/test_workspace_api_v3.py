@@ -259,25 +259,15 @@ class TestApprovals:
         row = next(r for r in body["batch"]["rows"] if r["item_id"] == "hubdb_rec:fh1")
         assert row["action"] == "Recommendation"            # high-severity copy is held from clients
 
-    def test_pacing_interrupt_creates_work_and_never_pauses(self, client, scope, items, monkeypatch):
+    def test_no_pacing_interrupts_even_when_a_pacing_signal_is_high(self, client, scope, items, monkeypatch):
         import bigquery_client
-        import portal_tickets
         from skills import workspace_signals
         monkeypatch.setattr(bigquery_client, "is_bigquery_configured", lambda: True)
-        sig = {"id": f"spend_pacing:{CID2}:2026-09-14", "kind": "spend_pacing", "severity": "high",
-               "detail": "$900 spent against $3,000 of monthly paid line items (under plan)."}
-        monkeypatch.setattr(workspace_signals, "signals_for_property",
-                            lambda ctx, gaps, today=None, **kw: [dict(sig)] if ctx.company_id == CID2 else [])
-        with mock.patch.object(portal_tickets, "create_ticket") as create, \
-                mock.patch("hubspot_client.patch_deal") as patch_deal:
-            body = client.get("/api/workspace/approvals", headers=_h()).get_json()
-        pacing = next(i for i in body["interrupts"] if i["kind"] == "pacing")
-        assert pacing["primary_action"]["label"] == "Pause campaign"
-        assert pacing["primary_action"]["creates"] == "work_item"
-        assert pacing["primary_action"]["href"] == f"/api/workspace/signals/{sig['id']}/start-work"
-        assert "Nothing is paused" in pacing["primary_action"]["note"]
-        create.assert_not_called()
-        patch_deal.assert_not_called()
+        monkeypatch.setattr(workspace_signals, "signals_for_property", lambda ctx, gaps, today=None, **kw: [
+            {"id": "spend_pacing:x", "kind": "spend_pacing", "severity": "high", "detail": "under plan"}])
+        body = client.get("/api/workspace/approvals", headers=_h()).get_json()
+        assert all(i["kind"] == "compliance" for i in body["interrupts"])
+        assert "pause" not in json.dumps(body).lower()
 
     def test_stats_and_auto_approve_candidates(self, client, scope, items, monkeypatch):
         at = TODAY.isoformat() + "T10:00:00+00:00"

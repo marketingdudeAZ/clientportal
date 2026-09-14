@@ -390,6 +390,7 @@ def record_event(ctx, item: dict, action: str, reason: str | None, actor: str, *
             "detail": detail,
             "requires_signature": bool(item.get("_requires_signature")),
             "title": wi.view_item(item, internal=False)["title"],
+            "creative_kind": item.get("_creative_kind"),
         },
     )
 
