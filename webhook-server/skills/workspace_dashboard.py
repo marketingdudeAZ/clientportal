@@ -36,7 +36,9 @@ logger = logging.getLogger(__name__)
 
 KPI_ORDER = ("occupancy", "units_to_lease_90d", "leases_this_month", "cost_per_lease", "ai_visibility",
              "actions_taken", "waiting_on_you")
-ITEM_SOURCES = ("hubdb_rec", "call_prep", "video_variant", "content_brief", "onboarding_gap")
+# The last entry (onboarding checks) is dropped for Approvals; keep it last.
+ITEM_SOURCES = ("hubdb_rec", "call_prep", "video_variant", "content_brief", "fair_housing_review",
+                "onboarding_gap")
 MAX_TILES = 50
 MAX_VISIBILITY_READS = 25
 

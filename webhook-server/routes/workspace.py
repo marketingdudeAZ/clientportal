@@ -731,3 +731,33 @@ def workspace_value():
                                         scope_internal=_real_internal(), range_key=range_key))
     except Exception as exc:  # noqa: BLE001
         return _failed("value", exc)
+
+
+@workspace_bp.route("/api/internal/workspace/fair-housing-review/run", methods=["POST", "OPTIONS"])
+def workspace_fair_housing_review_run():
+    """Run the monthly Fair Housing review for one property or all. X-Internal-Key only.
+
+    Body: {"company_id": "123"} runs one property and returns its review record;
+    {"all": true, "limit": 50} starts every managed property in the background.
+    Read-only against websites; findings are stored as loop events.
+    """
+    if not _internal_key_ok():
+        return jsonify({"error": "Internal key required"}), 401
+    import threading
+    from skills import workspace_fair_housing_review as fhr, workspace_inbox
+    body = request.get_json(silent=True) or {}
+    company_id = str(body.get("company_id") or "").strip()
+    if company_id:
+        try:
+            return jsonify(fhr.run_property(company_id))
+        except workspace_inbox.PropertyNotFound:
+            return jsonify({"error": "Property not found"}), 404
+        except Exception as exc:  # noqa: BLE001
+            return _failed("fair housing review", exc)
+    if body.get("all") is True:
+        limit = body.get("limit")
+        limit = int(limit) if isinstance(limit, int) and limit > 0 else None
+        threading.Thread(target=fhr.run_all, kwargs={"limit": limit}, name="ws-fair-housing-review",
+                         daemon=True).start()
+        return jsonify({"status": "started", "scope": "all", "limit": limit}), 202
+    return jsonify({"error": "company_id or all: true is required"}), 400

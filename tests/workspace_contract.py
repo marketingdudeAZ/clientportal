@@ -92,7 +92,7 @@ def check(value: Any, spec: Any, path: str = "$") -> list[str]:
 # ── shared pieces ────────────────────────────────────────────────────────────
 
 SOURCES = enum("hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
-               "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket")
+               "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket", "fair_housing_review")
 LENSES = enum("express", "tailor", "amplify", "evolve")
 STATUSES = enum("to_do", "in_motion", "done")
 KINDS = enum("auto", "queued", "person")
@@ -340,7 +340,16 @@ VALUE = {
     "gaps": [GAP],
 }
 
+FAIR_HOUSING_REVIEW = {
+    "property": {"company_id": STR, "name": opt(STR)},
+    "run_at": STR, "next_run": STR, "pages_checked": INT, "assets_checked": opt(INT),
+    "findings": [{"kind": enum("copy", "image"), "location": STR, "excerpt": STR, "reason": STR,
+                  "severity": STR, "suggested_fix": STR}],
+}
+FAIR_HOUSING_RUN_ALL = {"status": enum("started"), "scope": enum("all"), "limit": opt(INT)}
+
 SHAPES.update({
+    "fair_housing_review": FAIR_HOUSING_REVIEW, "fair_housing_run_all": FAIR_HOUSING_RUN_ALL,
     "dashboard": DASHBOARD, "approvals": APPROVALS, "property_overview": PROPERTY_OVERVIEW,
     "media_plan": MEDIA_PLAN, "visibility": VISIBILITY_SCREEN, "create_brief": CREATE_BRIEF,
     "content": CONTENT, "creative": CREATIVE, "value": VALUE,
@@ -364,6 +373,7 @@ COUNT_KEYS = frozenset({
     "approved_unedited", "total", "pct", "threshold", "highlight_index",
     "waiting", "interrupts_count", "approved_this_month", "recommendations", "published", "in_review",
     "assets", "tracked_in_ads", "changes", "window_days", "autopilot_approvals", "fair_housing_reviews_clean",
+    "pages_checked", "assets_checked", "profile_fields_checked", "findings_count",
 })
 
 

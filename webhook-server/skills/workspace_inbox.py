@@ -64,7 +64,7 @@ logger = logging.getLogger(__name__)
 
 SOURCES = (
     "hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
-    "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket",
+    "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket", "fair_housing_review",
 )
 
 LENS = {
@@ -77,6 +77,7 @@ LENS = {
     "onboarding_gap": "express",
     "portal_ticket": "amplify",
     "service_ticket": "amplify",
+    "fair_housing_review": "express",
 }
 
 # Existing loop stages a decision on each source is written under (ADR 0010).
@@ -90,6 +91,7 @@ STAGE = {
     "onboarding_gap": "ops",
     "portal_ticket": "ops",
     "service_ticket": "ops",
+    "fair_housing_review": "engage",
 }
 
 SOURCE_LABELS = {
@@ -102,6 +104,7 @@ SOURCE_LABELS = {
     "onboarding_gap": "onboarding checks",
     "portal_ticket": "portal requests",
     "service_ticket": "service tickets",
+    "fair_housing_review": "Fair Housing reviews",
 }
 
 # Shown to a client in place of copy held at high Fair Housing severity.
@@ -115,12 +118,13 @@ GENERIC_TITLES = {
     "onboarding_gap": "Onboarding step",
     "portal_ticket": "Request",
     "service_ticket": "Service ticket",
+    "fair_housing_review": "Monthly Fair Housing review",
 }
 
 # Sources with an existing approval handler (see workspace_decisions).
 DECIDABLE = frozenset({
     "hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
-    "ticket_profile",
+    "ticket_profile", "fair_housing_review",
 })
 
 STATUSES = ("to_do", "in_motion", "done")
@@ -820,6 +824,51 @@ def _service_tickets(ctx: PropertyContext, gaps: list, today: date) -> list:
     return items
 
 
+FH_EVIDENCE_ROWS = 10
+
+
+def _fair_housing_reviews(ctx: PropertyContext, gaps: list, today: date) -> list:
+    """The latest monthly Fair Housing review, as a Compliance item when it found
+    something. A clean review is not an item; it counts as an action we took."""
+    from skills import workspace_fair_housing_review as fhr
+    record = fhr.latest(ctx, gaps)
+    if not record:
+        return []
+    findings = record.get("findings") or []
+    count = record.get("findings_count") or len(findings)
+    if not count:
+        return []
+    run_at = record.get("run_at")
+    run_day = str(run_at or "")[:10]
+    checked = (f"{record.get('pages_checked') or 0} website page(s) and "
+               f"{record.get('profile_fields_checked') or 0} profile field(s) were checked")
+    if record.get("assets_checked") is not None:
+        checked += f", and {record['assets_checked']} image(s)"
+    item = _new_item(
+        "fair_housing_review", f"{ctx.company_id}-{run_day}",
+        f"Your monthly Fair Housing review for {ctx.name or 'this property'} found {count} item(s)",
+        found=f"{checked}. Each finding lists where it is, why it was flagged and a suggested fix.",
+        receipts=[_receipt(f"Fair Housing review run on {run_day}", "fair_housing_review", run_at)],
+        evidence={
+            "columns": ["Page or asset", "Excerpt", "Why flagged", "Suggested fix"],
+            "rows": [[f.get("location"), f.get("excerpt"), f.get("reason"), f.get("suggested_fix")]
+                     for f in findings[:FH_EVIDENCE_ROWS]],
+            "more_count": max(0, count - min(len(findings), FH_EVIDENCE_ROWS)),
+        },
+        channels=["website", "listing"],
+        needs_approval=True,
+        steps=[
+            _step("The web team receives each suggested fix as a draft ticket", "queued", "website"),
+            _step("Nothing publishes until the web team applies the fixes", "person", "website"),
+        ],
+        trail=[trail(run_at, "Fair Housing review", "Review ran")] if run_at else [],
+        _created=run_at,
+        _raw={"run_at": run_at, "findings": findings},
+        review=record,
+    )
+    return [item]
+
+
 ADAPTERS: dict[str, Callable[[PropertyContext, list, date], list]] = {
     "hubdb_rec": _hubdb_recs,
     "loop_rec": _loop_recs,
@@ -830,6 +879,7 @@ ADAPTERS: dict[str, Callable[[PropertyContext, list, date], list]] = {
     "onboarding_gap": _onboarding_gaps,
     "portal_ticket": _portal_tickets,
     "service_ticket": _service_tickets,
+    "fair_housing_review": _fair_housing_reviews,
 }
 
 
