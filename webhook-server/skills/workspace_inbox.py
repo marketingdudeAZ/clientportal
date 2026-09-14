@@ -146,7 +146,7 @@ METRIC_FIELDS = (
 # One read of the company serves the inbox and the property views (the
 # hubspot_client cache is keyed by the property list, so one list = one read).
 PROPERTY_FIELDS = (
-    "uuid", "name", "plestatus", "seo_tier", "rpmmarket",
+    "uuid", "name", "plestatus", "seo_tier", "rpmmarket", "occupancy",
     "address", "city", "state", "zip", "domain", "website", "managementstart",
     "target_occupancy",
     "aptiq_property_id", "aptiq_market_id", "hyly_property_id",

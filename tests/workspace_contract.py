@@ -237,6 +237,110 @@ SHAPES = {
     "search": SEARCH, "error": ERROR,
 }
 
+# ── v3 rebuild screens ───────────────────────────────────────────────────────
+
+BAND = enum("healthy", "attention", "warning", "critical", "new")
+APPROVAL_CATEGORY = enum("cost", "vendor", "negotiate", "content", "creative", "compliance")
+LOOP_LENS = enum("express", "tailor", "amplify", "evolve")
+
+DASHBOARD = {
+    "greeting_name": opt(STR), "as_of": STR,
+    "kpis": {"ai_visibility": opt(METRIC), "portfolio_occupancy": opt(METRIC),
+             "identified_savings": opt(METRIC), "waiting_on_you": opt(METRIC)},
+    "health_tiles": [{"company_id": STR, "name": opt(STR), "score": opt(NUM), "band": BAND}],
+    "properties": [{"company_id": STR, "name": opt(STR), "units": opt(INT), "to_lease_90d": opt(METRIC),
+                    "overspend_per_year": opt(METRIC), "health": opt(NUM), "band": BAND}],
+    "activity": [{"at": opt(STR), "text": STR, "company_id": opt(STR),
+                  "kind": enum("audit", "draft", "check", "flag", "forecast", "decision", "publish"),
+                  "visibility": VISIBILITY}],
+    "waiting": [{"item_id": STR, "title": STR, "subtitle": opt(STR), "category": APPROVAL_CATEGORY}],
+    "loop_status": {"running": opt(BOOL), "property_count": INT, "last_pass": opt(STR)},
+    "gaps": [GAP],
+}
+
+APPROVALS = {
+    "waiting": INT, "interrupts_count": INT, "approved_this_month": opt(INT),
+    "interrupts": [{"id": STR, "kind": enum("compliance", "pacing", "tracking"), "title": STR, "detail": STR,
+                    "company_id": STR, "item_id": opt(STR), "primary_action": {"label": STR},
+                    "secondary_action": {"label": STR}}],
+    "batch": {"label": STR, "rows": [{"item_id": STR, "company_id": STR, "property": opt(STR), "action": STR,
+                                      "category": APPROVAL_CATEGORY, "savings_per_year": opt(METRIC),
+                                      "can_edit": BOOL}]},
+    "stats": {"approval_rate": opt(METRIC), "edit_rate": opt(METRIC), "auto_approve_candidates": [STR]},
+    "gaps": [GAP],
+}
+
+PROPERTY_OVERVIEW = {
+    "name": opt(STR), "city": opt(STR), "state": opt(STR), "units": opt(INT), "objective": opt(STR),
+    "health": opt({"score": NUM, "band": BAND, "source": STR, "as_of": opt(STR)}),
+    "kpis": {"ai_visibility": opt(METRIC), "renewal_rate": opt(METRIC), "units_to_lease": opt(METRIC),
+             "lead_to_lease": opt(METRIC)},
+    "exposure_forecast": opt({"months": [{"month": STR, "units_to_lease": INT}], "source": STR, "as_of": opt(STR)}),
+    "vendor_audit": [{"vendor": STR, "package": opt(STR), "monthly": opt(METRIC),
+                      "verdict": enum("over", "fair", "under", "unknown"), "basis": STR}],
+    "visibility_by_engine": [{"engine": STR, "score": opt(METRIC)}],
+    "findings": [{"text": STR, "receipts": [RECEIPT]}],
+    "recommended_action": opt({"item_id": STR, "label": STR}),
+    "draft_email": opt({"subject": STR, "preview": STR, "item_id": opt(STR)}),
+    "loop": [{"lens": LOOP_LENS, "status": enum("done", "waiting", "upcoming"), "at": opt(STR), "text": STR}],
+    "links": {"media_plan": STR, "visibility": STR, "content": STR, "creative": STR, "report": STR},
+    "gaps": [GAP],
+}
+
+MEDIA_PLAN = {
+    "fiscal_year": STR, "envelope": opt(METRIC), "objective": opt(STR), "generated_at": opt(STR),
+    "months": [{"month": STR, "units_to_lease": opt(INT)}],
+    "channels": [{"channel": STR, "monthly": [NUM], "monthly_avg": NUM, "annual": NUM, "share": opt(NUM),
+                  "cpl_target": opt(NUM)}],
+    "allocated": opt(METRIC), "notes": [STR], "gaps": [GAP],
+}
+
+VISIBILITY_SCREEN = {
+    "score": opt(METRIC), "change": opt({"value": NUM, "window": STR}), "last_audit": opt(STR),
+    "next_audit": opt(STR),
+    "engines": [{"engine": STR, "score": opt(METRIC), "queries_hit": opt(INT), "queries_total": opt(INT)}],
+    "comp_stack": opt({"competitors": [STR], "rows": [{"surface": STR, "values": ANY}]}),
+    "citation_sources": [{"source": STR, "share": NUM}],
+    "recommendations": [{"text": STR, "action": {"type": STR}}],
+    "alerts": [{"kind": enum("exposure", "competitor"), "text": STR}],
+    "gaps": [GAP],
+}
+CREATE_BRIEF = {"status": enum("generating"), "hub_keyword": STR}
+
+CONTENT = {
+    "counts": {"recommendations": INT, "published": INT, "in_review": INT},
+    "rows": [{"id": STR, "priority": opt(enum("high", "med", "low", "done")), "type": opt(STR), "title": STR,
+              "gap_source": opt(STR),
+              "status": enum("draft_ready", "in_review", "not_started", "published"),
+              "published_at": opt(STR), "item_id": opt(STR)}],
+    "impact": [{"text": STR}], "gaps": [GAP],
+}
+
+CREATIVE = {
+    "counts": {"assets": INT, "tracked_in_ads": opt(INT)},
+    "top": opt({"name": STR}), "lowest": opt({"name": STR}),
+    "assets": [{"id": STR, "name": opt(STR), "thumbnail_url": opt(STR), "tags": [STR],
+                "origin": enum("generated", "inherited", "uploaded"), "impressions": opt(METRIC),
+                "ctr": opt(METRIC), "leads": opt(METRIC), "flag": opt(enum("underperforming"))}],
+    "gaps": [GAP],
+}
+
+VALUE = {
+    "period": STR,
+    "headline": {"savings_captured": opt(METRIC), "savings_identified": opt(METRIC),
+                 "changes_shipped": opt(METRIC)},
+    "rows": [{"change": STR, "company_id": opt(STR), "property": opt(STR), "annual_value": opt(METRIC),
+              "decided_by": enum("you", "automatic", "team"), "decided_at": opt(STR)}],
+    "totals": {"annual_value": opt(METRIC), "changes": opt(INT), "automatic_share": opt(METRIC)},
+    "gaps": [GAP],
+}
+
+SHAPES.update({
+    "dashboard": DASHBOARD, "approvals": APPROVALS, "property_overview": PROPERTY_OVERVIEW,
+    "media_plan": MEDIA_PLAN, "visibility": VISIBILITY_SCREEN, "create_brief": CREATE_BRIEF,
+    "content": CONTENT, "creative": CREATIVE, "value": VALUE,
+})
+
 
 def assert_shape(value: Any, name: str) -> None:
     errs = check(value, SHAPES[name])
@@ -253,6 +357,8 @@ COUNT_KEYS = frozenset({
     "channel_count", "pending_changes", "done_count", "comments_count", "range",
     "page", "page_size", "next_page", "high", "medium", "low", "more_count",
     "approved_unedited", "total", "pct", "threshold", "highlight_index",
+    "waiting", "interrupts_count", "approved_this_month", "recommendations", "published", "in_review",
+    "assets", "tracked_in_ads", "changes",
 })
 
 

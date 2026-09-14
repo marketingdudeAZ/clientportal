@@ -537,3 +537,21 @@ def workspace_warm():
         return jsonify(workspace_cache.warm())
     except Exception as exc:  # noqa: BLE001
         return _failed("warm", exc)
+
+
+# ── v3: dashboard ────────────────────────────────────────────────────────────
+
+@workspace_bp.route("/api/workspace/dashboard", methods=["GET", "OPTIONS"])
+def workspace_dashboard():
+    gate = require_access(FEATURE_KEY)
+    if gate:
+        return gate
+    from skills import workspace_dashboard as wdash
+    lens = (request.args.get("lens") or "").strip() or None
+    if lens and lens not in wdash.LENSES:
+        return jsonify({"error": "Invalid lens", "detail": "|".join(wdash.LENSES)}), 400
+    try:
+        return jsonify(wdash.build_dashboard(current_portal_email(), internal=_is_internal(),
+                                             scope_internal=_real_internal(), lens=lens))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("dashboard", exc)
