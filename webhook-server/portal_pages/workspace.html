@@ -1593,7 +1593,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     var strip = '<div class="kpis">' +
       '<div class="kpi"><span class="eyebrow">Properties</span><span class="v">' + esc(num(list.length)) + '</span></div>' +
       '<div class="kpi"><span class="eyebrow">Total units</span><span class="v">' + esc(num(units)) + '</span></div>' +
-      [['portfolio_occupancy', 'Avg occupancy', function (v) { return pct(v, 1); }, ''], ['identified_savings', 'Identified savings', moneyK, 't-healthy'], ['waiting_on_you', 'Waiting on you', num, 't-brand']].map(function (x) {
+      [['occupancy', 'Occupancy', function (v) { return pct(v, 1); }, ''], ['units_to_lease_90d', 'To lease (90 days)', num, ''], ['leases_this_month', 'Leases this month', num, '']].map(function (x) {
         var r = k[x[0]], v = val(r);
         return '<div class="kpi"' + rtitle(r) + '><span class="eyebrow">' + x[1] + '</span><span class="v ' + x[3] + '">' + (v == null ? '<span class="empty-dash">—</span>' : esc(x[2](v))) + '</span>' + (receipt(r) ? '<span class="rc">' + receipt(r) + '</span>' : '') + '</div>';
       }).join('') + '</div>';
@@ -1603,12 +1603,12 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       var score = p.health != null ? p.health : t.score, b = p.band || t.band || band(score), href = '#/property/' + encodeURIComponent(c.company_id);
       function cell(r, fmt, cls) { var v = val(r); return '<td class="num ' + (cls || '') + '"' + rtitle(r) + '>' + (v == null ? '<span class="empty-dash">—</span>' : esc(fmt(v))) + '</td>'; }
       return '<tr class="rowlink" data-href="' + href + '"><td class="name"><a href="' + href + '">' + esc(c.name) + '</a><span class="fine" style="display:block">' + esc([c.city, c.state].filter(Boolean).join(', ')) + '</span></td>' +
-        '<td class="num">' + esc(num(c.units)) + '</td>' + cell(p.to_lease_90d, num) + cell(p.overspend_per_year, money, 't-critical') +
-        '<td class="num"><span class="healthcell t-' + esc(b) + '">' + (score == null ? '—' : esc(score)) + '</span></td>' +
-        '<td class="num"><span class="pill ' + esc(b) + '"><i></i>' + esc(BAND_LABEL[b]) + '</span></td></tr>';
+        '<td class="num">' + esc(num(c.units)) + '</td>' + cell(p.occupancy, function (v) { return pct(v, 1); }) + cell(p.to_lease_90d, num) + cell(p.leases_month, num) +
+        '<td class="num"><span class="pill ' + esc(b) + '"><i></i>' + (score == null ? 'New' : esc(score) + ' · ' + esc(BAND_LABEL[b])) + '</span></td>' +
+        '<td class="num">' + (has(p.status) ? esc(p.status) : '<span class="empty-dash">—</span>') + '</td></tr>';
     }).join('');
     return '<div class="page"><div class="head"><div class="stack"><h1 class="h-page">Properties</h1><p class="support">Every property you can see, sorted as your account lists them.</p></div>' + staleLabel(d.as_of) + '</div>' + strip +
-      '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Overspend/yr</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">Occupancy</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Leases (month)</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       gapsLine(d.gaps) + '</div>';
   }
 

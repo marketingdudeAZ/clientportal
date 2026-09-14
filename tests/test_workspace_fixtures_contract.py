@@ -338,9 +338,9 @@ def test_dashboard():
         assert t["band"] in BANDS
     for p in d["properties"]:
         check(p, {"company_id": str, "name": str, "units": OPT_NUM, "occupancy": OPT_RECEIPT, "to_lease_90d": OPT_RECEIPT,
-                  "leases_this_month": OPT_RECEIPT, "health": OPT_NUM, "band": str}, "dashboard.properties[]")
+                  "leases_month": OPT_RECEIPT, "status": OPT_STR, "health": OPT_NUM, "band": str}, "dashboard.properties[]")
         assert "overspend_per_year" not in p
-        for k in ("occupancy", "to_lease_90d", "leases_this_month"):
+        for k in ("occupancy", "to_lease_90d", "leases_month"):
             check_receipt(p[k], f"dashboard.properties[].{k}")
         assert p["band"] in BANDS
     for a in d["activity"]:

@@ -266,11 +266,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 7,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 82,
       "band": "healthy"
     },
@@ -288,11 +289,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 14,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Lease-up",
       "health": 58,
       "band": "attention"
     },
@@ -310,11 +312,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 41,
       "band": "warning"
     },
@@ -332,11 +335,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 3,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 55,
       "band": "attention"
     },
@@ -354,11 +358,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 6,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 74,
       "band": "healthy"
     },
@@ -376,11 +381,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 5,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 78,
       "band": "healthy"
     },
@@ -398,11 +404,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 3,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 28,
       "band": "critical"
     },
@@ -420,11 +427,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 64,
       "band": "attention"
     },
@@ -442,11 +450,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 64,
       "band": "attention"
     },
@@ -464,11 +473,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 65,
       "band": "attention"
     },
@@ -486,11 +496,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 66,
       "band": "attention"
     },
@@ -508,11 +519,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 69,
       "band": "attention"
     },
@@ -530,11 +542,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 6,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 69,
       "band": "attention"
     },
@@ -552,11 +565,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 3,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 73,
       "band": "healthy"
     },
@@ -574,11 +588,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 73,
       "band": "healthy"
     },
@@ -596,11 +611,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 3,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 75,
       "band": "healthy"
     },
@@ -618,11 +634,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 5,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 76,
       "band": "healthy"
     },
@@ -640,11 +657,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 5,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 76,
       "band": "healthy"
     },
@@ -662,11 +680,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 3,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 77,
       "band": "healthy"
     },
@@ -684,11 +703,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 3,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 78,
       "band": "healthy"
     },
@@ -706,11 +726,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 79,
       "band": "healthy"
     },
@@ -728,11 +749,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 3,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 80,
       "band": "healthy"
     },
@@ -750,11 +772,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 3,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 80,
       "band": "healthy"
     },
@@ -772,11 +795,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 3,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 82,
       "band": "healthy"
     },
@@ -794,11 +818,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 83,
       "band": "healthy"
     },
@@ -816,11 +841,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 2,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 83,
       "band": "healthy"
     },
@@ -838,11 +864,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 3,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 85,
       "band": "healthy"
     },
@@ -860,11 +887,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 85,
       "band": "healthy"
     },
@@ -882,11 +910,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 5,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 86,
       "band": "healthy"
     },
@@ -904,11 +933,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 89,
       "band": "healthy"
     },
@@ -926,11 +956,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 7,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 90,
       "band": "healthy"
     },
@@ -948,11 +979,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 4,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 90,
       "band": "healthy"
     },
@@ -970,11 +1002,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 2,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 91,
       "band": "healthy"
     },
@@ -992,11 +1025,12 @@
         "source": "aptiq_exposure",
         "as_of": "2026-09-14T13:04:00Z"
       },
-      "leases_this_month": {
+      "leases_month": {
         "value": 3,
         "source": "hyly",
         "as_of": "2026-09-14T11:00:00Z"
       },
+      "status": "Stabilized",
       "health": 91,
       "band": "healthy"
     },
@@ -1006,7 +1040,8 @@
       "units": 160,
       "occupancy": null,
       "to_lease_90d": null,
-      "leases_this_month": null,
+      "leases_month": null,
+      "status": null,
       "health": null,
       "band": "new"
     }

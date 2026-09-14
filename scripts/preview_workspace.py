@@ -322,6 +322,13 @@ def _waiting_items() -> list:
     return [it for p in props() for it in _items_for(p) if it["status"] == "to_do" and it["actions"]["approve"]]
 
 
+def _status(p: dict) -> str | None:
+    """Lifecycle status as the company record would carry it; unknown until the first ApartmentIQ read."""
+    if p["occupied"] is None:
+        return None
+    return "Lease-up" if p["occupied"] / p["units"] < 0.85 else "Stabilized"
+
+
 def dashboard() -> dict:
     ps = props()
     known = [p for p in ps if p["occupied"] is not None]
@@ -353,8 +360,8 @@ def dashboard() -> dict:
         "health_tiles": [{"company_id": p["company_id"], "name": p["name"], "score": p["health"], "band": p["band"]} for p in order],
         "properties": [{"company_id": p["company_id"], "name": p["name"], "units": p["units"],
                         "occupancy": _metric(_occ(p), "aptiq"), "to_lease_90d": _metric(p["units_to_lease_90d"], "aptiq_exposure"),
-                        "leases_this_month": _metric(p["leases_this_month"], "hyly", "2026-09-14T11:00:00Z"),
-                        "health": p["health"], "band": p["band"]} for p in order],
+                        "leases_month": _metric(p["leases_this_month"], "hyly", "2026-09-14T11:00:00Z"),
+                        "status": _status(p), "health": p["health"], "band": p["band"]} for p in order],
         "activity": activity,
         "waiting": [{"item_id": it["id"], "company_id": it["company_id"], "title": it["title"], "subtitle": it["cost_note"] or (it["why"] or {}).get("text"), "category": it["category"]} for it in waiting],
         "loop_status": {"running": True, "property_count": len(ps), "last_pass": "2026-09-14T08:00:00Z"},

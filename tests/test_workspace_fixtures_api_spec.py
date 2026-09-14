@@ -33,48 +33,8 @@ SPEC_BY_FIXTURE = {
     "visibility": wc.VISIBILITY_SCREEN, "content": wc.CONTENT, "creative": wc.CREATIVE, "value": wc.VALUE,
     "create_brief": wc.CREATE_BRIEF, "media_plan_regenerate": REGENERATE_RESULT,
 }
-# Round 4 shapes ("Round 4 — Kyle's review" in docs/handoffs/PORTAL_WORKSPACE_BUILD_PLAN.md). The API
-# branch adds them to tests/workspace_contract.py in parallel; until they land here the Round 4 fixtures are
-# checked against these, built from the contract's own pieces and following the spec exactly.
-R4_CATEGORY = wc.enum("cost", "vendor", "content", "creative", "compliance")
-R4_DASHBOARD = {
-    **wc.DASHBOARD,
-    "lens": wc.absent("lens"), "kpi_order": wc.absent("kpi_order"),
-    "kpis": {**{k: wc.opt(wc.METRIC) for k in ("occupancy", "units_to_lease_90d", "leases_this_month", "cost_per_lease",
-                                              "ai_visibility", "actions_taken", "waiting_on_you")},
-             "identified_savings": wc.absent("identified_savings")},
-    "properties": [{"company_id": wc.STR, "name": wc.opt(wc.STR), "units": wc.opt(wc.INT),
-                    "occupancy": wc.opt(wc.METRIC), "to_lease_90d": wc.opt(wc.METRIC),
-                    "leases_this_month": wc.opt(wc.METRIC), "health": wc.opt(wc.NUM), "band": wc.BAND,
-                    "overspend_per_year": wc.absent("overspend_per_year")}],
-    "waiting": [{"item_id": wc.STR, "title": wc.STR, "subtitle": wc.opt(wc.STR), "category": R4_CATEGORY}],
-}
-R4_APPROVALS = {
-    **wc.APPROVALS,
-    "interrupts": [{"id": wc.STR, "kind": wc.enum("compliance"), "title": wc.STR, "detail": wc.STR,
-                    "company_id": wc.STR, "item_id": wc.opt(wc.STR), "primary_action": {"label": wc.STR},
-                    "secondary_action": {"label": wc.STR}}],
-    "batch": {"label": wc.STR, "rows": [{"item_id": wc.STR, "company_id": wc.STR, "property": wc.opt(wc.STR),
-                                         "action": wc.STR, "category": R4_CATEGORY,
-                                         "savings_per_year": wc.opt(wc.METRIC), "can_edit": wc.BOOL}]},
-}
-R4_ITEM = {
-    **wc.ITEM,
-    "source": wc.enum(*dict.fromkeys(wc.SOURCES.values + ("fair_housing_review",))),
-    "why": wc.opt({"text": wc.STR, "receipts": [wc.RECEIPT]}),
-    "for_whom": wc.opt({"text": wc.STR, "questions": [wc.STR]}),
-    "approving_does": [{"label": wc.STR, "owner": wc.enum("RPM Digital", "vendor", "you"), "when": wc.opt(wc.STR)}],
-}
-R4_FAIR_HOUSING_REVIEW = {
-    "property": {"company_id": wc.STR, "name": wc.opt(wc.STR)},
-    "run_at": wc.STR, "next_run": wc.STR, "pages_checked": wc.INT, "assets_checked": wc.opt(wc.INT),
-    "findings": [{"kind": wc.enum("copy", "image"), "location": wc.STR, "excerpt": wc.STR, "reason": wc.STR,
-                  "severity": wc.STR, "suggested_fix": wc.STR}],
-}
-SPEC_BY_FIXTURE.update({"dashboard": R4_DASHBOARD, "approvals": R4_APPROVALS, "approvals_empty": R4_APPROVALS,
-                        "item": R4_ITEM})
 # Fixtures that hold a list of one shape under a key.
-LIST_FIXTURES = {"approval_items": ("items", R4_ITEM)}
+LIST_FIXTURES = {"approval_items": ("items", wc.ITEM)}
 # Covered by their own contract tests (tests/test_ask.py, tests/test_workspace_report.py).
 OWN_CONTRACT = ("ask_", "report_")
 # The preview server's 35-property source book, not an API response;
@@ -109,14 +69,14 @@ def test_list_fixture_matches_api_spec(name):
     assert not problems, f"{name}.json breaks the API contract:\n  " + "\n  ".join(problems)
 
 
-def test_decision_and_undo_items_match_round4_item_spec():
+def test_decision_and_undo_items_match_item_spec():
     for name in ("decision", "undo"):
         data = json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
-        problems = wc.check(data["item"], R4_ITEM)
-        assert not problems, f"{name}.json item breaks the Round 4 item spec:\n  " + "\n  ".join(problems)
+        problems = wc.check(data["item"], wc.ITEM)
+        assert not problems, f"{name}.json item breaks the item spec:\n  " + "\n  ".join(problems)
 
 
-def test_every_preview_item_matches_round4_item_spec():
+def test_every_preview_item_matches_item_spec():
     """Every item the preview serves, including the monthly Fair Housing review record."""
     import importlib.util
     root = pathlib.Path(__file__).resolve().parents[1]
@@ -125,7 +85,7 @@ def test_every_preview_item_matches_round4_item_spec():
     spec.loader.exec_module(pw)
     problems = []
     for it in pw.all_items():
-        problems += [f"{it['id']}: {p}" for p in wc.check(it, R4_ITEM)]
+        problems += [f"{it['id']}: {p}" for p in wc.check(it, wc.ITEM)]
         if it.get("review"):
-            problems += [f"{it['id']}.review: {p}" for p in wc.check(it["review"], R4_FAIR_HOUSING_REVIEW)]
+            problems += [f"{it['id']}.review: {p}" for p in wc.check(it["review"], wc.FAIR_HOUSING_REVIEW)]
     assert not problems, "\n  ".join(problems)
