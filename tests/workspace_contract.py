@@ -417,7 +417,13 @@ PROFILE = {
     "gaps": [GAP],
 }
 
+FAIR_HOUSING_RESULT = {"result": enum("clear", "flagged", "blocked"), "severity": omittable(STR),
+                       "terms": omittable([STR])}
+PROFILE_EDIT = {"field": PROFILE_FIELD, "outcome": enum("saved", "pending_review", "blocked"),
+                "fair_housing": FAIR_HOUSING_RESULT, "message": STR}
+
 SHAPES.update({
+    "profile_edit": PROFILE_EDIT,
     "profile": PROFILE, "profile_field": PROFILE_FIELD,
     "spend_sheet": SPEND_SHEET,
     "creative_upload": CREATIVE_UPLOAD,

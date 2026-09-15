@@ -23,6 +23,9 @@ unknown (null).
 
 from __future__ import annotations
 
+import hashlib
+import itertools
+import json
 import logging
 import re
 import threading
@@ -47,12 +50,18 @@ HUBSPOT_RESOLVED = frozenset({"name", "address", "city", "state", "zip", "domain
 _lock = threading.Lock()
 _local_audit: dict = {}          # company_id → [audit row] written by this process
 _checkins: dict = {}             # company_id → datetime of the latest check-in
+_proposals: dict = {}            # company_id → {proposal_id: record}
+
+_sequence = itertools.count(1)   # orders proposals made within the same second
+PROPOSAL_EVENT = "workspace_profile_update_proposed"
+ITEM_SOURCE = "profile_update"
 
 
 def clear() -> None:
     with _lock:
         _local_audit.clear()
         _checkins.clear()
+        _proposals.clear()
 
 
 # ── reading ──────────────────────────────────────────────────────────────────
@@ -208,9 +217,92 @@ def checkin_state(views: list, company_id: str, now: datetime) -> dict:
     return {"due": bool(stale) and not checked_in_this_month(company_id, now), "stale_fields": stale}
 
 
-# Filled in by the edit, approval and suggestion steps below.
+# ── profile updates: proposals awaiting RPM review ───────────────────────────
+#
+# Storage. `ticket_profile_proposals` (migration 0015) is unapplied in
+# production, so profile updates are stored the way Workspace decisions are:
+# each proposal is a `workspace_profile_update_proposed` loop event, and its
+# approval or rejection is the ordinary `workspace_decision` event on
+# `profile_update:<proposal_id>` (net of `workspace_decision_undone`). This
+# process also keeps the records it wrote, so the flow works without BigQuery.
+
+def item_id_for(proposal_id: str) -> str:
+    return f"{ITEM_SOURCE}:{proposal_id}"
+
+
+def _proposal_id(company_id: str, key: str, value: str, at: str) -> str:
+    return hashlib.sha1(f"{company_id}|{key}|{value}|{at}".encode("utf-8")).hexdigest()[:12]
+
+
+def propose(ctx, field, current: str, value: str, actor: str, now: datetime) -> dict:
+    import loop_writer
+
+    at = wc.to_iso_ts(now)
+    pid = _proposal_id(ctx.company_id, field.key, value, at)
+    record = {
+        "proposal_id": pid, "company_id": ctx.company_id, "property_uuid": ctx.uuid or None,
+        "field_key": field.key, "field_label": field.label,
+        "current_value": current, "proposed_value": value,
+        "proposed_by": actor, "proposed_at": at, "used_in": community_brief.used_in(field.key),
+        "status": "pending", "decided_by": None, "decided_at": None, "reason": None,
+    }
+    stored = {**record, "_seq": next(_sequence)}
+    with _lock:
+        for other in _proposals.get(ctx.company_id, {}).values():
+            if other["field_key"] == field.key and other["status"] == "pending":
+                other["status"] = "superseded"
+        _proposals.setdefault(ctx.company_id, {})[pid] = stored
+    try:
+        loop_writer.record("engage", PROPOSAL_EVENT, property_uuid=ctx.uuid or None, company_id=ctx.company_id,
+                           source="workspace", source_id=item_id_for(pid), trigger="client_action",
+                           payload=dict(record))
+    except Exception as exc:  # noqa: BLE001 — the in-process record still stands
+        logger.warning("profile update event not written for %s: %s", ctx.company_id, exc)
+    return dict(record)
+
+
+def proposals(ctx, gaps: list) -> list:
+    """Every profile update for the property, newest first, with its status."""
+    import loop_writer
+
+    with _lock:
+        by_id = {pid: dict(r) for pid, r in _proposals.get(ctx.company_id, {}).items()}
+    if loop_writer._bq() is None:
+        gaps.append(wc.gap("pending", "Profile updates proposed before this server started need BigQuery loop "
+                                      "events, which are not configured here", source="loop_events", internal=True))
+    elif ctx.uuid:
+        try:
+            for ev in loop_writer.query_recent(ctx.uuid, limit=500):
+                payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else None
+                if ev.get("event_type") == PROPOSAL_EVENT and payload and payload.get("proposal_id"):
+                    by_id.setdefault(payload["proposal_id"], {**payload, "status": "pending"})
+        except Exception as exc:  # noqa: BLE001
+            gaps.append(wc.gap("pending", f"Stored profile updates could not be read ({type(exc).__name__})",
+                               source="loop_events", internal=True))
+    apply_decided(ctx, by_id, gaps)
+    rows = sorted(by_id.values(), key=lambda r: (r.get("proposed_at") or "", r.get("_seq") or 0), reverse=True)
+    newest_pending: set = set()
+    for r in rows:
+        if r["status"] != "pending":
+            continue
+        if r["field_key"] in newest_pending:
+            r["status"] = "superseded"
+        newest_pending.add(r["field_key"])
+    return rows
+
+
+def apply_decided(ctx, by_id: dict, gaps: list) -> None:
+    """Overlay approvals and rejections recorded as decisions (see the approval step)."""
+    return None
+
+
 def pending_by_key(ctx, gaps: list) -> dict:
-    return {}
+    out = {}
+    for r in proposals(ctx, gaps):
+        if r["status"] == "pending" and r["field_key"] not in out:
+            out[r["field_key"]] = {"proposed_value": r["proposed_value"], "by": display_name(r["proposed_by"]),
+                                   "at": r["proposed_at"], "item_id": item_id_for(r["proposal_id"])}
+    return out
 
 
 def reviews_by_key(ctx, gaps: list) -> dict:
@@ -257,3 +349,124 @@ def build_profile(ctx, *, internal: bool, props: dict | None = None, now: dateti
         "sections": sections,
         "gaps": wc.gaps_for(gaps, internal),
     }
+
+
+# ── editing ──────────────────────────────────────────────────────────────────
+
+SAVED = "saved"
+PENDING = "pending_review"
+BLOCKED = "blocked"
+
+
+def normalize_value(field, value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        if field.type in community_brief.TABLE_TYPES:
+            return json.dumps(value)
+        parts = [str(v).strip() for v in value if str(v).strip()]
+        return ";".join(parts) if field.type == "multiselect" else "\n".join(parts)
+    if isinstance(value, (dict, bool)):
+        raise wc.WorkspaceError(400, "Invalid value", "a string or a list")
+    return str(value)
+
+
+def validate(field, value: str) -> str:
+    """The checks `community_brief.write_field` makes, without writing. Raises 400."""
+    if field.options and value:
+        if field.type == "multiselect":
+            selected = [v.strip() for v in value.split(";") if v.strip()]
+            bad = [v for v in selected if v not in field.options]
+            if bad:
+                raise wc.WorkspaceError(400, "Invalid value", f"{', '.join(bad)} is not one of the options")
+            return ";".join(selected)
+        if value not in field.options:
+            raise wc.WorkspaceError(400, "Invalid value", f"{value} is not one of the options")
+    if field.type in community_brief.TABLE_TYPES and value not in ("", "[]"):
+        try:
+            parsed = json.loads(value)
+        except (ValueError, TypeError):
+            raise wc.WorkspaceError(400, "Invalid value", "value must be valid JSON")
+        if not isinstance(parsed, list):
+            raise wc.WorkspaceError(400, "Invalid value", "value must be a JSON array")
+    return value
+
+
+def fair_housing_result(review: dict | None, internal: bool) -> dict:
+    """Blocked is shown to everyone, with the words; a low flag only to staff."""
+    if not review:
+        return {"result": "clear"}
+    if review["severity"] == "high":
+        return {"result": "blocked", "severity": "high", "terms": list(review["terms"])}
+    if internal:
+        return {"result": "flagged", "severity": review["severity"], "terms": list(review["terms"])}
+    return {"result": "clear"}
+
+
+def blocked_message(review: dict) -> str:
+    words = ", ".join(f"“{t}”" for t in review["terms"] if t) or "some of this wording"
+    return (f"This wasn't saved. {words} describes who can live here, which Fair Housing rules don't allow in "
+            "housing marketing. Describe the property, its amenities or its location instead.")
+
+
+def _remember_edit(ctx, field, old: str, new: str, actor: str, now: datetime, label: str | None = None) -> None:
+    with _lock:
+        _local_audit.setdefault(ctx.company_id, []).append({
+            "field_key": field.key, "field_label": label or field.label, "old_value": old, "new_value": new,
+            "edited_by": actor, "edited_at": wc.to_iso_ts(now)})
+
+
+def one_field(ctx, field, props: dict, *, internal: bool, now: datetime) -> dict:
+    gaps: list = []
+    audit = audit_rows(ctx.company_id, gaps)
+    entries = [r for r in audit or [] if r.get("field_key") == field.key]
+    pending = pending_by_key(ctx, gaps).get(field.key)
+    return field_view(field, props, entries, internal=internal, audit_known=audit is not None, now=now,
+                      pending=pending, review=None if pending else reviews_by_key(ctx, gaps).get(field.key))
+
+
+def edit_field(ctx, key: str, value, actor: str, *, staff: bool, props: dict | None = None,
+               now: datetime | None = None) -> dict:
+    """The one edit flow: Fair Housing, then review or save. Raises WorkspaceError."""
+    now = now or wc.utc_now()
+    field = community_brief.FIELDS.get(key)
+    if field is None:
+        raise wc.WorkspaceError(404, "Unknown field")
+    if field.internal and not staff:
+        raise wc.WorkspaceError(403, "This field is internal")
+    if not field.hs_override:
+        raise wc.WorkspaceError(400, f"{field.label} comes from HubSpot and isn't edited here")
+    value = validate(field, normalize_value(field, value))
+    props = read_props(ctx.company_id) if props is None else props
+    current = community_brief.resolve_value(props, field.hs_resolved, field.hs_override)
+
+    review = wc.fair_housing_review(value) if (value and field.type not in community_brief.TABLE_TYPES) else None
+    result = fair_housing_result(review, staff)
+    if review and review["severity"] == "high":
+        logger.info("profile edit blocked by Fair Housing: %s/%s terms=%s", ctx.company_id, key, review["terms"])
+        return {"field": one_field(ctx, field, props, internal=staff, now=now), "outcome": BLOCKED,
+                "fair_housing": result, "message": blocked_message(review)}
+
+    if not staff and community_brief.is_ad_facing(key):
+        propose(ctx, field, current, value, actor, now)
+        return {"field": one_field(ctx, field, props, internal=staff, now=now), "outcome": PENDING,
+                "fair_housing": result,
+                "message": "Sent to RPM for review. The current value stays live until RPM approves it."}
+
+    ok, written = community_brief.write_field(ctx.company_id, key, value, edited_by=actor)
+    if not ok:
+        status = 502 if (written == "network error" or str(written).startswith("HubSpot")) else 400
+        raise wc.WorkspaceError(status, "The field could not be saved", written)
+    _after_write(ctx, field, props, current, written, actor, now)
+    return {"field": one_field(ctx, field, props, internal=staff, now=now), "outcome": SAVED,
+            "fair_housing": result, "message": "Saved" if field.internal else "Saved · live in ads tomorrow"}
+
+
+def _after_write(ctx, field, props: dict, old: str, new: str, actor: str, now: datetime) -> None:
+    props[field.hs_override] = new
+    _remember_edit(ctx, field, old, new, actor, now)
+    try:
+        import hubspot_client
+        hubspot_client.invalidate(ctx.company_id)
+    except Exception:  # noqa: BLE001
+        pass

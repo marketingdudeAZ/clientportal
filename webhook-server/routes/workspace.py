@@ -24,6 +24,7 @@ HubSpot, HubDB, BigQuery or Claude directly.
     GET  /api/workspace/search?q=&company_id=
     GET  /api/workspace/spend-sheet?q=&market=&manager=&status=&sort=&dir=&page=&page_size=
     GET  /api/workspace/profile?company_id=
+    PATCH /api/workspace/profile/field                        verified identity
     POST /api/internal/workspace/warm                         X-Internal-Key
 
 Gates:
@@ -831,3 +832,29 @@ def workspace_profile():
         return jsonify(wpr.build_profile(ctx, internal=_is_internal()))
     except Exception as exc:  # noqa: BLE001
         return _failed("profile", exc)
+
+
+@workspace_bp.route("/api/workspace/profile/field", methods=["PATCH", "OPTIONS"])
+def workspace_profile_field():
+    """One field edit. Fair Housing first; a client's ad-facing edit waits for RPM."""
+    gate = _write_gate()
+    if gate:
+        return gate
+    body = request.get_json(silent=True) or {}
+    company_id = str(body.get("company_id") or "").strip()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    key = str(body.get("key") or "").strip()
+    if not key or "value" not in body:
+        return jsonify({"error": "key and value are required"}), 400
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_common, workspace_profile as wpr
+    try:
+        return jsonify(wpr.edit_field(ctx, key, body.get("value"), current_portal_email(), staff=_is_internal()))
+    except workspace_common.WorkspaceError as exc:
+        return _refused(exc)
+    except Exception as exc:  # noqa: BLE001
+        return _failed("profile edit", exc)
