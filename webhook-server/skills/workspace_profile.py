@@ -530,7 +530,7 @@ def edit_field(ctx, key: str, value, actor: str, *, staff: bool, props: dict | N
     _after_write(ctx, field, props, current, written, actor, now)
     _forget_completeness(ctx.company_id)
     return {"field": one_field(ctx, field, props, internal=staff, now=now), "outcome": SAVED,
-            "fair_housing": result, "message": "Saved" if field.internal else "Saved · live in ads tomorrow"}
+            "fair_housing": result, "message": "Saved · live in ads tomorrow" if community_brief.is_ad_facing(key) else "Saved"}
 
 
 def _after_write(ctx, field, props: dict, old: str, new: str, actor: str, now: datetime) -> None:

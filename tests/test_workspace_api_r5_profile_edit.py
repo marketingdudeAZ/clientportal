@@ -136,7 +136,7 @@ class TestSavesNow:
     def test_context_field_saves_through_write_field(self, client, write_field, events):
         body = _ok(_patch(client, "goals", "Reach 96% occupancy by spring"))
         write_field.assert_called_once_with(CID, "goals", "Reach 96% occupancy by spring", edited_by=CLIENT)
-        assert body["outcome"] == "saved" and body["message"] == "Saved · live in ads tomorrow"
+        assert body["outcome"] == "saved" and body["message"] == "Saved"  # goals is context-only, not in ads
         assert body["field"]["value"] == "Reach 96% occupancy by spring"
         assert body["field"]["last_updated"] is not None and body["field"]["stale"] is False
 
