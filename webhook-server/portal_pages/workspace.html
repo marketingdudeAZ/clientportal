@@ -767,6 +767,10 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .ckcard .sub{display:block;font-size:11px;line-height:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--attention-text)}
 .todo-h{font-size:12px;line-height:16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--color-fg-muted);padding-top:4px}
 
+.profchip{display:inline-flex;align-items:center;gap:8px;font-size:13px;line-height:16px;font-weight:500;color:var(--copper-ink);min-height:24px}
+.profchip .meterbar{width:72px;height:6px}
+.profchip:hover{text-decoration:underline}
+
 /* AA on tinted surfaces: small muted text steps down to the strong gray shade */
 .pane .eyebrow,.pane .support,.finding .receipt,.receipts .support,.receipts .eyebrow,.tbl tr.top td.support,.tbl .self,
 .tbl tr.rowlink:hover .fine,.tbl tr.rowlink:hover .empty-dash,.kbd,.chip:hover,.sopt:hover span,.sopt[aria-selected="true"] span,.hero .support{color:var(--gray-ink-strong)}
@@ -1831,10 +1835,11 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       return '<tr class="rowlink" data-href="' + href + '"><td class="name"><a href="' + href + '">' + esc(c.name) + '</a><span class="fine" style="display:block">' + esc([c.city, c.state].filter(Boolean).join(', ')) + '</span></td>' +
         '<td class="num">' + esc(num(c.units)) + '</td>' + cell(p.occupancy, function (v) { return pct(v, 1); }) + cell(p.to_lease_90d, num) + cell(p.leases_month, num) +
         '<td class="num"><span class="pill ' + esc(b) + '"><i></i>' + (score == null ? 'New' : esc(score) + ' · ' + esc(BAND_LABEL[b])) + '</span></td>' +
-        '<td class="num">' + (has(p.status) ? esc(p.status) : '<span class="empty-dash">—</span>') + '</td></tr>';
+        '<td class="num">' + (has(p.status) ? esc(p.status) : '<span class="empty-dash">—</span>') + '</td>' +
+        '<td class="num">' + (p.profile_completeness == null ? '<span class="empty-dash">—</span>' : '<a class="link" href="#/property/' + encodeURIComponent(c.company_id) + '/profile">' + esc(Math.round(p.profile_completeness)) + '%</a>') + '</td></tr>';
     }).join('');
     return '<div class="page"><div class="head"><div class="stack"><h1 class="h-page">Properties</h1><p class="support">Every property you can see, sorted as your account lists them.</p></div>' + staleLabel(d.as_of) + '</div>' + strip +
-      '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">Occupancy</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Leases (month)</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">Occupancy</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Leases (month)</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th><th scope="col" class="num">Profile</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       gapsLine(d.gaps) + '</div>';
   }
 
@@ -2282,6 +2287,13 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       renderTop('Properties', d.name);
       var h = propertyHtml(d);
       setView(h.page, h.rail);
+      var cid = state.companyId;
+      api('/api/workspace/profile?' + cq()).then(function (pr) {
+        var chip = view.querySelector('[data-prof-chip]'), pct = (((pr.data || {}).completeness) || {}).pct;
+        if (!chip || cid !== state.companyId || pct == null) return;
+        chip.innerHTML = 'Profile ' + esc(Math.round(pct)) + '% complete<span class="meterbar" aria-hidden="true"><i style="width:' + Math.round(pct) + '%"></i></span>';
+        chip.hidden = false;
+      }).catch(function () {});
     });
   }
   function ring(score, b) {
@@ -2329,7 +2341,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     var page = '<div class="page"><a class="back" href="#/properties">' + ic(I.arrowLeft, 13) + 'All properties</a>' +
       '<div class="proptitle">' + ring(d.health && d.health.score, hb) + '<div class="stack" style="display:flex;flex-direction:column;gap:2px;min-width:0"><h1 class="h-page">' + esc(d.name) + '</h1><p class="support">' + esc(sub) + '</p>' +
       (has(d.objective_reason) ? '<span class="receipt">Objective: ' + esc(d.objective_reason) + '</span>' : '') +
-      (d.health ? '<span class="receipt">Health ' + receipt(d.health) + '</span>' : '') + '</div></div>' +
+      (d.health ? '<span class="receipt">Health ' + receipt(d.health) + '</span>' : '') +
+      '<a class="profchip" data-prof-chip hidden href="#/property/' + encodeURIComponent(state.companyId) + '/profile"></a>' + '</div></div>' +
       (links ? '<div class="scoped-links">' + links + '</div>' : '') +
       '<div class="kpis">' + kp + '</div>' + fHtml + vend + eng + loop + gapsLine(d.gaps) + '</div>';
     var rail = '';
