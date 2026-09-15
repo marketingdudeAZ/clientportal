@@ -33,6 +33,36 @@ SPEC_BY_FIXTURE = {
     "visibility": wc.VISIBILITY_SCREEN, "content": wc.CONTENT, "creative": wc.CREATIVE, "value": wc.VALUE,
     "create_brief": wc.CREATE_BRIEF, "media_plan_regenerate": REGENERATE_RESULT, "creative_upload": wc.CREATIVE_UPLOAD,
 }
+# Round 5 shapes, copied from "Round 5 — Spend sheet and Property profile" in the build plan. The API branch adds
+# them to tests/workspace_contract.py in parallel; replace these with wc.* when its Round 5 commits merge.
+R5_SPEND_SHEET = {
+    "as_of": wc.STR, "scope": wc.enum("portfolio", "client"),
+    "columns": [{"key": wc.STR, "label": wc.STR, "group": wc.enum("channel", "meta", "internal"), "internal": wc.BOOL}],
+    "rows": [{"company_id": wc.STR, "property_name": wc.STR, "status": wc.opt(wc.STR), "market": wc.opt(wc.STR),
+              "manager": wc.opt(wc.STR), "values": wc.ANY, "total": wc.opt(wc.NUM), "href": wc.STR}],
+    "totals": {"values": wc.ANY, "total": wc.opt(wc.NUM)},
+    "count": wc.INT, "page": wc.INT, "page_size": wc.INT,
+    "filters": {"markets": [wc.STR], "managers": [wc.STR], "statuses": [wc.STR]}, "gaps": [wc.GAP],
+}
+R5_FIELD = {
+    "key": wc.STR, "label": wc.STR, "hint": wc.opt(wc.STR), "type": wc.STR, "options": wc.opt([wc.STR]), "value": wc.opt(wc.ANY),
+    "provenance": {"kind": wc.enum("override", "resolved", "empty"), "by": wc.opt(wc.STR), "at": wc.opt(wc.STR), "source": wc.opt(wc.STR)},
+    "ad_facing": wc.BOOL, "used_in": [wc.enum("ads", "website_faq", "ai_answers", "reports", "internal")], "internal": wc.BOOL,
+    "stale": wc.BOOL, "last_updated": wc.opt(wc.STR),
+    "pending": wc.opt({"proposed_value": wc.opt(wc.ANY), "by": wc.STR, "at": wc.STR, "item_id": wc.STR}),
+    "suggestion": wc.opt({"id": wc.STR, "value": wc.opt(wc.ANY), "source": wc.enum("site_scrape", "geo_claim", "fair_housing", "ticket"), "reason": wc.STR}),
+}
+R5_PROFILE = {
+    "property": {"company_id": wc.STR, "name": wc.opt(wc.STR)},
+    "completeness": {"pct": wc.opt(wc.NUM), "weighted": wc.BOOL, "top_missing": [{"key": wc.STR, "label": wc.STR, "used_in": [wc.STR]}]},
+    "checkin": {"due": wc.BOOL, "stale_fields": [wc.STR]},
+    "sections": [{"key": wc.STR, "title": wc.STR, "completeness": wc.opt(wc.NUM), "fields": [R5_FIELD]}],
+    "gaps": [wc.GAP],
+}
+R5_CLIENT_PROFILE = {**R5_PROFILE, "sections": [{"key": wc.STR, "title": wc.STR, "completeness": wc.opt(wc.NUM),
+                                                 "fields": [{**R5_FIELD, "fair_housing_review": wc.absent("fair_housing_review")}]}]}
+SPEC_BY_FIXTURE.update({"spend_sheet": R5_SPEND_SHEET, "spend_sheet_client": R5_SPEND_SHEET,
+                        "profile": R5_PROFILE, "profile_client": R5_CLIENT_PROFILE})
 # Fixtures that hold a list of one shape under a key.
 LIST_FIXTURES = {"approval_items": ("items", wc.ITEM)}
 # Covered by their own contract tests (tests/test_ask.py, tests/test_workspace_report.py).

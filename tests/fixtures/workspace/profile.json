@@ -1,0 +1,1597 @@
+{
+  "property": {
+    "company_id": "18234410021",
+    "name": "LYV Broadway",
+    "city": "Carrollton",
+    "state": "TX"
+  },
+  "completeness": {
+    "pct": 85,
+    "weighted": true,
+    "top_missing": [
+      {
+        "key": "short_name",
+        "label": "Short Name",
+        "used_in": [
+          "ads"
+        ]
+      },
+      {
+        "key": "unit_features",
+        "label": "In-Unit Features",
+        "used_in": [
+          "ads"
+        ]
+      },
+      {
+        "key": "neighborhood_highlights",
+        "label": "Neighborhood Highlights",
+        "used_in": [
+          "ads"
+        ]
+      }
+    ]
+  },
+  "last_updated": "2026-09-02",
+  "checkin": {
+    "due": true,
+    "stale_fields": [
+      "romance",
+      "residents_love",
+      "property_amenities",
+      "competitors",
+      "goals",
+      "pms",
+      "must_include"
+    ]
+  },
+  "sections": [
+    {
+      "key": "identity",
+      "title": "Identity",
+      "completeness": 100,
+      "fields": [
+        {
+          "key": "name",
+          "label": "Name",
+          "hint": null,
+          "type": "readonly",
+          "options": null,
+          "value": "LYV Broadway",
+          "provenance": {
+            "kind": "resolved",
+            "by": null,
+            "at": "2025-06-02",
+            "source": "the company record"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2025-06-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "address",
+          "label": "Address",
+          "hint": null,
+          "type": "readonly",
+          "options": null,
+          "value": "1250 W Broadway St",
+          "provenance": {
+            "kind": "resolved",
+            "by": null,
+            "at": "2025-06-02",
+            "source": "the company record"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2025-06-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "city",
+          "label": "City",
+          "hint": null,
+          "type": "readonly",
+          "options": null,
+          "value": "Carrollton",
+          "provenance": {
+            "kind": "resolved",
+            "by": null,
+            "at": "2025-06-02",
+            "source": "the company record"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2025-06-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "state",
+          "label": "State",
+          "hint": null,
+          "type": "readonly",
+          "options": null,
+          "value": "TX",
+          "provenance": {
+            "kind": "resolved",
+            "by": null,
+            "at": "2025-06-02",
+            "source": "the company record"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2025-06-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "zip",
+          "label": "Zip",
+          "hint": null,
+          "type": "readonly",
+          "options": null,
+          "value": "75006",
+          "provenance": {
+            "kind": "resolved",
+            "by": null,
+            "at": "2025-06-02",
+            "source": "the company record"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2025-06-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "domain",
+          "label": "Domain",
+          "hint": null,
+          "type": "readonly",
+          "options": null,
+          "value": "lyvbroadway.com",
+          "provenance": {
+            "kind": "resolved",
+            "by": null,
+            "at": "2025-06-02",
+            "source": "the company record"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2025-06-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "voice",
+      "title": "Voice & Positioning",
+      "completeness": 69,
+      "fields": [
+        {
+          "key": "voice_tier",
+          "label": "Voice Tier",
+          "hint": "How copy should feel for this property's price point. Select all that apply — properties with sub-brands or mixed unit types may need more than one.",
+          "type": "multiselect",
+          "options": [
+            "value",
+            "standard",
+            "lifestyle",
+            "luxury"
+          ],
+          "value": [
+            "lifestyle"
+          ],
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": "the rent-tier estimate"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads",
+            "website_faq",
+            "ai_answers"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "unit_noun",
+          "label": "Unit Noun",
+          "hint": "What we call a unit in copy. Select ALL that apply — properties with multiple unit types should check every one we lease.",
+          "type": "multiselect",
+          "options": [
+            "apartment",
+            "townhome",
+            "loft",
+            "home",
+            "duplex",
+            "penthouse"
+          ],
+          "value": [
+            "apartment"
+          ],
+          "provenance": {
+            "kind": "resolved",
+            "by": null,
+            "at": "2026-07-08",
+            "source": "the website"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "advertised_name",
+          "label": "Advertised Name",
+          "hint": "The full name used in headlines.",
+          "type": "text",
+          "options": null,
+          "value": "LYV Broadway Apartments",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "short_name",
+          "label": "Short Name",
+          "hint": "The shortened name used in tight UI / social copy.",
+          "type": "text",
+          "options": null,
+          "value": null,
+          "provenance": {
+            "kind": "empty",
+            "by": null,
+            "at": null,
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": null,
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "former_property_name",
+          "label": "Former Property Name",
+          "hint": "If rebranded, the prior name — protects search equity during the transition.",
+          "type": "text",
+          "options": null,
+          "value": null,
+          "provenance": {
+            "kind": "empty",
+            "by": null,
+            "at": null,
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [],
+          "internal": false,
+          "stale": false,
+          "last_updated": null,
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "brand",
+      "title": "Brand & Story",
+      "completeness": 100,
+      "fields": [
+        {
+          "key": "taglines",
+          "label": "Taglines",
+          "hint": "Property taglines / slogans. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "Your space. Your pace. LYV Broadway.",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads",
+            "website_faq",
+            "ai_answers"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": {
+            "proposed_value": "Modern Carrollton living, minutes from the Green Line.",
+            "by": "Morgan Lee",
+            "at": "2026-09-12T15:20:00Z",
+            "item_id": "profile_update:0021-taglines"
+          },
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "brand_adjectives",
+          "label": "Brand Adjectives",
+          "hint": "3–5 adjectives that best describe the community. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "Modern, social, walkable, easygoing",
+          "provenance": {
+            "kind": "override",
+            "by": "Morgan Lee",
+            "at": "2026-08-12",
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads",
+            "website_faq",
+            "ai_answers"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-08-12",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "differentiators",
+          "label": "Differentiators",
+          "hint": "What sets this community apart from competitors. Be specific — skip generic descriptors. Work with PM to get specifics. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "Rooftop lounge with downtown views; a block from Downtown Carrollton Station on the DART Green Line; renovated one-bedrooms with in-home washers and dryers",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-08-12",
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads",
+            "website_faq",
+            "ai_answers"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-08-12",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "romance",
+          "label": "Romance Paragraph",
+          "hint": "Long-form prose capturing the property's story / vibe / feel. Fluency pulls from this for richer copy than tags alone.",
+          "type": "textarea",
+          "options": null,
+          "value": "Bright white quartz kitchens, oversized windows and a rooftop lounge that catches the sunset over Downtown Carrollton.",
+          "provenance": {
+            "kind": "override",
+            "by": "Morgan Lee",
+            "at": "2026-03-02",
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": true,
+          "last_updated": "2026-03-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": {
+            "severity": "low",
+            "terms": [
+              "white"
+            ]
+          }
+        },
+        {
+          "key": "residents_love",
+          "label": "What Residents Love",
+          "hint": "What current residents love about the community. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "The rooftop, the dog park and being able to take the train to work",
+          "provenance": {
+            "kind": "override",
+            "by": "Morgan Lee",
+            "at": "2026-04-11",
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": true,
+          "last_updated": "2026-04-11",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "residents_dislike",
+          "label": "What Residents Don't Love",
+          "hint": "Internal context — friction points to be aware of. Not used in ad copy.",
+          "type": "textarea",
+          "options": null,
+          "value": "Garage gate is slow at rush hour; package room fills up around holidays",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-21",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-07-21",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "target_resident",
+          "label": "Typical Resident (ICP)",
+          "hint": "Describe the ICP — age, income, lifestyle, needs are all fair game for internal brief discussion. FAIR HOUSING: this context shapes strategy but the protected-class attributes (age, family status, race, religion, national origin, disability) NEVER reach ad platforms or copy. Used internally only.",
+          "type": "textarea",
+          "options": null,
+          "value": "People who commute downtown by train and want a walkable neighborhood",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-21",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-07-21",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "lifecycle",
+      "title": "Lifecycle",
+      "completeness": 100,
+      "fields": [
+        {
+          "key": "lifecycle_state",
+          "label": "Lifecycle State",
+          "hint": null,
+          "type": "dropdown",
+          "options": [
+            "pre_lease",
+            "lease_up",
+            "stabilized",
+            "renovated"
+          ],
+          "value": "stabilized",
+          "provenance": {
+            "kind": "resolved",
+            "by": null,
+            "at": "2026-09-01",
+            "source": "ApartmentIQ"
+          },
+          "ad_facing": false,
+          "used_in": [
+            "reports"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-09-01",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "year_built",
+          "label": "Year Built",
+          "hint": "From Apt IQ.",
+          "type": "readonly",
+          "options": null,
+          "value": "2019",
+          "provenance": {
+            "kind": "resolved",
+            "by": null,
+            "at": "2025-06-02",
+            "source": "the company record"
+          },
+          "ad_facing": false,
+          "used_in": [],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2025-06-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "inventory",
+      "title": "Inventory",
+      "completeness": 100,
+      "fields": [
+        {
+          "key": "floor_plans",
+          "label": "Floor Plans",
+          "hint": "Name, beds, baths, sq ft per plan. Auto-filled from Apt IQ; edit a row to override. Pending until your property is onboarded.",
+          "type": "floorplan_table",
+          "options": null,
+          "value": [
+            {
+              "plan": "S1",
+              "beds": 0,
+              "baths": 1,
+              "sqft": 548
+            },
+            {
+              "plan": "A1",
+              "beds": 1,
+              "baths": 1,
+              "sqft": 712
+            },
+            {
+              "plan": "A2",
+              "beds": 1,
+              "baths": 1,
+              "sqft": 804
+            },
+            {
+              "plan": "B1",
+              "beds": 2,
+              "baths": 2,
+              "sqft": 1096
+            }
+          ],
+          "provenance": {
+            "kind": "resolved",
+            "by": null,
+            "at": "2026-09-01",
+            "source": "ApartmentIQ"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads",
+            "website_faq",
+            "ai_answers"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-09-01",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "unit_level_details",
+          "label": "Unit-Level Details + Sq Ft",
+          "hint": "Per-unit-type breakdown — e.g. 'Studio: 600 sq ft · 1BR: 800 sq ft · 2BR: 1,200 sq ft.' One line per unit type. Add notes about specific unit features beyond the floor plan table.",
+          "type": "textarea",
+          "options": null,
+          "value": "A1 homes on floors 4–6 have the renovated finishes; B1 corner homes have wraparound balconies",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-08-20",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-08-20",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "amenities",
+      "title": "Amenities",
+      "completeness": 50,
+      "fields": [
+        {
+          "key": "property_amenities",
+          "label": "Property Amenities",
+          "hint": "Community-level: pool, fitness center, clubhouse, etc. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "Resort-style pool, fitness center, clubhouse, dog park",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-01-15",
+            "source": "the website"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads",
+            "website_faq",
+            "ai_answers"
+          ],
+          "internal": false,
+          "stale": true,
+          "last_updated": "2026-01-15",
+          "pending": null,
+          "suggestion": {
+            "id": "sug-0021-amenities",
+            "source": "site_scrape",
+            "value": "Saltwater pool with cabanas, 24-hour fitness center, rooftop lounge, dog park and pet spa, package lockers, EV charging",
+            "reason": "We found this amenity list on lyvbroadway.com on Sep 3. The profile's list is from January and leaves out the rooftop lounge and pet spa."
+          },
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "unit_features",
+          "label": "In-Unit Features",
+          "hint": "Inside the unit: stainless appliances, walk-in closets, etc. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": null,
+          "provenance": {
+            "kind": "empty",
+            "by": null,
+            "at": null,
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": null,
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "geography",
+      "title": "Geography",
+      "completeness": 77,
+      "fields": [
+        {
+          "key": "neighborhood",
+          "label": "In (Located In)",
+          "hint": "The neighborhood the property sits IN (e.g., 'South Congress', not 'Austin').",
+          "type": "text",
+          "options": null,
+          "value": "Downtown Carrollton",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": "the website"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads",
+            "website_faq",
+            "ai_answers"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "nearby_neighborhoods",
+          "label": "Near (Adjacent Areas)",
+          "hint": "Desirable areas the property is NEAR, worth name-dropping in copy. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "Old Downtown Carrollton, Josey Ranch, Farmers Branch",
+          "provenance": {
+            "kind": "override",
+            "by": "Morgan Lee",
+            "at": "2026-08-12",
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads",
+            "website_faq",
+            "ai_answers"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-08-12",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "landmarks",
+          "label": "Close To (Landmarks)",
+          "hint": "Specific places / institutions / parks the property is close to. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "Downtown Carrollton, Downtown Carrollton Station (DART Green Line), Josey Ranch Lake",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": "the website"
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads",
+            "website_faq",
+            "ai_answers"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": {
+            "id": "sug-0021-landmarks",
+            "source": "geo_claim",
+            "value": "Downtown Carrollton, Downtown Carrollton Station (DART Green Line), Josey Ranch Lake, Sandy Lake Park",
+            "reason": "ChatGPT and Perplexity answers name Sandy Lake Park near LYV Broadway, and the profile doesn't list it. Add it if it's right; dismiss it and we'll correct the answer."
+          },
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "neighborhood_highlights",
+          "label": "Neighborhood Highlights",
+          "hint": "What makes the area desirable — walkability, dining, vibe. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": null,
+          "provenance": {
+            "kind": "empty",
+            "by": null,
+            "at": null,
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": null,
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "nearby_employers",
+          "label": "Nearby Employers",
+          "hint": "Anchor employers that drive renter demand. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "Carrollton-Farmers Branch ISD, Western Extrusions, Halliburton Carrollton",
+          "provenance": {
+            "kind": "resolved",
+            "by": null,
+            "at": "2026-08-03",
+            "source": "the website"
+          },
+          "ad_facing": false,
+          "used_in": [],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-08-03",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "competitors",
+      "title": "Competitors",
+      "completeness": 100,
+      "fields": [
+        {
+          "key": "competitors",
+          "label": "Competitors",
+          "hint": "Same-market rent peers. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "The Reserve at Carrollton, Carrollton Station, Solana Carrollton",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-02-20",
+            "source": "ApartmentIQ"
+          },
+          "ad_facing": false,
+          "used_in": [
+            "reports"
+          ],
+          "internal": false,
+          "stale": true,
+          "last_updated": "2026-02-20",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "strategy",
+      "title": "Strategy & Goals",
+      "completeness": 75,
+      "fields": [
+        {
+          "key": "goals",
+          "label": "Overarching Goals",
+          "hint": "Top-line goals for this property. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "Hold 93% leased through the winter; lift renewals to 55%",
+          "provenance": {
+            "kind": "override",
+            "by": "Morgan Lee",
+            "at": "2026-05-30",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "reports"
+          ],
+          "internal": false,
+          "stale": true,
+          "last_updated": "2026-05-30",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "initiatives",
+          "label": "Short- vs Long-Term Initiatives",
+          "hint": "What to prioritize near-term vs longer-term. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "A1 ad variants from the renovated photos; landing page that matches the Apartments.com listing",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-09-02",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "reports"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-09-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "challenges",
+          "label": "Anticipated Challenges (6–8 mo)",
+          "hint": "Internal context — challenges to plan around. Not ad copy.",
+          "type": "textarea",
+          "options": null,
+          "value": "One-bedrooms are the slowest homes to lease",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-09-02",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-09-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "priorities",
+          "label": "Additional Priorities",
+          "hint": "Other focus areas we should know about. Internal.",
+          "type": "textarea",
+          "options": null,
+          "value": "Cut lead-to-tour time; keep cost per lease under $350",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-09-02",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-09-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "onsite_developments",
+          "label": "Upcoming Onsite Developments",
+          "hint": "Renovations, rebranding, amenity closures, etc. Include start + completion DATES (e.g. 'Pool deck reno — May 2026 to Aug 2026'). One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "Package lockers installed in August; EV chargers coming in October",
+          "provenance": {
+            "kind": "override",
+            "by": "Morgan Lee",
+            "at": "2026-08-28",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-08-28",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "local_partnerships",
+          "label": "Local Business Partnerships",
+          "hint": "Partnerships with local businesses worth featuring. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": null,
+          "provenance": {
+            "kind": "empty",
+            "by": null,
+            "at": null,
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [],
+          "internal": false,
+          "stale": false,
+          "last_updated": null,
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "onsite_events",
+          "label": "Planned Onsite Events",
+          "hint": "Events targeting new prospects. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": null,
+          "provenance": {
+            "kind": "empty",
+            "by": null,
+            "at": null,
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [],
+          "internal": false,
+          "stale": false,
+          "last_updated": null,
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "website_priorities",
+          "label": "Website Page Priorities",
+          "hint": "Which pages of the property's website we CAN touch and which we CANNOT touch. Use this as the working agreement with PM on page-level edits. One page per line — e.g. 'Amenities: editable · Floor Plans: PM-owned · Contact: locked'. Internal.",
+          "type": "textarea",
+          "options": null,
+          "value": "Floor plan pages first; add the pet FAQ",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-09-02",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-09-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "operations",
+      "title": "Operations & Tech",
+      "completeness": 80,
+      "fields": [
+        {
+          "key": "marketing_budget",
+          "label": "Marketing Budget",
+          "hint": "Total monthly marketing budget (and/or per-unit). Internal.",
+          "type": "text",
+          "options": null,
+          "value": "$4,638 a month",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-09-01",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-09-01",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "pms",
+          "label": "Property Management System (PMS)",
+          "hint": "e.g. Yardi, RealPage.",
+          "type": "text",
+          "options": null,
+          "value": "Yardi Voyager",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2025-11-03",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": true,
+          "last_updated": "2025-11-03",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "cms",
+          "label": "Website CMS",
+          "hint": "What powers the website.",
+          "type": "text",
+          "options": null,
+          "value": "RPM WordPress",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "chatbot",
+          "label": "Chatbot / Assistant",
+          "hint": "Any on-site chatbot / automated assistant.",
+          "type": "text",
+          "options": null,
+          "value": null,
+          "provenance": {
+            "kind": "empty",
+            "by": null,
+            "at": null,
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": null,
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "website_last_updated",
+          "label": "Website Creative Last Updated",
+          "hint": "When the site was last refreshed.",
+          "type": "text",
+          "options": null,
+          "value": "2026-08-14",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-08-14",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-08-14",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "building_style",
+          "label": "Building Style",
+          "hint": "Salesforce field — check for accuracy.",
+          "type": "text",
+          "options": null,
+          "value": "Mid-rise, podium parking",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "asset_class",
+          "label": "Asset Class",
+          "hint": "Salesforce field — check for accuracy.",
+          "type": "text",
+          "options": null,
+          "value": "A-",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "elise_ai",
+          "label": "Elise AI Participation",
+          "hint": "Salesforce field — check for accuracy.",
+          "type": "text",
+          "options": null,
+          "value": null,
+          "provenance": {
+            "kind": "empty",
+            "by": null,
+            "at": null,
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": null,
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "crm",
+          "label": "CRM",
+          "hint": "Salesforce field — check for accuracy.",
+          "type": "text",
+          "options": null,
+          "value": "Hyly",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "host_name",
+          "label": "Host Name",
+          "hint": "Salesforce field — check for accuracy.",
+          "type": "text",
+          "options": null,
+          "value": "RPM Web Hosting",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "guardrails",
+      "title": "Guardrails",
+      "completeness": 100,
+      "fields": [
+        {
+          "key": "must_include",
+          "label": "Must Include / Key Messages",
+          "hint": "Phrases / themes copy MUST work in. One per line.",
+          "type": "textarea",
+          "options": null,
+          "value": "Pet-friendly; DART Green Line access",
+          "provenance": {
+            "kind": "override",
+            "by": "Morgan Lee",
+            "at": "2026-05-02",
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": true,
+          "last_updated": "2026-05-02",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "forbidden_phrases",
+          "label": "Things NOT to Say",
+          "hint": "Phrases / topics to avoid. One per line. Anything sensitive (litigation, PR risk, fair housing) goes here.",
+          "type": "textarea",
+          "options": null,
+          "value": "Luxury (we're lifestyle tier); \"best in Carrollton\"",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": null
+          },
+          "ad_facing": true,
+          "used_in": [
+            "ads"
+          ],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "motivations_considerations",
+          "label": "Primary Motivations & Considerations",
+          "hint": "WHAT motivates renters at this property — lifestyle, amenities, commute, walkability. Fair Housing safe: focus on needs/preferences, NOT demographics (no age, family status, race, religion, national origin, disability, or schools).",
+          "type": "textarea",
+          "options": null,
+          "value": "Renters compare commute time and pet rules before anything else",
+          "provenance": {
+            "kind": "override",
+            "by": "Morgan Lee",
+            "at": "2026-08-12",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-08-12",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "excluded_neighborhoods",
+          "label": "Neighborhoods NOT to Target",
+          "hint": "Areas to avoid in ad copy / keyword targeting (NOT geo-targeting). One per line. Keep Fair Housing compliant.",
+          "type": "textarea",
+          "options": null,
+          "value": "None",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        },
+        {
+          "key": "client_expectations",
+          "label": "Firm Client Expectations",
+          "hint": "Hard rules from the client — e.g. agency not allowed to independently update copy. Internal.",
+          "type": "textarea",
+          "options": null,
+          "value": "Monthly owner call; cost per lease trend in every report",
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-07-08",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [
+            "internal"
+          ],
+          "internal": true,
+          "stale": false,
+          "last_updated": "2026-07-08",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "tracking",
+      "title": "Tracking & Attribution",
+      "completeness": 100,
+      "fields": [
+        {
+          "key": "tracking",
+          "label": "Tracking Numbers & UTMs",
+          "hint": "Call-tracking number + UTM string per source. Powers attribution across paid + organic channels. One row per source.",
+          "type": "tracking_table",
+          "options": null,
+          "value": [
+            {
+              "channel": "Google Ads",
+              "tag": "AW-5520194431",
+              "status": "firing"
+            },
+            {
+              "channel": "GA4",
+              "tag": "G-LYV24BRD",
+              "status": "firing"
+            },
+            {
+              "channel": "Meta",
+              "tag": "Pixel 814492",
+              "status": "firing"
+            }
+          ],
+          "provenance": {
+            "kind": "override",
+            "by": "Dana R.",
+            "at": "2026-08-14",
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [],
+          "internal": false,
+          "stale": false,
+          "last_updated": "2026-08-14",
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    },
+    {
+      "key": "documents",
+      "title": "Documents",
+      "completeness": 0,
+      "fields": [
+        {
+          "key": "documents",
+          "label": "Pitch Decks, RFPs & Brand Guides",
+          "hint": "Link any pitch deck, RFP, or brand guide so the whole brief lives in one place.",
+          "type": "documents",
+          "options": null,
+          "value": null,
+          "provenance": {
+            "kind": "empty",
+            "by": null,
+            "at": null,
+            "source": null
+          },
+          "ad_facing": false,
+          "used_in": [],
+          "internal": false,
+          "stale": false,
+          "last_updated": null,
+          "pending": null,
+          "suggestion": null,
+          "last_review": null,
+          "fair_housing_review": null
+        }
+      ]
+    }
+  ],
+  "gaps": []
+}

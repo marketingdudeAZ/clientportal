@@ -34,7 +34,7 @@ PORT = 5057
 app = Flask(__name__)
 
 # Demo switches for screenshots, flipped at /__preview/<name>?on=1|0.
-SWITCHES = {"approvals_empty": False, "cannot_decide": False}
+SWITCHES = {"approvals_empty": False, "cannot_decide": False, "client_editor": False}
 
 
 @app.get("/__preview/<name>")
@@ -260,6 +260,9 @@ def item(item_id: str) -> dict | None:
     for it in all_items():
         if it["id"] == item_id:
             return it
+    for it in profile_update_items():
+        if it["id"] == item_id:
+            return it
     return None
 
 
@@ -320,7 +323,7 @@ def content(company_id: str) -> dict:
 # ── screens ──────────────────────────────────────────────────────────────────
 
 def me_data() -> dict:
-    return {"email": book()["owner_email"], "role": "internal", "verified": True, "can_decide": not SWITCHES["cannot_decide"],
+    return {"email": book()["owner_email"], "role": "client" if SWITCHES["client_editor"] else "internal", "verified": True, "can_decide": not SWITCHES["cannot_decide"],
             "companies": [{"company_id": p["company_id"], "uuid": hashlib.md5(p["company_id"].encode()).hexdigest(), "name": p["name"],
                            "city": p["city"], "state": p["state"], "units": p["units"]} for p in props()]}
 
@@ -336,12 +339,12 @@ def _status(p: dict) -> str | None:
     return "Lease-up" if p["occupied"] / p["units"] < 0.85 else "Stabilized"
 
 
-def dashboard() -> dict:
+def dashboard(client: bool = False) -> dict:
     ps = props()
     known = [p for p in ps if p["occupied"] is not None]
     occupied, units_known = sum(p["occupied"] for p in known), sum(p["units"] for p in known)
     leases_lm, spend_lm = sum(p["leases_last_month"] for p in known), sum(p["spend_last_month"] for p in known)
-    waiting = _waiting_items()
+    waiting = _waiting_items() + ([] if client else profile_update_items())
     actions_taken = sum(_h(p["company_id"] + "auto", 3, 11) for p in known)
     vis = round(sum(p["ai_visibility"] for p in known) / len(known))
     kpis = {
@@ -368,19 +371,21 @@ def dashboard() -> dict:
         "properties": [{"company_id": p["company_id"], "name": p["name"], "units": p["units"],
                         "occupancy": _metric(_occ(p), "aptiq"), "to_lease_90d": _metric(p["units_to_lease_90d"], "aptiq_exposure"),
                         "leases_month": _metric(p["leases_this_month"], "hyly", "2026-09-14T11:00:00Z"),
-                        "status": _status(p), "health": p["health"], "band": p["band"]} for p in order],
+                        "status": _status(p), "profile_completeness": profile_completeness_pct(p["company_id"], client),
+                        "health": p["health"], "band": p["band"]} for p in order],
         "activity": activity,
-        "waiting": [{"item_id": it["id"], "company_id": it["company_id"], "title": it["title"], "subtitle": it["cost_note"] or (it["why"] or {}).get("text"), "category": it["category"]} for it in waiting],
+        "waiting": [{"item_id": it["id"], "company_id": it["company_id"], "title": it["title"], "subtitle": it["cost_note"] or (it["why"] or {}).get("text"), "category": it["category"]} for it in waiting] + profile_checkins(client),
         "loop_status": {"running": True, "property_count": len(ps), "last_pass": "2026-09-14T08:00:00Z"},
         "gaps": [{"message": "Cedar Falls Commons has no ApartmentIQ read yet, so its occupancy and exposure are left out of the totals.", "field": "kpis.occupancy", "source": "aptiq"}],
     }
 
 
-def approvals(category: str | None = None) -> dict:
+def approvals(category: str | None = None, client: bool = False) -> dict:
     if SWITCHES["approvals_empty"]:
         waiting = []
     else:
-        waiting = _waiting_items()
+        # Profile updates are reviewed by RPM staff only; clients never see them in Approvals.
+        waiting = _waiting_items() + ([] if client else profile_update_items())
     rows = [{"item_id": it["id"], "company_id": it["company_id"], "property": prop(it["company_id"])["name"], "action": it["title"],
              "category": it["category"], "savings_per_year": _metric(it.get("_savings"), "hubspot_line_items") if it.get("_savings") else None,
              "can_edit": False} for it in waiting]
@@ -680,7 +685,7 @@ def _preview_role_gate():
     # Mirrors the API contract: the header is honored on reads only, and /me ignores it.
     if request.method == "GET" and _as_client() and request.path.startswith(INTERNAL_ONLY_PATHS):
         return jsonify({"error": "forbidden", "detail": "Internal only."}), 403
-    if request.method == "POST" and _as_client():
+    if request.method in ("POST", "PATCH", "PUT", "DELETE") and _as_client():
         return jsonify({"error": "preview_read_only", "detail": "Previewing as a client is read-only."}), 403
     return None
 
@@ -752,6 +757,10 @@ def decision(item_id: str):
     if body.get("action") == "not_now" and not body.get("reason"):
         return jsonify({"error": "reason is required when the action is not_now"}), 400
     it = item(item_id)
+    if it and it["source"] == "profile_update":
+        if _viewer_client():
+            return jsonify({"error": "forbidden", "detail": "Profile updates are reviewed by RPM."}), 403
+        apply_profile_decision(item_id, body["action"], body.get("reason"))
     if it:
         return jsonify(decision_for(it))
     data = copy.deepcopy(_fixture("decision"))
@@ -834,6 +843,10 @@ def undo(item_id: str):
     body = request.get_json(silent=True) or {}
     if not body.get("company_id"):
         return jsonify({"error": "company_id is required"}), 400
+    if item_id.startswith("profile_update:"):
+        restored = undo_profile_decision(item_id)
+        if restored:
+            return jsonify({"item": _public(restored), "undone": True})
     it = item(item_id)
     if not it or it["category"] == "vendor":
         # Demonstrates the 409 path: a vendor email has already gone out.
@@ -850,12 +863,12 @@ def _company_or_404():
 
 @app.get("/api/workspace/dashboard")
 def dashboard_route():
-    return jsonify(dashboard())
+    return jsonify(dashboard(client=_viewer_client()))
 
 
 @app.get("/api/workspace/approvals")
 def approvals_route():
-    return jsonify(approvals(request.args.get("category") or None))
+    return jsonify(approvals(request.args.get("category") or None, client=_viewer_client()))
 
 
 @app.get("/api/workspace/property-overview")
@@ -1020,6 +1033,650 @@ def ask_answer(key: str):
     data["question"] = key
     data["label"] = next(q["label"] for q in _fixture("ask_questions")["questions"] if q["key"] == key)
     return jsonify(data)
+
+
+# ══ Round 5: spend sheet and property profile ═════════════════════════════════
+# "Round 5 — Spend sheet and Property profile" in the build plan. The spend sheet
+# follows spend_sheet.py's row fields and SKU columns; the profile follows
+# community_brief.SECTIONS (imported, so labels, hints, types and options never
+# drift). Internal columns and fields are removed here, server-side, for a
+# client viewer and in preview-as-client, never hidden by the page.
+
+R5_NOW = datetime(2026, 9, 15, 13, 0, tzinfo=timezone.utc)
+SPEND_AS_OF = "2026-09-15T06:10:00Z"
+STAFF_NAME, CLIENT_NAME = "Dana R.", "Morgan Lee"
+
+SPEND_META = [("property_name", "Property"), ("status", "Status"), ("market", "Market"), ("manager", "Manager")]
+SPEND_CHANNELS = [("search", "Search"), ("pmax", "Performance Max"), ("paid_social", "Paid social"), ("geofence", "Geofence"),
+                  ("display", "Display"), ("retargeting", "Retargeting"), ("ctv", "CTV / OTT"), ("seo", "SEO"),
+                  ("social_posting", "Social posting"), ("eblast", "Eblast"), ("email_drip", "Email drip"), ("demand_gen", "Demand Gen"),
+                  ("tiktok", "TikTok"), ("youtube", "YouTube"), ("reputation", "Reputation"), ("website_hosting", "Website hosting"),
+                  ("costar_package", "Apartments.com"), ("zillow_per_month", "Zillow")]
+# Internal-only keys (the spec's list). mgmt_fee and deal_amount are money; the rest are deal and quote details.
+SPEND_INTERNAL = [("mgmt_fee", "Mgmt fee"), ("ple_status", "PLE status"), ("deal_id", "Deal ID"), ("deal_name", "Deal"),
+                  ("deal_stage", "Deal stage"), ("deal_amount", "Deal amount"), ("quote_status", "Quote status"), ("quote_title", "Quote")]
+SPEND_INTERNAL_KEYS = {k for k, _ in SPEND_INTERNAL}
+SPEND_MONEY_INTERNAL = {"mgmt_fee", "deal_amount"}
+
+# The four properties with August reports use those reports' vendor splits, so the
+# sheet, plan.json and the reports agree (Google Ads splits into search and PMax).
+REPORT_SPLITS = {
+    "18234410021": {"search": 1762, "pmax": 1077, "seo": 800, "zillow_per_month": 556, "paid_social": 243, "costar_package": 200},
+    "26136316506": {"search": 6900, "pmax": 4120, "zillow_per_month": 1900, "paid_social": 1200, "costar_package": 1000},
+    "18234410112": {"costar_package": 3100, "search": 1925, "zillow_per_month": 500, "paid_social": 300},
+    "18234410087": {"search": 3700, "pmax": 2200, "costar_package": 3200, "paid_social": 2100},
+}
+MARKETS = {"Carrollton": "Dallas–Fort Worth", "Dallas": "Dallas–Fort Worth", "Plano": "Dallas–Fort Worth", "Frisco": "Dallas–Fort Worth",
+           "Irving": "Dallas–Fort Worth", "McKinney": "Dallas–Fort Worth", "Denton": "Dallas–Fort Worth", "Fort Worth": "Dallas–Fort Worth",
+           "Houston": "Houston", "Cypress": "Houston", "Austin": "Austin", "Round Rock": "Austin", "San Antonio": "San Antonio",
+           "Tampa": "Tampa Bay", "Orlando": "Orlando", "Jacksonville": "Jacksonville", "Atlanta": "Atlanta", "Brighton": "Denver",
+           "Denver": "Denver", "Aurora": "Denver", "Phoenix": "Phoenix", "Mesa": "Phoenix", "Charlotte": "Charlotte", "Nashville": "Nashville"}
+MANAGERS = ("Dana R.", "Marcus T.", "Priya S.", "Jordan K.")
+
+
+def _manager(p: dict) -> str:
+    return "Dana R." if p["company_id"] in REPORT_SPLITS else MANAGERS[_h(p["company_id"] + "mgr", 0, len(MANAGERS) - 1)]
+
+
+def _split_spend(p: dict) -> dict:
+    """Channel amounts for one property. Sums exactly to the book's monthly spend; absent channels are null, never 0."""
+    cid, total = p["company_id"], p["spend_last_month"]
+    if cid in REPORT_SPLITS:
+        return dict(REPORT_SPLITS[cid])
+    if total is None:
+        return {}
+    shares = [("pmax", 0.20), ("paid_social", 0.08), ("costar_package", 0.16), ("zillow_per_month", 0.09)]
+    out = {}
+    if total >= 3000:
+        out["seo"] = 800 if total >= 6000 else 500
+    if _h(cid + "rep", 0, 2) == 0:
+        out["reputation"] = 150
+    if _h(cid + "soc", 0, 3) == 0:
+        out["social_posting"] = 250
+    if _h(cid + "geo", 0, 5) == 0:
+        out["geofence"] = 400
+    rest = total - sum(out.values())
+    for key, share in shares:
+        if key == "zillow_per_month" and _h(cid + "zil", 0, 2) == 0:
+            continue
+        out[key] = int(round(rest * share / 5.0) * 5)
+    out["search"] = total - sum(out.values())
+    return out
+
+
+def _spend_row(p: dict) -> dict:
+    cid, name = p["company_id"], p["name"]
+    values = {k: None for k, _ in SPEND_CHANNELS}
+    values.update(_split_spend(p))
+    total = sum(v for v in values.values() if isinstance(v, (int, float))) if any(values.values()) else None
+    new = p["occupied"] is None
+    values.update({
+        "mgmt_fee": 450 if cid == "18234410021" else (None if new else int(max(350, round((total or 0) * 0.1 / 25) * 25))),
+        "ple_status": "Onboarding" if new else "Active",
+        "deal_id": str(9_000_000 + int(cid[-6:])),
+        "deal_name": f"{name} — FY26-27 digital",
+        "deal_stage": "Contract sent" if new else "Closed won",
+        "deal_amount": None if total is None else total * 12,
+        "quote_status": "Sent" if new else "Signed",
+        "quote_title": f"{name} digital marketing FY26-27",
+    })
+    return {"company_id": cid, "property_name": name, "status": "Onboarding" if new else _status(p), "market": MARKETS.get(p["city"], p["city"]),
+            "manager": _manager(p), "values": values, "total": total, "href": f"#/property/{cid}"}
+
+
+def spend_sheet(q: str = "", market: str = "", manager: str = "", status: str = "", sort: str = "property_name",
+                direction: str = "asc", page: int = 1, page_size: int = 50, client: bool = False) -> dict:
+    rows = [_spend_row(p) for p in props()]
+    filters = {"markets": sorted({r["market"] for r in rows}), "managers": sorted({r["manager"] for r in rows}),
+               "statuses": sorted({r["status"] for r in rows if r["status"]})}
+    ql = (q or "").strip().lower()
+    rows = [r for r in rows if (not ql or ql in r["property_name"].lower() or ql in r["market"].lower())
+            and (not market or r["market"] == market) and (not manager or r["manager"] == manager) and (not status or r["status"] == status)]
+    channel_keys = [k for k, _ in SPEND_CHANNELS]
+    visible_value_keys = channel_keys + ([] if client else [k for k, _ in SPEND_INTERNAL])
+
+    def sort_key(r):
+        if sort in ("property_name", "status", "market", "manager"):
+            v = r[sort]
+        elif sort == "total":
+            v = r["total"]
+        elif sort in visible_value_keys:
+            v = r["values"].get(sort)
+        else:
+            v = r["property_name"]
+        return (v is None, v if not isinstance(v, str) else v.lower())
+
+    rows.sort(key=sort_key, reverse=False)
+    if direction == "desc":
+        present = [r for r in rows if sort_key(r)[0] is False]
+        rows = list(reversed(present)) + [r for r in rows if sort_key(r)[0] is True]
+    totals = {}
+    for k in channel_keys + ([] if client else sorted(SPEND_MONEY_INTERNAL)):
+        nums = [r["values"][k] for r in rows if isinstance(r["values"].get(k), (int, float))]
+        totals[k] = sum(nums) if nums else None
+    grand = [r["total"] for r in rows if r["total"] is not None]
+    count = len(rows)
+    page, page_size = max(1, page), max(1, min(200, page_size))
+    shown = rows[(page - 1) * page_size: page * page_size]
+    if client:
+        for r in shown:
+            r["values"] = {k: v for k, v in r["values"].items() if k not in SPEND_INTERNAL_KEYS}
+    columns = ([{"key": k, "label": lbl, "group": "meta", "internal": False} for k, lbl in SPEND_META] +
+               [{"key": k, "label": lbl, "group": "channel", "internal": False} for k, lbl in SPEND_CHANNELS] +
+               ([] if client else [{"key": k, "label": lbl, "group": "internal", "internal": True} for k, lbl in SPEND_INTERNAL]) +
+               [{"key": "total", "label": "Total", "group": "meta", "internal": False}])
+    gaps = [{"message": "Cedar Falls Commons is still onboarding, so it has no line items yet.", "field": "rows.values", "source": "hubspot_line_items"}]
+    if any(r["company_id"] == "18234410087" for r in rows):
+        gaps.append({"message": "Skye Reserve's $1,200 ApartmentList.com listing has no spend sheet column, so its total here is $11,200; the August report counts $12,400.",
+                     "field": "rows.total", "source": "hubspot_line_items"})
+    return {"as_of": SPEND_AS_OF, "source": "hubspot_line_items", "scope": "client" if client else "portfolio", "columns": columns, "rows": shown,
+            "totals": {"values": totals, "total": sum(grand) if grand else None}, "count": count, "page": page, "page_size": page_size,
+            "filters": filters, "gaps": gaps}
+
+
+# ── Property profile ──────────────────────────────────────────────────────────
+
+def _brief_sections():
+    sys.path.insert(0, str(REPO / "webhook-server"))
+    import community_brief as cb
+    return cb.SECTIONS
+
+
+SECTION_KEYS = {"Identity": "identity", "Voice & Positioning": "voice", "Brand & Story": "brand", "Lifecycle": "lifecycle",
+                "Inventory": "inventory", "Amenities": "amenities", "Geography": "geography", "Competitors": "competitors",
+                "Strategy & Goals": "strategy", "Operations & Tech": "operations", "Guardrails": "guardrails",
+                "Tracking & Attribution": "tracking", "Documents": "documents"}
+# The preview mirrors the spec's classification; the API owns the single mapping next to SECTIONS.
+AD_FACING = {"name", "address", "city", "state", "zip", "domain", "voice_tier", "unit_noun", "advertised_name", "short_name",
+             "taglines", "brand_adjectives", "differentiators", "romance", "residents_love", "floor_plans", "property_amenities",
+             "unit_features", "neighborhood", "nearby_neighborhoods", "landmarks", "neighborhood_highlights", "must_include", "forbidden_phrases"}
+VOICE_PACK = {"voice_tier", "brand_adjectives", "taglines", "differentiators", "property_amenities", "floor_plans",
+              "neighborhood", "nearby_neighborhoods", "landmarks"}
+REPORT_FIELDS = {"goals", "initiatives", "lifecycle_state", "competitors"}
+STALE_DAYS = 90
+
+
+def _used_in(key: str, internal: bool) -> list:
+    if internal:
+        return ["internal"]
+    out = []
+    if key in AD_FACING:
+        out.append("ads")
+    if key in VOICE_PACK:
+        out += ["website_faq", "ai_answers"]
+    if key in REPORT_FIELDS:
+        out.append("reports")
+    return out
+
+
+def _weight(f: dict) -> int:
+    return 3 if (f["ad_facing"] or "ai_answers" in f["used_in"]) and not f["internal"] else 1
+
+
+LYV_PROFILE = {
+    "name": ("LYV Broadway", "resolved", None, "2025-06-02", "the company record"),
+    "address": ("1250 W Broadway St", "resolved", None, "2025-06-02", "the company record"),
+    "city": ("Carrollton", "resolved", None, "2025-06-02", "the company record"),
+    "state": ("TX", "resolved", None, "2025-06-02", "the company record"),
+    "zip": ("75006", "resolved", None, "2025-06-02", "the company record"),
+    "domain": ("lyvbroadway.com", "resolved", None, "2025-06-02", "the company record"),
+    "voice_tier": (["lifestyle"], "override", STAFF_NAME, "2026-07-08", "the rent-tier estimate"),
+    "unit_noun": (["apartment"], "resolved", None, "2026-07-08", "the website"),
+    "advertised_name": ("LYV Broadway Apartments", "override", STAFF_NAME, "2026-07-08", None),
+    "short_name": (None, "empty", None, None, None),
+    "former_property_name": (None, "empty", None, None, None),
+    "taglines": ("Your space. Your pace. LYV Broadway.", "override", STAFF_NAME, "2026-07-08", None),
+    "brand_adjectives": ("Modern, social, walkable, easygoing", "override", CLIENT_NAME, "2026-08-12", None),
+    "differentiators": ("Rooftop lounge with downtown views; a block from Downtown Carrollton Station on the DART Green Line; renovated one-bedrooms with in-home washers and dryers", "override", STAFF_NAME, "2026-08-12", None),
+    "romance": ("Bright white quartz kitchens, oversized windows and a rooftop lounge that catches the sunset over Downtown Carrollton.", "override", CLIENT_NAME, "2026-03-02", None),
+    "residents_love": ("The rooftop, the dog park and being able to take the train to work", "override", CLIENT_NAME, "2026-04-11", None),
+    "residents_dislike": ("Garage gate is slow at rush hour; package room fills up around holidays", "override", STAFF_NAME, "2026-07-21", None),
+    "target_resident": ("People who commute downtown by train and want a walkable neighborhood", "override", STAFF_NAME, "2026-07-21", None),
+    "lifecycle_state": ("stabilized", "resolved", None, "2026-09-01", "ApartmentIQ"),
+    "year_built": ("2019", "resolved", None, "2025-06-02", "the company record"),
+    "floor_plans": ([{"plan": "S1", "beds": 0, "baths": 1, "sqft": 548}, {"plan": "A1", "beds": 1, "baths": 1, "sqft": 712},
+                     {"plan": "A2", "beds": 1, "baths": 1, "sqft": 804}, {"plan": "B1", "beds": 2, "baths": 2, "sqft": 1096}],
+                    "resolved", None, "2026-09-01", "ApartmentIQ"),
+    "unit_level_details": ("A1 homes on floors 4–6 have the renovated finishes; B1 corner homes have wraparound balconies", "override", STAFF_NAME, "2026-08-20", None),
+    "property_amenities": ("Resort-style pool, fitness center, clubhouse, dog park", "override", STAFF_NAME, "2026-01-15", "the website"),
+    "unit_features": (None, "empty", None, None, None),
+    "neighborhood": ("Downtown Carrollton", "override", STAFF_NAME, "2026-07-08", "the website"),
+    "nearby_neighborhoods": ("Old Downtown Carrollton, Josey Ranch, Farmers Branch", "override", CLIENT_NAME, "2026-08-12", None),
+    "landmarks": ("Downtown Carrollton, Downtown Carrollton Station (DART Green Line), Josey Ranch Lake", "override", STAFF_NAME, "2026-07-08", "the website"),
+    "neighborhood_highlights": (None, "empty", None, None, None),
+    "nearby_employers": ("Carrollton-Farmers Branch ISD, Western Extrusions, Halliburton Carrollton", "resolved", None, "2026-08-03", "the website"),
+    "competitors": ("The Reserve at Carrollton, Carrollton Station, Solana Carrollton", "override", STAFF_NAME, "2026-02-20", "ApartmentIQ"),
+    "goals": ("Hold 93% leased through the winter; lift renewals to 55%", "override", CLIENT_NAME, "2026-05-30", None),
+    "initiatives": ("A1 ad variants from the renovated photos; landing page that matches the Apartments.com listing", "override", STAFF_NAME, "2026-09-02", None),
+    "challenges": ("One-bedrooms are the slowest homes to lease", "override", STAFF_NAME, "2026-09-02", None),
+    "priorities": ("Cut lead-to-tour time; keep cost per lease under $350", "override", STAFF_NAME, "2026-09-02", None),
+    "onsite_developments": ("Package lockers installed in August; EV chargers coming in October", "override", CLIENT_NAME, "2026-08-28", None),
+    "local_partnerships": (None, "empty", None, None, None),
+    "onsite_events": (None, "empty", None, None, None),
+    "website_priorities": ("Floor plan pages first; add the pet FAQ", "override", STAFF_NAME, "2026-09-02", None),
+    "marketing_budget": ("$4,638 a month", "override", STAFF_NAME, "2026-09-01", None),
+    "pms": ("Yardi Voyager", "override", STAFF_NAME, "2025-11-03", None),
+    "cms": ("RPM WordPress", "override", STAFF_NAME, "2026-07-08", None),
+    "chatbot": (None, "empty", None, None, None),
+    "website_last_updated": ("2026-08-14", "override", STAFF_NAME, "2026-08-14", None),
+    "building_style": ("Mid-rise, podium parking", "override", STAFF_NAME, "2026-07-08", None),
+    "asset_class": ("A-", "override", STAFF_NAME, "2026-07-08", None),
+    "elise_ai": (None, "empty", None, None, None),
+    "crm": ("Hyly", "override", STAFF_NAME, "2026-07-08", None),
+    "host_name": ("RPM Web Hosting", "override", STAFF_NAME, "2026-07-08", None),
+    "must_include": ("Pet-friendly; DART Green Line access", "override", CLIENT_NAME, "2026-05-02", None),
+    "forbidden_phrases": ("Luxury (we're lifestyle tier); \"best in Carrollton\"", "override", STAFF_NAME, "2026-07-08", None),
+    "motivations_considerations": ("Renters compare commute time and pet rules before anything else", "override", CLIENT_NAME, "2026-08-12", None),
+    "excluded_neighborhoods": ("None", "override", STAFF_NAME, "2026-07-08", None),
+    "client_expectations": ("Monthly owner call; cost per lease trend in every report", "override", STAFF_NAME, "2026-07-08", None),
+    "tracking": ([{"channel": "Google Ads", "tag": "AW-5520194431", "status": "firing"}, {"channel": "GA4", "tag": "G-LYV24BRD", "status": "firing"},
+                  {"channel": "Meta", "tag": "Pixel 814492", "status": "firing"}], "override", STAFF_NAME, "2026-08-14", None),
+    "documents": (None, "empty", None, None, None),
+}
+
+PROFILES: dict = {}
+PROFILE_UNDO: dict = {}
+
+
+def _reset_profiles():
+    PROFILES.clear()
+    PROFILE_UNDO.clear()
+
+
+def _light_profile(p: dict) -> dict:
+    """A consistent, lighter profile for the other 34 properties, from the book's own facts."""
+    n, city, cid = p["name"], p["city"], p["company_id"]
+    new = p["occupied"] is None
+    tier = ["standard"] if (p["health"] or 0) < 65 else ["lifestyle"]
+    stale = "2026-04-01" if _h(cid + "stale", 0, 2) == 0 else "2026-08-01"
+    base = {
+        "name": (n, "resolved", None, "2025-06-02", "the company record"), "city": (city, "resolved", None, "2025-06-02", "the company record"),
+        "state": (p["state"], "resolved", None, "2025-06-02", "the company record"), "domain": (p["domain"], "resolved", None, "2025-06-02", "the company record"),
+        "unit_noun": (["apartment"], "resolved", None, "2026-07-08", "the website"),
+    }
+    if new:
+        return base
+    base.update({
+        "voice_tier": (tier, "resolved", None, "2026-07-08", "the rent-tier estimate"),
+        "advertised_name": (n, "override", STAFF_NAME, "2026-07-08", None),
+        "taglines": (f"Home, made easy at {n}.", "override", STAFF_NAME, stale, None),
+        "property_amenities": ("Pool, fitness center, clubhouse", "resolved", None, "2026-08-03", "the website"),
+        "neighborhood": (city, "resolved", None, "2026-08-03", "the website"),
+        "lifecycle_state": ("lease_up" if _status(p) == "Lease-up" else "stabilized", "resolved", None, "2026-09-01", "ApartmentIQ"),
+        "competitors": (f"The Reserve at {city}, {city} Station, Solana {city}", "resolved", None, "2026-09-01", "ApartmentIQ"),
+        "goals": (f"Hold occupancy at {n} through the winter", "override", STAFF_NAME, stale, None),
+        "pms": ("Yardi Voyager", "override", STAFF_NAME, "2026-07-08", None),
+    })
+    return base
+
+
+def _seed_profile(cid: str) -> dict:
+    p = prop(cid)
+    seed = LYV_PROFILE if cid == "18234410021" else _light_profile(p)
+    state = {}
+    for title, fields in _brief_sections():
+        for f in fields:
+            value, kind, by, at, source = seed.get(f.key, (None, "empty", None, None, None))
+            state[f.key] = {"value": copy.deepcopy(value), "provenance": {"kind": kind, "by": by, "at": at, "source": source},
+                            "last_updated": at, "pending": None, "suggestion": None, "fair_housing_review": None, "last_review": None,
+                            "history": ([{"at": at, "by": by or (source and f"From {source}") or "RPM Digital", "action": "edited" if kind == "override" else "synced",
+                                          "value": copy.deepcopy(value), "note": None}] if at else [])}
+    if cid == "18234410021":
+        state["taglines"]["pending"] = {"proposed_value": "Modern Carrollton living, minutes from the Green Line.", "by": CLIENT_NAME,
+                                        "at": "2026-09-12T15:20:00Z", "item_id": "profile_update:0021-taglines"}
+        state["taglines"]["history"].append({"at": "2026-09-12T15:20:00Z", "by": CLIENT_NAME, "action": "proposed",
+                                             "value": "Modern Carrollton living, minutes from the Green Line.", "note": "Sent to RPM for review"})
+        state["property_amenities"]["suggestion"] = {
+            "id": "sug-0021-amenities", "source": "site_scrape",
+            "value": "Saltwater pool with cabanas, 24-hour fitness center, rooftop lounge, dog park and pet spa, package lockers, EV charging",
+            "reason": "We found this amenity list on lyvbroadway.com on Sep 3. The profile's list is from January and leaves out the rooftop lounge and pet spa."}
+        state["landmarks"]["suggestion"] = {
+            "id": "sug-0021-landmarks", "source": "geo_claim",
+            "value": "Downtown Carrollton, Downtown Carrollton Station (DART Green Line), Josey Ranch Lake, Sandy Lake Park",
+            "reason": "ChatGPT and Perplexity answers name Sandy Lake Park near LYV Broadway, and the profile doesn't list it. Add it if it's right; dismiss it and we'll correct the answer."}
+        state["romance"]["fair_housing_review"] = _fh_check(state["romance"]["value"])
+    return state
+
+
+def _fh_check(value) -> dict | None:
+    sys.path.insert(0, str(REPO / "webhook-server"))
+    from skills import workspace_common as wcm
+    text = value if isinstance(value, str) else json.dumps(value)
+    return wcm.fair_housing_review(text)
+
+
+def _profile_state(cid: str) -> dict:
+    if cid not in PROFILES:
+        PROFILES[cid] = _seed_profile(cid)
+    return PROFILES[cid]
+
+
+def _filled(v) -> bool:
+    if v is None:
+        return False
+    if isinstance(v, (list, dict, str)):
+        return len(v) > 0 if not isinstance(v, str) else bool(v.strip())
+    return True
+
+
+def _days_old(at: str | None) -> int | None:
+    if not at:
+        return None
+    d = datetime.fromisoformat(at.replace("Z", "+00:00")) if "T" in at else datetime.fromisoformat(at + "T00:00:00+00:00")
+    return (R5_NOW - d).days
+
+
+def _field_out(f, st: dict, client: bool) -> dict:
+    internal = bool(f.internal)
+    days = _days_old(st["last_updated"])
+    out = {"key": f.key, "label": f.label, "hint": f.hint or None, "type": f.type, "options": list(f.options or []) or None,
+           "value": copy.deepcopy(st["value"]), "provenance": dict(st["provenance"]), "ad_facing": f.key in AD_FACING and not internal,
+           "used_in": _used_in(f.key, internal), "internal": internal,
+           # Read-only fields come from the company record; nobody can confirm or edit them here, so they never go stale.
+           "stale": bool(f.type != "readonly" and _filled(st["value"]) and days is not None and days >= STALE_DAYS), "last_updated": st["last_updated"],
+           "pending": copy.deepcopy(st["pending"]), "suggestion": copy.deepcopy(st["suggestion"]),
+           "last_review": copy.deepcopy(st["last_review"])}
+    if not client:
+        out["fair_housing_review"] = copy.deepcopy(st["fair_housing_review"])
+    return out
+
+
+def _completeness(fields: list) -> dict:
+    total = sum(_weight(f) for f in fields)
+    have = sum(_weight(f) for f in fields if _filled(f["value"]))
+    missing = [f for f in fields if not _filled(f["value"]) and f["type"] != "readonly"]
+    missing.sort(key=lambda f: (-_weight(f), -len([u for u in f["used_in"] if u != "internal"])))
+    return {"pct": round(100 * have / total) if total else None, "weighted": True,
+            "top_missing": [{"key": f["key"], "label": f["label"], "used_in": f["used_in"]} for f in missing[:3]]}
+
+
+def profile(cid: str, client: bool = False) -> dict:
+    p = prop(cid)
+    state = _profile_state(cid)
+    sections, all_fields = [], []
+    for title, fields in _brief_sections():
+        out = [_field_out(f, state[f.key], client) for f in fields if not (client and f.internal)]
+        if not out:
+            continue
+        all_fields += out
+        sections.append({"key": SECTION_KEYS.get(title, title.lower()), "title": title, "completeness": _completeness(out)["pct"], "fields": out})
+    stale = [f["key"] for f in all_fields if f["stale"]]
+    dates = [f["last_updated"] for f in all_fields if f["last_updated"]]
+    gaps = []
+    if p["occupied"] is None:
+        gaps.append({"message": f"{p['name']} is onboarding, so most of its profile hasn't been filled in yet.", "field": "sections"})
+    if not any(f["suggestion"] and f["suggestion"]["source"] == "geo_claim" for f in all_fields):
+        gaps.append({"message": "No GEO claims conflict with this profile yet, so there are no suggestions from AI answers.", "field": "suggestion", "source": "geo_claims"})
+    return {"property": {"company_id": cid, "name": p["name"], "city": p["city"], "state": p["state"]},
+            "completeness": _completeness(all_fields),
+            "last_updated": max(dates) if dates else None,
+            "checkin": {"due": bool(stale), "stale_fields": stale},
+            "sections": sections, "gaps": gaps}
+
+
+def profile_completeness_pct(cid: str, client: bool = False) -> int | None:
+    return profile(cid, client)["completeness"]["pct"]
+
+
+def _field_def(key: str):
+    for title, fields in _brief_sections():
+        for f in fields:
+            if f.key == key:
+                return f
+    return None
+
+
+def _coerce(f, value):
+    if f.type == "multiselect":
+        if not isinstance(value, list) or any(v not in (f.options or []) for v in value):
+            raise ValueError(f"Choose from: {', '.join(f.options or [])}.")
+        return value
+    if f.type == "dropdown":
+        if value not in (f.options or []):
+            raise ValueError(f"Choose one of: {', '.join(f.options or [])}.")
+        return value
+    if f.type in ("floorplan_table", "tracking_table", "documents"):
+        if not isinstance(value, list):
+            raise ValueError("Send a list of rows.")
+        return value
+    if not isinstance(value, str) or len(value) > 5000:
+        raise ValueError("Send text of 5,000 characters or fewer.")
+    return value.strip()
+
+
+def _profile_update_item(cid: str, key: str) -> dict | None:
+    st = _profile_state(cid)[key]
+    pend, f, p = st["pending"], _field_def(key), prop(cid)
+    if not pend or not f:
+        return None
+    n, tail = p["name"], cid[-4:]
+    used = _used_in(key, bool(f.internal))
+    fh = _fh_check(pend["proposed_value"])
+    it = _base_item(
+        p, "profile_update", f"{tail}-{key}", category="content", lens="express", channels=["ads", "website"],
+        title=f"Profile update: {f.label} at {n}",
+        found=f"{pend['by']} proposed a new {f.label.lower()} for {n}.",
+        expect=f"The new {f.label.lower()} goes live in {n}'s profile, and the ad feed picks it up the next day.",
+        if_skip=f"The current {f.label.lower()} stays live at {n}.",
+        why={"text": f"{pend['by']} edited an ad-facing field. Ad-facing edits wait for RPM review before they reach ads.",
+             "receipts": [{"label": f"Proposed {pend['at'][:10]}", "source": "workspace_profile", "as_of": pend["at"]}]},
+        for_whom={"text": f"Everyone who sees {n} in " + ", ".join({"ads": "ads", "website_faq": "the website FAQ", "ai_answers": "AI answers", "reports": "reports"}.get(u, u) for u in used) + ".",
+                  "questions": []},
+        approving_does=[{"label": f"RPM Digital writes the new {f.label.lower()} to {n}'s profile", "owner": "RPM Digital", "when": "When you approve"},
+                        {"label": "The ad feed picks it up in its next daily sync", "owner": "RPM Digital", "when": "The next day"}],
+        owner=STAFF_NAME, status="to_do", needs_approval=True, client_visible=False, actions={"approve": True, "not_now": True},
+        trail=[_trail(pend["at"], pend["by"], f"Proposed a new {f.label.lower()}", "internal")],
+    )
+    it["profile_update"] = {"field_key": key, "label": f.label, "current_value": st["value"], "proposed_value": pend["proposed_value"],
+                            "proposed_by": pend["by"], "proposed_at": pend["at"], "used_in": used,
+                            "fair_housing": fh}
+    return it
+
+
+def profile_update_items() -> list:
+    out = []
+    for cid in [p["company_id"] for p in props()]:
+        state = _profile_state(cid)
+        for key, st in state.items():
+            if st["pending"]:
+                it = _profile_update_item(cid, key)
+                if it:
+                    out.append(it)
+    return out
+
+
+def profile_checkins(client: bool = False) -> list:
+    """Monthly check-in to-dos: one per property with fields untouched 90+ days. Not approvals."""
+    out = []
+    for p in props():
+        if p["occupied"] is None:
+            continue
+        stale = profile(p["company_id"], client)["checkin"]["stale_fields"]
+        if stale and (p["company_id"] == "18234410021" or _h(p["company_id"] + "chk", 0, 4) == 0):
+            out.append({"kind": "profile_checkin", "company_id": p["company_id"], "title": "Review your property profile", "stale_count": len(stale)})
+    return out
+
+
+def _save_field(cid: str, key: str, value, client: bool, by: str) -> tuple[dict, int]:
+    f = _field_def(key)
+    p = prop(cid)
+    if not p:
+        return {"error": "not_found", "detail": "No such property."}, 404
+    if not f:
+        return {"error": "unknown_field", "detail": f"No profile field called {key}."}, 404
+    if f.internal and client:
+        return {"error": "forbidden", "detail": "This field is RPM-only."}, 403
+    if f.type == "readonly":
+        return {"error": "read_only_field", "detail": f"{f.label} comes from the company record. Send a request to change it."}, 400
+    try:
+        value = _coerce(f, value)
+    except ValueError as exc:
+        return {"error": "invalid_value", "detail": str(exc)}, 400
+    st = _profile_state(cid)[key]
+    fh = _fh_check(value)
+    now = R5_NOW.isoformat().replace("+00:00", "Z")
+    if fh and fh["severity"] == "high":
+        terms = ", ".join(f"“{t}”" for t in fh["terms"])
+        msg = (f"Not saved. {terms} describes the kind of resident the property wants, which Fair Housing rules don't allow in housing marketing. "
+               "Describe the home and the neighborhood instead.")
+        return {"field": _field_out(f, st, client), "outcome": "blocked", "fair_housing": fh if not client else {"severity": "high", "terms": fh["terms"]}, "message": msg}, 200
+    if client and key in AD_FACING:
+        st["pending"] = {"proposed_value": value, "by": by, "at": now, "item_id": f"profile_update:{cid[-4:]}-{key}"}
+        st["history"].append({"at": now, "by": by, "action": "proposed", "value": value, "note": "Sent to RPM for review"})
+        return {"field": _field_out(f, st, client), "outcome": "pending_review", "fair_housing": None if client else fh,
+                "message": "Sent to RPM for review. The current value stays live until it's approved."}, 200
+    resolved_from = st["provenance"].get("source") if st["provenance"]["kind"] in ("resolved", "override") else None
+    st.update(value=value, last_updated=now, fair_housing_review=fh,
+              provenance={"kind": "override", "by": by, "at": now, "source": resolved_from})
+    st["history"].append({"at": now, "by": by, "action": "edited", "value": value, "note": None})
+    msg = "Saved" if f.internal else "Saved · live in ads tomorrow"
+    return {"field": _field_out(f, st, client), "outcome": "saved", "fair_housing": None if client else fh, "message": msg}, 200
+
+
+def apply_profile_decision(item_id: str, action: str, reason: str | None) -> dict | None:
+    """Approve writes the proposed value (recording proposer and approver); reject leaves the live value."""
+    if not item_id.startswith("profile_update:"):
+        return None
+    tail, key = item_id.split(":", 1)[1].split("-", 1)
+    cid = next((p["company_id"] for p in props() if p["company_id"].endswith(tail)), None)
+    if not cid:
+        return None
+    it = _profile_update_item(cid, key)
+    if not it:
+        return None
+    st = _profile_state(cid)[key]
+    pend = st["pending"]
+    now = R5_NOW.isoformat().replace("+00:00", "Z")
+    PROFILE_UNDO[item_id] = (cid, key, copy.deepcopy(st))
+    if action == "approve":
+        st.update(value=pend["proposed_value"], last_updated=now, pending=None, fair_housing_review=_fh_check(pend["proposed_value"]),
+                  provenance={"kind": "override", "by": pend["by"], "at": now, "source": st["provenance"].get("source")},
+                  last_review={"outcome": "approved", "by": "RPM", "at": now, "reason": None})
+        st["history"].append({"at": now, "by": STAFF_NAME, "action": "approved", "value": pend["proposed_value"], "note": f"Proposed by {pend['by']}"})
+    else:
+        label = dict([("wrong_data", "Wrong read of the data"), ("already_handled", "Already handled"),
+                      ("not_priority", "Not a priority this month"), ("discuss_on_call", "Discuss on our call")]).get(reason, reason)
+        st.update(pending=None, last_review={"outcome": "not_applied", "by": "RPM", "at": now, "reason": label})
+        st["history"].append({"at": now, "by": STAFF_NAME, "action": "rejected", "value": pend["proposed_value"], "note": label})
+    return it
+
+
+def undo_profile_decision(item_id: str) -> dict | None:
+    snap = PROFILE_UNDO.pop(item_id, None)
+    if not snap:
+        return None
+    cid, key, st = snap
+    _profile_state(cid)[key] = st
+    return _profile_update_item(cid, key)
+
+
+def _viewer_client() -> bool:
+    return _as_client() or SWITCHES.get("client_editor", False)
+
+
+@app.get("/api/workspace/spend-sheet")
+def spend_sheet_route():
+    a = request.args
+    try:
+        page, page_size = int(a.get("page") or 1), int(a.get("page_size") or 50)
+    except ValueError:
+        return jsonify({"error": "invalid_paging", "detail": "page and page_size are whole numbers."}), 400
+    return jsonify(spend_sheet(a.get("q", ""), a.get("market", ""), a.get("manager", ""), a.get("status", ""), a.get("sort") or "property_name",
+                               "desc" if a.get("dir") == "desc" else "asc", page, page_size, client=_viewer_client()))
+
+
+@app.get("/api/workspace/profile")
+def profile_route():
+    return jsonify(profile(_company_or_404(), client=_viewer_client()))
+
+
+@app.patch("/api/workspace/profile/field")
+def profile_field_route():
+    body = request.get_json(silent=True) or {}
+    cid = str(body.get("company_id") or "").strip()
+    if not cid or not body.get("key"):
+        return jsonify({"error": "company_id and key are required"}), 400
+    client = _viewer_client()
+    data, status = _save_field(cid, str(body["key"]), body.get("value"), client, CLIENT_NAME if client else STAFF_NAME)
+    return jsonify(data), status
+
+
+@app.post("/api/workspace/profile/checkin")
+def profile_checkin_route():
+    body = request.get_json(silent=True) or {}
+    cid = str(body.get("company_id") or "").strip()
+    if not prop(cid):
+        return jsonify({"error": "company_id is required"}), 400
+    keys = [k for k in body.get("confirmed") or [] if isinstance(k, str)]
+    client = _viewer_client()
+    state, now = _profile_state(cid), R5_NOW.isoformat().replace("+00:00", "Z")
+    done = []
+    for k in keys:
+        f = _field_def(k)
+        if not f or k not in state or (f.internal and client):
+            continue
+        state[k]["last_updated"] = now
+        state[k]["history"].append({"at": now, "by": CLIENT_NAME if client else STAFF_NAME, "action": "reviewed_no_change", "value": None, "note": "Reviewed, no change"})
+        done.append(k)
+    after = profile(cid, client)["checkin"]
+    return jsonify({"confirmed": done, "checkin": after,
+                    "message": f"Marked {len(done)} {'field' if len(done) == 1 else 'fields'} as still accurate."})
+
+
+def _find_suggestion(sid: str):
+    for cid, state in PROFILES.items():
+        for key, st in state.items():
+            if st["suggestion"] and st["suggestion"]["id"] == sid:
+                return cid, key, st
+    for p in props():
+        state = _profile_state(p["company_id"])
+        for key, st in state.items():
+            if st["suggestion"] and st["suggestion"]["id"] == sid:
+                return p["company_id"], key, st
+    return None
+
+
+@app.post("/api/workspace/profile/suggestions/<sid>/accept")
+def suggestion_accept_route(sid: str):
+    found = _find_suggestion(sid)
+    if not found:
+        return jsonify({"error": "not_found", "detail": "That suggestion is gone."}), 404
+    cid, key, st = found
+    client = _viewer_client()
+    value = st["suggestion"]["value"]
+    data, status = _save_field(cid, key, value, client, CLIENT_NAME if client else STAFF_NAME)
+    if status == 200 and data["outcome"] != "blocked":
+        st["suggestion"] = None
+        data["field"]["suggestion"] = None
+    return jsonify(data), status
+
+
+@app.post("/api/workspace/profile/suggestions/<sid>/dismiss")
+def suggestion_dismiss_route(sid: str):
+    body = request.get_json(silent=True) or {}
+    reason = str(body.get("reason") or "").strip()
+    if not reason:
+        return jsonify({"error": "reason is required"}), 400
+    found = _find_suggestion(sid)
+    if not found:
+        return jsonify({"error": "not_found", "detail": "That suggestion is gone."}), 404
+    cid, key, st = found
+    now = R5_NOW.isoformat().replace("+00:00", "Z")
+    st["history"].append({"at": now, "by": CLIENT_NAME if _viewer_client() else STAFF_NAME, "action": "suggestion_dismissed", "value": st["suggestion"]["value"], "note": reason})
+    st["suggestion"] = None
+    return jsonify({"dismissed": sid, "key": key, "reason": reason})
+
+
+@app.get("/api/workspace/profile/history")
+def profile_history_route():
+    cid, key = _company_or_404(), request.args.get("key", "")
+    f = _field_def(key)
+    if not f:
+        return jsonify({"error": "unknown_field"}), 404
+    if f.internal and _viewer_client():
+        return jsonify({"error": "forbidden", "detail": "This field is RPM-only."}), 403
+    entries = list(reversed(_profile_state(cid)[key]["history"]))
+    return jsonify({"company_id": cid, "key": key, "label": f.label, "entries": entries})
 
 
 if __name__ == "__main__":
