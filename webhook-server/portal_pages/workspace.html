@@ -653,6 +653,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .ctl span{font-size:11px;line-height:14px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--color-fg-muted)}
 .inp{height:36px;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:0 10px;background:var(--color-card);font-size:13px;line-height:16px;min-width:0;max-width:100%}
 .inp:focus{outline:2px solid var(--copper-fill);outline-offset:1px}
+.inp[type=search]{-webkit-appearance:none;appearance:none;box-sizing:border-box}
 .inp.search-inp{width:240px}
 .togglebtn{display:inline-flex;align-items:center;gap:6px;height:36px;padding-inline:12px;border-radius:var(--radius-sm);border:1px solid var(--color-border);background:var(--color-card);font-size:13px;line-height:16px;color:var(--color-fg-2)}
 .togglebtn[aria-pressed="true"]{background:var(--color-brand-soft);border-color:var(--mint);color:var(--juniper);font-weight:500}
@@ -1164,6 +1165,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     if (pv) pv.addEventListener('click', function () {
       state.preview = !state.preview;
       try { sessionStorage.setItem(PREVIEW_KEY, state.preview ? '1' : '0'); } catch (e) {}
+      loadBadge();
       if (state.preview && /^#\/signals/.test(location.hash)) location.hash = '#/dashboard'; else route();
     });
   }
@@ -1185,7 +1187,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       bar.className = 'previewbar';
       bar.innerHTML = '<span><b>Previewing as a client.</b> Internal notes, internal trail entries and review flags are hidden, just as a client sees them.</span><span class="grow"></span><button type="button" class="link" data-stop-preview>Stop preview</button>';
       bar.querySelector('[data-stop-preview]').addEventListener('click', function () {
-        state.preview = false; try { sessionStorage.setItem(PREVIEW_KEY, '0'); } catch (e) {} route();
+        state.preview = false; try { sessionStorage.setItem(PREVIEW_KEY, '0'); } catch (e) {} loadBadge(); route();
       });
     } else { bar.hidden = true; bar.innerHTML = ''; }
   }
