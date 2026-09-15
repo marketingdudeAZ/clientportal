@@ -754,6 +754,14 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .hist li{font-size:12px;line-height:17px;color:var(--color-fg-2)}
 .hist li b{font-weight:600}
 
+/* ── Profile update review (Round 5) ─────────────────────────────────── */
+.diff{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.diff>div{border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:var(--color-bg)}
+.diff p{font-size:14px;line-height:22px;white-space:pre-wrap}
+.diff del{background:var(--critical-soft);color:var(--critical-text);text-decoration:line-through;border-radius:2px;padding:0 2px}
+.diff ins{background:var(--healthy-soft);color:var(--healthy-text);text-decoration:none;border-radius:2px;padding:0 2px;font-weight:500}
+.fhline{font-size:13px;line-height:19px}
+
 /* AA on tinted surfaces: small muted text steps down to the strong gray shade */
 .pane .eyebrow,.pane .support,.finding .receipt,.receipts .support,.receipts .eyebrow,.tbl tr.top td.support,.tbl .self,
 .tbl tr.rowlink:hover .fine,.tbl tr.rowlink:hover .empty-dash,.kbd,.chip:hover,.sopt:hover span,.sopt[aria-selected="true"] span,.hero .support{color:var(--gray-ink-strong)}
@@ -801,6 +809,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   .intr{flex-direction:column}
   .spend-scroll{display:none}
   .spend-cards{display:flex}
+  .diff{grid-template-columns:1fr}
   .prof-layout{grid-template-columns:1fr}
   .secnav{display:none}
   .fields{padding:0 14px}
@@ -1266,9 +1275,13 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   var CAT_LABEL = { cost: 'Cost', vendor: 'Vendor', content: 'Content', creative: 'Creative', compliance: 'Compliance' };
   // Round 4: negotiate is no longer its own category; it reads as a vendor item.
   function catKey(c) { return c === 'negotiate' ? 'vendor' : c; }
+  function catTag(cat, itemId) {
+    var label = String(itemId || '').indexOf('profile_update:') === 0 ? 'profile update' : (CAT_LABEL[cat] || cat || '').toLowerCase();
+    return '<span class="tag ' + esc(cat) + '">' + esc(label) + '</span>';
+  }
   // Every decision opens the Review panel first: one button, one place to decide.
   function reviewBtn(id, cid, cls, label) { return '<button type="button" class="' + cls + '" data-review="' + esc(id) + '" data-company="' + esc(cid || '') + '">' + esc(label || 'Review') + '</button>'; }
-  var SOURCE_LABEL = { hubdb_rec: 'Recommendation', loop_rec: 'Loop recommendation', call_prep: 'Call prep', content_brief: 'Content brief', video_variant: 'Creative', ticket_profile: 'Ticket profile', onboarding_gap: 'Onboarding', portal_ticket: 'Request', service_ticket: 'Service ticket', fair_housing_review: 'Fair Housing review' };
+  var SOURCE_LABEL = { hubdb_rec: 'Recommendation', loop_rec: 'Loop recommendation', call_prep: 'Call prep', content_brief: 'Content brief', video_variant: 'Creative', ticket_profile: 'Ticket profile', onboarding_gap: 'Onboarding', portal_ticket: 'Request', service_ticket: 'Service ticket', fair_housing_review: 'Fair Housing review', profile_update: 'Profile update' };
   var STATUS_LABEL = { to_do: 'Needs you', in_motion: 'In motion', done: 'Done' };
   function reasonChips(attr) { return REASONS.map(function (r) { return '<button type="button" class="rchip" aria-pressed="false" ' + attr + '="' + r[0] + '">' + esc(r[1]) + '</button>'; }).join(''); }
   function approveFlow(btn, id, errEl) {
@@ -1373,7 +1386,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     }).join('');
     var cards = waiting.slice(0, 3).map(function (w) {
       var wk = catKey(w.category);
-      return '<li class="wcard"><div class="top"><b>' + esc(w.title) + '</b><span class="tag ' + esc(wk) + '">' + esc((CAT_LABEL[wk] || wk).toLowerCase()) + '</span></div>' +
+      return '<li class="wcard"><div class="top"><b>' + esc(w.title) + '</b>' + catTag(wk, w.item_id) + '</div>' +
         (has(w.subtitle) ? '<p>' + esc(w.subtitle) + '</p>' : '') +
         '<div class="acts">' + reviewBtn(w.item_id, w.company_id, 'btn xs outline') + '</div></li>';
     }).join('');
@@ -1422,7 +1435,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     var body = rows.map(function (row) {
       var sv = val(row.savings_per_year), cat = catKey(row.category);
       return '<tr data-row="' + esc(row.item_id) + '"><td class="name"><a href="#/property/' + encodeURIComponent(row.company_id) + '">' + esc(row.property) + '</a></td>' +
-        '<td>' + esc(row.action) + '</td><td><span class="tag ' + esc(cat) + '">' + esc((CAT_LABEL[cat] || cat).toLowerCase()) + '</span></td>' +
+        '<td>' + esc(row.action) + '</td><td>' + catTag(cat, row.item_id) + '</td>' +
         '<td class="sav"' + rtitle(row.savings_per_year) + '>' + (sv == null ? '<span class="empty-dash">—</span>' : esc(money(sv)) + '/yr') + '</td>' +
         '<td class="acts">' + reviewBtn(row.item_id, row.company_id, 'btn xs outline') + '</td></tr>';
     }).join('');
@@ -1519,6 +1532,38 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     return '<section class="rv-sec"><h3>What the review found</h3>' + (meta ? '<p class="fh-meta">' + esc(meta) + '</p>' : '') +
       (finds ? '<ol class="fh-finds">' + finds + '</ol>' : '<p>Nothing was flagged.</p>') + '</section>';
   }
+  function asText(v) {
+    if (v == null) return '';
+    if (Array.isArray(v)) return v.map(function (x) { return typeof x === 'object' ? JSON.stringify(x) : x; }).join(', ');
+    return typeof v === 'object' ? JSON.stringify(v) : String(v);
+  }
+  function wordDiff(a, b) {
+    // Word-level LCS: what the proposal removes from the current value and what it adds.
+    var x = a ? a.split(/(\s+)/) : [], y = b ? b.split(/(\s+)/) : [], n = x.length, m = y.length, i, j;
+    if (n * m > 250000) return { before: esc(a), after: esc(b) };
+    var L = []; for (i = 0; i <= n; i++) { L.push(new Array(m + 1).fill(0)); }
+    for (i = n - 1; i >= 0; i--) for (j = m - 1; j >= 0; j--) L[i][j] = x[i] === y[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    var before = '', after = ''; i = 0; j = 0;
+    while (i < n && j < m) {
+      if (x[i] === y[j]) { before += esc(x[i]); after += esc(y[j]); i++; j++; }
+      else if (L[i + 1][j] >= L[i][j + 1]) { before += /\S/.test(x[i]) ? '<del>' + esc(x[i]) + '</del>' : esc(x[i]); i++; }
+      else { after += /\S/.test(y[j]) ? '<ins>' + esc(y[j]) + '</ins>' : esc(y[j]); j++; }
+    }
+    for (; i < n; i++) before += /\S/.test(x[i]) ? '<del>' + esc(x[i]) + '</del>' : esc(x[i]);
+    for (; j < m; j++) after += /\S/.test(y[j]) ? '<ins>' + esc(y[j]) + '</ins>' : esc(y[j]);
+    return { before: before, after: after };
+  }
+  function profileUpdateHtml(pu) {
+    if (!pu) return '';
+    var cur = asText(pu.current_value), next = asText(pu.proposed_value), d = wordDiff(cur, next), fh = pu.fair_housing;
+    return '<section class="rv-sec"><h3>The proposed change · ' + esc(pu.label) + '</h3>' +
+      '<p class="support">Proposed by ' + esc(pu.proposed_by) + ' · ' + esc(mdy(pu.proposed_at)) + '</p>' +
+      '<div class="diff"><div><span class="eyebrow">Live now</span><p>' + (cur ? d.before : '<span class="support">Empty</span>') + '</p></div>' +
+      '<div><span class="eyebrow">Proposed</span><p>' + (next ? d.after : '<span class="support">Empty</span>') + '</p></div></div>' +
+      '<p class="fine">Used in</p>' + usedChips(pu.used_in) +
+      '<p class="fhline">' + (fh ? '<span class="pill ' + (fh.severity === 'high' ? 'critical' : 'attention') + '"><i></i>Fair Housing · ' + esc(fh.severity) + '</span> Flagged: ' + esc((fh.terms || []).join(', '))
+        : '<span class="pill healthy"><i></i>Fair Housing check passed</span> Nothing in the proposed text was flagged.') + '</p></section>';
+  }
   function reviewSections(it) {
     var c = companyById(it.company_id), cat = catKey(it.category), out = '';
     var meta = [c ? c.name : '', it.owner ? 'Owner ' + it.owner : '', it.cost_note || ''].filter(Boolean).join(' · ');
@@ -1529,6 +1574,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     if (why) out += '<section class="rv-sec"><h3>Why we’re proposing this</h3>' + (has(why.text) ? '<p>' + esc(why.text) + '</p>' : '') + receiptList(why.receipts) +
       (it.review ? '' : evidenceHtml(it.evidence) + sparkHtml(it.sparkline)) + '</section>';
     out += fhReviewHtml(it.review);
+    out += profileUpdateHtml(it.profile_update);
     var fw = it.for_whom;
     if (fw && (has(fw.text) || has(fw.questions))) out += '<section class="rv-sec"><h3>Who it’s for</h3>' + (has(fw.text) ? '<p>' + esc(fw.text) + '</p>' : '') +
       (has(fw.questions) ? '<p class="fine">' + (cat === 'content' ? 'The renter questions and searches it answers' : 'The questions it answers') + '</p><ul class="rv-qs">' + fw.questions.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ul>' : '') + '</section>';
