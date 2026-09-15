@@ -690,6 +690,70 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .sumline{font-size:13px;line-height:18px;color:var(--color-fg-muted)}
 .sumline b{color:var(--color-fg);font-weight:600}
 
+/* ── Profile (Round 5) ───────────────────────────────────────────────── */
+.prof-head{display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap}
+.prof-head .who{flex:1;min-width:240px;display:flex;flex-direction:column;gap:6px}
+.meter{display:flex;flex-direction:column;gap:8px;width:320px;max-width:100%}
+.meter .row1{display:flex;align-items:baseline;gap:8px}
+.meter .row1 b{font-size:28px;line-height:34px;font-weight:700;letter-spacing:-.02em}
+.meterbar{height:8px;border-radius:4px;background:var(--rule);overflow:hidden}
+.meterbar i{display:block;height:100%;background:var(--juniper);border-radius:4px}
+.missing{display:flex;flex-direction:column;gap:6px}
+.missing li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;line-height:18px}
+.missing li b{font-weight:500}
+.checkin-note{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--attention-soft);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;line-height:18px;color:var(--attention-text)}
+.checkin-note.done{background:var(--healthy-soft);color:var(--healthy-text)}
+.checkin-note .link{color:inherit;text-decoration:underline}
+.prof-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:32px;align-items:start}
+.secnav{position:sticky;top:64px;display:flex;flex-direction:column;gap:2px}
+.secnav button{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;min-height:36px;padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;line-height:16px;color:var(--color-fg-2);text-align:left}
+.secnav button:hover{background:var(--color-muted)}
+.secnav button span{font-size:12px;color:var(--color-fg-muted);font-variant-numeric:tabular-nums}
+.psecs{display:flex;flex-direction:column;gap:12px;min-width:0}
+.psec{border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-card);scroll-margin-top:64px}
+.psec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px 18px;min-height:52px}
+.psec>summary::-webkit-details-marker{display:none}
+.psec>summary b{flex:1;font-size:16px;line-height:20px;font-weight:600}
+.psec>summary .sp{font-size:13px;color:var(--color-fg-muted)}
+.psec>summary .chev{transition:transform .15s}
+.psec[open]>summary .chev{transform:rotate(180deg)}
+.fields{padding:0 18px}
+.fld{display:grid;grid-template-columns:minmax(150px,210px) minmax(0,1fr);gap:8px 24px;padding:16px 0;border-top:1px solid var(--color-line);scroll-margin-top:72px}
+.fld .lab{display:flex;flex-direction:column;gap:6px;min-width:0}
+.fld .lab b{font-size:14px;line-height:18px;font-weight:600}
+.fld .lab .fine{line-height:16px}
+.uchips{display:flex;gap:4px;flex-wrap:wrap}
+.uchip{display:inline-flex;align-items:center;gap:3px;height:20px;padding-inline:7px;border-radius:4px;font-size:11px;line-height:14px;font-weight:500;background:var(--color-muted);color:var(--gray-ink-strong);white-space:nowrap}
+.uchip.ads{background:var(--attention-soft);color:var(--attention-text)}
+.uchip.ai_answers,.uchip.website_faq{background:var(--color-brand-soft);color:var(--juniper)}
+.uchip.reports{background:var(--healthy-soft);color:var(--healthy-text)}
+.fld .body{display:flex;flex-direction:column;gap:8px;min-width:0}
+.fval{font-size:14px;line-height:22px;white-space:pre-wrap}
+.fval .pills{display:flex;gap:6px;flex-wrap:wrap}
+.fval table{border-collapse:collapse;font-size:13px;line-height:16px}
+.fval th,.fval td{padding:4px 12px 4px 0;text-align:left;border-bottom:1px solid var(--color-line)}
+.fval th{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--gray-ink-strong)}
+.prov{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.fstates{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.notebox{border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;line-height:19px}
+.notebox.pend{background:var(--attention-soft);color:var(--attention-text)}
+.notebox.ok{background:var(--healthy-soft);color:var(--healthy-text)}
+.notebox.no{background:var(--color-muted);color:var(--gray-ink-strong)}
+.notebox.block{background:var(--critical-soft);color:var(--critical-text)}
+.notebox b{font-weight:600}
+.sugbox{border:1px solid var(--mint);background:var(--color-brand-soft);border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.sugbox p{font-size:13px;line-height:19px;color:var(--color-fg)}
+.sugbox .fine{color:var(--gray-ink-strong)}
+.facts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.editor{display:flex;flex-direction:column;gap:8px}
+.editor textarea.inp{height:auto;min-height:104px;padding:8px 10px;resize:vertical;font-size:14px;line-height:21px}
+.editor input.inp{height:40px;font-size:14px}
+.checks{display:flex;gap:6px 16px;flex-wrap:wrap}
+.checks label{display:inline-flex;align-items:center;gap:6px;min-height:32px;font-size:14px}
+.hist{display:flex;flex-direction:column;gap:6px;border-left:2px solid var(--color-border);padding-left:12px}
+.hist li{font-size:12px;line-height:17px;color:var(--color-fg-2)}
+.hist li b{font-weight:600}
+
 /* AA on tinted surfaces: small muted text steps down to the strong gray shade */
 .pane .eyebrow,.pane .support,.finding .receipt,.receipts .support,.receipts .eyebrow,.tbl tr.top td.support,.tbl .self,
 .tbl tr.rowlink:hover .fine,.tbl tr.rowlink:hover .empty-dash,.kbd,.chip:hover,.sopt:hover span,.sopt[aria-selected="true"] span,.hero .support{color:var(--gray-ink-strong)}
@@ -737,6 +801,12 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   .intr{flex-direction:column}
   .spend-scroll{display:none}
   .spend-cards{display:flex}
+  .prof-layout{grid-template-columns:1fr}
+  .secnav{display:none}
+  .fields{padding:0 14px}
+  .psec>summary{padding:12px 14px}
+  .fld{grid-template-columns:1fr}
+  .meter{width:100%}
   .controls .ctl,.inp.search-inp{flex:1 1 100%;width:100%}
   .controls .inp{height:44px}
   .togglebtn{min-height:44px}
@@ -1023,7 +1093,9 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
     wallet: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
-    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+    idcard: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M15 8h2M15 12h2M7 16h10"/>',
+    chevron: '<path d="m6 9 6 6 6-6"/>'
   };
 
   /* ── Sidebar ─────────────────────────────────────────────────────── */
@@ -1034,6 +1106,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       { key: 'approvals', href: '#/approvals', label: 'Approvals', icon: 'inbox', badge: state.waiting },
       { key: 'properties', href: '#/properties', label: 'Properties', icon: 'building', count: companies().length || null },
       { key: 'spend', href: '#/spend', label: 'Spend', icon: 'wallet' },
+      { key: 'profile', href: '#/property/' + encodeURIComponent(state.companyId || '') + '/profile', label: 'Profile', icon: 'idcard' },
       { key: 'visibility', href: '#/visibility', label: 'Visibility', icon: 'eye' },
       { key: 'content', href: '#/content', label: 'Content', icon: 'file' },
       { key: 'creative', href: '#/creative', label: 'Creative', icon: 'image' },
@@ -1902,6 +1975,242 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
   }
 
+  /* ── Profile (Round 5) ───────────────────────────────────────────────
+     The community brief as a living profile. The server removes internal
+     fields for clients and in preview-as-client. Edits run Fair Housing first;
+     ad-facing edits from clients wait for RPM review. */
+  var USED_LABEL = { ads: 'Ads', website_faq: 'Website FAQ', ai_answers: 'AI answers', reports: 'Reports', internal: 'Internal' };
+  var SUG_SOURCE = { site_scrape: 'From the property website', geo_claim: 'From AI answers', fair_housing: 'From the Fair Housing review', ticket: 'From a request' };
+  var DISMISS_REASONS = ['Not accurate', 'Already covered', 'Not for ads'];
+  var TABLE_TYPES = { floorplan_table: 1, tracking_table: 1, documents: 1 };
+  state.profileFlash = {};
+  function usedChips(list) {
+    return '<span class="uchips">' + (list || []).map(function (u) { return '<span class="uchip ' + esc(u) + '">' + (u === 'internal' ? ic(I.lock, 9) : '') + esc(USED_LABEL[u] || u) + '</span>'; }).join('') + '</span>';
+  }
+  function humanOpt(v) { return String(v).replace(/_/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); }); }
+  function isEmptyVal(v) { return v == null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && !v.length); }
+  function fieldValueHtml(f, v) {
+    if (isEmptyVal(v)) return '<span class="support">Not filled in yet</span>';
+    if (TABLE_TYPES[f.type] && Array.isArray(v)) {
+      var keys = Object.keys(v[0] || {});
+      return '<div class="tscroll"><table><thead><tr>' + keys.map(function (k) { return '<th scope="col">' + esc(humanOpt(k)) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        v.map(function (row) { return '<tr>' + keys.map(function (k) { return '<td>' + esc(row[k]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+    }
+    if (Array.isArray(v)) return '<span class="pills">' + v.map(function (x) { return '<span class="pill brand">' + esc(humanOpt(x)) + '</span>'; }).join('') + '</span>';
+    if (f.type === 'dropdown') return esc(humanOpt(v));
+    return esc(v);
+  }
+  function provenanceHtml(f) {
+    var p = f.provenance || {};
+    if (p.kind === 'override') return 'Written by ' + esc(p.by || 'RPM') + (p.at ? ' · ' + esc(mdy(p.at)) : '') + (p.source ? ' · overrides the value from ' + esc(p.source) : '');
+    if (p.kind === 'resolved') return 'From ' + esc(p.source || 'a connected source') + (p.at ? ' · ' + esc(mdy(p.at)) : '');
+    return 'Nobody has filled this in';
+  }
+  function fieldRowHtml(f, prof, opts) {
+    opts = opts || {};
+    var cid = prof.property.company_id, flash = state.profileFlash[f.key], states = '';
+    if (f.stale) states += '<span class="pill attention"><i></i>Untouched 90+ days</span>';
+    if (f.ad_facing) states += '<span class="pill new">Reviewed by RPM before ads</span>';
+    if (viewInternal() && f.fair_housing_review) states += '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review · ' + esc(f.fair_housing_review.severity) + (has(f.fair_housing_review.terms) ? ' · “' + esc(f.fair_housing_review.terms.join('”, “')) + '”' : '') + '</span>';
+    var notes = '';
+    if (f.pending) notes += '<div class="notebox pend"><b>Pending RPM review.</b> ' + esc(f.pending.by) + ' proposed “' + esc(Array.isArray(f.pending.proposed_value) ? f.pending.proposed_value.join(', ') : f.pending.proposed_value) + '” · ' + esc(mdy(f.pending.at)) +
+      '. The current value stays live until it’s approved.' + (viewInternal() && f.pending.item_id ? ' ' + reviewBtn(f.pending.item_id, cid, 'link', 'Review it') : '') + '</div>';
+    else if (f.last_review && f.last_review.outcome === 'approved') notes += '<div class="notebox ok">Approved by RPM · ' + esc(mdy(f.last_review.at)) + '</div>';
+    else if (f.last_review && f.last_review.outcome === 'not_applied') notes += '<div class="notebox no">Not applied — ' + esc(f.last_review.reason || 'RPM kept the current value') + '</div>';
+    if (flash) notes += '<div class="notebox ' + ({ saved: 'ok', pending_review: 'pend', blocked: 'block', confirmed: 'ok' }[flash.kind] || 'ok') + '" role="' + (flash.kind === 'blocked' ? 'alert' : 'status') + '">' + esc(flash.text) + '</div>';
+    var sug = f.suggestion;
+    var sugHtml = sug ? '<div class="sugbox" data-sug="' + esc(sug.id) + '"><p><b>We found</b> “' + esc(Array.isArray(sug.value) ? sug.value.join(', ') : sug.value) + '” — use it?</p><p class="fine">' + esc(SUG_SOURCE[sug.source] || 'Suggested') + '. ' + esc(sug.reason) + '</p>' +
+      (canDecide() ? '<div class="facts"><button type="button" class="btn xs primary" data-sug-accept="' + esc(sug.id) + '">Use it</button><button type="button" class="btn xs" data-sug-dismiss="' + esc(sug.id) + '" aria-expanded="false">Dismiss</button></div>' +
+        '<div class="reasons" data-sug-reasons hidden role="group" aria-label="Why dismiss">' + DISMISS_REASONS.map(function (r) { return '<button type="button" class="rchip" data-sug-reason="' + esc(r) + '">' + esc(r) + '</button>'; }).join('') + '</div>' : '') + '</div>' : '';
+    var acts = '';
+    if (opts.checkin && canDecide()) acts += '<button type="button" class="btn xs outline" data-confirm="' + esc(f.key) + '">' + ic(I.check, 12) + 'Still accurate</button>';
+    if (canDecide() && f.type !== 'readonly' && !TABLE_TYPES[f.type] && !f.pending) acts += '<button type="button" class="btn xs" data-edit="' + esc(f.key) + '">' + (isEmptyVal(f.value) ? 'Add' : 'Edit') + '</button>';
+    if (f.type === 'readonly' || TABLE_TYPES[f.type]) acts += '<button type="button" class="textbtn" data-req-change="' + esc(f.key) + '">Request a change</button>';
+    acts += '<button type="button" class="textbtn" data-history="' + esc(f.key) + '" aria-expanded="false">History</button>';
+    if (!canDecide() && f.type !== 'readonly') acts += signInLink('Sign in to edit');
+    return '<div class="fld" id="fld-' + esc(f.key) + '" data-field="' + esc(f.key) + '"><div class="lab"><b id="lbl-' + esc(f.key) + '">' + esc(f.label) + '</b>' + (f.hint ? '<span class="fine">' + esc(f.hint) + '</span>' : '') + usedChips(f.used_in) + '</div>' +
+      '<div class="body"><div class="fval" data-fval>' + fieldValueHtml(f, f.value) + '</div><p class="prov">' + provenanceHtml(f) + '</p>' +
+      (states ? '<div class="fstates">' + states + '</div>' : '') + notes + sugHtml +
+      '<div class="facts">' + acts + '</div><div data-editor></div><ol class="hist" data-hist hidden></ol><p class="inline-err" role="alert" hidden data-ferr></p></div></div>';
+  }
+  function editorHtml(f) {
+    var v = f.value;
+    if (f.type === 'multiselect') return '<fieldset class="editor"><legend class="sr-only">' + esc(f.label) + '</legend><div class="checks">' + (f.options || []).map(function (o) {
+      return '<label><input type="checkbox" value="' + esc(o) + '"' + ((v || []).indexOf(o) !== -1 ? ' checked' : '') + '>' + esc(humanOpt(o)) + '</label>'; }).join('') + '</div>' + editorButtons() + '</fieldset>';
+    if (f.type === 'dropdown') return '<div class="editor"><select class="inp" aria-labelledby="lbl-' + esc(f.key) + '">' + (f.options || []).map(function (o) { return '<option value="' + esc(o) + '"' + (o === v ? ' selected' : '') + '>' + esc(humanOpt(o)) + '</option>'; }).join('') + '</select>' + editorButtons() + '</div>';
+    if (f.type === 'text') return '<div class="editor"><input class="inp" type="text" maxlength="5000" aria-labelledby="lbl-' + esc(f.key) + '" value="' + esc(v || '') + '">' + editorButtons() + '</div>';
+    return '<div class="editor"><textarea class="inp" maxlength="5000" aria-labelledby="lbl-' + esc(f.key) + '">' + esc(v || '') + '</textarea>' + editorButtons() + '</div>';
+  }
+  function editorButtons() { return '<div class="facts"><button type="button" class="btn sm primary" data-save>Save</button><button type="button" class="btn sm ghost" data-cancel>Cancel</button></div>'; }
+  function editorValue(box, f) {
+    if (f.type === 'multiselect') return Array.prototype.filter.call(box.querySelectorAll('input[type=checkbox]'), function (c) { return c.checked; }).map(function (c) { return c.value; });
+    var el = box.querySelector('select,input,textarea'); return el ? el.value : '';
+  }
+  function screenProfile() {
+    var c = company();
+    renderTop('Profile', c ? c.name : '');
+    renderSide('profile');
+    guard(api('/api/workspace/profile?' + cq()), 'the property profile').then(function (r) { if (r) renderProfile(r.data || {}); });
+  }
+  function reloadProfile() {
+    var y = window.scrollY;
+    return api('/api/workspace/profile?' + cq()).then(function (r) { renderProfile(r.data || {}); window.scrollTo(0, y); })
+      .catch(function (e) { if (e && e.status === 401) return; setView(errorHtml(e)); });
+  }
+  function profileFields(prof) { var out = []; (prof.sections || []).forEach(function (sec) { (sec.fields || []).forEach(function (f) { out.push(f); }); }); return out; }
+  function renderProfile(prof) {
+    state.profile = prof;
+    var p = prof.property || {}, comp = prof.completeness || {}, ci = prof.checkin || {}, staleView = state.profileView === 'stale';
+    renderTop('Profile', p.name);
+    var pctv = comp.pct == null ? null : Math.round(comp.pct);
+    var meter = '<div class="meter"><span class="eyebrow">Profile completeness</span><div class="row1"><b>' + (pctv == null ? '—' : esc(pctv) + '%') + '</b><span class="support">complete</span></div>' +
+      '<div class="meterbar" role="img" aria-label="Profile ' + (pctv == null ? 'not scored' : pctv + '% complete') + '"><i style="width:' + (pctv || 0) + '%"></i></div>' +
+      (has(comp.top_missing) ? '<p class="fine">Fill these in first — they matter most:</p><ul class="missing">' + comp.top_missing.map(function (m) {
+        return '<li><b>' + esc(m.label) + '</b>' + usedChips(m.used_in) + '<button type="button" class="link" data-jump="' + esc(m.key) + '">Add</button></li>';
+      }).join('') + '</ul>' : '') + '</div>';
+    var staleN = (ci.stale_fields || []).length;
+    var checkinNote = ci.due && staleN
+      ? '<p class="checkin-note">' + ic(I.history, 14) + '<span><b>Monthly check-in:</b> ' + esc(staleN) + ' ' + plural(staleN, 'field') + ' untouched 90+ days.</span>' +
+        (staleView ? '' : '<a class="link" href="#/property/' + encodeURIComponent(p.company_id) + '/profile/stale">Review them</a>') + '</p>'
+      : '<p class="checkin-note done">' + ic(I.check, 14) + '<span>Check-in done — every field has been touched in the last 90 days.</span></p>';
+    var head = '<div class="prof-head"><div class="who">' + scopedBack() + '<h1 class="h-page">' + (staleView ? 'Review your property profile' : 'Property profile') + '</h1>' +
+      '<p class="support">' + esc([p.name, p.city && p.state ? p.city + ', ' + p.state : ''].filter(Boolean).join(' · ')) + (prof.last_updated ? ' · last updated ' + esc(mdy(prof.last_updated)) : '') + '</p>' +
+      '<p class="fine">Everything here feeds your ads, website FAQ, AI answers and reports. Changes to ad-facing fields are reviewed by RPM first.</p>' + checkinNote + '</div>' + meter + '</div>';
+    var body;
+    if (staleView) {
+      var stale = profileFields(prof).filter(function (f) { return (ci.stale_fields || []).indexOf(f.key) !== -1; });
+      body = stale.length
+        ? '<section class="sec"><div class="sec-head"><h2 class="h-sec">Still accurate?</h2>' + (canDecide() ? '<button type="button" class="btn sm primary" data-confirm-all>' + ic(I.check, 13) + 'All ' + esc(stale.length) + ' are still accurate</button>' : '') + '</div>' +
+          '<p class="support">Confirm each one, or edit it. Confirming records “reviewed, no change” and resets its clock.</p>' +
+          '<div class="psec"><div class="fields">' + stale.map(function (f) { return fieldRowHtml(f, prof, { checkin: true }); }).join('') + '</div></div>' +
+          '<p><a class="link" href="#/property/' + encodeURIComponent(p.company_id) + '/profile">See the whole profile</a></p></section>'
+        : '<div class="emptybox" style="min-height:240px"><span class="ic">' + ic(I.check, 24).replace('currentColor', '#5B7265') + '</span><b>You’re all caught up</b><p class="support">Every field has been reviewed. We’ll ask again next month.</p>' +
+          '<a class="btn sm" href="#/property/' + encodeURIComponent(p.company_id) + '/profile">See the whole profile</a></div>';
+    } else {
+      var nav = '<nav class="secnav" aria-label="Profile sections">' + (prof.sections || []).map(function (sec) {
+        return '<button type="button" data-sec-jump="' + esc(sec.key) + '">' + esc(sec.title) + '<span>' + (sec.completeness == null ? '—' : esc(Math.round(sec.completeness)) + '%') + '</span></button>';
+      }).join('') + '</nav>';
+      var secs = (prof.sections || []).map(function (sec) {
+        return '<details class="psec" id="sec-' + esc(sec.key) + '" open><summary><b>' + esc(sec.title) + '</b><span class="sp">' + (sec.completeness == null ? '' : esc(Math.round(sec.completeness)) + '% complete') + '</span><span class="chev" aria-hidden="true">' + ic(I.chevron, 16) + '</span></summary>' +
+          '<div class="fields">' + (sec.fields || []).map(function (f) { return fieldRowHtml(f, prof); }).join('') + '</div></details>';
+      }).join('');
+      body = '<div class="prof-layout">' + nav + '<div class="psecs">' + secs + '</div></div>';
+    }
+    setView('<div class="page">' + head + body + gapsLine(prof.gaps) + '</div>');
+    state.profileFlash = {};
+    bindProfile(prof);
+  }
+  function bindProfile(prof) {
+    var cid = prof.property.company_id, byKey = {};
+    profileFields(prof).forEach(function (f) { byKey[f.key] = f; });
+    function row(key) { return view.querySelector('[data-field="' + key + '"]'); }
+    function openEditor(key) {
+      var f = byKey[key], r = row(key); if (!f || !r) return;
+      var slot = r.querySelector('[data-editor]');
+      slot.innerHTML = editorHtml(f);
+      var input = slot.querySelector('textarea,input,select'); if (input) input.focus();
+      var err = r.querySelector('[data-ferr]');
+      slot.querySelector('[data-cancel]').addEventListener('click', function () { slot.innerHTML = ''; var eb = r.querySelector('[data-edit]'); if (eb) eb.focus(); });
+      var save = slot.querySelector('[data-save]');
+      save.addEventListener('click', function () {
+        var value = editorValue(slot, f);
+        save.disabled = true; save.textContent = 'Saving…'; err.hidden = true;
+        var old = slot.querySelector('.notebox.block'); if (old) old.remove();
+        api('/api/workspace/profile/field', { method: 'PATCH', body: { company_id: cid, key: key, value: value } }).then(function (res) {
+          var d = res.data || {};
+          if (d.outcome === 'blocked') {
+            save.disabled = false; save.textContent = 'Save';
+            slot.querySelector('.editor').insertAdjacentHTML('afterbegin', '<div class="notebox block" role="alert"><b>Not saved.</b> ' + esc(String(d.message || '').replace(/^Not saved\.\s*/, '')) + '</div>');
+            return;
+          }
+          state.profileFlash[key] = d.outcome === 'pending_review' ? { kind: 'pending_review', text: 'Sent to RPM for review. The current value stays live until it’s approved.' }
+            : { kind: 'saved', text: d.message || 'Saved' };
+          return reloadProfile().then(function () { var nr = row(key); if (nr) nr.scrollIntoView({ block: 'nearest' }); });
+        }).catch(function (e) {
+          save.disabled = false; save.textContent = 'Save';
+          if (e && e.status === 401) return;
+          err.hidden = false; err.textContent = failText(e, 'That didn’t save');
+        });
+      });
+    }
+    view.querySelectorAll('[data-edit]').forEach(function (b) { b.addEventListener('click', function () { openEditor(b.getAttribute('data-edit')); }); });
+    view.querySelectorAll('[data-jump]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-jump'), r = row(key);
+        if (!r) { location.hash = '#/property/' + encodeURIComponent(cid) + '/profile'; return; }
+        var det = r.closest('details'); if (det) det.open = true;
+        r.scrollIntoView({ block: 'start' });
+        if (canDecide()) openEditor(key);
+      });
+    });
+    view.querySelectorAll('[data-sec-jump]').forEach(function (b) {
+      b.addEventListener('click', function () { var sec = view.querySelector('#sec-' + b.getAttribute('data-sec-jump')); if (sec) { sec.open = true; sec.scrollIntoView({ block: 'start' }); sec.querySelector('summary').focus(); } });
+    });
+    view.querySelectorAll('[data-req-change]').forEach(function (b) {
+      b.addEventListener('click', function () { var f = byKey[b.getAttribute('data-req-change')]; startRequest('Change the ' + f.label.toLowerCase() + ' in ' + prof.property.name + '’s profile.\nIt should say: '); });
+    });
+    view.querySelectorAll('[data-history]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-history'), list = row(key).querySelector('[data-hist]');
+        if (!list.hidden) { list.hidden = true; b.setAttribute('aria-expanded', 'false'); return; }
+        b.setAttribute('aria-expanded', 'true'); list.hidden = false; list.innerHTML = '<li>Loading…</li>';
+        var ACT = { edited: 'Edited', synced: 'Synced', proposed: 'Proposed', approved: 'Approved', rejected: 'Not applied', reviewed_no_change: 'Reviewed, no change', suggestion_dismissed: 'Dismissed a suggestion' };
+        api('/api/workspace/profile/history?' + cq() + '&key=' + encodeURIComponent(key)).then(function (r) {
+          var entries = (r.data || {}).entries || [];
+          list.innerHTML = entries.length ? entries.map(function (h) {
+            var v = h.value == null ? '' : (Array.isArray(h.value) ? h.value.map(function (x) { return typeof x === 'object' ? '' : x; }).filter(Boolean).join(', ') : h.value);
+            return '<li><b>' + esc(ACT[h.action] || h.action) + '</b> · ' + esc(h.by || '') + ' · ' + esc(mdy(h.at)) + (v && typeof v === 'string' ? ' — “' + esc(v.length > 120 ? v.slice(0, 117) + '…' : v) + '”' : '') + (h.note ? ' · ' + esc(h.note) : '') + '</li>';
+          }).join('') : '<li>No changes recorded yet.</li>';
+        }).catch(function (e) { if (e && e.status === 401) return; list.innerHTML = '<li class="inline-err">' + esc(failText(e, 'History didn’t load')) + '</li>'; });
+      });
+    });
+    view.querySelectorAll('[data-sug-accept]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.closest('[data-field]').getAttribute('data-field'), err = row(key).querySelector('[data-ferr]');
+        b.disabled = true; b.textContent = 'Using it…';
+        api('/api/workspace/profile/suggestions/' + encodeURIComponent(b.getAttribute('data-sug-accept')) + '/accept', { method: 'POST', body: { company_id: cid } }).then(function (res) {
+          var d = res.data || {};
+          state.profileFlash[key] = d.outcome === 'blocked' ? { kind: 'blocked', text: d.message } : d.outcome === 'pending_review'
+            ? { kind: 'pending_review', text: 'Sent to RPM for review. The current value stays live until it’s approved.' } : { kind: 'saved', text: d.message || 'Saved' };
+          return reloadProfile();
+        }).catch(function (e) { b.disabled = false; b.textContent = 'Use it'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'That didn’t go through'); });
+      });
+    });
+    view.querySelectorAll('[data-sug-dismiss]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var box = b.closest('.sugbox').querySelector('[data-sug-reasons]');
+        box.hidden = !box.hidden; b.setAttribute('aria-expanded', String(!box.hidden));
+        if (!box.hidden) box.querySelector('button').focus();
+      });
+    });
+    view.querySelectorAll('[data-sug-reason]').forEach(function (c) {
+      c.addEventListener('click', function () {
+        var sug = c.closest('.sugbox'), key = c.closest('[data-field]').getAttribute('data-field'), err = row(key).querySelector('[data-ferr]');
+        c.setAttribute('aria-pressed', 'true');
+        api('/api/workspace/profile/suggestions/' + encodeURIComponent(sug.getAttribute('data-sug')) + '/dismiss', { method: 'POST', body: { company_id: cid, reason: c.getAttribute('data-sug-reason') } }).then(function () {
+          sug.outerHTML = '<div class="notebox no" role="status">Dismissed — ' + esc(c.getAttribute('data-sug-reason').toLowerCase()) + '.</div>';
+        }).catch(function (e) { c.setAttribute('aria-pressed', 'false'); if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'That didn’t go through'); });
+      });
+    });
+    function confirmKeys(keys, btn) {
+      var label = btn.innerHTML; btn.disabled = true; btn.textContent = 'Saving…';
+      api('/api/workspace/profile/checkin', { method: 'POST', body: { company_id: cid, confirmed: keys } }).then(function (res) {
+        keys.forEach(function (k) { state.profileFlash[k] = { kind: 'confirmed', text: 'Marked as still accurate' }; });
+        var r = row(keys[0]);
+        if (keys.length === 1 && r) {
+          r.querySelector('.facts').insertAdjacentHTML('beforebegin', '<div class="notebox ok" role="status">Marked as still accurate · ' + esc((res.data || {}).message || '') + '</div>');
+          btn.remove();
+          var pill = r.querySelector('.pill.attention'); if (pill) pill.remove();
+          return;
+        }
+        return reloadProfile();
+      }).catch(function (e) { btn.disabled = false; btn.innerHTML = label; if (e && e.status === 401) return; });
+    }
+    view.querySelectorAll('[data-confirm]').forEach(function (b) { b.addEventListener('click', function () { confirmKeys([b.getAttribute('data-confirm')], b); }); });
+    var all = view.querySelector('[data-confirm-all]');
+    if (all) all.addEventListener('click', function () { confirmKeys((prof.checkin || {}).stale_fields || [], all); });
+  }
+
   /* ── Property detail (D4I-2, G73-1) ──────────────────────────────── */
   var LENS_LABEL = { express: 'Express', tailor: 'Tailor', amplify: 'Amplify', evolve: 'Evolve' };
   function scopedBack() { var c = company(); return '<a class="back" href="#/property/' + encodeURIComponent(state.companyId) + '">' + ic(I.arrowLeft, 13) + esc(c ? c.name : 'Property') + '</a>'; }
@@ -1931,8 +2240,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       var r = k[x[0]], v = val(r);
       return '<div class="kpi sm"' + rtitle(r) + '><span class="eyebrow">' + x[1] + '</span><span class="v">' + (v == null ? '<span class="empty-dash">—</span>' : esc(x[2](v))) + '</span>' + (receipt(r) ? '<span class="rc">' + receipt(r) + '</span>' : '') + '</div>';
     }).join('');
-    var links = [['media_plan', 'Media plan'], ['visibility', 'Visibility'], ['content', 'Content'], ['creative', 'Creative'], ['report', 'Monthly report']].map(function (x) {
-      var h = linkFor(d, x[0]); return h ? '<a class="btn sm" href="' + esc(h) + '">' + x[1] + '</a>' : '';
+    var links = [['media_plan', 'Media plan'], ['visibility', 'Visibility'], ['content', 'Content'], ['creative', 'Creative'], ['profile', 'Profile'], ['report', 'Monthly report']].map(function (x) {
+      var h = linkFor(d, x[0]) || (x[0] === 'profile' ? '#/property/' + encodeURIComponent(state.companyId) + '/profile' : null); return h ? '<a class="btn sm" href="' + esc(h) + '">' + x[1] + '</a>' : '';
     }).join('');
     var fc = d.exposure_forecast, fHtml = '';
     if (fc && has(fc.months)) {
@@ -2508,15 +2817,16 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     if (name === 'signals' && !viewInternal()) name = 'dashboard';
     if (name === 'property' && parts[1]) {
       setCompany(parts[1]);
-      name = parts[2] ? { 'media-plan': 'mediaplan', visibility: 'visibility', content: 'content', creative: 'creative' }[parts[2]] || 'property' : 'property';
+      name = parts[2] ? { 'media-plan': 'mediaplan', visibility: 'visibility', content: 'content', creative: 'creative', profile: 'profile' }[parts[2]] || 'property' : 'property';
     }
     var screens = {
       dashboard: [screenDashboard, 'dashboard'], approvals: [screenApprovals, 'approvals'], item: [screenItem, 'approvals'],
       approved: [screenApproved, 'approvals'], properties: [screenProperties, 'properties'], property: [screenProperty, 'properties'],
       mediaplan: [screenMediaPlan, 'properties'], visibility: [screenVisibility, 'visibility'], content: [screenContent, 'content'],
       creative: [screenCreative, 'creative'], value: [screenValue, 'value'], signals: [screenSignals, 'signals'],
-      ask: [screenAsk, ''], request: [screenRequest, 'approvals'], spend: [screenSpend, 'spend']
+      ask: [screenAsk, ''], request: [screenRequest, 'approvals'], spend: [screenSpend, 'spend'], profile: [screenProfile, 'profile']
     };
+    state.profileView = name === 'profile' ? (parts[3] || '') : '';
     var s = screens[name] || screens.dashboard;
     renderSide(s[1]);
     window.scrollTo(0, 0);
