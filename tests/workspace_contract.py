@@ -281,11 +281,15 @@ DASHBOARD = {
     "health_tiles": [{"company_id": STR, "name": opt(STR), "score": opt(NUM), "band": BAND}],
     "properties": [{"company_id": STR, "name": opt(STR), "units": opt(INT), "to_lease_90d": opt(METRIC),
                     "occupancy": opt(METRIC), "leases_month": opt(METRIC), "status": opt(STR),
+                    "profile_completeness": omittable(opt(METRIC)),
                     "no_overspend": absent("overspend_per_year"), "health": opt(NUM), "band": BAND}],
     "activity": [{"at": opt(STR), "text": STR, "company_id": opt(STR),
                   "kind": enum("audit", "draft", "check", "flag", "forecast", "decision", "publish"),
                   "visibility": VISIBILITY}],
-    "waiting": [{"item_id": STR, "title": STR, "subtitle": opt(STR), "category": APPROVAL_CATEGORY}],
+    # Round 5: approvals, plus a client's monthly profile check-in (a to-do, not an approval)
+    "waiting": [{"kind": omittable(enum("approval", "profile_checkin")), "item_id": opt(STR),
+                 "company_id": omittable(STR), "title": STR, "subtitle": opt(STR),
+                 "category": opt(APPROVAL_CATEGORY), "stale_count": omittable(INT)}],
     "loop_status": {"running": opt(BOOL), "property_count": INT, "last_pass": opt(STR)},
     "gaps": [GAP],
 }
@@ -303,6 +307,7 @@ APPROVALS = {
 }
 
 PROPERTY_OVERVIEW = {
+    "profile_completeness": omittable(opt(METRIC)),
     "name": opt(STR), "city": opt(STR), "state": opt(STR), "units": opt(INT), "objective": opt(STR),
     "health": opt({"score": NUM, "band": BAND, "source": STR, "as_of": opt(STR)}),
     "kpis": {"ai_visibility": opt(METRIC), "renewal_rate": opt(METRIC), "units_to_lease": opt(METRIC),
@@ -431,7 +436,19 @@ FAIR_HOUSING_RESULT = {"result": enum("clear", "flagged", "blocked"), "severity"
 PROFILE_EDIT = {"field": PROFILE_FIELD, "outcome": enum("saved", "pending_review", "blocked"),
                 "fair_housing": FAIR_HOUSING_RESULT, "message": STR}
 
+PROFILE_CHECKIN = {"company_id": STR, "confirmed": [STR], "skipped": [{"key": STR, "reason": STR}],
+                   "checkin": {"due": BOOL, "stale_fields": [STR]}}
+SUGGESTION_DISMISSED = {"suggestion_id": STR, "dismissed": BOOL, "reason": STR}
+PROFILE_HISTORY = {
+    "company_id": STR, "key": STR, "label": STR,
+    "entries": [{"at": opt(STR), "by": opt(STR), "kind": enum("edit", "reviewed", "approved", "proposed", "rejected"),
+                 "old_value": opt(STR), "new_value": opt(STR), "note": opt(STR)}],
+    "gaps": [GAP],
+}
+
 SHAPES.update({
+    "profile_checkin": PROFILE_CHECKIN, "suggestion_dismissed": SUGGESTION_DISMISSED,
+    "profile_history": PROFILE_HISTORY,
     "profile_edit": PROFILE_EDIT,
     "profile": PROFILE, "profile_field": PROFILE_FIELD,
     "spend_sheet": SPEND_SHEET,
@@ -453,6 +470,7 @@ def assert_shape(value: Any, name: str) -> None:
 # Numbers the contract carries bare: tallies of workspace items, paging and
 # screen parameters, decision-record tallies, not measurements of a property.
 COUNT_KEYS = frozenset({
+    "stale_count",
     "open", "late", "to_do", "in_motion", "done", "count", "hidden_count", "needs_approval",
     "property_count", "item_count", "starting_this_week", "more_items", "quiet_count",
     "channel_count", "pending_changes", "done_count", "comments_count", "range",

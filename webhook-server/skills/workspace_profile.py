@@ -56,6 +56,11 @@ _proposals: dict = {}            # company_id → {proposal_id: record}
 
 _sequence = itertools.count(1)   # orders proposals made within the same second
 PROPOSAL_EVENT = "workspace_profile_update_proposed"
+CHECKIN_EVENT = "workspace_profile_checkin"
+DISMISSED_EVENT = "workspace_profile_suggestion_dismissed"
+_dismissed: dict = {}            # company_id → {suggestion_id: reason}
+_completeness: dict = {}         # (company_id, internal) → (monotonic time, metric)
+COMPLETENESS_TTL = 1800.0
 ITEM_SOURCE = "profile_update"
 STORED_TTL = 120.0               # seconds a property's stored proposals and decisions are reused
 _stored: dict = {}               # company_id → (monotonic time, [payload], decision history | None)
@@ -67,6 +72,8 @@ def clear() -> None:
         _checkins.clear()
         _proposals.clear()
         _stored.clear()
+        _dismissed.clear()
+        _completeness.clear()
 
 
 # ── reading ──────────────────────────────────────────────────────────────────
@@ -120,7 +127,7 @@ def audit_rows(company_id: str, gaps: list) -> list | None:
             continue
         seen.add(key)
         rows.append({**row, "at": at})
-    rows.sort(key=lambda r: r["at"] or "", reverse=True)
+    rows.sort(key=lambda r: (r["at"] or "", r.get("_seq") or 0), reverse=True)
     return rows
 
 
@@ -211,15 +218,16 @@ def completeness(views: list) -> dict:
                             for v in missing[:TOP_MISSING]]}
 
 
-def checked_in_this_month(company_id: str, now: datetime) -> bool:
+def checked_in_this_month(company_id: str, now: datetime, stored: list | None = None) -> bool:
     with _lock:
-        at = _checkins.get(str(company_id))
-    return bool(at and (at.year, at.month) == (now.year, now.month))
+        local = _checkins.get(str(company_id))
+    return any(at and (at.year, at.month) == (now.year, now.month) for at in [local] + list(stored or []))
 
 
-def checkin_state(views: list, company_id: str, now: datetime) -> dict:
+def checkin_state(views: list, company_id: str, now: datetime, stored: list | None = None) -> dict:
+    """Due once a month per property while any field is stale."""
     stale = [v["key"] for v in views if v["stale"]]
-    return {"due": bool(stale) and not checked_in_this_month(company_id, now), "stale_fields": stale}
+    return {"due": bool(stale) and not checked_in_this_month(company_id, now, stored), "stale_fields": stale}
 
 
 # ── profile updates: proposals awaiting RPM review ───────────────────────────
@@ -267,45 +275,58 @@ def propose(ctx, field, current: str, value: str, actor: str, now: datetime) -> 
     return dict(record)
 
 
-def _stored_events(ctx, gaps: list) -> tuple[list, dict | None]:
-    """(proposal payloads from loop events, decision history), reused for STORED_TTL."""
+def _stored_events(ctx, gaps: list) -> dict:
+    """What other servers (or this one before a restart) stored for the property:
+    proposals, dismissed suggestions, check-ins and decision history. Reused for
+    STORED_TTL seconds; `history` is None when it is unknown."""
     import loop_writer
     from skills import workspace_inbox as wi
 
+    empty = {"proposals": [], "dismissed": {}, "checkins": [], "history": None}
     if loop_writer._bq() is None:
-        gaps.append(wc.gap("pending", "Profile updates proposed before this server started need BigQuery loop "
-                                      "events, which are not configured here", source="loop_events", internal=True))
-        return [], None
+        gaps.append(wc.gap("pending", "Profile updates, check-ins and dismissed suggestions from before this server "
+                                      "started need BigQuery loop events, which are not configured here",
+                           source="loop_events", internal=True))
+        return empty
     if not ctx.uuid:
-        return [], None
+        return empty
     with _lock:
         hit = _stored.get(ctx.company_id)
     if hit and time.monotonic() - hit[0] < STORED_TTL:
-        return hit[1], hit[2]
-    payloads: list = []
+        return hit[1]
+    out = {"proposals": [], "dismissed": {}, "checkins": [], "history": None}
     try:
         for ev in loop_writer.query_recent(ctx.uuid, limit=500):
             payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else None
-            if ev.get("event_type") == PROPOSAL_EVENT and payload and payload.get("proposal_id"):
-                payloads.append(payload)
-        history = wi.decision_history(ctx, gaps)
+            if not payload:
+                continue
+            etype = ev.get("event_type")
+            if etype == PROPOSAL_EVENT and payload.get("proposal_id"):
+                out["proposals"].append(payload)
+            elif etype == DISMISSED_EVENT and payload.get("suggestion_id"):
+                out["dismissed"][payload["suggestion_id"]] = payload.get("reason") or ""
+            elif etype == CHECKIN_EVENT:
+                at = wc.to_datetime(ev.get("occurred_at"))
+                if at:
+                    out["checkins"].append(at)
+        out["history"] = wi.decision_history(ctx, gaps)
     except Exception as exc:  # noqa: BLE001
         gaps.append(wc.gap("pending", f"Stored profile updates could not be read ({type(exc).__name__})",
                            source="loop_events", internal=True))
-        return [], None
+        return empty
     with _lock:
-        _stored[ctx.company_id] = (time.monotonic(), payloads, history)
-    return payloads, history
+        _stored[ctx.company_id] = (time.monotonic(), out)
+    return out
 
 
 def proposals(ctx, gaps: list) -> list:
     """Every profile update for the property, newest first, with its status."""
     with _lock:
         by_id = {pid: dict(r) for pid, r in _proposals.get(ctx.company_id, {}).items()}
-    payloads, history = _stored_events(ctx, gaps)
-    for payload in payloads:
+    stored = _stored_events(ctx, gaps)
+    for payload in stored["proposals"]:
         by_id.setdefault(payload["proposal_id"], {**payload, "status": "pending"})
-    apply_decided(by_id, history)
+    apply_decided(by_id, stored["history"])
     rows = sorted(by_id.values(), key=lambda r: (r.get("proposed_at") or "", r.get("_seq") or 0), reverse=True)
     newest_pending: set = set()
     for r in rows:
@@ -360,10 +381,6 @@ def pending_by_key(ctx, gaps: list, rows: list | None = None) -> dict:
     return out
 
 
-def suggestions_by_key(ctx, props: dict, views_by_key: dict, gaps: list) -> dict:
-    return {}
-
-
 def build_profile(ctx, *, internal: bool, props: dict | None = None, now: datetime | None = None) -> dict:
     now = now or wc.utc_now()
     gaps: list = []
@@ -384,7 +401,7 @@ def build_profile(ctx, *, internal: bool, props: dict | None = None, now: dateti
                          for f in fields]
         views += section_views
         sections.append({"key": section_key(title), "title": title, "fields": section_views})
-    suggestions = suggestions_by_key(ctx, props, {v["key"]: v for v in views}, gaps)
+    suggestions = suggestions_by_key(ctx, props, {v["key"]: v for v in views}, gaps, internal=internal)
     for v in views:
         if not v["pending"]:
             v["suggestion"] = suggestions.get(v["key"])
@@ -397,7 +414,7 @@ def build_profile(ctx, *, internal: bool, props: dict | None = None, now: dateti
         "property": {"company_id": ctx.company_id, "name": ctx.name or props.get("name") or None,
                      "last_updated": max(stamps) if stamps else None},
         "completeness": completeness(views),
-        "checkin": checkin_state(views, ctx.company_id, now),
+        "checkin": checkin_state(views, ctx.company_id, now, _stored_events(ctx, [])["checkins"]),
         "sections": sections,
         "gaps": wc.gaps_for(gaps, internal),
     }
@@ -465,7 +482,7 @@ def _remember_edit(ctx, field, old: str, new: str, actor: str, now: datetime, la
     with _lock:
         _local_audit.setdefault(ctx.company_id, []).append({
             "field_key": field.key, "field_label": label or field.label, "old_value": old, "new_value": new,
-            "edited_by": actor, "edited_at": wc.to_iso_ts(now)})
+            "edited_by": actor, "edited_at": wc.to_iso_ts(now), "_seq": next(_sequence)})
 
 
 def one_field(ctx, field, props: dict, *, internal: bool, now: datetime) -> dict:
@@ -511,6 +528,7 @@ def edit_field(ctx, key: str, value, actor: str, *, staff: bool, props: dict | N
         status = 502 if (written == "network error" or str(written).startswith("HubSpot")) else 400
         raise wc.WorkspaceError(status, "The field could not be saved", written)
     _after_write(ctx, field, props, current, written, actor, now)
+    _forget_completeness(ctx.company_id)
     return {"field": one_field(ctx, field, props, internal=staff, now=now), "outcome": SAVED,
             "fair_housing": result, "message": "Saved" if field.internal else "Saved · live in ads tomorrow"}
 
@@ -615,6 +633,7 @@ def approve(ctx, proposal_id: str, actor: str, *, now: datetime | None = None) -
         status = 502 if (written == "network error" or str(written).startswith("HubSpot")) else 400
         raise wc.WorkspaceError(status, "The profile could not be updated", written)
     _set_status(ctx, rec, status="approved", decided_by=actor, decided_at=wc.to_iso_ts(now), reason=None)
+    _forget_completeness(ctx.company_id)
     _remember_edit(ctx, field, rec.get("current_value") or "", written, editor, now)
     try:
         import hubspot_client
@@ -640,3 +659,320 @@ def reopen(ctx, proposal_id: str) -> None:
     if rec["status"] != "rejected":
         raise wc.WorkspaceError(409, "not_undoable", f"The profile update is now {rec['status']}")
     _set_status(ctx, rec, status="pending", decided_by=None, decided_at=None, reason=None)
+
+
+# ── suggestions from data ────────────────────────────────────────────────────
+#
+# One-tap proposed edits beside the field they affect. Sources, in priority order
+# when a field has more than one: the monthly Fair Housing review (profile copy),
+# an existing ticket-to-profile proposal, a GEO claim that conflicts with the
+# field, and the auto-resolved value (site scrape / AptIQ) differing from the
+# human override. Accepting runs `edit_field`; dismissing records the reason.
+
+SUGGESTION_SOURCES = ("fair_housing", "ticket", "geo_claim", "site_scrape")
+
+
+def suggestion_id(company_id: str, key: str, source: str, value: str) -> str:
+    return hashlib.sha1(f"{company_id}|{key}|{source}|{value}".encode("utf-8")).hexdigest()[:16]
+
+
+def _same(field, a, b) -> bool:
+    if field.type in community_brief.TABLE_TYPES:
+        return community_brief._parse_json_list(a) == community_brief._parse_json_list(b)
+    return " ".join(str(a or "").split()).lower() == " ".join(str(b or "").split()).lower()
+
+
+def _from_site(props: dict, visible: set) -> list:
+    out = []
+    for key in visible:
+        f = community_brief.FIELDS[key]
+        if not (f.hs_override and f.hs_resolved):
+            continue
+        override, resolved = props.get(f.hs_override), props.get(f.hs_resolved)
+        if filled(f, override) and filled(f, resolved) and not _same(f, override, resolved):
+            origin = "AptIQ" if key in APTIQ_RESOLVED else "the property website"
+            out.append({"key": key, "value": str(resolved), "source": "site_scrape",
+                        "reason": f"We found “{wc.truncate(resolved, 120)}” on {origin} — use it?"})
+    return out
+
+
+def _from_geo_claims(ctx, visible: set, gaps: list) -> list:
+    """`geo_claims` rows whose `conflicts_brief_field` names a profile field."""
+    import bigquery_client
+    if not bigquery_client.is_bigquery_configured() or not ctx.uuid:
+        gaps.append(wc.gap("suggestion.geo_claim", "GEO claim checks need BigQuery, which is not configured here",
+                           source="geo_claims", internal=True))
+        return []
+    try:
+        from google.cloud import bigquery
+        base = f"{bigquery_client.BIGQUERY_PROJECT_ID}.{bigquery_client._dataset()}"
+        rows = bigquery_client.query(f"""
+            SELECT claim_text, conflicts_brief_field, engine, created_at FROM `{base}.geo_claims`
+            WHERE property_uuid = @uuid AND conflicts_brief_field IS NOT NULL
+            ORDER BY created_at DESC LIMIT 50""", [bigquery.ScalarQueryParameter("uuid", "STRING", ctx.uuid)])
+    except Exception as exc:  # noqa: BLE001
+        gaps.append(wc.gap("suggestion.geo_claim", f"GEO claims could not be read ({type(exc).__name__})",
+                           source="geo_claims", internal=True))
+        return []
+    by_label = {f.label.lower(): k for k, f in community_brief.FIELDS.items()}
+    out = []
+    for r in rows:
+        named = str(r.get("conflicts_brief_field") or "").strip()
+        key = named if named in community_brief.FIELDS else by_label.get(named.lower())
+        claim = str(r.get("claim_text") or "").strip()
+        if key in visible and claim:
+            engine = r.get("engine") or "An AI answer engine"
+            out.append({"key": key, "value": claim, "source": "geo_claim",
+                        "reason": f"{engine} says “{wc.truncate(claim, 120)}” — use it?"})
+    if not rows:
+        gaps.append(wc.gap("suggestion.geo_claim", "No GEO claims conflict with this profile yet", source="geo_claims"))
+    return out
+
+
+def _from_fair_housing(ctx, props: dict, visible: set, gaps: list) -> list:
+    """The monthly review's findings on profile copy, as the value without the flagged sentence."""
+    from skills import workspace_fair_housing_review as fhr
+    review = fhr.latest(ctx, gaps) or {}
+    by_label = {f.label: k for k, f in community_brief.FIELDS.items()}
+    out = []
+    for finding in review.get("findings") or []:
+        location = str(finding.get("location") or "")
+        if not location.startswith("Property profile: "):
+            continue
+        key = by_label.get(location.split(": ", 1)[1])
+        excerpt = str(finding.get("excerpt") or "").rstrip("…").strip()
+        if key not in visible or not excerpt:
+            continue
+        f = community_brief.FIELDS[key]
+        current = community_brief.resolve_value(props, f.hs_resolved, f.hs_override)
+        if excerpt not in current:
+            continue
+        cleaned = re.sub(r"[ \t]{2,}", " ", current.replace(excerpt, "")).strip()
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+        if not cleaned or cleaned == current:
+            continue
+        out.append({"key": key, "value": cleaned, "source": "fair_housing",
+                    "reason": f"The monthly Fair Housing review flagged “{wc.truncate(excerpt, 120)}” — use this "
+                              "version without it?"})
+    return out
+
+
+def _from_tickets(ctx, visible: set) -> list:
+    import ticket_profile_sync
+    if not ticket_profile_sync.enabled():
+        return []
+    out = []
+    for r in ticket_profile_sync.list_proposals(ctx.company_id, ctx.uuid):
+        key, value = r.get("field_key"), str(r.get("proposed_value") or "")
+        if key in visible and value:
+            out.append({"key": key, "value": value, "source": "ticket", "ticket_proposal_id": r.get("proposal_id"),
+                        "reason": f"A completed ticket ({r.get('task_id')}) suggests “{wc.truncate(value, 120)}” "
+                                  "— use it?"})
+    return out
+
+
+def all_suggestions(ctx, props: dict, *, internal: bool, gaps: list) -> list:
+    visible = {f.key for _, fields in visible_sections(internal) for f in fields}
+    found = (_from_fair_housing(ctx, props, visible, gaps) + _from_tickets(ctx, visible)
+             + _from_geo_claims(ctx, visible, gaps) + _from_site(props, visible))
+    with _lock:
+        dismissed = dict(_dismissed.get(ctx.company_id, {}))
+    dismissed.update(_stored_events(ctx, [])["dismissed"])
+    out = []
+    for s in found:
+        f = community_brief.FIELDS[s["key"]]
+        current = community_brief.resolve_value(props, f.hs_resolved, f.hs_override)
+        s["id"] = suggestion_id(ctx.company_id, s["key"], s["source"], s["value"])
+        if s["id"] in dismissed or _same(f, current, s["value"]):
+            continue
+        out.append(s)
+    return out
+
+
+def suggestions_by_key(ctx, props: dict, views_by_key: dict, gaps: list, *, internal: bool = False) -> dict:
+    out: dict = {}
+    for s in sorted(all_suggestions(ctx, props, internal=internal, gaps=gaps),
+                    key=lambda s: SUGGESTION_SOURCES.index(s["source"])):
+        if s["key"] in views_by_key and s["key"] not in out:
+            out[s["key"]] = {"id": s["id"], "value": s["value"], "source": s["source"], "reason": s["reason"]}
+    return out
+
+
+def _suggestion(ctx, props: dict, sid: str, internal: bool) -> dict:
+    hit = next((s for s in all_suggestions(ctx, props, internal=internal, gaps=[]) if s["id"] == sid), None)
+    if hit is None:
+        raise wc.WorkspaceError(404, "Suggestion not found")
+    return hit
+
+
+def accept_suggestion(ctx, sid: str, actor: str, *, staff: bool, now: datetime | None = None) -> dict:
+    """The same edit flow as a typed edit: Fair Housing, then review or save."""
+    props = read_props(ctx.company_id)
+    s = _suggestion(ctx, props, sid, staff)
+    result = edit_field(ctx, s["key"], s["value"], actor, staff=staff, props=props, now=now)
+    if result["outcome"] != BLOCKED:
+        with _lock:
+            _dismissed.setdefault(ctx.company_id, {})[sid] = "accepted"
+    if result["outcome"] == SAVED and s.get("ticket_proposal_id"):
+        try:
+            import ticket_profile_sync
+            row = ticket_profile_sync.get_proposal(s["ticket_proposal_id"])
+            if row:
+                ticket_profile_sync._transition(row, ticket_profile_sync.STATUS_ACCEPTED, actor, "workspace")
+        except Exception as exc:  # noqa: BLE001 — the profile write already happened
+            logger.warning("ticket proposal %s not marked accepted: %s", s["ticket_proposal_id"], exc)
+    return {**result, "suggestion_id": sid}
+
+
+def dismiss_suggestion(ctx, sid: str, actor: str, reason, *, staff: bool) -> dict:
+    import loop_writer
+
+    reason = str(reason or "").strip()
+    if not reason:
+        raise wc.WorkspaceError(400, "reason is required")
+    reason = wc.truncate(reason, 500)
+    props = read_props(ctx.company_id)
+    s = _suggestion(ctx, props, sid, staff)
+    with _lock:
+        _dismissed.setdefault(ctx.company_id, {})[sid] = reason
+        _stored.pop(ctx.company_id, None)
+    try:
+        loop_writer.record("engage", DISMISSED_EVENT, property_uuid=ctx.uuid or None, company_id=ctx.company_id,
+                           source="workspace", source_id=sid, trigger="client_action",
+                           payload={"suggestion_id": sid, "field_key": s["key"], "source": s["source"],
+                                    "value": wc.truncate(s["value"], 500), "reason": reason, "actor": actor})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("suggestion dismissal event not written for %s: %s", ctx.company_id, exc)
+    return {"suggestion_id": sid, "dismissed": True, "reason": reason}
+
+
+# ── monthly check-in ─────────────────────────────────────────────────────────
+
+REVIEWED_LABEL = "(reviewed, no change)"
+
+
+def checkin(ctx, confirmed, actor: str, *, staff: bool, now: datetime | None = None) -> dict:
+    """Record "reviewed, no change" for each confirmed field; that resets its clock."""
+    import loop_writer
+    import property_brief_audit
+
+    if not isinstance(confirmed, list) or not all(isinstance(k, str) for k in confirmed):
+        raise wc.WorkspaceError(400, "confirmed must be a list of field keys")
+    now = now or wc.utc_now()
+    props = read_props(ctx.company_id)
+    done, skipped = [], []
+    for key in dict.fromkeys(confirmed):
+        field = community_brief.FIELDS.get(key)
+        if field is None:
+            skipped.append({"key": key, "reason": "Unknown field"})
+            continue
+        if field.internal and not staff:
+            skipped.append({"key": key, "reason": "Internal field"})
+            continue
+        value = community_brief.resolve_value(props, field.hs_resolved, field.hs_override)
+        if not filled(field, value):
+            skipped.append({"key": key, "reason": "No value to confirm"})
+            continue
+        label = f"{field.label} {REVIEWED_LABEL}"
+        property_brief_audit.log_edit(company_id=ctx.company_id, company_name=ctx.name or "", field_key=key,
+                                      field_label=label, old_value=value, new_value=value, edited_by=actor)
+        _remember_edit(ctx, field, value, value, actor, now, label=label)
+        done.append(key)
+    if done:
+        with _lock:
+            _checkins[ctx.company_id] = now
+        try:
+            loop_writer.record("engage", CHECKIN_EVENT, property_uuid=ctx.uuid or None, company_id=ctx.company_id,
+                               source="workspace", source_id=f"profile_checkin:{ctx.company_id}",
+                               trigger="client_action",
+                               payload={"confirmed": done, "actor": actor, "month": now.strftime("%Y-%m")})
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("check-in event not written for %s: %s", ctx.company_id, exc)
+    profile = build_profile(ctx, internal=staff, props=props, now=now)
+    return {"company_id": ctx.company_id, "confirmed": done, "skipped": skipped, "checkin": profile["checkin"]}
+
+
+def checkin_card(ctx, *, now: datetime | None = None) -> dict | None:
+    """The client dashboard's "Review your property profile" to-do, or None."""
+    now = now or wc.utc_now()
+    gaps: list = []
+    props = read_props(ctx.company_id)
+    audit = audit_rows(ctx.company_id, gaps)
+    if audit is None:
+        return None
+    entries: dict = {}
+    for row in audit:
+        entries.setdefault(row.get("field_key"), []).append(row)
+    views = [field_view(f, props, entries.get(f.key, []), internal=False, audit_known=True, now=now)
+             for _, fields in visible_sections(False) for f in fields]
+    state = checkin_state(views, ctx.company_id, now, _stored_events(ctx, [])["checkins"])
+    if not state["due"]:
+        return None
+    n = len(state["stale_fields"])
+    return {"kind": "profile_checkin", "item_id": None, "company_id": ctx.company_id,
+            "title": "Review your property profile",
+            "subtitle": f"{ctx.name or 'Property'} · {n} field{'s' if n != 1 else ''} not updated in 90+ days",
+            "category": None, "stale_count": n, "stale_fields": state["stale_fields"]}
+
+
+# ── history ──────────────────────────────────────────────────────────────────
+
+def history(ctx, key: str, *, internal: bool) -> dict:
+    field = community_brief.FIELDS.get(key)
+    if field is None:
+        raise wc.WorkspaceError(404, "Unknown field")
+    if field.internal and not internal:
+        raise wc.WorkspaceError(403, "This field is internal")
+    gaps: list = []
+    entries = []
+    for r in audit_rows(ctx.company_id, gaps) or []:
+        if r.get("field_key") != key:
+            continue
+        editor = str(r.get("edited_by") or "")
+        kind = ("reviewed" if REVIEWED_LABEL in str(r.get("field_label") or "")
+                else "approved" if "(approved; proposed by" in editor else "edit")
+        entries.append({"at": r.get("at"), "by": display_name(editor), "kind": kind,
+                        "old_value": r.get("old_value") or None, "new_value": r.get("new_value") or None,
+                        "note": None, "_seq": r.get("_seq") or 0})
+    for p in proposals(ctx, gaps):
+        if p["field_key"] != key or p["status"] == "superseded":
+            continue
+        entries.append({"at": p.get("proposed_at"), "by": display_name(p.get("proposed_by")), "kind": "proposed",
+                        "old_value": p.get("current_value") or None, "new_value": p.get("proposed_value") or None,
+                        "note": "Pending RPM review" if p["status"] == "pending" else None,
+                        "_seq": p.get("_seq") or 0})
+        if p["status"] == "rejected":
+            entries.append({"at": p.get("decided_at"), "by": "RPM", "kind": "rejected", "old_value": None,
+                            "new_value": p.get("proposed_value") or None, "note": p.get("reason"),
+                            "_seq": p.get("_seq") or 0})
+    # Same-second entries keep the order this process recorded them in.
+    entries.sort(key=lambda e: (e["at"] or "", e["_seq"]), reverse=True)
+    for e in entries:
+        e.pop("_seq", None)
+    return {"company_id": ctx.company_id, "key": key, "label": field.label, "entries": entries,
+            "gaps": wc.gaps_for(gaps, internal)}
+
+
+# ── completeness for lists (Properties rows, Property detail) ────────────────
+
+def _forget_completeness(company_id: str) -> None:
+    with _lock:
+        for k in [k for k in _completeness if k[0] == str(company_id)]:
+            _completeness.pop(k, None)
+
+
+def completeness_metric(company_id: str, internal: bool) -> dict | None:
+    """`{value: pct, source, as_of, weighted}` for one property, cached 30 minutes."""
+    key = (str(company_id), bool(internal))
+    with _lock:
+        hit = _completeness.get(key)
+    if hit and time.monotonic() - hit[0] < COMPLETENESS_TTL:
+        return hit[1]
+    props = read_props(str(company_id))
+    views = [{"key": f.key, "label": f.label, "used_in": community_brief.used_in(f.key),
+              "value": "x" if filled(f, community_brief.resolve_value(props, f.hs_resolved, f.hs_override)) else None}
+             for _, fields in visible_sections(internal) for f in fields]
+    metric = wc.metric(completeness(views)["pct"], "community_brief", wc.now_iso(), weighted=True)
+    with _lock:
+        _completeness[key] = (time.monotonic(), metric)
+    return metric

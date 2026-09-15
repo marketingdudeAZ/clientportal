@@ -25,6 +25,10 @@ HubSpot, HubDB, BigQuery or Claude directly.
     GET  /api/workspace/spend-sheet?q=&market=&manager=&status=&sort=&dir=&page=&page_size=
     GET  /api/workspace/profile?company_id=
     PATCH /api/workspace/profile/field                        verified identity
+    POST /api/workspace/profile/checkin                       verified identity
+    POST /api/workspace/profile/suggestions/<id>/accept       verified identity
+    POST /api/workspace/profile/suggestions/<id>/dismiss      verified identity
+    GET  /api/workspace/profile/history?company_id=&key=
     POST /api/internal/workspace/warm                         X-Internal-Key
 
 Gates:
@@ -858,3 +862,70 @@ def workspace_profile_field():
         return _refused(exc)
     except Exception as exc:  # noqa: BLE001
         return _failed("profile edit", exc)
+
+
+def _profile_write(fn):
+    """Shared gates for profile POSTs: verified identity, no preview, company access."""
+    gate = _write_gate()
+    if gate:
+        return gate
+    body = request.get_json(silent=True) or {}
+    company_id = str(body.get("company_id") or "").strip()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_common
+    try:
+        return jsonify(fn(ctx, body))
+    except workspace_common.WorkspaceError as exc:
+        return _refused(exc)
+    except Exception as exc:  # noqa: BLE001
+        return _failed("profile", exc)
+
+
+@workspace_bp.route("/api/workspace/profile/checkin", methods=["POST", "OPTIONS"])
+def workspace_profile_checkin():
+    """Body {company_id, confirmed: [key]}: record "reviewed, no change" for each."""
+    from skills import workspace_profile as wpr
+    return _profile_write(lambda ctx, body: wpr.checkin(ctx, body.get("confirmed"), current_portal_email(),
+                                                        staff=_is_internal()))
+
+
+@workspace_bp.route("/api/workspace/profile/suggestions/<suggestion_id>/accept", methods=["POST", "OPTIONS"])
+def workspace_profile_suggestion_accept(suggestion_id):
+    """Runs the same edit flow as PATCH /profile/field."""
+    from skills import workspace_profile as wpr
+    return _profile_write(lambda ctx, body: wpr.accept_suggestion(ctx, suggestion_id, current_portal_email(),
+                                                                  staff=_is_internal()))
+
+
+@workspace_bp.route("/api/workspace/profile/suggestions/<suggestion_id>/dismiss", methods=["POST", "OPTIONS"])
+def workspace_profile_suggestion_dismiss(suggestion_id):
+    """Body {company_id, reason}."""
+    from skills import workspace_profile as wpr
+    return _profile_write(lambda ctx, body: wpr.dismiss_suggestion(ctx, suggestion_id, current_portal_email(),
+                                                                   body.get("reason"), staff=_is_internal()))
+
+
+@workspace_bp.route("/api/workspace/profile/history", methods=["GET", "OPTIONS"])
+def workspace_profile_history():
+    company_id = _company_id()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    key = (request.args.get("key") or "").strip()
+    if not key:
+        return jsonify({"error": "key is required"}), 400
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_common, workspace_profile as wpr
+    try:
+        return jsonify(wpr.history(ctx, key, internal=_is_internal()))
+    except workspace_common.WorkspaceError as exc:
+        return _refused(exc)
+    except Exception as exc:  # noqa: BLE001
+        return _failed("profile history", exc)
