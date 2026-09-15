@@ -65,6 +65,7 @@ logger = logging.getLogger(__name__)
 SOURCES = (
     "hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
     "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket", "fair_housing_review",
+    "profile_update",
 )
 
 LENS = {
@@ -78,6 +79,7 @@ LENS = {
     "portal_ticket": "amplify",
     "service_ticket": "amplify",
     "fair_housing_review": "express",
+    "profile_update": "express",
 }
 
 # Existing loop stages a decision on each source is written under (ADR 0010).
@@ -92,6 +94,7 @@ STAGE = {
     "portal_ticket": "ops",
     "service_ticket": "ops",
     "fair_housing_review": "engage",
+    "profile_update": "engage",
 }
 
 SOURCE_LABELS = {
@@ -105,6 +108,7 @@ SOURCE_LABELS = {
     "portal_ticket": "portal requests",
     "service_ticket": "service tickets",
     "fair_housing_review": "Fair Housing reviews",
+    "profile_update": "Profile update",
 }
 
 # Shown to a client in place of copy held at high Fair Housing severity.
@@ -119,13 +123,24 @@ GENERIC_TITLES = {
     "portal_ticket": "Request",
     "service_ticket": "Service ticket",
     "fair_housing_review": "Monthly Fair Housing review",
+    "profile_update": "Profile update",
 }
 
 # Sources with an existing approval handler (see workspace_decisions).
 DECIDABLE = frozenset({
     "hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
-    "ticket_profile", "fair_housing_review",
+    "ticket_profile", "fair_housing_review", "profile_update",
 })
+
+# Sources only internal users ever see (Round 5: a client's proposed profile
+# update is reviewed by RPM). Never read by default; callers that serve clients
+# drop them with `visible_items`, and decisions on them 404 for clients.
+INTERNAL_ONLY_SOURCES = frozenset({"profile_update"})
+DEFAULT_SOURCES = tuple(s for s in SOURCES if s not in INTERNAL_ONLY_SOURCES)
+
+
+def visible_items(items: list, internal: bool) -> list:
+    return [i for i in items if internal or i["source"] not in INTERNAL_ONLY_SOURCES]
 
 STATUSES = ("to_do", "in_motion", "done")
 
@@ -927,6 +942,11 @@ def _fair_housing_reviews(ctx: PropertyContext, gaps: list, today: date) -> list
     return [item]
 
 
+def _profile_updates(ctx: PropertyContext, gaps: list, today: date) -> list:
+    from skills import workspace_profile
+    return workspace_profile.proposal_items(ctx, gaps)
+
+
 ADAPTERS: dict[str, Callable[[PropertyContext, list, date], list]] = {
     "hubdb_rec": _hubdb_recs,
     "loop_rec": _loop_recs,
@@ -938,6 +958,7 @@ ADAPTERS: dict[str, Callable[[PropertyContext, list, date], list]] = {
     "portal_ticket": _portal_tickets,
     "service_ticket": _service_tickets,
     "fair_housing_review": _fair_housing_reviews,
+    "profile_update": _profile_updates,
 }
 
 
@@ -1158,7 +1179,7 @@ def collect(ctx: PropertyContext, *, sources: tuple | list | None = None,
     ignored: nothing is dropped at collection time any more.)
     """
     today = today or date.today()
-    wanted = [s for s in (sources or SOURCES) if s in ADAPTERS]
+    wanted = [s for s in (sources or DEFAULT_SOURCES) if s in ADAPTERS]
 
     def _run(src: str):
         local_gaps: list = []

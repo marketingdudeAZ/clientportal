@@ -106,7 +106,8 @@ def check(value: Any, spec: Any, path: str = "$") -> list[str]:
 # ── shared pieces ────────────────────────────────────────────────────────────
 
 SOURCES = enum("hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
-               "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket", "fair_housing_review")
+               "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket", "fair_housing_review",
+               "profile_update")
 LENSES = enum("express", "tailor", "amplify", "evolve")
 STATUSES = enum("to_do", "in_motion", "done")
 KINDS = enum("auto", "queued", "person")
@@ -140,6 +141,14 @@ ITEM = {
     "for_whom": opt({"text": STR, "questions": [STR]}),
     "approving_does": [{"label": STR, "owner": enum("RPM Digital", "vendor", "you"), "when": opt(STR)}],
     "draft": omittable(opt(ITEM_DRAFT)),
+    # Round 5: only on `profile_update` items, which only internal callers see.
+    "profile_update": omittable(opt({
+        "field_key": STR, "field_label": STR, "current_value": opt(STR), "proposed_value": opt(STR),
+        "proposed_by": opt(STR), "proposed_at": opt(STR),
+        "used_in": [enum("ads", "website_faq", "ai_answers", "reports", "internal")],
+        "diff": [{"op": enum("same", "add", "remove"), "text": STR}],
+        "status": enum("pending", "approved", "rejected"), "decided_by": opt(STR), "decided_at": opt(STR),
+        "reason": opt(STR)})),
     "actions": {"approve": BOOL, "not_now": BOOL},
 }
 

@@ -57,7 +57,7 @@ ACTIONS = ("approve", "not_now")
 UNDO_WINDOW = timedelta(minutes=10)
 
 # What an approval leaves the item as, when the handler finishes the job itself.
-_APPROVED_STATUS = {"video_variant": "done", "ticket_profile": "done"}
+_APPROVED_STATUS = {"video_variant": "done", "ticket_profile": "done", "profile_update": "done"}
 
 _REC_TYPES = ("budget_change", "strategy_change", "package_upgrade")
 
@@ -270,6 +270,34 @@ def _profile_not_now(ctx, item, reason, actor):
             "written_down": f"Not now: {wi.REASONS[reason]}. The profile is unchanged."}
 
 
+def _profile_update_approve(ctx, item, reason, actor):
+    """Write the client's proposed value; the audit log names proposer and approver."""
+    from skills import workspace_profile
+    try:
+        record = workspace_profile.approve(ctx, item["_raw"]["proposal_id"], actor)
+    except wc.WorkspaceError as exc:
+        raise DecisionError(exc.status, exc.message, exc.detail) from exc
+    return {"in_motion": [
+                _motion(f"“{record['field_label']}” written to the property profile", "auto", "done"),
+                _motion("Reaches ads on the next daily feed sync", "queued", "pending"),
+            ],
+            "outcome": "ok",
+            "written_down": (f"Approved. The audit log records {record['proposed_by']} as the proposer and "
+                             f"{actor} as the approver.")}
+
+
+def _profile_update_reject(ctx, item, reason, actor):
+    from skills import workspace_profile
+    label = wi.REASONS[reason]
+    try:
+        workspace_profile.reject(ctx, item["_raw"]["proposal_id"], actor, label)
+    except wc.WorkspaceError as exc:
+        raise DecisionError(exc.status, exc.message, exc.detail) from exc
+    return {"in_motion": [_motion("Not applied; the current value stays live", "auto", "done")],
+            "outcome": "ok",
+            "written_down": f"Not applied: {label}. The client sees the reason on the field."}
+
+
 FH_FIX_TICKET_TYPE = "general"
 
 
@@ -314,6 +342,8 @@ HANDLERS: dict[tuple[str, str], Callable] = {
     ("ticket_profile", "not_now"): _profile_not_now,
     ("fair_housing_review", "approve"): _fh_approve,
     ("fair_housing_review", "not_now"): _record_only_not_now,
+    ("profile_update", "approve"): _profile_update_approve,
+    ("profile_update", "not_now"): _profile_update_reject,
 }
 
 
@@ -357,6 +387,14 @@ def _undo_profile_not_now(ctx, raw, actor):
     ticket_profile_sync._transition(row, ticket_profile_sync.STATUS_PENDING, actor, "undo")
 
 
+def _undo_profile_update_reject(ctx, raw, actor):
+    from skills import workspace_profile
+    try:
+        workspace_profile.reopen(ctx, raw["proposal_id"])
+    except wc.WorkspaceError as exc:
+        raise DecisionError(exc.status, exc.message, reason=exc.detail) from exc
+
+
 UNDO: dict[tuple[str, str], Callable | str] = {
     ("hubdb_rec", "approve"): "Approval already created a draft deal or ClickUp tasks, which are not reversed automatically.",
     ("hubdb_rec", "not_now"): _undo_hubdb_not_now,
@@ -372,6 +410,8 @@ UNDO: dict[tuple[str, str], Callable | str] = {
     ("ticket_profile", "not_now"): _undo_profile_not_now,
     ("fair_housing_review", "approve"): "Approval filed the fixes as a ticket for the web team.",
     ("fair_housing_review", "not_now"): _undo_nothing,
+    ("profile_update", "approve"): "Approval wrote the change to the property profile.",
+    ("profile_update", "not_now"): _undo_profile_update_reject,
 }
 
 _recent: dict = {}
@@ -454,6 +494,8 @@ def decide(ctx, value: str, action: str, reason: str | None, actor: str, *,
         source, _ = wi.parse_item_id(value)
     except ValueError:
         raise DecisionError(404, "Item not found")
+    if not internal and source in wi.INTERNAL_ONLY_SOURCES:
+        raise DecisionError(404, "Item not found")
     item, _ = wi.find_item(ctx, value, today=today)
     if item is None:
         raise DecisionError(404, "Item not found")
@@ -525,6 +567,8 @@ def undo(ctx, value: str, actor: str, *, internal: bool, now: datetime | None = 
     try:
         source, _ = wi.parse_item_id(value)
     except ValueError:
+        raise DecisionError(404, "Item not found")
+    if not internal and source in wi.INTERNAL_ONLY_SOURCES:
         raise DecisionError(404, "Item not found")
     now = now or wc.utc_now()
     last = _last_decision(ctx, value)

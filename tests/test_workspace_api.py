@@ -912,7 +912,7 @@ class TestContractShapes:
         _shape_ok(body, "work")
         items = body["groups"]["late"] + body["groups"]["this_week"]
         # no onboarding status and no stored Fair Housing review in this fixture
-        assert {i["source"] for i in items} | {"call_prep"} >= set(wi.SOURCES) - {"onboarding_gap", "fair_housing_review"}
+        assert {i["source"] for i in items} | {"call_prep"} >= set(wi.SOURCES) - {"onboarding_gap", "fair_housing_review"} - wi.INTERNAL_ONLY_SOURCES
         # the badge also counts open items grouped under "later" (call prep, due month end)
         assert body["summary"]["needs_approval"] == sum(1 for i in items if i["needs_approval"]) + 1
 

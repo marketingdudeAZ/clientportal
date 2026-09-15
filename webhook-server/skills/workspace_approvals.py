@@ -54,7 +54,7 @@ def build_approvals(email: str, *, internal: bool, category: str | None = None,
     per_property = wdash.scope_items(props, today, gaps, sources=wdash.ITEM_SOURCES[:-1]) if props else []
     rows, interrupts, categorized = [], [], []
     for p, items in per_property:
-        for item in items:
+        for item in wi.visible_items(items, internal):
             if item["status"] != "to_do" or not item["actions"]["approve"]:
                 continue
             cat = wdash.category_for(item)
