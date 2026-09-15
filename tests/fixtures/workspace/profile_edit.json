@@ -1,0 +1,35 @@
+{
+  "fair_housing": {
+    "result": "clear"
+  },
+  "field": {
+    "ad_facing": true,
+    "editable": true,
+    "fair_housing_review": null,
+    "hint": "The shortened name used in tight UI / social copy.",
+    "internal": false,
+    "key": "short_name",
+    "label": "Short Name",
+    "last_updated": "2026-09-15T13:00:00Z",
+    "options": [],
+    "pending": null,
+    "provenance": {
+      "at": "2026-09-15T13:00:00Z",
+      "by": "Dana R.",
+      "kind": "override",
+      "overrides": null,
+      "source": "profile_edit"
+    },
+    "review_outcome": null,
+    "section": "Voice & Positioning",
+    "stale": false,
+    "suggestion": null,
+    "type": "text",
+    "used_in": [
+      "ads"
+    ],
+    "value": "LYV"
+  },
+  "message": "Saved · live in ads tomorrow",
+  "outcome": "saved"
+}
