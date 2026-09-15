@@ -646,6 +646,50 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .briefrow input{flex:1;min-width:0;height:28px;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:0 8px;font-size:13px;background:var(--color-card)}
 .briefrow input:focus{outline:2px solid var(--copper-fill);outline-offset:1px}
 
+/* ── Spend (Round 5) ─────────────────────────────────────────────────── */
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.controls .grow{flex:1}
+.ctl{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ctl span{font-size:11px;line-height:14px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--color-fg-muted)}
+.inp{height:36px;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:0 10px;background:var(--color-card);font-size:13px;line-height:16px;min-width:0;max-width:100%}
+.inp:focus{outline:2px solid var(--copper-fill);outline-offset:1px}
+.inp.search-inp{width:240px}
+.togglebtn{display:inline-flex;align-items:center;gap:6px;height:36px;padding-inline:12px;border-radius:var(--radius-sm);border:1px solid var(--color-border);background:var(--color-card);font-size:13px;line-height:16px;color:var(--color-fg-2)}
+.togglebtn[aria-pressed="true"]{background:var(--color-brand-soft);border-color:var(--mint);color:var(--juniper);font-weight:500}
+.spend-scroll{overflow:auto;max-height:calc(100vh - 290px);min-height:240px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-card)}
+.stbl{border-collapse:separate;border-spacing:0;min-width:100%;overflow-wrap:normal}
+.stbl th,.stbl td{padding:9px 12px;border-bottom:1px solid var(--color-line);font-size:13px;line-height:16px;white-space:nowrap;background:var(--color-card);text-align:left}
+.stbl thead th{position:sticky;top:0;z-index:2;background:var(--color-bg);border-bottom:1px solid var(--color-border);font-size:11px;line-height:14px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--gray-ink-strong)}
+.stbl thead th button{font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;display:inline-flex;align-items:center;gap:4px;min-height:24px;text-align:inherit}
+.stbl thead th[aria-sort] button{color:var(--color-fg)}
+.stbl .num{text-align:right}
+.stbl .num button{justify-content:flex-end}
+.stbl th:first-child,.stbl td:first-child{position:sticky;left:0;z-index:1;border-right:1px solid var(--color-border);max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.stbl thead th:first-child{z-index:3}
+.stbl tbody tr{cursor:pointer}
+.stbl tbody tr:hover td{background:var(--color-muted)}
+.stbl tbody td:first-child a{font-weight:500;font-size:14px}
+.stbl tfoot td{position:sticky;bottom:0;z-index:1;background:var(--color-bg);font-weight:600;border-top:1px solid var(--color-border);border-bottom:0}
+.stbl tfoot td:first-child{z-index:3}
+.stbl .intcol{color:var(--gray-ink-strong)}
+.stbl thead th.intcol{background:var(--color-muted)}
+.stbl td.total{font-weight:600}
+.spend-cards{display:none;flex-direction:column;gap:10px}
+.scard{border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-card);padding:14px;display:flex;flex-direction:column;gap:8px}
+.scard .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.scard .top a{font-size:15px;line-height:20px;font-weight:600}
+.scard .top b{font-size:18px;line-height:22px;font-weight:700;white-space:nowrap}
+.chlist{display:flex;flex-direction:column}
+.chlist li{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--color-line);font-size:13px;line-height:18px}
+.chlist li b{font-weight:600}
+.scard details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size:13px;font-weight:500;color:var(--copper-ink)}
+.picklist{display:flex;flex-direction:column;gap:8px}
+.picklist button{display:flex;justify-content:space-between;gap:12px;width:100%;min-height:44px;padding:10px 14px;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-card);font-size:14px;line-height:18px;text-align:left}
+.picklist button:hover{background:var(--color-muted)}
+.picklist button span{color:var(--color-fg-muted)}
+.sumline{font-size:13px;line-height:18px;color:var(--color-fg-muted)}
+.sumline b{color:var(--color-fg);font-weight:600}
+
 /* AA on tinted surfaces: small muted text steps down to the strong gray shade */
 .pane .eyebrow,.pane .support,.finding .receipt,.receipts .support,.receipts .eyebrow,.tbl tr.top td.support,.tbl .self,
 .tbl tr.rowlink:hover .fine,.tbl tr.rowlink:hover .empty-dash,.kbd,.chip:hover,.sopt:hover span,.sopt[aria-selected="true"] span,.hero .support{color:var(--gray-ink-strong)}
@@ -691,6 +735,11 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   .hero .r{width:auto}
   .btn,.chip,.rchip,.textbtn{min-height:44px}
   .intr{flex-direction:column}
+  .spend-scroll{display:none}
+  .spend-cards{display:flex}
+  .controls .ctl,.inp.search-inp{flex:1 1 100%;width:100%}
+  .controls .inp{height:44px}
+  .togglebtn{min-height:44px}
   /* Approvals and Content rows stack as cards so Review is always in reach. */
   .tscroll .tbl.cards-sm{min-width:0;border:0;background:none}
   .tbl.cards-sm thead{display:none}
@@ -972,7 +1021,9 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     arrowLeft: '<path d="m12 19-7-7 7-7M19 12H5"/>',
     history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>',
-    x: '<path d="M18 6 6 18M6 6l12 12"/>'
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    wallet: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'
   };
 
   /* ── Sidebar ─────────────────────────────────────────────────────── */
@@ -982,6 +1033,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       { key: 'dashboard', href: '#/dashboard', label: 'Dashboard', icon: 'dashboard' },
       { key: 'approvals', href: '#/approvals', label: 'Approvals', icon: 'inbox', badge: state.waiting },
       { key: 'properties', href: '#/properties', label: 'Properties', icon: 'building', count: companies().length || null },
+      { key: 'spend', href: '#/spend', label: 'Spend', icon: 'wallet' },
       { key: 'visibility', href: '#/visibility', label: 'Visibility', icon: 'eye' },
       { key: 'content', href: '#/content', label: 'Content', icon: 'file' },
       { key: 'creative', href: '#/creative', label: 'Creative', icon: 'image' },
@@ -1654,6 +1706,202 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       gapsLine(d.gaps) + '</div>';
   }
 
+  /* ── Spend (Round 5) ─────────────────────────────────────────────────
+     The spend sheet as a calm table. The server removes internal columns for
+     clients and in preview-as-client; the page only shows what it receives.
+     Money never moves from here: "Propose a change" opens New request. */
+  state.spend = { q: '', market: '', manager: '', status: '', sort: 'property_name', dir: 'asc', showAll: false, showDeal: false };
+  var SPEND_DEAL_DEFAULT = ['mgmt_fee'];
+  function spendQuery(page) {
+    var f = state.spend, qs = ['page=' + page, 'page_size=200', 'sort=' + encodeURIComponent(f.sort), 'dir=' + f.dir];
+    ['q', 'market', 'manager', 'status'].forEach(function (k) { if (f[k]) qs.push(k + '=' + encodeURIComponent(f[k])); });
+    return '/api/workspace/spend-sheet?' + qs.join('&');
+  }
+  function loadSpend() {
+    // Every page of the filtered set, so the table, totals and CSV cover the same rows.
+    function next(page, acc) {
+      return api(spendQuery(page)).then(function (r) {
+        var d = r.data || {}, rows = acc.concat(d.rows || []);
+        if (rows.length < (d.count || 0) && (d.rows || []).length) return next(page + 1, rows);
+        d.rows = rows;
+        return d;
+      });
+    }
+    return next(1, []);
+  }
+  function spendCols(d) {
+    var f = state.spend, rows = d.rows || [], cols = d.columns || [];
+    function used(k) { return rows.some(function (r) { var v = (r.values || {})[k]; return v != null && v !== 0; }); }
+    return cols.filter(function (c) {
+      if (c.key === 'property_name' || c.key === 'total' || c.group === 'meta') return true;
+      if (c.group === 'channel') return f.showAll || used(c.key);
+      if (c.internal) return f.showDeal || SPEND_DEAL_DEFAULT.indexOf(c.key) !== -1;
+      return true;
+    });
+  }
+  var SPEND_MONEY_INTERNAL = { mgmt_fee: 1, deal_amount: 1 };
+  function isMoneyCol(c) { return c.group === 'channel' || c.key === 'total' || SPEND_MONEY_INTERNAL[c.key]; }
+  function spendCell(r, c) {
+    if (c.key === 'total') return r.total;
+    if (c.group === 'meta') return r[c.key];
+    return (r.values || {})[c.key];
+  }
+  function screenSpend() {
+    renderTop('Spend', '');
+    renderSide('spend');
+    setView('<div class="page">' + spendHead(null) + '<div data-spend-results><div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading the spend sheet…</div></div></div>');
+    bindSpendControls();
+    refreshSpend();
+  }
+  function spendHead(d) {
+    var f = state.spend, opts = (d && d.filters) || state.spendFilters || { markets: [], managers: [], statuses: [] };
+    function sel(key, label, list) {
+      return '<label class="ctl"><span>' + label + '</span><select class="inp" data-spend-filter="' + key + '"><option value="">All</option>' +
+        list.map(function (v) { return '<option' + (v === f[key] ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') + '</select></label>';
+    }
+    return '<div class="head"><div class="stack"><h1 class="h-page">Spend</h1><p class="support" data-spend-scope>Monthly contracted spend by channel, from HubSpot line items.</p></div><span data-spend-asof></span></div>' +
+      '<div class="controls" role="search"><label class="ctl"><span>Search</span><input class="inp search-inp" type="search" data-spend-q placeholder="Property or market" value="' + esc(f.q) + '"></label>' +
+      sel('market', 'Market', opts.markets) + sel('manager', 'Manager', opts.managers) + sel('status', 'Status', opts.statuses) +
+      '<span class="grow"></span><button type="button" class="togglebtn" data-spend-all aria-pressed="' + f.showAll + '">Show all channels</button>' +
+      '<span data-spend-deal-slot></span>' +
+      '<button type="button" class="btn sm" data-spend-csv>' + ic(I.download, 14) + 'Export CSV</button></div>';
+  }
+  function bindSpendControls() {
+    var f = state.spend, timer = null;
+    var q = view.querySelector('[data-spend-q]');
+    q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(function () { f.q = q.value.trim(); refreshSpend(); }, 250); });
+    view.querySelectorAll('[data-spend-filter]').forEach(function (el) { el.addEventListener('change', function () { f[el.getAttribute('data-spend-filter')] = el.value; refreshSpend(); }); });
+    var all = view.querySelector('[data-spend-all]');
+    all.addEventListener('click', function () { f.showAll = !f.showAll; all.setAttribute('aria-pressed', String(f.showAll)); renderSpend(state.spendData); });
+    view.querySelector('[data-spend-csv]').addEventListener('click', function () { if (state.spendData) exportSpendCsv(state.spendData); });
+  }
+  function refreshSpend() {
+    var box = view.querySelector('[data-spend-results]'); if (!box) return;
+    var my = state.spendSeq = (state.spendSeq || 0) + 1;
+    box.setAttribute('aria-busy', 'true');
+    loadSpend().then(function (d) {
+      if (my !== state.spendSeq || !view.querySelector('[data-spend-results]')) return;
+      state.spendData = d;
+      if (!state.spendFilters) {
+        state.spendFilters = d.filters;
+        ['market', 'manager', 'status'].forEach(function (k) {
+          var el = view.querySelector('[data-spend-filter="' + k + '"]'), list = (d.filters || {})[k === 'status' ? 'statuses' : k + 's'] || [];
+          if (el) el.innerHTML = '<option value="">All</option>' + list.map(function (v) { return '<option' + (v === state.spend[k] ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('');
+        });
+      }
+      renderSpend(d);
+    }).catch(function (e) {
+      if (my !== state.spendSeq || (e && e.status === 401)) return;
+      box.removeAttribute('aria-busy');
+      box.innerHTML = errorHtml(e);
+    });
+  }
+  function renderSpend(d) {
+    var box = view.querySelector('[data-spend-results]'); if (!box || !d) return;
+    box.removeAttribute('aria-busy');
+    var f = state.spend, cols = spendCols(d), rows = d.rows || [], hasInternal = (d.columns || []).some(function (c) { return c.internal; });
+    var asof = view.querySelector('[data-spend-asof]'); if (asof) asof.innerHTML = staleLabel(d.as_of);
+    var scope = view.querySelector('[data-spend-scope]');
+    if (scope) scope.textContent = (d.scope === 'client' ? 'Your properties’ ' : 'Every managed property’s ') + 'monthly contracted spend by channel, from HubSpot line items. Money never moves from this screen.';
+    var slot = view.querySelector('[data-spend-deal-slot]');
+    if (slot) {
+      slot.innerHTML = hasInternal ? '<button type="button" class="togglebtn" data-spend-deal aria-pressed="' + f.showDeal + '">' + ic(I.lock, 12) + 'Deal details</button>' : '';
+      var db = slot.querySelector('[data-spend-deal]');
+      if (db) db.addEventListener('click', function () { f.showDeal = !f.showDeal; renderSpend(d); });
+    }
+    var hidden = (d.columns || []).filter(function (c) { return c.group === 'channel'; }).length - cols.filter(function (c) { return c.group === 'channel'; }).length;
+    var tot = (d.totals || {}), totalVal = tot.total;
+    function fmt(c, v) {
+      if (v == null || v === '') return '<span class="empty-dash">—</span>';
+      return esc(isMoneyCol(c) && typeof v === 'number' ? money(v) : v);
+    }
+    var head = '<tr>' + cols.map(function (c, i) {
+      var sorted = f.sort === c.key, cls = (isMoneyCol(c) ? 'num' : '') + (c.internal ? ' intcol' : '');
+      return '<th scope="col" class="' + cls + '"' + (sorted ? ' aria-sort="' + (f.dir === 'asc' ? 'ascending' : 'descending') + '"' : '') + '><button type="button" data-spend-sort="' + esc(c.key) + '">' +
+        (c.internal ? ic(I.lock, 10) : '') + esc(c.label) + (sorted ? '<span aria-hidden="true">' + (f.dir === 'asc' ? '↑' : '↓') + '</span>' : '') + '</button></th>';
+    }).join('') + '<th scope="col"><span class="sr-only">Propose a change</span></th></tr>';
+    var body = rows.map(function (r, ri) {
+      return '<tr data-href="' + esc(r.href || ('#/property/' + encodeURIComponent(r.company_id))) + '">' + cols.map(function (c, i) {
+        var v = spendCell(r, c);
+        if (i === 0) return '<td><a href="#/property/' + encodeURIComponent(r.company_id) + '">' + esc(r.property_name) + '</a></td>';
+        return '<td class="' + (isMoneyCol(c) ? 'num' : '') + (c.internal ? ' intcol' : '') + (c.key === 'total' ? ' total' : '') + '">' + fmt(c, v) + '</td>';
+      }).join('') + '<td><button type="button" class="textbtn" data-spend-propose="' + ri + '">Propose a change</button></td></tr>';
+    }).join('');
+    var foot = rows.length ? '<tfoot><tr>' + cols.map(function (c, i) {
+      if (i === 0) return '<td>Total · ' + esc(num(rows.length)) + ' ' + plural(rows.length, 'property', 'properties') + '</td>';
+      if (c.key === 'total') return '<td class="num">' + fmt(c, totalVal) + '</td>';
+      if (c.group === 'meta' || !isMoneyCol(c)) return '<td></td>';
+      return '<td class="num' + (c.internal ? ' intcol' : '') + '">' + fmt(c, (tot.values || {})[c.key]) + '</td>';
+    }).join('') + '<td></td></tr></tfoot>' : '';
+    var channelCols = (d.columns || []).filter(function (c) { return c.group === 'channel'; });
+    var cards = rows.map(function (r, ri) {
+      var ch = channelCols.map(function (c) { return { c: c, v: (r.values || {})[c.key] }; }).filter(function (x) { return x.v != null && x.v !== 0; })
+        .sort(function (a, b) { return b.v - a.v; });
+      var li = function (x) { return '<li><span>' + esc(x.c.label) + '</span><b>' + esc(money(x.v)) + '</b></li>'; };
+      var fee = hasInternal && (r.values || {}).mgmt_fee != null ? '<li class="intcol"><span>' + ic(I.lock, 10) + ' Mgmt fee</span><b>' + esc(money(r.values.mgmt_fee)) + '</b></li>' : '';
+      return '<li class="scard"><div class="top"><a href="#/property/' + encodeURIComponent(r.company_id) + '">' + esc(r.property_name) + '</a><b>' + (r.total == null ? '—' : esc(money(r.total))) + '</b></div>' +
+        '<p class="fine">' + esc([r.status, r.market, r.manager].filter(Boolean).join(' · ')) + '</p>' +
+        (ch.length ? '<ul class="chlist">' + ch.slice(0, 3).map(li).join('') + '</ul>' : '<p class="support">No line items yet.</p>') +
+        (ch.length > 3 || fee ? '<details><summary>All channels (' + ch.length + ')</summary><ul class="chlist">' + ch.slice(3).map(li).join('') + fee + '</ul></details>' : '') +
+        '<button type="button" class="btn sm" data-spend-propose="' + ri + '">Propose a change</button></li>';
+    }).join('');
+    box.innerHTML = '<p class="sumline" role="status"><b>' + esc(num(d.count)) + '</b> ' + plural(d.count, 'property', 'properties') + (totalVal != null ? ' · <b>' + esc(money(totalVal)) + '</b> a month' : '') +
+      (hidden > 0 && !f.showAll ? ' · ' + esc(hidden) + ' ' + plural(hidden, 'channel') + ' with no spend hidden' : '') + '</p>' +
+      (rows.length ? '<div class="spend-scroll" tabindex="0" role="region" aria-label="Spend sheet, scrolls sideways"><table class="stbl"><caption class="sr-only">Monthly spend by property and channel</caption><thead>' + head + '</thead><tbody>' + body + '</tbody>' + foot + '</table></div>' +
+        '<ul class="spend-cards">' + cards + '</ul>' : '<p class="support">No properties match these filters.</p>') +
+      gapsLine(d.gaps);
+    box.querySelectorAll('[data-spend-sort]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-spend-sort');
+        if (f.sort === k) f.dir = f.dir === 'asc' ? 'desc' : 'asc'; else { f.sort = k; f.dir = isMoneyCol({ key: k, group: (d.columns || []).filter(function (c) { return c.key === k; }).map(function (c) { return c.group; })[0] }) ? 'desc' : 'asc'; }
+        refreshSpend();
+      });
+    });
+    box.querySelectorAll('[data-spend-propose]').forEach(function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openPropose(rows[+b.getAttribute('data-spend-propose')], channelCols, b); });
+    });
+  }
+  function openPropose(r, channelCols, opener) {
+    drawerOpener = opener; drawerSeq++;
+    document.body.classList.add('drawer-open');
+    var ch = channelCols.map(function (c) { return { c: c, v: (r.values || {})[c.key] }; });
+    var active = ch.filter(function (x) { return x.v != null && x.v !== 0; }), rest = ch.filter(function (x) { return x.v == null || x.v === 0; });
+    function btn(x) { return '<button type="button" data-pick="' + esc(x.c.key) + '">' + esc(x.c.label) + '<span>' + (x.v == null || x.v === 0 ? 'Not running' : esc(money(x.v)) + '/mo') + '</span></button>'; }
+    drawerRoot.innerHTML = '<div class="drawer-scrim" data-drawer-close></div><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="pp-title"><div class="drawer-head"><span class="h-rail" id="pp-title">Propose a change · ' + esc(r.property_name) + '</span><span class="grow"></span>' +
+      '<button type="button" class="iconbtn" data-drawer-close aria-label="Close">' + ic(I.x, 18) + '</button></div><div class="drawer-body">' +
+      '<p class="support">Pick the channel. You’ll describe the change in a new request; nothing changes until your RPM team confirms it.</p>' +
+      (active.length ? '<section class="rv-sec"><h3>Running now</h3><div class="picklist">' + active.map(btn).join('') + '</div></section>' : '') +
+      '<section class="rv-sec"><h3>Add a channel</h3><div class="picklist">' + rest.map(btn).join('') + '<button type="button" data-pick="">Something else<span>Describe it</span></button></div></section></div></div>';
+    drawerRoot.querySelector('.iconbtn').focus();
+    drawerRoot.querySelectorAll('[data-pick]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-pick'), x = ch.filter(function (y) { return y.c.key === key; })[0];
+        var text = key ? 'Change to ' + x.c.label + ' at ' + r.property_name + '. Today: ' + (x.v == null || x.v === 0 ? 'not running' : money(x.v) + ' a month') + '.\nWhat should change: '
+          : 'Change to spend at ' + r.property_name + '.\nWhat should change: ';
+        closeReview();
+        setCompany(r.company_id);
+        startRequest(text);
+      });
+    });
+  }
+  function exportSpendCsv(d) {
+    // Only the columns the viewer can see right now, from the rows the page has.
+    var cols = spendCols(d);
+    function cell(v) { if (v == null) return ''; var t = String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
+    var lines = [cols.map(function (c) { return cell(c.label); }).join(',')];
+    (d.rows || []).forEach(function (r) { lines.push(cols.map(function (c) { return cell(spendCell(r, c)); }).join(',')); });
+    lines.push(cols.map(function (c, i) {
+      if (i === 0) return 'Total';
+      if (c.key === 'total') return cell((d.totals || {}).total);
+      return isMoneyCol(c) && c.group !== 'meta' ? cell(((d.totals || {}).values || {})[c.key]) : '';
+    }).join(','));
+    var blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv' }), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'spend-sheet-' + String(d.as_of || '').slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+
   /* ── Property detail (D4I-2, G73-1) ──────────────────────────────── */
   var LENS_LABEL = { express: 'Express', tailor: 'Tailor', amplify: 'Amplify', evolve: 'Evolve' };
   function scopedBack() { var c = company(); return '<a class="back" href="#/property/' + encodeURIComponent(state.companyId) + '">' + ic(I.arrowLeft, 13) + esc(c ? c.name : 'Property') + '</a>'; }
@@ -2267,7 +2515,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       approved: [screenApproved, 'approvals'], properties: [screenProperties, 'properties'], property: [screenProperty, 'properties'],
       mediaplan: [screenMediaPlan, 'properties'], visibility: [screenVisibility, 'visibility'], content: [screenContent, 'content'],
       creative: [screenCreative, 'creative'], value: [screenValue, 'value'], signals: [screenSignals, 'signals'],
-      ask: [screenAsk, ''], request: [screenRequest, 'approvals']
+      ask: [screenAsk, ''], request: [screenRequest, 'approvals'], spend: [screenSpend, 'spend']
     };
     var s = screens[name] || screens.dashboard;
     renderSide(s[1]);
