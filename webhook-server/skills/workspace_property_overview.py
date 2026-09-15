@@ -137,6 +137,17 @@ def loop_story(items: list) -> list:
     return out
 
 
+def _profile_completeness(ctx, internal: bool, gaps: list) -> dict | None:
+    """Round 5: the property profile's weighted completeness, as on the Properties list."""
+    from skills import workspace_profile
+    try:
+        return workspace_profile.completeness_metric(ctx.company_id, internal)
+    except Exception as exc:  # noqa: BLE001
+        gaps.append(wc.gap("profile_completeness", f"The property profile could not be read ({type(exc).__name__})",
+                           source="community_brief"))
+        return None
+
+
 def build_property_overview(ctx, *, internal: bool, today: date | None = None) -> dict:
     from skills import workspace_views
 
@@ -205,6 +216,7 @@ def build_property_overview(ctx, *, internal: bool, today: date | None = None) -
         "findings": findings,
         "recommended_action": {"item_id": views[0]["id"], "label": views[0]["title"]} if views else None,
         "draft_email": None,
+        "profile_completeness": _profile_completeness(ctx, internal, gaps),
         "loop": loop_story([dict(i, title=wi.view_item(i, internal)["title"]) for i in items]),
         "links": {
             "media_plan": f"#/property/{cid}/media-plan",
