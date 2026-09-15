@@ -762,6 +762,11 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .diff ins{background:var(--healthy-soft);color:var(--healthy-text);text-decoration:none;border-radius:2px;padding:0 2px;font-weight:500}
 .fhline{font-size:13px;line-height:19px}
 
+/* ── Profile check-in card (Round 5) ─────────────────────────────────── */
+.ckcard{border-left:3px solid var(--attention)}
+.ckcard .sub{display:block;font-size:11px;line-height:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--attention-text)}
+.todo-h{font-size:12px;line-height:16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--color-fg-muted);padding-top:4px}
+
 /* AA on tinted surfaces: small muted text steps down to the strong gray shade */
 .pane .eyebrow,.pane .support,.finding .receipt,.receipts .support,.receipts .eyebrow,.tbl tr.top td.support,.tbl .self,
 .tbl tr.rowlink:hover .fine,.tbl tr.rowlink:hover .empty-dash,.kbd,.chip:hover,.sopt:hover span,.sopt[aria-selected="true"] span,.hero .support{color:var(--gray-ink-strong)}
@@ -1349,7 +1354,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   }
   function dashboardHtml(d) {
     var name = d.greeting_name ? ', ' + d.greeting_name : '';
-    var waiting = d.waiting || [];
+    var checkins = (d.waiting || []).filter(function (w) { return w.kind === 'profile_checkin'; });
+    var waiting = (d.waiting || []).filter(function (w) { return w.kind !== 'profile_checkin'; });
     var top = waiting[0];
     var hero = '';
     if (top) {
@@ -1394,7 +1400,14 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       '<div class="rail-sep"></div>' +
       '<section class="sec"><h2 class="h-rail">Waiting on you' + (waiting.length ? '<span class="countbadge">' + esc(waiting.length) + '</span>' : '') + '</h2>' +
       (cards ? '<ul class="sec">' + cards + '</ul>' : '<p class="support">Nothing is waiting on you.</p>') +
-      (waiting.length > 3 ? '<a class="link" href="#/approvals">All ' + esc(waiting.length) + ' in Approvals</a>' : '') + '</section>';
+      (waiting.length > 3 ? '<a class="link" href="#/approvals">All ' + esc(waiting.length) + ' in Approvals</a>' : '') +
+      (checkins.length ? '<p class="todo-h">To-dos</p><ul class="sec">' + checkins.slice(0, 3).map(function (ck) {
+        var c = companyById(ck.company_id), n = ck.stale_count || 0;
+        return '<li class="wcard ckcard"><span class="sub">Monthly check-in</span><div class="top"><b>' + esc(ck.title || 'Review your property profile') + '</b></div>' +
+          '<p>' + esc((c ? c.name + ' · ' : '') + n + ' ' + plural(n, 'field') + ' untouched 90+ days') + '</p>' +
+          '<div class="acts"><a class="btn xs outline" href="#/property/' + encodeURIComponent(ck.company_id) + '/profile/stale" data-set-company="' + esc(ck.company_id) + '">Review profile</a></div></li>';
+      }).join('') + '</ul>' + (checkins.length > 3 ? '<p class="support">' + esc(checkins.length - 3) + ' more ' + plural(checkins.length - 3, 'property', 'properties') + ' due for a check-in this month.</p>' : '') : '') +
+      '</section>';
     return { page: page, rail: rail };
   }
 
