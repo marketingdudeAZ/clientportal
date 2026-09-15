@@ -688,6 +688,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .picklist button:hover{background:var(--color-muted)}
 .picklist button span{color:var(--color-fg-muted)}
 .sumline{font-size:13px;line-height:18px;color:var(--color-fg-muted)}
+[data-spend-results]{display:flex;flex-direction:column;gap:12px;min-width:0}
 .sumline b{color:var(--color-fg);font-weight:600}
 
 /* ── Profile (Round 5) ───────────────────────────────────────────────── */
@@ -699,7 +700,9 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .meterbar{height:8px;border-radius:4px;background:var(--rule);overflow:hidden}
 .meterbar i{display:block;height:100%;background:var(--juniper);border-radius:4px}
 .missing{display:flex;flex-direction:column;gap:6px}
-.missing li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;line-height:18px}
+.missing li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:4px 12px;font-size:13px;line-height:18px}
+.missing li .uchips{grid-column:1}
+.missing li .link{grid-column:2;grid-row:1}
 .missing li b{font-weight:500}
 .checkin-note{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--attention-soft);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;line-height:18px;color:var(--attention-text)}
 .checkin-note.done{background:var(--healthy-soft);color:var(--healthy-text)}
@@ -1035,7 +1038,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   function rtitle(r) { var t = receipt(r); return t ? ' title="' + t.replace(/&amp;/g, '&') + '"' : ''; }
   function gapsLine(gaps) {
     if (!has(gaps)) return '';
-    var txt = gaps.map(function (g) { return typeof g === 'string' ? g : (g && (g.message || g.detail || g.reason)) || ''; }).filter(Boolean).join(' ');
+    var txt = gaps.map(function (g) { return typeof g === 'string' ? g : (g && (g.message || g.detail || g.reason)) || ''; }).filter(Boolean)
+      .map(function (t) { t = String(t).trim(); return /[.!?”"]$/.test(t) ? t : t + '.'; }).join(' ');
     return txt ? '<p class="gaps">' + esc(txt) + '</p>' : '';
   }
   function staleLabel(iso) {
@@ -1837,7 +1841,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         '<td class="num">' + esc(num(c.units)) + '</td>' + cell(p.occupancy, function (v) { return pct(v, 1); }) + cell(p.to_lease_90d, num) + cell(p.leases_month, num) +
         '<td class="num"><span class="pill ' + esc(b) + '"><i></i>' + (score == null ? 'New' : esc(score) + ' · ' + esc(BAND_LABEL[b])) + '</span></td>' +
         '<td class="num">' + (has(p.status) ? esc(p.status) : '<span class="empty-dash">—</span>') + '</td>' +
-        '<td class="num">' + (p.profile_completeness == null ? '<span class="empty-dash">—</span>' : '<a class="link" href="#/property/' + encodeURIComponent(c.company_id) + '/profile">' + esc(Math.round(p.profile_completeness)) + '%</a>') + '</td></tr>';
+        (function () { var pc = val(p.profile_completeness); return '<td class="num"' + rtitle(p.profile_completeness) + '>' + (pc == null ? '<span class="empty-dash">—</span>' : '<a class="link" href="#/property/' + encodeURIComponent(c.company_id) + '/profile">' + esc(Math.round(pc)) + '%</a>') + '</td></tr>'; })();
     }).join('');
     return '<div class="page"><div class="head"><div class="stack"><h1 class="h-page">Properties</h1><p class="support">Every property you can see, sorted as your account lists them.</p></div>' + staleLabel(d.as_of) + '</div>' + strip +
       '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">Occupancy</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Leases (month)</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th><th scope="col" class="num">Profile</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
@@ -2093,7 +2097,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     opts = opts || {};
     var cid = prof.property.company_id, flash = state.profileFlash[f.key], states = '';
     if (f.stale) states += '<span class="pill attention"><i></i>Untouched 90+ days</span>';
-    if (f.ad_facing) states += '<span class="pill new">Reviewed by RPM before ads</span>';
+    if (f.ad_facing && f.editable !== false && !realInternal()) states += '<span class="pill new">Reviewed by RPM before ads</span>';
     if (viewInternal() && f.fair_housing_review) states += '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review · ' + esc(f.fair_housing_review.severity) + (has(f.fair_housing_review.terms) ? ' · “' + esc(f.fair_housing_review.terms.join('”, “')) + '”' : '') + '</span>';
     var notes = '';
     if (f.pending) notes += '<div class="notebox pend"><b>Pending RPM review.</b> ' + esc(f.pending.by) + ' proposed “' + esc(Array.isArray(f.pending.proposed_value) ? f.pending.proposed_value.join(', ') : f.pending.proposed_value) + '” · ' + esc(mdy(f.pending.at)) +
@@ -2124,6 +2128,10 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     if (f.type === 'dropdown') return '<div class="editor"><select class="inp" aria-labelledby="lbl-' + esc(f.key) + '">' + (f.options || []).map(function (o) { return '<option value="' + esc(o) + '"' + (o === v ? ' selected' : '') + '>' + esc(humanOpt(o)) + '</option>'; }).join('') + '</select>' + editorButtons() + '</div>';
     if (f.type === 'text') return '<div class="editor"><input class="inp" type="text" maxlength="5000" aria-labelledby="lbl-' + esc(f.key) + '" value="' + esc(v || '') + '">' + editorButtons() + '</div>';
     return '<div class="editor"><textarea class="inp" maxlength="5000" aria-labelledby="lbl-' + esc(f.key) + '">' + esc(v || '') + '</textarea>' + editorButtons() + '</div>';
+  }
+  function savedText(d) {
+    // Only an ad-facing field saved immediately reaches ads with the next daily feed; context and internal fields just save.
+    return d && d.field && d.field.ad_facing ? 'Saved · live in ads tomorrow' : 'Saved';
   }
   function editorButtons() { return '<div class="facts"><button type="button" class="btn sm primary" data-save>Save</button><button type="button" class="btn sm ghost" data-cancel>Cancel</button></div>'; }
   function editorValue(box, f) {
@@ -2210,7 +2218,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
             return;
           }
           state.profileFlash[key] = d.outcome === 'pending_review' ? { kind: 'pending_review', text: d.message || 'Sent to RPM for review. The current value stays live until RPM approves it.' }
-            : { kind: 'saved', text: d.message || 'Saved' };
+            : { kind: 'saved', text: savedText(d) };
           return reloadProfile().then(function () { var nr = row(key); if (nr) nr.scrollIntoView({ block: 'nearest' }); });
         }).catch(function (e) {
           save.disabled = false; save.textContent = 'Save';
@@ -2240,12 +2248,12 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         var key = b.getAttribute('data-history'), list = row(key).querySelector('[data-hist]');
         if (!list.hidden) { list.hidden = true; b.setAttribute('aria-expanded', 'false'); return; }
         b.setAttribute('aria-expanded', 'true'); list.hidden = false; list.innerHTML = '<li>Loading…</li>';
-        var ACT = { edited: 'Edited', synced: 'Synced', proposed: 'Proposed', approved: 'Approved', rejected: 'Not applied', reviewed_no_change: 'Reviewed, no change', suggestion_dismissed: 'Dismissed a suggestion' };
+        var ACT = { edit: 'Edited', reviewed: 'Reviewed, no change', proposed: 'Proposed', approved: 'Approved', rejected: 'Not applied' };
         api('/api/workspace/profile/history?' + cq() + '&key=' + encodeURIComponent(key)).then(function (r) {
           var entries = (r.data || {}).entries || [];
           list.innerHTML = entries.length ? entries.map(function (h) {
-            var v = h.value == null ? '' : (Array.isArray(h.value) ? h.value.map(function (x) { return typeof x === 'object' ? '' : x; }).filter(Boolean).join(', ') : h.value);
-            return '<li><b>' + esc(ACT[h.action] || h.action) + '</b> · ' + esc(h.by || '') + ' · ' + esc(mdy(h.at)) + (v && typeof v === 'string' ? ' — “' + esc(v.length > 120 ? v.slice(0, 117) + '…' : v) + '”' : '') + (h.note ? ' · ' + esc(h.note) : '') + '</li>';
+            var v = h.new_value == null ? '' : String(h.new_value);
+            return '<li><b>' + esc(ACT[h.kind] || h.kind) + '</b> · ' + esc(h.by || '') + ' · ' + esc(mdy(h.at)) + (v && typeof v === 'string' ? ' — “' + esc(v.length > 120 ? v.slice(0, 117) + '…' : v) + '”' : '') + (h.note ? ' · ' + esc(h.note) : '') + '</li>';
           }).join('') : '<li>No changes recorded yet.</li>';
         }).catch(function (e) { if (e && e.status === 401) return; list.innerHTML = '<li class="inline-err">' + esc(failText(e, 'History didn’t load')) + '</li>'; });
       });
@@ -2257,7 +2265,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         api('/api/workspace/profile/suggestions/' + encodeURIComponent(b.getAttribute('data-sug-accept')) + '/accept', { method: 'POST', body: { company_id: cid } }).then(function (res) {
           var d = res.data || {};
           state.profileFlash[key] = d.outcome === 'blocked' ? { kind: 'blocked', text: d.message } : d.outcome === 'pending_review'
-            ? { kind: 'pending_review', text: 'Sent to RPM for review. The current value stays live until it’s approved.' } : { kind: 'saved', text: d.message || 'Saved' };
+            ? { kind: 'pending_review', text: 'Sent to RPM for review. The current value stays live until RPM approves it.' } : { kind: 'saved', text: savedText(d) };
           return reloadProfile();
         }).catch(function (e) { b.disabled = false; b.textContent = 'Use it'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'That didn’t go through'); });
       });
@@ -2284,7 +2292,10 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         keys.forEach(function (k) { state.profileFlash[k] = { kind: 'confirmed', text: 'Marked as still accurate' }; });
         var r = row(keys[0]);
         if (keys.length === 1 && r) {
-          r.querySelector('.facts').insertAdjacentHTML('beforebegin', '<div class="notebox ok" role="status">Marked as still accurate · ' + esc((res.data || {}).message || '') + '</div>');
+          var skipped = ((res.data || {}).skipped || []).filter(function (x) { return x.key === keys[0]; })[0];
+          r.querySelector('.facts').insertAdjacentHTML('beforebegin', skipped
+            ? '<div class="notebox no" role="status">Not marked — ' + esc(skipped.reason) + '</div>'
+            : '<div class="notebox ok" role="status">Marked as still accurate</div>');
           btn.remove();
           var pill = r.querySelector('.pill.attention'); if (pill) pill.remove();
           return;
@@ -2310,6 +2321,13 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       var h = propertyHtml(d);
       setView(h.page, h.rail);
       var cid = state.companyId;
+      function showChip(pct) {
+        var chip = view.querySelector('[data-prof-chip]');
+        if (!chip || cid !== state.companyId || pct == null) return;
+        chip.innerHTML = 'Profile ' + esc(Math.round(pct)) + '% complete<span class="meterbar" aria-hidden="true"><i style="width:' + Math.round(pct) + '%"></i></span>';
+        chip.hidden = false;
+      }
+      if (val(d.profile_completeness) != null) { showChip(val(d.profile_completeness)); return; }
       api('/api/workspace/profile?' + cq()).then(function (pr) {
         var chip = view.querySelector('[data-prof-chip]'), pct = (((pr.data || {}).completeness) || {}).pct;
         if (!chip || cid !== state.companyId || pct == null) return;
