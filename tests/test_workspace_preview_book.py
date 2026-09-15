@@ -419,15 +419,23 @@ def test_profile_update_approve_reject_and_undo(fresh_profiles):
     assert taglines["value"] == "Your space. Your pace. LYV Broadway." and taglines["review_outcome"]["status"] == "rejected"
 
 
-def test_checkin_resets_staleness_and_is_never_an_approval(fresh_profiles):
-    checkins = [w for w in pw.dashboard()["waiting"] if w.get("kind") == "profile_checkin"]
+def test_checkin_is_a_client_to_do_resets_staleness_and_is_never_an_approval(fresh_profiles):
+    staff, client = pw.dashboard(), pw.dashboard(client=True)
+    assert not wc.check(staff, wc.DASHBOARD) and not wc.check(client, wc.DASHBOARD)
+    assert not [w for w in staff["waiting"] if w["kind"] == "profile_checkin"], "check-ins are client to-dos"
+    checkins = [w for w in client["waiting"] if w["kind"] == "profile_checkin"]
     lyv = next(w for w in checkins if w["company_id"] == LYV)
-    stale = pw.profile(LYV)["checkin"]["stale_fields"]
-    assert lyv["stale_count"] == len(stale)
+    stale = pw.profile(LYV, client=True)["checkin"]["stale_fields"]
+    assert lyv["stale_count"] == len(stale) and lyv["item_id"] is None and lyv["category"] is None
+    assert client["kpis"]["waiting_on_you"]["value"] == len([w for w in client["waiting"] if w["kind"] == "approval"])
     assert not [r for r in pw.approvals()["batch"]["rows"] if "checkin" in r["item_id"]]
-    body = pw.app.test_client().post("/api/workspace/profile/checkin", json={"company_id": LYV, "confirmed": stale[:2]}).get_json()
+    c = pw.app.test_client()
+    body = c.post("/api/workspace/profile/checkin", json={"company_id": LYV, "confirmed": stale[:2] + ["unit_features", "nope"]}).get_json()
+    assert not wc.check(body, wc.PROFILE_CHECKIN)
     assert body["confirmed"] == stale[:2] and not set(stale[:2]) & set(body["checkin"]["stale_fields"])
-    assert pw._profile_state(LYV)[stale[0]]["entries"][0]["action"] == "reviewed_no_change"
+    assert {s["key"]: s["reason"] for s in body["skipped"]} == {"unit_features": "No value to confirm", "nope": "Unknown field"}
+    history = c.get(f"/api/workspace/profile/history?company_id={LYV}&key={stale[0]}").get_json()
+    assert not wc.check(history, wc.PROFILE_HISTORY) and history["entries"][0]["kind"] == "reviewed"
 
 
 def test_suggestions_accept_through_the_edit_flow_and_dismiss_with_a_reason(fresh_profiles):
@@ -437,13 +445,25 @@ def test_suggestions_accept_through_the_edit_flow_and_dismiss_with_a_reason(fres
     assert body["outcome"] == "pending_review", "an ad-facing suggestion from a client goes to review like any edit"
     assert c.post("/api/workspace/profile/suggestions/sug-0021-landmarks/dismiss", json={}).status_code == 400
     body = c.post("/api/workspace/profile/suggestions/sug-0021-landmarks/dismiss", json={"reason": "Not near the property"}).get_json()
-    assert body["dismissed"] == "sug-0021-landmarks"
+    assert not wc.check(body, wc.SUGGESTION_DISMISSED) and body == {"suggestion_id": "sug-0021-landmarks", "dismissed": True, "reason": "Not near the property"}
     assert pw._profile_state(LYV)["landmarks"]["entries"][0]["note"] == "Not near the property"
 
 
-def test_properties_rows_carry_profile_completeness(fresh_profiles):
+def test_properties_rows_and_overview_carry_profile_completeness(fresh_profiles):
     for row in pw.dashboard()["properties"]:
-        assert row["profile_completeness"] == pw.profile(row["company_id"])["completeness"]["pct"]
+        metric = row["profile_completeness"]
+        assert metric["value"] == pw.profile(row["company_id"])["completeness"]["pct"] and metric["source"]
+    with pw.app.test_request_context():
+        assert pw.property_overview(LYV)["profile_completeness"]["value"] == pw.profile(LYV)["completeness"]["pct"]
+
+
+def test_save_messages_say_what_actually_happens(fresh_profiles):
+    c = pw.app.test_client()
+    assert _patch(c, "short_name", "LYV")[1]["message"] == "Saved · live in ads tomorrow", "ad-facing, saved immediately by staff"
+    assert _patch(c, "onsite_events", "Monthly rooftop yoga")[1]["message"] == "Saved", "context fields aren't used in ads"
+    assert _patch(c, "pms", "Entrata")[1]["message"] == "Saved", "internal fields just save"
+    pw.SWITCHES["client_editor"] = True
+    assert _patch(c, "unit_features", "In-home washer and dryer")[1]["message"].startswith("Sent to RPM for review")
 
 
 def test_every_profile_update_item_matches_the_item_spec(fresh_profiles):

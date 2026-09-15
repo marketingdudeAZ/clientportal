@@ -371,10 +371,11 @@ def dashboard(client: bool = False) -> dict:
         "properties": [{"company_id": p["company_id"], "name": p["name"], "units": p["units"],
                         "occupancy": _metric(_occ(p), "aptiq"), "to_lease_90d": _metric(p["units_to_lease_90d"], "aptiq_exposure"),
                         "leases_month": _metric(p["leases_this_month"], "hyly", "2026-09-14T11:00:00Z"),
-                        "status": _status(p), "profile_completeness": profile_completeness_pct(p["company_id"], client),
+                        "status": _status(p), "profile_completeness": profile_completeness_metric(p["company_id"], client),
                         "health": p["health"], "band": p["band"]} for p in order],
         "activity": activity,
-        "waiting": [{"item_id": it["id"], "company_id": it["company_id"], "title": it["title"], "subtitle": it["cost_note"] or (it["why"] or {}).get("text"), "category": it["category"]} for it in waiting] + profile_checkins(client),
+        "waiting": (profile_checkins() if client else []) + [{"kind": "approval", "item_id": it["id"], "company_id": it["company_id"], "title": it["title"],
+                                                               "subtitle": it["cost_note"] or (it["why"] or {}).get("text"), "category": it["category"]} for it in waiting],
         "loop_status": {"running": True, "property_count": len(ps), "last_pass": "2026-09-14T08:00:00Z"},
         "gaps": [{"message": "Cedar Falls Commons has no ApartmentIQ read yet, so its occupancy and exposure are left out of the totals.", "field": "kpis.occupancy", "source": "aptiq"}],
     }
@@ -421,7 +422,7 @@ def property_overview(company_id: str) -> dict:
         loop.append({"lens": it["lens"], "status": "waiting", "at": it["trail"][0]["at"] if it["trail"] else None, "text": it["title"], "item_id": it["id"]})
     loop.append({"lens": "evolve", "status": "upcoming", "at": "2026-10-14", "text": f"30 days of before-and-after for {n} once the open decisions are made.", "item_id": None})
     engines = _engine_scores(p)
-    return {
+    return {"profile_completeness": profile_completeness_metric(company_id, _viewer_client() if request else False),
         "as_of": AS_OF, "name": n, "city": p["city"], "state": p["state"], "units": p["units"], "objective": "Stabilize" if (occ or 1) >= 0.9 else "Lease up",
         "objective_reason": None if occ is None else f"{int(round(occ * 100))}% occupied",
         "health": None if p["health"] is None else {"score": p["health"], "band": p["band"], "source": "redlight", "as_of": "2026-09-14T08:00:00Z"},
@@ -1371,6 +1372,11 @@ def profile_completeness_pct(cid: str, client: bool = False) -> int | None:
     return profile(cid, client)["completeness"]["pct"]
 
 
+def profile_completeness_metric(cid: str, client: bool = False) -> dict | None:
+    pct = profile_completeness_pct(cid, client)
+    return None if pct is None else {"value": pct, "source": "community_brief", "as_of": R5_NOW.isoformat().replace("+00:00", "Z"), "weighted": True}
+
+
 def _field_def(key: str):
     return _api_modules()[0].FIELDS.get(key)
 
@@ -1420,15 +1426,17 @@ def profile_update_items() -> list:
     return out
 
 
-def profile_checkins(client: bool = False) -> list:
-    """Monthly check-in to-dos: one per property with fields untouched 90+ days. Not approvals."""
+def profile_checkins() -> list:
+    """Client dashboards' monthly check-in to-dos (skills.workspace_profile.checkin_card). Not approvals."""
     out = []
     for p in props():
         if p["occupied"] is None:
             continue
-        ci = profile(p["company_id"], client)["checkin"]
+        ci = profile(p["company_id"], client=True)["checkin"]
         if ci["due"] and (p["company_id"] == "18234410021" or _h(p["company_id"] + "chk", 0, 4) == 0):
-            out.append({"kind": "profile_checkin", "company_id": p["company_id"], "title": "Review your property profile", "stale_count": len(ci["stale_fields"])})
+            n = len(ci["stale_fields"])
+            out.append({"kind": "profile_checkin", "item_id": None, "company_id": p["company_id"], "title": "Review your property profile",
+                        "subtitle": f"{p['name']} · {n} field{'s' if n != 1 else ''} not updated in 90+ days", "category": None, "stale_count": n})
     return out
 
 
@@ -1464,7 +1472,8 @@ def _save_field(cid: str, key: str, value, client: bool, by: str) -> tuple[dict,
     st["review"] = None
     st["entries"].insert(0, {"at": now, "by": by, "action": "edited", "old_value": old, "new_value": value, "note": None})
     return {"field": _field_out(f, st, client), "outcome": "saved", "fair_housing": result,
-            "message": "Saved" if f.internal else "Saved · live in ads tomorrow"}, 200
+            # "live in ads tomorrow" only when an ad-facing field saves immediately; context and internal fields just save.
+            "message": "Saved · live in ads tomorrow" if cb.is_ad_facing(key) else "Saved"}, 200
 
 
 def apply_profile_decision(item_id: str, action: str, reason: str | None) -> dict | None:
@@ -1542,20 +1551,30 @@ def profile_checkin_route():
     cid = str(body.get("company_id") or "").strip()
     if not prop(cid):
         return jsonify({"error": "company_id is required"}), 400
+    confirmed = body.get("confirmed")
+    if not isinstance(confirmed, list) or not all(isinstance(k, str) for k in confirmed):
+        return jsonify({"error": "confirmed must be a list of field keys"}), 400
     client = _viewer_client()
     state, now = _profile_state(cid), R5_NOW.isoformat().replace("+00:00", "Z")
-    done = []
-    for k in [k for k in body.get("confirmed") or [] if isinstance(k, str)]:
+    done, skipped = [], []
+    for k in dict.fromkeys(confirmed):
         f = _field_def(k)
-        if not f or k not in state or (f.internal and client) or state[k]["override"] is None:
+        if f is None:
+            skipped.append({"key": k, "reason": "Unknown field"})
             continue
+        if f.internal and client:
+            skipped.append({"key": k, "reason": "Internal field"})
+            continue
+        if state[k]["override"] is None and state[k]["resolved"] is None:
+            skipped.append({"key": k, "reason": "No value to confirm"})
+            continue
+        current = state[k]["override"] if state[k]["override"] is not None else state[k]["resolved"]
         state[k]["entries"].insert(0, {"at": now, "by": CLIENT_NAME if client else STAFF_NAME, "action": "reviewed_no_change",
-                                       "old_value": None, "new_value": None, "note": "Reviewed, no change"})
+                                       "old_value": current, "new_value": current, "note": None})
         done.append(k)
-    if done and not profile(cid, client)["checkin"]["stale_fields"]:
+    if done:
         CHECKINS[cid] = R5_NOW
-    return jsonify({"confirmed": done, "checkin": profile(cid, client)["checkin"],
-                    "message": f"Marked {len(done)} {'field' if len(done) == 1 else 'fields'} as still accurate."})
+    return jsonify({"company_id": cid, "confirmed": done, "skipped": skipped, "checkin": profile(cid, client)["checkin"]})
 
 
 def _find_suggestion(sid: str):
@@ -1594,7 +1613,7 @@ def suggestion_dismiss_route(sid: str):
     st["entries"].insert(0, {"at": now, "by": CLIENT_NAME if _viewer_client() else STAFF_NAME, "action": "suggestion_dismissed",
                              "old_value": None, "new_value": st["suggestion"]["value"], "note": reason})
     st["suggestion"] = None
-    return jsonify({"dismissed": sid, "key": key, "reason": reason})
+    return jsonify({"suggestion_id": sid, "dismissed": True, "reason": reason})
 
 
 @app.get("/api/workspace/profile/history")
@@ -1605,7 +1624,10 @@ def profile_history_route():
         return jsonify({"error": "Unknown field"}), 404
     if f.internal and _viewer_client():
         return jsonify({"error": "This field is internal"}), 403
-    return jsonify({"company_id": cid, "key": key, "label": f.label, "entries": copy.deepcopy(_profile_state(cid)[key]["entries"])})
+    kinds = {"edited": "edit", "reviewed_no_change": "reviewed", "approved": "approved", "proposed": "proposed", "rejected": "rejected"}
+    entries = [{"at": e["at"], "by": e["by"], "kind": kinds[e["action"]], "old_value": e.get("old_value"), "new_value": e.get("new_value"),
+                "note": e.get("note")} for e in _profile_state(cid)[key]["entries"] if e["action"] in kinds]
+    return jsonify({"company_id": cid, "key": key, "label": f.label, "entries": entries, "gaps": []})
 
 
 
