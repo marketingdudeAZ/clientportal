@@ -23,6 +23,7 @@ HubSpot, HubDB, BigQuery or Claude directly.
     GET  /api/workspace/requests?company_id=
     GET  /api/workspace/search?q=&company_id=
     GET  /api/workspace/spend-sheet?q=&market=&manager=&status=&sort=&dir=&page=&page_size=
+    GET  /api/workspace/profile?company_id=
     POST /api/internal/workspace/warm                         X-Internal-Key
 
 Gates:
@@ -810,3 +811,23 @@ def workspace_spend_sheet():
         return _refused(exc)
     except Exception as exc:  # noqa: BLE001
         return _failed("spend sheet", exc)
+
+
+# ── property profile (Round 5) ───────────────────────────────────────────────
+
+@workspace_bp.route("/api/workspace/profile", methods=["GET", "OPTIONS"])
+def workspace_profile():
+    """The community brief as the Workspace profile. Internal fields are removed
+    server-side for clients and preview-as-client."""
+    company_id = _company_id()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_profile as wpr
+    try:
+        return jsonify(wpr.build_profile(ctx, internal=_is_internal()))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("profile", exc)
