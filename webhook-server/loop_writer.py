@@ -102,6 +102,10 @@ LOOP_EVENT_TYPES = {
     # filed from plain words, and the undo of a forecast recommendation decision.
     "workspace_decision", "workspace_decision_undone", "workspace_request_filed",
     "recommendation_undone", "workspace_fair_housing_review",
+    # Workspace property profile (Round 5): a client's proposed edit to an
+    # ad-facing field, a "reviewed, no change" check-in, a dismissed suggestion.
+    "workspace_profile_update_proposed", "workspace_profile_checkin",
+    "workspace_profile_suggestion_dismissed",
 }
 
 

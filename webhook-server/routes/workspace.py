@@ -22,6 +22,9 @@ HubSpot, HubDB, BigQuery or Claude directly.
     POST /api/workspace/requests                              verified identity
     GET  /api/workspace/requests?company_id=
     GET  /api/workspace/search?q=&company_id=
+    GET  /api/workspace/spend-sheet?q=&market=&manager=&status=&sort=&dir=&page=&page_size=
+    GET  /api/workspace/profile?company_id=
+    PATCH /api/workspace/profile/field                        verified identity
     POST /api/internal/workspace/warm                         X-Internal-Key
 
 Gates:
@@ -64,7 +67,7 @@ def _preflight():
     if origin in ALLOWED_ORIGINS:
         resp.headers["Access-Control-Allow-Origin"] = origin
         resp.headers["Access-Control-Allow-Credentials"] = "true"
-        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, OPTIONS"
         resp.headers["Access-Control-Allow-Headers"] = (
             "Content-Type, X-Portal-Email, Authorization, X-Workspace-Link, " + PREVIEW_HEADER
         )
@@ -789,3 +792,69 @@ def workspace_creative_upload():
         return _refused(exc)
     except Exception as exc:  # noqa: BLE001
         return _failed("creative upload", exc)
+
+
+# ── spend sheet (Round 5) ────────────────────────────────────────────────────
+
+@workspace_bp.route("/api/workspace/spend-sheet", methods=["GET", "OPTIONS"])
+def workspace_spend_sheet():
+    """Every managed property's contracted spend. Clients: their properties, no
+    internal columns. Preview-as-client strips the same columns."""
+    gate = require_access(FEATURE_KEY)
+    if gate:
+        return gate
+    from skills import workspace_common, workspace_spend as wsp
+    try:
+        params = wsp.parse_params(request.args)
+        return jsonify(wsp.build_spend_sheet(current_portal_email(), internal=_is_internal(),
+                                             real_internal=_real_internal(), **params))
+    except workspace_common.WorkspaceError as exc:
+        return _refused(exc)
+    except Exception as exc:  # noqa: BLE001
+        return _failed("spend sheet", exc)
+
+
+# ── property profile (Round 5) ───────────────────────────────────────────────
+
+@workspace_bp.route("/api/workspace/profile", methods=["GET", "OPTIONS"])
+def workspace_profile():
+    """The community brief as the Workspace profile. Internal fields are removed
+    server-side for clients and preview-as-client."""
+    company_id = _company_id()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_profile as wpr
+    try:
+        return jsonify(wpr.build_profile(ctx, internal=_is_internal()))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("profile", exc)
+
+
+@workspace_bp.route("/api/workspace/profile/field", methods=["PATCH", "OPTIONS"])
+def workspace_profile_field():
+    """One field edit. Fair Housing first; a client's ad-facing edit waits for RPM."""
+    gate = _write_gate()
+    if gate:
+        return gate
+    body = request.get_json(silent=True) or {}
+    company_id = str(body.get("company_id") or "").strip()
+    gate = _property_gate(company_id)
+    if gate:
+        return gate
+    key = str(body.get("key") or "").strip()
+    if not key or "value" not in body:
+        return jsonify({"error": "key and value are required"}), 400
+    ctx, err = _load(company_id)
+    if err:
+        return err
+    from skills import workspace_common, workspace_profile as wpr
+    try:
+        return jsonify(wpr.edit_field(ctx, key, body.get("value"), current_portal_email(), staff=_is_internal()))
+    except workspace_common.WorkspaceError as exc:
+        return _refused(exc)
+    except Exception as exc:  # noqa: BLE001
+        return _failed("profile edit", exc)

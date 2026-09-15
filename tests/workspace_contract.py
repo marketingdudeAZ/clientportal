@@ -380,7 +380,52 @@ CREATIVE_UPLOAD = {
     "skipped": [{"filename": STR, "reason": STR}],
 }
 
+SPEND_SHEET = {
+    "as_of": opt(STR), "scope": enum("portfolio", "client"), "source": STR,
+    "columns": [{"key": STR, "label": STR, "group": enum("channel", "meta", "internal"), "internal": BOOL}],
+    "rows": [{"company_id": STR, "property_name": opt(STR), "status": opt(STR), "market": opt(STR),
+              "manager": opt(STR), "values": ANY, "total": opt(NUM), "href": STR}],
+    "totals": {"values": ANY, "total": opt(NUM)},
+    "count": INT, "page": INT, "page_size": INT,
+    "filters": {"markets": [STR], "managers": [STR], "statuses": [STR]},
+    "gaps": [GAP],
+}
+
+USED_IN = enum("ads", "website_faq", "ai_answers", "reports", "internal")
+COMPLETENESS = {"pct": opt(NUM), "weighted": BOOL,
+                "top_missing": [{"key": STR, "label": STR, "used_in": [USED_IN]}]}
+PROFILE_FIELD = {
+    "key": STR, "label": STR, "hint": opt(STR), "type": STR, "options": [STR], "section": STR,
+    "value": opt(STR),
+    "provenance": {"kind": enum("override", "resolved", "empty"), "by": opt(STR), "at": opt(STR),
+                   "source": opt(STR), "overrides": opt(STR)},
+    "ad_facing": BOOL, "used_in": [USED_IN], "internal": BOOL, "editable": BOOL,
+    "stale": opt(BOOL), "last_updated": opt(STR),
+    "pending": opt({"proposed_value": STR, "by": opt(STR), "at": opt(STR), "item_id": STR}),
+    "suggestion": opt({"id": STR, "value": STR, "source": enum("site_scrape", "geo_claim", "fair_housing", "ticket"),
+                       "reason": STR}),
+    "review_outcome": opt({"status": enum("approved", "rejected"), "at": opt(STR), "reason": opt(STR),
+                           "proposed_value": STR}),
+    # internal callers only; the key is removed for clients
+    "fair_housing_review": omittable(opt({"severity": STR, "terms": [STR]})),
+}
+PROFILE = {
+    "property": {"company_id": STR, "name": opt(STR), "last_updated": opt(STR)},
+    "completeness": COMPLETENESS,
+    "checkin": {"due": BOOL, "stale_fields": [STR]},
+    "sections": [{"key": STR, "title": STR, "completeness": COMPLETENESS, "fields": [PROFILE_FIELD]}],
+    "gaps": [GAP],
+}
+
+FAIR_HOUSING_RESULT = {"result": enum("clear", "flagged", "blocked"), "severity": omittable(STR),
+                       "terms": omittable([STR])}
+PROFILE_EDIT = {"field": PROFILE_FIELD, "outcome": enum("saved", "pending_review", "blocked"),
+                "fair_housing": FAIR_HOUSING_RESULT, "message": STR}
+
 SHAPES.update({
+    "profile_edit": PROFILE_EDIT,
+    "profile": PROFILE, "profile_field": PROFILE_FIELD,
+    "spend_sheet": SPEND_SHEET,
     "creative_upload": CREATIVE_UPLOAD,
     "fair_housing_review": FAIR_HOUSING_REVIEW, "fair_housing_run_all": FAIR_HOUSING_RUN_ALL,
     "dashboard": DASHBOARD, "approvals": APPROVALS, "property_overview": PROPERTY_OVERVIEW,
