@@ -23,12 +23,14 @@ unknown (null).
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import itertools
 import json
 import logging
 import re
 import threading
+import time
 from datetime import datetime, timedelta
 
 import community_brief
@@ -55,6 +57,8 @@ _proposals: dict = {}            # company_id → {proposal_id: record}
 _sequence = itertools.count(1)   # orders proposals made within the same second
 PROPOSAL_EVENT = "workspace_profile_update_proposed"
 ITEM_SOURCE = "profile_update"
+STORED_TTL = 120.0               # seconds a property's stored proposals and decisions are reused
+_stored: dict = {}               # company_id → (monotonic time, [payload], decision history | None)
 
 
 def clear() -> None:
@@ -62,6 +66,7 @@ def clear() -> None:
         _local_audit.clear()
         _checkins.clear()
         _proposals.clear()
+        _stored.clear()
 
 
 # ── reading ──────────────────────────────────────────────────────────────────
@@ -252,6 +257,7 @@ def propose(ctx, field, current: str, value: str, actor: str, now: datetime) -> 
             if other["field_key"] == field.key and other["status"] == "pending":
                 other["status"] = "superseded"
         _proposals.setdefault(ctx.company_id, {})[pid] = stored
+        _stored.pop(ctx.company_id, None)
     try:
         loop_writer.record("engage", PROPOSAL_EVENT, property_uuid=ctx.uuid or None, company_id=ctx.company_id,
                            source="workspace", source_id=item_id_for(pid), trigger="client_action",
@@ -261,25 +267,45 @@ def propose(ctx, field, current: str, value: str, actor: str, now: datetime) -> 
     return dict(record)
 
 
-def proposals(ctx, gaps: list) -> list:
-    """Every profile update for the property, newest first, with its status."""
+def _stored_events(ctx, gaps: list) -> tuple[list, dict | None]:
+    """(proposal payloads from loop events, decision history), reused for STORED_TTL."""
     import loop_writer
+    from skills import workspace_inbox as wi
 
-    with _lock:
-        by_id = {pid: dict(r) for pid, r in _proposals.get(ctx.company_id, {}).items()}
     if loop_writer._bq() is None:
         gaps.append(wc.gap("pending", "Profile updates proposed before this server started need BigQuery loop "
                                       "events, which are not configured here", source="loop_events", internal=True))
-    elif ctx.uuid:
-        try:
-            for ev in loop_writer.query_recent(ctx.uuid, limit=500):
-                payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else None
-                if ev.get("event_type") == PROPOSAL_EVENT and payload and payload.get("proposal_id"):
-                    by_id.setdefault(payload["proposal_id"], {**payload, "status": "pending"})
-        except Exception as exc:  # noqa: BLE001
-            gaps.append(wc.gap("pending", f"Stored profile updates could not be read ({type(exc).__name__})",
-                               source="loop_events", internal=True))
-    apply_decided(ctx, by_id, gaps)
+        return [], None
+    if not ctx.uuid:
+        return [], None
+    with _lock:
+        hit = _stored.get(ctx.company_id)
+    if hit and time.monotonic() - hit[0] < STORED_TTL:
+        return hit[1], hit[2]
+    payloads: list = []
+    try:
+        for ev in loop_writer.query_recent(ctx.uuid, limit=500):
+            payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else None
+            if ev.get("event_type") == PROPOSAL_EVENT and payload and payload.get("proposal_id"):
+                payloads.append(payload)
+        history = wi.decision_history(ctx, gaps)
+    except Exception as exc:  # noqa: BLE001
+        gaps.append(wc.gap("pending", f"Stored profile updates could not be read ({type(exc).__name__})",
+                           source="loop_events", internal=True))
+        return [], None
+    with _lock:
+        _stored[ctx.company_id] = (time.monotonic(), payloads, history)
+    return payloads, history
+
+
+def proposals(ctx, gaps: list) -> list:
+    """Every profile update for the property, newest first, with its status."""
+    with _lock:
+        by_id = {pid: dict(r) for pid, r in _proposals.get(ctx.company_id, {}).items()}
+    payloads, history = _stored_events(ctx, gaps)
+    for payload in payloads:
+        by_id.setdefault(payload["proposal_id"], {**payload, "status": "pending"})
+    apply_decided(by_id, history)
     rows = sorted(by_id.values(), key=lambda r: (r.get("proposed_at") or "", r.get("_seq") or 0), reverse=True)
     newest_pending: set = set()
     for r in rows:
@@ -291,22 +317,47 @@ def proposals(ctx, gaps: list) -> list:
     return rows
 
 
-def apply_decided(ctx, by_id: dict, gaps: list) -> None:
-    """Overlay approvals and rejections recorded as decisions (see the approval step)."""
-    return None
+def apply_decided(by_id: dict, history: dict | None) -> None:
+    """Status from the `workspace_decision` events on `profile_update:<id>`.
+
+    A record this process decided keeps the status it set; the stored decisions
+    fill in the rest (another server's decision, or a restart).
+    """
+    from skills import workspace_inbox as wi
+
+    for pid, rec in by_id.items():
+        if rec.get("_seq") and rec["status"] != "pending":
+            continue
+        effective = [d for d in (history or {}).get(item_id_for(pid), [])
+                     if d.get("outcome", "ok") in ("ok", "partial") and not d.get("undone")]
+        if not effective:
+            continue
+        last = effective[-1]
+        rec.update({"decided_by": last.get("actor"), "decided_at": wc.to_iso_ts(last.get("at"))})
+        if last.get("action") == "approve":
+            rec.update({"status": "approved", "reason": None})
+        elif last.get("action") == "not_now":
+            rec.update({"status": "rejected", "reason": wi.REASONS.get(last.get("reason"), last.get("reason"))})
 
 
-def pending_by_key(ctx, gaps: list) -> dict:
+def reviews_by_key(ctx, gaps: list, rows: list | None = None) -> dict:
+    """The latest RPM decision per field: what the client sees on the field."""
     out = {}
-    for r in proposals(ctx, gaps):
+    for r in proposals(ctx, gaps) if rows is None else rows:
+        if r["status"] in ("approved", "rejected") and r["field_key"] not in out:
+            out[r["field_key"]] = {"status": r["status"], "at": r.get("decided_at"),
+                                   "reason": r.get("reason") if r["status"] == "rejected" else None,
+                                   "proposed_value": r.get("proposed_value") or ""}
+    return out
+
+
+def pending_by_key(ctx, gaps: list, rows: list | None = None) -> dict:
+    out = {}
+    for r in proposals(ctx, gaps) if rows is None else rows:
         if r["status"] == "pending" and r["field_key"] not in out:
             out[r["field_key"]] = {"proposed_value": r["proposed_value"], "by": display_name(r["proposed_by"]),
                                    "at": r["proposed_at"], "item_id": item_id_for(r["proposal_id"])}
     return out
-
-
-def reviews_by_key(ctx, gaps: list) -> dict:
-    return {}
 
 
 def suggestions_by_key(ctx, props: dict, views_by_key: dict, gaps: list) -> dict:
@@ -321,8 +372,9 @@ def build_profile(ctx, *, internal: bool, props: dict | None = None, now: dateti
     entries: dict = {}
     for row in audit or []:
         entries.setdefault(row.get("field_key"), []).append(row)
-    pending = pending_by_key(ctx, gaps)
-    reviews = reviews_by_key(ctx, gaps)
+    rows = proposals(ctx, gaps)
+    pending = pending_by_key(ctx, gaps, rows)
+    reviews = reviews_by_key(ctx, gaps, rows)
 
     sections, views = [], []
     for title, fields in visible_sections(internal):
@@ -420,9 +472,10 @@ def one_field(ctx, field, props: dict, *, internal: bool, now: datetime) -> dict
     gaps: list = []
     audit = audit_rows(ctx.company_id, gaps)
     entries = [r for r in audit or [] if r.get("field_key") == field.key]
-    pending = pending_by_key(ctx, gaps).get(field.key)
+    rows = proposals(ctx, gaps)
+    pending = pending_by_key(ctx, gaps, rows).get(field.key)
     return field_view(field, props, entries, internal=internal, audit_known=audit is not None, now=now,
-                      pending=pending, review=None if pending else reviews_by_key(ctx, gaps).get(field.key))
+                      pending=pending, review=None if pending else reviews_by_key(ctx, gaps, rows).get(field.key))
 
 
 def edit_field(ctx, key: str, value, actor: str, *, staff: bool, props: dict | None = None,
@@ -470,3 +523,120 @@ def _after_write(ctx, field, props: dict, old: str, new: str, actor: str, now: d
         hubspot_client.invalidate(ctx.company_id)
     except Exception:  # noqa: BLE001
         pass
+
+
+# ── RPM review of a profile update (item source `profile_update`) ────────────
+
+def diff_lines(current: str | None, proposed: str | None) -> list:
+    out = []
+    for line in difflib.ndiff(str(current or "").splitlines(), str(proposed or "").splitlines()):
+        op = {"  ": "same", "+ ": "add", "- ": "remove"}.get(line[:2])
+        if op:
+            out.append({"op": op, "text": line[2:]})
+    return out
+
+
+def proposal_items(ctx, gaps: list) -> list:
+    """Workspace items for RPM staff. Internal only (INTERNAL_ONLY_SOURCES)."""
+    from skills import workspace_inbox as wi
+
+    items = []
+    for r in proposals(ctx, gaps):
+        if r["status"] == "superseded":
+            continue
+        pid, label, proposer = r["proposal_id"], r["field_label"], r.get("proposed_by") or None
+        current, proposed = r.get("current_value") or "", r.get("proposed_value") or ""
+        status = "to_do" if r["status"] == "pending" else "done"
+        used = [community_brief.USED_IN_LABELS[u] for u in r.get("used_in") or [] if u in community_brief.USED_IN_LABELS]
+        receipts = [wi._receipt(f"Proposed by {proposer or 'a client'}", "workspace_profile_update", r.get("proposed_at"))]
+        items.append(wi._new_item(
+            ITEM_SOURCE, pid, f"Profile update: {label}",
+            found=f"Proposed {label}: {wc.truncate(proposed)}" if proposed else f"Proposed clearing {label}",
+            if_skip=f"The profile keeps: {wc.truncate(current)}" if current else f"{label} stays empty",
+            receipts=receipts,
+            status=status,
+            needs_approval=status == "to_do",
+            client_visible=False,
+            steps=[wi._step("Written to the property profile", "auto"),
+                   wi._step("Reaches ads on the next daily feed sync", "queued")],
+            evidence={"columns": ["Current value", "Proposed value"], "rows": [[current or None, proposed or None]],
+                      "more_count": 0},
+            trail=[wi.trail(r.get("proposed_at"), proposer, "Proposed this change", "internal")],
+            for_whom={"text": "Used in: " + ", ".join(used) if used else "Not used in ads or reports", "questions": []},
+            profile_update={
+                "field_key": r["field_key"], "field_label": label, "current_value": current or None,
+                "proposed_value": proposed or None, "proposed_by": proposer, "proposed_at": r.get("proposed_at"),
+                "used_in": list(r.get("used_in") or []), "diff": diff_lines(current, proposed),
+                "status": r["status"], "decided_by": r.get("decided_by"), "decided_at": r.get("decided_at"),
+                "reason": r.get("reason"),
+            },
+            _created=r.get("proposed_at"),
+            _closed=r.get("decided_at") if status == "done" else None,
+            _closed_as="not_now" if r["status"] == "rejected" else None,
+            _raw={"proposal_id": pid, "field_key": r["field_key"], "proposed_by": proposer},
+        ))
+    return items
+
+
+def _find(ctx, proposal_id: str) -> dict:
+    rec = next((r for r in proposals(ctx, []) if r["proposal_id"] == proposal_id), None)
+    if rec is None:
+        raise wc.WorkspaceError(404, "Item not found")
+    return rec
+
+
+def _set_status(ctx, rec: dict, **changes) -> None:
+    with _lock:
+        stored = _proposals.setdefault(ctx.company_id, {}).get(rec["proposal_id"])
+        if stored is None:
+            stored = {k: v for k, v in rec.items()}
+            stored["_seq"] = next(_sequence)
+            _proposals[ctx.company_id][rec["proposal_id"]] = stored
+        stored.update(changes)
+        _stored.pop(ctx.company_id, None)
+
+
+def approve(ctx, proposal_id: str, actor: str, *, now: datetime | None = None) -> dict:
+    """Write the proposed value through write_field. Raises WorkspaceError."""
+    now = now or wc.utc_now()
+    rec = _find(ctx, proposal_id)
+    if rec["status"] != "pending":
+        raise wc.WorkspaceError(409, f"This profile update is already {rec['status']}")
+    field = community_brief.FIELDS.get(rec["field_key"])
+    if field is None or not field.hs_override:
+        raise wc.WorkspaceError(409, "This field can no longer be edited")
+    proposed = rec.get("proposed_value") or ""
+    review = wc.fair_housing_review(proposed) if field.type not in community_brief.TABLE_TYPES else None
+    if review and review["severity"] == "high":
+        raise wc.WorkspaceError(409, "Fair Housing", blocked_message(review))
+    editor = f"{actor} (approved; proposed by {rec.get('proposed_by') or 'a client'})"
+    ok, written = community_brief.write_field(ctx.company_id, field.key, proposed, edited_by=editor)
+    if not ok:
+        status = 502 if (written == "network error" or str(written).startswith("HubSpot")) else 400
+        raise wc.WorkspaceError(status, "The profile could not be updated", written)
+    _set_status(ctx, rec, status="approved", decided_by=actor, decided_at=wc.to_iso_ts(now), reason=None)
+    _remember_edit(ctx, field, rec.get("current_value") or "", written, editor, now)
+    try:
+        import hubspot_client
+        hubspot_client.invalidate(ctx.company_id)
+    except Exception:  # noqa: BLE001
+        pass
+    return {**rec, "status": "approved", "decided_by": actor}
+
+
+def reject(ctx, proposal_id: str, actor: str, reason: str, *, now: datetime | None = None) -> dict:
+    """Not applied. The profile is untouched. Raises WorkspaceError."""
+    now = now or wc.utc_now()
+    rec = _find(ctx, proposal_id)
+    if rec["status"] != "pending":
+        raise wc.WorkspaceError(409, f"This profile update is already {rec['status']}")
+    _set_status(ctx, rec, status="rejected", decided_by=actor, decided_at=wc.to_iso_ts(now), reason=reason)
+    return {**rec, "status": "rejected", "decided_by": actor, "reason": reason}
+
+
+def reopen(ctx, proposal_id: str) -> None:
+    """Undo a rejection: the update waits for review again."""
+    rec = _find(ctx, proposal_id)
+    if rec["status"] != "rejected":
+        raise wc.WorkspaceError(409, "not_undoable", f"The profile update is now {rec['status']}")
+    _set_status(ctx, rec, status="pending", decided_by=None, decided_at=None, reason=None)

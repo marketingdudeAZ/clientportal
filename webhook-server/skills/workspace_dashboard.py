@@ -40,7 +40,7 @@ KPI_ORDER = ("occupancy", "units_to_lease_90d", "leases_this_month", "cost_per_l
              "actions_taken", "waiting_on_you")
 # The last entry (onboarding checks) is dropped for Approvals; keep it last.
 ITEM_SOURCES = ("hubdb_rec", "call_prep", "video_variant", "content_brief", "fair_housing_review",
-                "onboarding_gap")
+                "profile_update", "onboarding_gap")
 MAX_TILES = 50
 MAX_VISIBILITY_READS = 25
 
@@ -72,7 +72,7 @@ ACTIVITY = {
 
 CATEGORY_BY_REC_TYPE = {"budget_change": "cost", "package_upgrade": "vendor", "strategy_change": "content"}
 CATEGORY_BY_SOURCE = {"loop_rec": "cost", "call_prep": "content", "content_brief": "content",
-                      "fair_housing_review": "compliance",
+                      "fair_housing_review": "compliance", "profile_update": "content",
                       "video_variant": "creative", "ticket_profile": "content",
                       "onboarding_gap": "compliance", "portal_ticket": "content", "service_ticket": "content"}
 
@@ -332,7 +332,7 @@ def build_dashboard(email: str, *, internal: bool, today: date | None = None,
 
     rows, loaded = _aptiq(gaps) if props else ({}, None)
     per_property = scope_items(props, today, gaps) if props else []
-    waiting_items = [(p, i) for p, items in per_property for i in items
+    waiting_items = [(p, i) for p, items in per_property for i in wi.visible_items(items, internal)
                      if i["status"] == "to_do" and i["needs_approval"]]
     waiting_items.sort(key=lambda pi: (wscope.health_score(pi[0]) or 0, wi._sort_key(pi[1])))
 

@@ -302,7 +302,7 @@ def workspace_work_item(item_id):
         item, _ = workspace_inbox.find_item(ctx, item_id)
     except Exception as exc:  # noqa: BLE001
         return _failed("item", exc)
-    if item is None:
+    if item is None or not workspace_inbox.visible_items([item], _is_internal()):
         return jsonify({"error": "Item not found"}), 404
     return jsonify(workspace_inbox.view_item(item, _is_internal()))
 
