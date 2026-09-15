@@ -1101,3 +1101,41 @@ Dashboard and Properties additions:
 - Clients see all work; internal notes and internal fields stay private, filtered server-side.
 - Fair Housing on everything client- or channel-facing.
 - HubSpot only through `hubspot_client.py`; Claude only through `skills/llm_gateway.py`.
+
+### Round 5 (API)
+
+42. **Spend sheet.** `GET /api/workspace/spend-sheet` follows the spec shape, plus a top-level `source`.
+    - `columns[]` holds the channel and meta columns. `rows[].values` holds each visible column's value, which is null when the line item is absent.
+    - `rows[].total` sums the channel columns, plus `mgmt_fee` for staff. It is null when every value is null.
+    - Zillow (`zillow_per_month`, `zillow_per_lease`), `costar_package` and `cx_bundle` are `meta` columns and are never in a total.
+    - Internal keys never reach clients or preview-as-client: `mgmt_fee`, `deal_id`, `deal_name`, `deal_stage`, `deal_amount`, `close_date`, `quote_status`, `quote_title` and `ple_status`. For those callers, `rows[].status` is null, `filters.statuses` is `[]` and the status filter is ignored.
+    - Sort takes any visible column key, `property_name`, `market`, `manager` or `total` (`status` is staff-only). Nulls sort last either way.
+    - `page_size` is 1–200, default 50. `totals` cover every filtered row, not just the page. Bad `page`, `page_size`, `dir` or `sort` is 400.
+43. **Profile read.** `GET /api/workspace/profile` follows the spec shape.
+    - Fields add `section`, `editable` (false for read-only HubSpot identity fields), `provenance.overrides` and `review_outcome {status: approved|rejected, at, reason, proposed_value}`.
+    - `value` is null when empty. `stale` is null when the audit table is unavailable, and only human-written (override) values can be stale.
+    - `used_in` values are `ads`, `website_faq`, `ai_answers`, `reports`, `internal`.
+    - `fair_housing_review` is removed, key and all, for clients.
+    - Sections are keyed by slug and carry the full completeness shape.
+    - Completeness weights: fields used in ads or AI answers count 3, everything else 1.
+44. **Profile edit.** `PATCH /api/workspace/profile/field` returns `fair_housing {result: clear|flagged|blocked, severity?, terms?}`.
+    - A low-severity flag appears only for staff; clients get `clear`.
+    - Messages: "Saved · live in ads tomorrow" (non-internal fields), "Saved" (internal fields), "Sent to RPM for review…", or the plain Fair Housing reason when blocked.
+    - A list value is joined into the stored format.
+    - Errors: 400 for invalid values, missing `value` or read-only fields; 403 for an internal key from a client, for preview, or for another company; 401 unverified; 404 for an unknown key.
+45. **Profile updates.** New item source `profile_update`, category `content`, label "Profile update". It is internal only.
+    - It is not in default collection. It is dropped from client dashboard `waiting` and approvals rows, and item detail, decision and undo return 404 for clients and preview-as-client.
+    - Items add `profile_update {field_key, field_label, current_value, proposed_value, proposed_by, proposed_at, used_in, diff[{op, text}], status, decided_by, decided_at, reason}`.
+    - Approve writes through `write_field` with an editor of "<approver> (approved; proposed by <proposer>)". Reject uses the one-tap reasons. A rejection is undoable; an approval is not.
+    - Storage: proposals are `workspace_profile_update_proposed` loop events, and decisions are the ordinary `workspace_decision` events on `profile_update:<id>`, because migration 0015 (`ticket_profile_proposals`) is unapplied in production.
+46. **Check-in.** `POST /api/workspace/profile/checkin` returns `{company_id, confirmed[], skipped[{key, reason}], checkin}`.
+    - Dashboard `waiting` rows add `kind: approval|profile_checkin`. `item_id` and `category` may be null (check-in rows), and `stale_count` appears on check-in rows.
+    - Check-ins appear only for client (and preview-as-client) dashboards, for at most 10 properties, and never count toward `waiting_on_you`.
+47. **Suggestions.** Sources, in priority order: `fair_housing` (the value without the flagged sentence), `ticket`, `geo_claim`, `site_scrape` (the resolved value, from AptIQ or the website).
+    - Accept returns the edit response plus `suggestion_id`.
+    - Dismiss requires `reason` and returns `{suggestion_id, dismissed: true, reason}`.
+    - The `geo_claims` query assumes the columns `claim_text`, `conflicts_brief_field`, `engine`, `created_at` and `property_uuid`.
+48. **History.** `GET /api/workspace/profile/history` returns `{company_id, key, label, entries[{at, by, kind: edit|reviewed|approved|proposed|rejected, old_value, new_value, note}], gaps}`. `by` is a display name ("Dana R.").
+49. **Completeness on lists.** `profile_completeness` (a METRIC with `weighted: true`, source `community_brief`) is added to dashboard `properties[]` rows and to the property overview.
+50. **Loop events.** New registered event types: `workspace_profile_update_proposed`, `workspace_profile_checkin`, `workspace_profile_suggestion_dismissed`.
+51. **CORS.** The preflight allows `PATCH`.
