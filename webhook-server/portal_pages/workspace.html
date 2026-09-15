@@ -1570,10 +1570,11 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     for (; j < m; j++) after += /\S/.test(y[j]) ? '<ins>' + esc(y[j]) + '</ins>' : esc(y[j]);
     return { before: before, after: after };
   }
-  function profileUpdateHtml(pu) {
+  function profileUpdateHtml(pu, it) {
     if (!pu) return '';
-    var cur = asText(pu.current_value), next = asText(pu.proposed_value), d = wordDiff(cur, next), fh = pu.fair_housing;
-    return '<section class="rv-sec"><h3>The proposed change · ' + esc(pu.label) + '</h3>' +
+    var cur = asText(pu.current_value), next = asText(pu.proposed_value), d = wordDiff(cur, next);
+    var fh = pu.fair_housing !== undefined ? pu.fair_housing : (it && it.fair_housing_review);
+    return '<section class="rv-sec"><h3>The proposed change · ' + esc(pu.field_label || pu.label || '') + '</h3>' +
       '<p class="support">Proposed by ' + esc(pu.proposed_by) + ' · ' + esc(mdy(pu.proposed_at)) + '</p>' +
       '<div class="diff"><div><span class="eyebrow">Live now</span><p>' + (cur ? d.before : '<span class="support">Empty</span>') + '</p></div>' +
       '<div><span class="eyebrow">Proposed</span><p>' + (next ? d.after : '<span class="support">Empty</span>') + '</p></div></div>' +
@@ -1589,9 +1590,9 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       '<h2 class="rv-title" id="rv-title">' + esc(it.title) + '</h2>' + (meta ? '<p class="support">' + esc(meta) + '</p>' : '') + '</div>';
     var why = it.why || (has(it.found) || has(it.receipts) ? { text: it.found || '', receipts: it.receipts || [] } : null);
     if (why) out += '<section class="rv-sec"><h3>Why we’re proposing this</h3>' + (has(why.text) ? '<p>' + esc(why.text) + '</p>' : '') + receiptList(why.receipts) +
-      (it.review ? '' : evidenceHtml(it.evidence) + sparkHtml(it.sparkline)) + '</section>';
+      (it.review || it.profile_update ? '' : evidenceHtml(it.evidence) + sparkHtml(it.sparkline)) + '</section>';
     out += fhReviewHtml(it.review);
-    out += profileUpdateHtml(it.profile_update);
+    out += profileUpdateHtml(it.profile_update, it);
     var fw = it.for_whom;
     if (fw && (has(fw.text) || has(fw.questions))) out += '<section class="rv-sec"><h3>Who it’s for</h3>' + (has(fw.text) ? '<p>' + esc(fw.text) + '</p>' : '') +
       (has(fw.questions) ? '<p class="fine">' + (cat === 'content' ? 'The renter questions and searches it answers' : 'The questions it answers') + '</p><ul class="rv-qs">' + fw.questions.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ul>' : '') + '</section>';
@@ -1844,11 +1845,14 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   }
 
   /* ── Spend (Round 5) ─────────────────────────────────────────────────
-     The spend sheet as a calm table. The server removes internal columns for
-     clients and in preview-as-client; the page only shows what it receives.
-     Money never moves from here: "Propose a change" opens New request. */
+     The spend sheet as a calm table. The server removes internal columns (and
+     the PLE status) for clients and in preview-as-client; the page only shows
+     what it receives. Money never moves from here: "Propose a change" opens
+     New request. Columns: Property · Status (staff) · Market · Manager ·
+     channels · informational ILS columns · internal (staff) · Total. */
   state.spend = { q: '', market: '', manager: '', status: '', sort: 'property_name', dir: 'asc', showAll: false, showDeal: false };
-  var SPEND_DEAL_DEFAULT = ['mgmt_fee'];
+  var SPEND_DEFAULT_INTERNAL = ['mgmt_fee'];
+  var SPEND_MONEY_KEYS = { mgmt_fee: 1, deal_amount: 1, zillow_per_month: 1, zillow_per_lease: 1 };
   function spendQuery(page) {
     var f = state.spend, qs = ['page=' + page, 'page_size=200', 'sort=' + encodeURIComponent(f.sort), 'dir=' + f.dir];
     ['q', 'market', 'manager', 'status'].forEach(function (k) { if (f[k]) qs.push(k + '=' + encodeURIComponent(f[k])); });
@@ -1866,38 +1870,42 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     }
     return next(1, []);
   }
-  function spendCols(d) {
-    var f = state.spend, rows = d.rows || [], cols = d.columns || [];
-    function used(k) { return rows.some(function (r) { var v = (r.values || {})[k]; return v != null && v !== 0; }); }
-    return cols.filter(function (c) {
-      if (c.key === 'property_name' || c.key === 'total' || c.group === 'meta') return true;
-      if (c.group === 'channel') return f.showAll || used(c.key);
-      if (c.internal) return f.showDeal || SPEND_DEAL_DEFAULT.indexOf(c.key) !== -1;
+  function hasSpendValue(v) { return v != null && v !== 0 && v !== '' && v !== false; }
+  function isMoneyCol(c) { return c.key === 'total' || c.group === 'channel' || !!SPEND_MONEY_KEYS[c.key]; }
+  function spendTableCols(d) {
+    var f = state.spend, rows = d.rows || [], staff = d.scope === 'portfolio';
+    function used(k) { return rows.some(function (r) { return hasSpendValue((r.values || {})[k]); }); }
+    var lead = [{ key: 'property_name', label: 'Property', row: true }];
+    if (staff) lead.push({ key: 'status', label: 'Status', row: true, internal: true });
+    lead.push({ key: 'market', label: 'Market', row: true }, { key: 'manager', label: 'Manager', row: true });
+    var mid = (d.columns || []).filter(function (c) {
+      if (c.group === 'channel' || c.group === 'meta') return f.showAll || used(c.key);
+      if (c.internal) return f.showDeal || SPEND_DEFAULT_INTERNAL.indexOf(c.key) !== -1;
       return true;
     });
+    return lead.concat(mid, [{ key: 'total', label: 'Total', row: true }]);
   }
-  var SPEND_MONEY_INTERNAL = { mgmt_fee: 1, deal_amount: 1 };
-  function isMoneyCol(c) { return c.group === 'channel' || c.key === 'total' || SPEND_MONEY_INTERNAL[c.key]; }
-  function spendCell(r, c) {
-    if (c.key === 'total') return r.total;
-    if (c.group === 'meta') return r[c.key];
-    return (r.values || {})[c.key];
+  function spendCell(r, c) { return c.row ? r[c.key] : (r.values || {})[c.key]; }
+  function spendFmt(c, v) {
+    if (v === true) return 'Yes';
+    if (v == null || v === '' || v === false) return null;
+    return isMoneyCol(c) && typeof v === 'number' ? money(v) : String(v);
   }
   function screenSpend() {
     renderTop('Spend', '');
     renderSide('spend');
-    setView('<div class="page">' + spendHead(null) + '<div data-spend-results><div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading the spend sheet…</div></div></div>');
+    setView('<div class="page">' + spendHead() + '<div data-spend-results><div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading the spend sheet…</div></div></div>');
     bindSpendControls();
     refreshSpend();
   }
-  function spendHead(d) {
-    var f = state.spend, opts = (d && d.filters) || state.spendFilters || { markets: [], managers: [], statuses: [] };
+  function spendHead() {
+    var f = state.spend, opts = state.spendFilters || { markets: [], managers: [], statuses: [] };
     function sel(key, label, list) {
-      return '<label class="ctl"><span>' + label + '</span><select class="inp" data-spend-filter="' + key + '"><option value="">All</option>' +
+      return '<label class="ctl" data-spend-ctl="' + key + '"' + (key === 'status' && !list.length ? ' hidden' : '') + '><span>' + label + '</span><select class="inp" data-spend-filter="' + key + '"><option value="">All</option>' +
         list.map(function (v) { return '<option' + (v === f[key] ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') + '</select></label>';
     }
-    return '<div class="head"><div class="stack"><h1 class="h-page">Spend</h1><p class="support" data-spend-scope>Monthly contracted spend by channel, from HubSpot line items.</p></div><span data-spend-asof></span></div>' +
-      '<div class="controls" role="search"><label class="ctl"><span>Search</span><input class="inp search-inp" type="search" data-spend-q placeholder="Property or market" value="' + esc(f.q) + '"></label>' +
+    return '<div class="head"><div class="stack"><h1 class="h-page">Spend</h1><p class="support" data-spend-scope>Monthly contracted spend by channel, from HubSpot deals and line items.</p></div><span data-spend-asof></span></div>' +
+      '<div class="controls" role="search"><label class="ctl"><span>Search</span><input class="inp search-inp" type="search" data-spend-q placeholder="Property name" value="' + esc(f.q) + '"></label>' +
       sel('market', 'Market', opts.markets) + sel('manager', 'Manager', opts.managers) + sel('status', 'Status', opts.statuses) +
       '<span class="grow"></span><button type="button" class="togglebtn" data-spend-all aria-pressed="' + f.showAll + '">Show all channels</button>' +
       '<span data-spend-deal-slot></span>' +
@@ -1919,11 +1927,14 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     loadSpend().then(function (d) {
       if (my !== state.spendSeq || !view.querySelector('[data-spend-results]')) return;
       state.spendData = d;
-      if (!state.spendFilters) {
-        state.spendFilters = d.filters;
-        ['market', 'manager', 'status'].forEach(function (k) {
-          var el = view.querySelector('[data-spend-filter="' + k + '"]'), list = (d.filters || {})[k === 'status' ? 'statuses' : k + 's'] || [];
-          if (el) el.innerHTML = '<option value="">All</option>' + list.map(function (v) { return '<option' + (v === state.spend[k] ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('');
+      if (d.scope !== 'portfolio') state.spend.status = '';
+      if (!state.spendFilters || state.spendFiltersScope !== d.scope) {
+        state.spendFilters = d.filters || { markets: [], managers: [], statuses: [] };
+        state.spendFiltersScope = d.scope;
+        [['market', 'markets'], ['manager', 'managers'], ['status', 'statuses']].forEach(function (k) {
+          var el = view.querySelector('[data-spend-filter="' + k[0] + '"]'), list = state.spendFilters[k[1]] || [];
+          if (el) el.innerHTML = '<option value="">All</option>' + list.map(function (v) { return '<option' + (v === state.spend[k[0]] ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('');
+          var ctl = view.querySelector('[data-spend-ctl="' + k[0] + '"]'); if (ctl) ctl.hidden = !list.length;
         });
       }
       renderSpend(d);
@@ -1936,74 +1947,73 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   function renderSpend(d) {
     var box = view.querySelector('[data-spend-results]'); if (!box || !d) return;
     box.removeAttribute('aria-busy');
-    var f = state.spend, cols = spendCols(d), rows = d.rows || [], hasInternal = (d.columns || []).some(function (c) { return c.internal; });
+    var f = state.spend, cols = spendTableCols(d), rows = d.rows || [], staff = d.scope === 'portfolio';
     var asof = view.querySelector('[data-spend-asof]'); if (asof) asof.innerHTML = staleLabel(d.as_of);
     var scope = view.querySelector('[data-spend-scope]');
-    if (scope) scope.textContent = (d.scope === 'client' ? 'Your properties’ ' : 'Every managed property’s ') + 'monthly contracted spend by channel, from HubSpot line items. Money never moves from this screen.';
+    if (scope) scope.textContent = (staff ? 'Every managed property’s ' : 'Your properties’ ') + 'monthly contracted spend by channel, from HubSpot deals and line items. Money never moves from this screen.';
     var slot = view.querySelector('[data-spend-deal-slot]');
     if (slot) {
-      slot.innerHTML = hasInternal ? '<button type="button" class="togglebtn" data-spend-deal aria-pressed="' + f.showDeal + '">' + ic(I.lock, 12) + 'Deal details</button>' : '';
+      slot.innerHTML = staff ? '<button type="button" class="togglebtn" data-spend-deal aria-pressed="' + f.showDeal + '">' + ic(I.lock, 12) + 'Deal details</button>' : '';
       var db = slot.querySelector('[data-spend-deal]');
       if (db) db.addEventListener('click', function () { f.showDeal = !f.showDeal; renderSpend(d); });
     }
-    var hidden = (d.columns || []).filter(function (c) { return c.group === 'channel'; }).length - cols.filter(function (c) { return c.group === 'channel'; }).length;
-    var tot = (d.totals || {}), totalVal = tot.total;
-    function fmt(c, v) {
-      if (v == null || v === '') return '<span class="empty-dash">—</span>';
-      return esc(isMoneyCol(c) && typeof v === 'number' ? money(v) : v);
-    }
-    var head = '<tr>' + cols.map(function (c, i) {
+    var channelCols = (d.columns || []).filter(function (c) { return c.group === 'channel'; });
+    var metaCols = (d.columns || []).filter(function (c) { return c.group === 'meta'; });
+    var hidden = channelCols.length - cols.filter(function (c) { return c.group === 'channel'; }).length;
+    var tot = d.totals || {};
+    function cellHtml(c, v) { var t = spendFmt(c, v); return t == null ? '<span class="empty-dash">—</span>' : esc(t); }
+    var head = '<tr>' + cols.map(function (c) {
       var sorted = f.sort === c.key, cls = (isMoneyCol(c) ? 'num' : '') + (c.internal ? ' intcol' : '');
       return '<th scope="col" class="' + cls + '"' + (sorted ? ' aria-sort="' + (f.dir === 'asc' ? 'ascending' : 'descending') + '"' : '') + '><button type="button" data-spend-sort="' + esc(c.key) + '">' +
         (c.internal ? ic(I.lock, 10) : '') + esc(c.label) + (sorted ? '<span aria-hidden="true">' + (f.dir === 'asc' ? '↑' : '↓') + '</span>' : '') + '</button></th>';
     }).join('') + '<th scope="col"><span class="sr-only">Propose a change</span></th></tr>';
     var body = rows.map(function (r, ri) {
       return '<tr data-href="' + esc(r.href || ('#/property/' + encodeURIComponent(r.company_id))) + '">' + cols.map(function (c, i) {
-        var v = spendCell(r, c);
-        if (i === 0) return '<td><a href="#/property/' + encodeURIComponent(r.company_id) + '">' + esc(r.property_name) + '</a></td>';
-        return '<td class="' + (isMoneyCol(c) ? 'num' : '') + (c.internal ? ' intcol' : '') + (c.key === 'total' ? ' total' : '') + '">' + fmt(c, v) + '</td>';
+        if (i === 0) return '<td><a href="#/property/' + encodeURIComponent(r.company_id) + '">' + esc(r.property_name || 'Unnamed property') + '</a></td>';
+        return '<td class="' + (isMoneyCol(c) ? 'num' : '') + (c.internal ? ' intcol' : '') + (c.key === 'total' ? ' total' : '') + '">' + cellHtml(c, spendCell(r, c)) + '</td>';
       }).join('') + '<td><button type="button" class="textbtn" data-spend-propose="' + ri + '">Propose a change</button></td></tr>';
     }).join('');
     var foot = rows.length ? '<tfoot><tr>' + cols.map(function (c, i) {
       if (i === 0) return '<td>Total · ' + esc(num(rows.length)) + ' ' + plural(rows.length, 'property', 'properties') + '</td>';
-      if (c.key === 'total') return '<td class="num">' + fmt(c, totalVal) + '</td>';
-      if (c.group === 'meta' || !isMoneyCol(c)) return '<td></td>';
-      return '<td class="num' + (c.internal ? ' intcol' : '') + '">' + fmt(c, (tot.values || {})[c.key]) + '</td>';
+      if (c.key === 'total') return '<td class="num">' + cellHtml(c, tot.total) + '</td>';
+      if (c.row || !isMoneyCol(c)) return '<td></td>';
+      return '<td class="num' + (c.internal ? ' intcol' : '') + '">' + cellHtml(c, (tot.values || {})[c.key]) + '</td>';
     }).join('') + '<td></td></tr></tfoot>' : '';
-    var channelCols = (d.columns || []).filter(function (c) { return c.group === 'channel'; });
     var cards = rows.map(function (r, ri) {
-      var ch = channelCols.map(function (c) { return { c: c, v: (r.values || {})[c.key] }; }).filter(function (x) { return x.v != null && x.v !== 0; })
+      var ch = channelCols.map(function (c) { return { c: c, v: (r.values || {})[c.key] }; }).filter(function (x) { return hasSpendValue(x.v); })
         .sort(function (a, b) { return b.v - a.v; });
-      var li = function (x) { return '<li><span>' + esc(x.c.label) + '</span><b>' + esc(money(x.v)) + '</b></li>'; };
-      var fee = hasInternal && (r.values || {}).mgmt_fee != null ? '<li class="intcol"><span>' + ic(I.lock, 10) + ' Mgmt fee</span><b>' + esc(money(r.values.mgmt_fee)) + '</b></li>' : '';
-      return '<li class="scard"><div class="top"><a href="#/property/' + encodeURIComponent(r.company_id) + '">' + esc(r.property_name) + '</a><b>' + (r.total == null ? '—' : esc(money(r.total))) + '</b></div>' +
+      var li = function (x) { return '<li><span>' + esc(x.c.label) + '</span><b>' + esc(spendFmt(x.c, x.v)) + '</b></li>'; };
+      var extra = metaCols.map(function (c) { return { c: c, v: (r.values || {})[c.key] }; }).filter(function (x) { return hasSpendValue(x.v); }).map(li).join('') +
+        (staff && (r.values || {}).mgmt_fee != null ? '<li class="intcol"><span>' + ic(I.lock, 10) + ' Mgmt fee</span><b>' + esc(money(r.values.mgmt_fee)) + '</b></li>' : '');
+      return '<li class="scard"><div class="top"><a href="#/property/' + encodeURIComponent(r.company_id) + '">' + esc(r.property_name || 'Unnamed property') + '</a><b>' + (r.total == null ? '—' : esc(money(r.total))) + '</b></div>' +
         '<p class="fine">' + esc([r.status, r.market, r.manager].filter(Boolean).join(' · ')) + '</p>' +
-        (ch.length ? '<ul class="chlist">' + ch.slice(0, 3).map(li).join('') + '</ul>' : '<p class="support">No line items yet.</p>') +
-        (ch.length > 3 || fee ? '<details><summary>All channels (' + ch.length + ')</summary><ul class="chlist">' + ch.slice(3).map(li).join('') + fee + '</ul></details>' : '') +
+        (ch.length ? '<ul class="chlist">' + ch.slice(0, 3).map(li).join('') + '</ul>' : '<p class="support">No channel line items yet.</p>') +
+        (ch.length > 3 || extra ? '<details><summary>All channels (' + ch.length + ')</summary><ul class="chlist">' + ch.slice(3).map(li).join('') + extra + '</ul></details>' : '') +
         '<button type="button" class="btn sm" data-spend-propose="' + ri + '">Propose a change</button></li>';
     }).join('');
-    box.innerHTML = '<p class="sumline" role="status"><b>' + esc(num(d.count)) + '</b> ' + plural(d.count, 'property', 'properties') + (totalVal != null ? ' · <b>' + esc(money(totalVal)) + '</b> a month' : '') +
+    box.innerHTML = '<p class="sumline" role="status"><b>' + esc(num(d.count)) + '</b> ' + plural(d.count, 'property', 'properties') + (tot.total != null ? ' · <b>' + esc(money(tot.total)) + '</b> a month' + (staff ? ' including management fees' : '') : '') +
       (hidden > 0 && !f.showAll ? ' · ' + esc(hidden) + ' ' + plural(hidden, 'channel') + ' with no spend hidden' : '') + '</p>' +
       (rows.length ? '<div class="spend-scroll" tabindex="0" role="region" aria-label="Spend sheet, scrolls sideways"><table class="stbl"><caption class="sr-only">Monthly spend by property and channel</caption><thead>' + head + '</thead><tbody>' + body + '</tbody>' + foot + '</table></div>' +
         '<ul class="spend-cards">' + cards + '</ul>' : '<p class="support">No properties match these filters.</p>') +
       gapsLine(d.gaps);
     box.querySelectorAll('[data-spend-sort]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var k = b.getAttribute('data-spend-sort');
-        if (f.sort === k) f.dir = f.dir === 'asc' ? 'desc' : 'asc'; else { f.sort = k; f.dir = isMoneyCol({ key: k, group: (d.columns || []).filter(function (c) { return c.key === k; }).map(function (c) { return c.group; })[0] }) ? 'desc' : 'asc'; }
+        var k = b.getAttribute('data-spend-sort'), col = cols.filter(function (c) { return c.key === k; })[0] || {};
+        if (f.sort === k) f.dir = f.dir === 'asc' ? 'desc' : 'asc'; else { f.sort = k; f.dir = isMoneyCol(col) ? 'desc' : 'asc'; }
         refreshSpend();
       });
     });
     box.querySelectorAll('[data-spend-propose]').forEach(function (b) {
-      b.addEventListener('click', function (e) { e.stopPropagation(); openPropose(rows[+b.getAttribute('data-spend-propose')], channelCols, b); });
+      b.addEventListener('click', function (e) { e.stopPropagation(); openPropose(rows[+b.getAttribute('data-spend-propose')], channelCols.concat(metaCols.filter(function (c) { return /zillow_per_month|costar_package/.test(c.key); })), b); });
     });
   }
-  function openPropose(r, channelCols, opener) {
+  function openPropose(r, pickCols, opener) {
     drawerOpener = opener; drawerSeq++;
     document.body.classList.add('drawer-open');
-    var ch = channelCols.map(function (c) { return { c: c, v: (r.values || {})[c.key] }; });
-    var active = ch.filter(function (x) { return x.v != null && x.v !== 0; }), rest = ch.filter(function (x) { return x.v == null || x.v === 0; });
-    function btn(x) { return '<button type="button" data-pick="' + esc(x.c.key) + '">' + esc(x.c.label) + '<span>' + (x.v == null || x.v === 0 ? 'Not running' : esc(money(x.v)) + '/mo') + '</span></button>'; }
+    var ch = pickCols.map(function (c) { return { c: c, v: (r.values || {})[c.key] }; });
+    var active = ch.filter(function (x) { return hasSpendValue(x.v); }), rest = ch.filter(function (x) { return !hasSpendValue(x.v); });
+    function now(x) { return !hasSpendValue(x.v) ? 'not running' : (typeof x.v === 'number' ? money(x.v) + ' a month' : String(x.v)); }
+    function btn(x) { return '<button type="button" data-pick="' + esc(x.c.key) + '">' + esc(x.c.label) + '<span>' + esc(hasSpendValue(x.v) ? (typeof x.v === 'number' ? money(x.v) + '/mo' : x.v) : 'Not running') + '</span></button>'; }
     drawerRoot.innerHTML = '<div class="drawer-scrim" data-drawer-close></div><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="pp-title"><div class="drawer-head"><span class="h-rail" id="pp-title">Propose a change · ' + esc(r.property_name) + '</span><span class="grow"></span>' +
       '<button type="button" class="iconbtn" data-drawer-close aria-label="Close">' + ic(I.x, 18) + '</button></div><div class="drawer-body">' +
       '<p class="support">Pick the channel. You’ll describe the change in a new request; nothing changes until your RPM team confirms it.</p>' +
@@ -2013,7 +2023,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     drawerRoot.querySelectorAll('[data-pick]').forEach(function (b) {
       b.addEventListener('click', function () {
         var key = b.getAttribute('data-pick'), x = ch.filter(function (y) { return y.c.key === key; })[0];
-        var text = key ? 'Change to ' + x.c.label + ' at ' + r.property_name + '. Today: ' + (x.v == null || x.v === 0 ? 'not running' : money(x.v) + ' a month') + '.\nWhat should change: '
+        var text = key ? 'Change to ' + x.c.label + ' at ' + r.property_name + '. Today: ' + now(x) + '.\nWhat should change: '
           : 'Change to spend at ' + r.property_name + '.\nWhat should change: ';
         closeReview();
         setCompany(r.company_id);
@@ -2023,14 +2033,14 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   }
   function exportSpendCsv(d) {
     // Only the columns the viewer can see right now, from the rows the page has.
-    var cols = spendCols(d);
-    function cell(v) { if (v == null) return ''; var t = String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
+    var cols = spendTableCols(d);
+    function cell(v) { if (v == null || v === false) return ''; var t = v === true ? 'Yes' : String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
     var lines = [cols.map(function (c) { return cell(c.label); }).join(',')];
     (d.rows || []).forEach(function (r) { lines.push(cols.map(function (c) { return cell(spendCell(r, c)); }).join(',')); });
     lines.push(cols.map(function (c, i) {
       if (i === 0) return 'Total';
       if (c.key === 'total') return cell((d.totals || {}).total);
-      return isMoneyCol(c) && c.group !== 'meta' ? cell(((d.totals || {}).values || {})[c.key]) : '';
+      return !c.row && isMoneyCol(c) ? cell(((d.totals || {}).values || {})[c.key]) : '';
     }).join(','));
     var blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv' }), a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -2044,6 +2054,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
      fields for clients and in preview-as-client. Edits run Fair Housing first;
      ad-facing edits from clients wait for RPM review. */
   var USED_LABEL = { ads: 'Ads', website_faq: 'Website FAQ', ai_answers: 'AI answers', reports: 'Reports', internal: 'Internal' };
+  var PROV_SOURCE = { site_scrape: 'the website', aptiq: 'ApartmentIQ', hubspot_company: 'the company record' };
   var SUG_SOURCE = { site_scrape: 'From the property website', geo_claim: 'From AI answers', fair_housing: 'From the Fair Housing review', ticket: 'From a request' };
   var DISMISS_REASONS = ['Not accurate', 'Already covered', 'Not for ads'];
   var TABLE_TYPES = { floorplan_table: 1, tracking_table: 1, documents: 1 };
@@ -2053,8 +2064,16 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   }
   function humanOpt(v) { return String(v).replace(/_/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); }); }
   function isEmptyVal(v) { return v == null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && !v.length); }
+  function listValue(f, v) {
+    // Values arrive as HubSpot holds them: multi-select joined with ";", tables as a JSON array string.
+    if (Array.isArray(v)) return v;
+    if (f.type === 'multiselect') return String(v || '').split(';').map(function (x) { return x.trim(); }).filter(Boolean);
+    if (TABLE_TYPES[f.type]) { try { var parsed = JSON.parse(v); return Array.isArray(parsed) ? parsed : []; } catch (e) { return []; } }
+    return null;
+  }
   function fieldValueHtml(f, v) {
     if (isEmptyVal(v)) return '<span class="support">Not filled in yet</span>';
+    if (f.type === 'multiselect' || TABLE_TYPES[f.type]) v = listValue(f, v);
     if (TABLE_TYPES[f.type] && Array.isArray(v)) {
       var keys = Object.keys(v[0] || {});
       return '<div class="tscroll"><table><thead><tr>' + keys.map(function (k) { return '<th scope="col">' + esc(humanOpt(k)) + '</th>'; }).join('') + '</tr></thead><tbody>' +
@@ -2066,8 +2085,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   }
   function provenanceHtml(f) {
     var p = f.provenance || {};
-    if (p.kind === 'override') return 'Written by ' + esc(p.by || 'RPM') + (p.at ? ' · ' + esc(mdy(p.at)) : '') + (p.source ? ' · overrides the value from ' + esc(p.source) : '');
-    if (p.kind === 'resolved') return 'From ' + esc(p.source || 'a connected source') + (p.at ? ' · ' + esc(mdy(p.at)) : '');
+    if (p.kind === 'override') return 'Written by ' + esc(p.by || 'your team') + (p.at ? ' · ' + esc(mdy(p.at)) : '') + (p.overrides ? ' · overrides the value from ' + esc(PROV_SOURCE[p.overrides] || p.overrides) : '');
+    if (p.kind === 'resolved') return 'From ' + esc(PROV_SOURCE[p.source] || p.source || 'a connected source') + (p.at ? ' · ' + esc(mdy(p.at)) : '');
     return 'Nobody has filled this in';
   }
   function fieldRowHtml(f, prof, opts) {
@@ -2079,8 +2098,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     var notes = '';
     if (f.pending) notes += '<div class="notebox pend"><b>Pending RPM review.</b> ' + esc(f.pending.by) + ' proposed “' + esc(Array.isArray(f.pending.proposed_value) ? f.pending.proposed_value.join(', ') : f.pending.proposed_value) + '” · ' + esc(mdy(f.pending.at)) +
       '. The current value stays live until it’s approved.' + (viewInternal() && f.pending.item_id ? ' ' + reviewBtn(f.pending.item_id, cid, 'link', 'Review it') : '') + '</div>';
-    else if (f.last_review && f.last_review.outcome === 'approved') notes += '<div class="notebox ok">Approved by RPM · ' + esc(mdy(f.last_review.at)) + '</div>';
-    else if (f.last_review && f.last_review.outcome === 'not_applied') notes += '<div class="notebox no">Not applied — ' + esc(f.last_review.reason || 'RPM kept the current value') + '</div>';
+    else if (f.review_outcome && f.review_outcome.status === 'approved') notes += '<div class="notebox ok">Approved by RPM' + (f.review_outcome.at ? ' · ' + esc(mdy(f.review_outcome.at)) : '') + '</div>';
+    else if (f.review_outcome && f.review_outcome.status === 'rejected') notes += '<div class="notebox no">Not applied — ' + esc(f.review_outcome.reason || 'RPM kept the current value') + (f.review_outcome.proposed_value ? ' (proposed “' + esc(f.review_outcome.proposed_value) + '”)' : '') + '</div>';
     if (flash) notes += '<div class="notebox ' + ({ saved: 'ok', pending_review: 'pend', blocked: 'block', confirmed: 'ok' }[flash.kind] || 'ok') + '" role="' + (flash.kind === 'blocked' ? 'alert' : 'status') + '">' + esc(flash.text) + '</div>';
     var sug = f.suggestion;
     var sugHtml = sug ? '<div class="sugbox" data-sug="' + esc(sug.id) + '"><p><b>We found</b> “' + esc(Array.isArray(sug.value) ? sug.value.join(', ') : sug.value) + '” — use it?</p><p class="fine">' + esc(SUG_SOURCE[sug.source] || 'Suggested') + '. ' + esc(sug.reason) + '</p>' +
@@ -2088,10 +2107,11 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         '<div class="reasons" data-sug-reasons hidden role="group" aria-label="Why dismiss">' + DISMISS_REASONS.map(function (r) { return '<button type="button" class="rchip" data-sug-reason="' + esc(r) + '">' + esc(r) + '</button>'; }).join('') + '</div>' : '') + '</div>' : '';
     var acts = '';
     if (opts.checkin && canDecide()) acts += '<button type="button" class="btn xs outline" data-confirm="' + esc(f.key) + '">' + ic(I.check, 12) + 'Still accurate</button>';
-    if (canDecide() && f.type !== 'readonly' && !TABLE_TYPES[f.type] && !f.pending) acts += '<button type="button" class="btn xs" data-edit="' + esc(f.key) + '">' + (isEmptyVal(f.value) ? 'Add' : 'Edit') + '</button>';
-    if (f.type === 'readonly' || TABLE_TYPES[f.type]) acts += '<button type="button" class="textbtn" data-req-change="' + esc(f.key) + '">Request a change</button>';
+    var editable = f.editable != null ? f.editable : f.type !== 'readonly';
+    if (canDecide() && editable && !TABLE_TYPES[f.type] && !f.pending) acts += '<button type="button" class="btn xs" data-edit="' + esc(f.key) + '">' + (isEmptyVal(f.value) ? 'Add' : 'Edit') + '</button>';
+    if (!editable || TABLE_TYPES[f.type]) acts += '<button type="button" class="textbtn" data-req-change="' + esc(f.key) + '">Request a change</button>';
     acts += '<button type="button" class="textbtn" data-history="' + esc(f.key) + '" aria-expanded="false">History</button>';
-    if (!canDecide() && f.type !== 'readonly') acts += signInLink('Sign in to edit');
+    if (!canDecide() && editable) acts += signInLink('Sign in to edit');
     return '<div class="fld" id="fld-' + esc(f.key) + '" data-field="' + esc(f.key) + '"><div class="lab"><b id="lbl-' + esc(f.key) + '">' + esc(f.label) + '</b>' + (f.hint ? '<span class="fine">' + esc(f.hint) + '</span>' : '') + usedChips(f.used_in) + '</div>' +
       '<div class="body"><div class="fval" data-fval>' + fieldValueHtml(f, f.value) + '</div><p class="prov">' + provenanceHtml(f) + '</p>' +
       (states ? '<div class="fstates">' + states + '</div>' : '') + notes + sugHtml +
@@ -2100,7 +2120,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   function editorHtml(f) {
     var v = f.value;
     if (f.type === 'multiselect') return '<fieldset class="editor"><legend class="sr-only">' + esc(f.label) + '</legend><div class="checks">' + (f.options || []).map(function (o) {
-      return '<label><input type="checkbox" value="' + esc(o) + '"' + ((v || []).indexOf(o) !== -1 ? ' checked' : '') + '>' + esc(humanOpt(o)) + '</label>'; }).join('') + '</div>' + editorButtons() + '</fieldset>';
+      return '<label><input type="checkbox" value="' + esc(o) + '"' + ((listValue(f, v) || []).indexOf(o) !== -1 ? ' checked' : '') + '>' + esc(humanOpt(o)) + '</label>'; }).join('') + '</div>' + editorButtons() + '</fieldset>';
     if (f.type === 'dropdown') return '<div class="editor"><select class="inp" aria-labelledby="lbl-' + esc(f.key) + '">' + (f.options || []).map(function (o) { return '<option value="' + esc(o) + '"' + (o === v ? ' selected' : '') + '>' + esc(humanOpt(o)) + '</option>'; }).join('') + '</select>' + editorButtons() + '</div>';
     if (f.type === 'text') return '<div class="editor"><input class="inp" type="text" maxlength="5000" aria-labelledby="lbl-' + esc(f.key) + '" value="' + esc(v || '') + '">' + editorButtons() + '</div>';
     return '<div class="editor"><textarea class="inp" maxlength="5000" aria-labelledby="lbl-' + esc(f.key) + '">' + esc(v || '') + '</textarea>' + editorButtons() + '</div>';
@@ -2124,7 +2144,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   function profileFields(prof) { var out = []; (prof.sections || []).forEach(function (sec) { (sec.fields || []).forEach(function (f) { out.push(f); }); }); return out; }
   function renderProfile(prof) {
     state.profile = prof;
-    var p = prof.property || {}, comp = prof.completeness || {}, ci = prof.checkin || {}, staleView = state.profileView === 'stale';
+    var p = prof.property || {}, comp = prof.completeness || {}, ci = prof.checkin || {}, staleView = state.profileView === 'stale', co = companyById(p.company_id) || {};
     renderTop('Profile', p.name);
     var pctv = comp.pct == null ? null : Math.round(comp.pct);
     var meter = '<div class="meter"><span class="eyebrow">Profile completeness</span><div class="row1"><b>' + (pctv == null ? '—' : esc(pctv) + '%') + '</b><span class="support">complete</span></div>' +
@@ -2138,7 +2158,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         (staleView ? '' : '<a class="link" href="#/property/' + encodeURIComponent(p.company_id) + '/profile/stale">Review them</a>') + '</p>'
       : '<p class="checkin-note done">' + ic(I.check, 14) + '<span>Check-in done — every field has been touched in the last 90 days.</span></p>';
     var head = '<div class="prof-head"><div class="who">' + scopedBack() + '<h1 class="h-page">' + (staleView ? 'Review your property profile' : 'Property profile') + '</h1>' +
-      '<p class="support">' + esc([p.name, p.city && p.state ? p.city + ', ' + p.state : ''].filter(Boolean).join(' · ')) + (prof.last_updated ? ' · last updated ' + esc(mdy(prof.last_updated)) : '') + '</p>' +
+      '<p class="support">' + esc([p.name, co.city && co.state ? co.city + ', ' + co.state : ''].filter(Boolean).join(' · ')) + (p.last_updated ? ' · last updated ' + esc(mdy(p.last_updated)) : '') + '</p>' +
       '<p class="fine">Everything here feeds your ads, website FAQ, AI answers and reports. Changes to ad-facing fields are reviewed by RPM first.</p>' + checkinNote + '</div>' + meter + '</div>';
     var body;
     if (staleView) {
@@ -2152,10 +2172,12 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
           '<a class="btn sm" href="#/property/' + encodeURIComponent(p.company_id) + '/profile">See the whole profile</a></div>';
     } else {
       var nav = '<nav class="secnav" aria-label="Profile sections">' + (prof.sections || []).map(function (sec) {
-        return '<button type="button" data-sec-jump="' + esc(sec.key) + '">' + esc(sec.title) + '<span>' + (sec.completeness == null ? '—' : esc(Math.round(sec.completeness)) + '%') + '</span></button>';
+        var sp = sec.completeness && typeof sec.completeness === 'object' ? sec.completeness.pct : sec.completeness;
+        return '<button type="button" data-sec-jump="' + esc(sec.key) + '">' + esc(sec.title) + '<span>' + (sp == null ? '—' : esc(Math.round(sp)) + '%') + '</span></button>';
       }).join('') + '</nav>';
       var secs = (prof.sections || []).map(function (sec) {
-        return '<details class="psec" id="sec-' + esc(sec.key) + '" open><summary><b>' + esc(sec.title) + '</b><span class="sp">' + (sec.completeness == null ? '' : esc(Math.round(sec.completeness)) + '% complete') + '</span><span class="chev" aria-hidden="true">' + ic(I.chevron, 16) + '</span></summary>' +
+        var sp = sec.completeness && typeof sec.completeness === 'object' ? sec.completeness.pct : sec.completeness;
+        return '<details class="psec" id="sec-' + esc(sec.key) + '" open><summary><b>' + esc(sec.title) + '</b><span class="sp">' + (sp == null ? '' : esc(Math.round(sp)) + '% complete') + '</span><span class="chev" aria-hidden="true">' + ic(I.chevron, 16) + '</span></summary>' +
           '<div class="fields">' + (sec.fields || []).map(function (f) { return fieldRowHtml(f, prof); }).join('') + '</div></details>';
       }).join('');
       body = '<div class="prof-layout">' + nav + '<div class="psecs">' + secs + '</div></div>';
@@ -2184,10 +2206,10 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
           var d = res.data || {};
           if (d.outcome === 'blocked') {
             save.disabled = false; save.textContent = 'Save';
-            slot.querySelector('.editor').insertAdjacentHTML('afterbegin', '<div class="notebox block" role="alert"><b>Not saved.</b> ' + esc(String(d.message || '').replace(/^Not saved\.\s*/, '')) + '</div>');
+            slot.querySelector('.editor').insertAdjacentHTML('afterbegin', '<div class="notebox block" role="alert"><b>Not saved.</b> ' + esc(String(d.message || '').replace(/^(Not saved|This wasn['’]t saved)\.\s*/, '')) + '</div>');
             return;
           }
-          state.profileFlash[key] = d.outcome === 'pending_review' ? { kind: 'pending_review', text: 'Sent to RPM for review. The current value stays live until it’s approved.' }
+          state.profileFlash[key] = d.outcome === 'pending_review' ? { kind: 'pending_review', text: d.message || 'Sent to RPM for review. The current value stays live until RPM approves it.' }
             : { kind: 'saved', text: d.message || 'Saved' };
           return reloadProfile().then(function () { var nr = row(key); if (nr) nr.scrollIntoView({ block: 'nearest' }); });
         }).catch(function (e) {
