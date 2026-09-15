@@ -380,7 +380,19 @@ CREATIVE_UPLOAD = {
     "skipped": [{"filename": STR, "reason": STR}],
 }
 
+SPEND_SHEET = {
+    "as_of": opt(STR), "scope": enum("portfolio", "client"), "source": STR,
+    "columns": [{"key": STR, "label": STR, "group": enum("channel", "meta", "internal"), "internal": BOOL}],
+    "rows": [{"company_id": STR, "property_name": opt(STR), "status": opt(STR), "market": opt(STR),
+              "manager": opt(STR), "values": ANY, "total": opt(NUM), "href": STR}],
+    "totals": {"values": ANY, "total": opt(NUM)},
+    "count": INT, "page": INT, "page_size": INT,
+    "filters": {"markets": [STR], "managers": [STR], "statuses": [STR]},
+    "gaps": [GAP],
+}
+
 SHAPES.update({
+    "spend_sheet": SPEND_SHEET,
     "creative_upload": CREATIVE_UPLOAD,
     "fair_housing_review": FAIR_HOUSING_REVIEW, "fair_housing_run_all": FAIR_HOUSING_RUN_ALL,
     "dashboard": DASHBOARD, "approvals": APPROVALS, "property_overview": PROPERTY_OVERVIEW,
