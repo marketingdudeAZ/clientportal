@@ -646,6 +646,135 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 .briefrow input{flex:1;min-width:0;height:28px;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:0 8px;font-size:13px;background:var(--color-card)}
 .briefrow input:focus{outline:2px solid var(--copper-fill);outline-offset:1px}
 
+/* ── Spend (Round 5) ─────────────────────────────────────────────────── */
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.controls .grow{flex:1}
+.ctl{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ctl span{font-size:11px;line-height:14px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--color-fg-muted)}
+.inp{height:36px;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:0 10px;background:var(--color-card);font-size:13px;line-height:16px;min-width:0;max-width:100%}
+.inp:focus{outline:2px solid var(--copper-fill);outline-offset:1px}
+.inp[type=search]{-webkit-appearance:none;appearance:none;box-sizing:border-box}
+.inp.search-inp{width:240px}
+.togglebtn{display:inline-flex;align-items:center;gap:6px;height:36px;padding-inline:12px;border-radius:var(--radius-sm);border:1px solid var(--color-border);background:var(--color-card);font-size:13px;line-height:16px;color:var(--color-fg-2)}
+.togglebtn[aria-pressed="true"]{background:var(--color-brand-soft);border-color:var(--mint);color:var(--juniper);font-weight:500}
+.spend-scroll{overflow:auto;max-height:calc(100vh - 290px);min-height:240px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-card)}
+.stbl{border-collapse:separate;border-spacing:0;min-width:100%;overflow-wrap:normal}
+.stbl th,.stbl td{padding:9px 12px;border-bottom:1px solid var(--color-line);font-size:13px;line-height:16px;white-space:nowrap;background:var(--color-card);text-align:left}
+.stbl thead th{position:sticky;top:0;z-index:2;background:var(--color-bg);border-bottom:1px solid var(--color-border);font-size:11px;line-height:14px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--gray-ink-strong)}
+.stbl thead th button{font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;display:inline-flex;align-items:center;gap:4px;min-height:24px;text-align:inherit}
+.stbl thead th[aria-sort] button{color:var(--color-fg)}
+.stbl .num{text-align:right}
+.stbl .num button{justify-content:flex-end}
+.stbl th:first-child,.stbl td:first-child{position:sticky;left:0;z-index:1;border-right:1px solid var(--color-border);max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.stbl thead th:first-child{z-index:3}
+.stbl tbody tr{cursor:pointer}
+.stbl tbody tr:hover td{background:var(--color-muted)}
+.stbl tbody td:first-child a{font-weight:500;font-size:14px}
+.stbl tfoot td{position:sticky;bottom:0;z-index:1;background:var(--color-bg);font-weight:600;border-top:1px solid var(--color-border);border-bottom:0}
+.stbl tfoot td:first-child{z-index:3}
+.stbl .intcol{color:var(--gray-ink-strong)}
+.stbl thead th.intcol{background:var(--color-muted)}
+.stbl td.total{font-weight:600}
+.spend-cards{display:none;flex-direction:column;gap:10px}
+.scard{border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-card);padding:14px;display:flex;flex-direction:column;gap:8px}
+.scard .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.scard .top a{font-size:15px;line-height:20px;font-weight:600}
+.scard .top b{font-size:18px;line-height:22px;font-weight:700;white-space:nowrap}
+.chlist{display:flex;flex-direction:column}
+.chlist li{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--color-line);font-size:13px;line-height:18px}
+.chlist li b{font-weight:600}
+.scard details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size:13px;font-weight:500;color:var(--copper-ink)}
+.picklist{display:flex;flex-direction:column;gap:8px}
+.picklist button{display:flex;justify-content:space-between;gap:12px;width:100%;min-height:44px;padding:10px 14px;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-card);font-size:14px;line-height:18px;text-align:left}
+.picklist button:hover{background:var(--color-muted)}
+.picklist button span{color:var(--color-fg-muted)}
+.sumline{font-size:13px;line-height:18px;color:var(--color-fg-muted)}
+[data-spend-results]{display:flex;flex-direction:column;gap:12px;min-width:0}
+.sumline b{color:var(--color-fg);font-weight:600}
+
+/* ── Profile (Round 5) ───────────────────────────────────────────────── */
+.prof-head{display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap}
+.prof-head .who{flex:1;min-width:240px;display:flex;flex-direction:column;gap:6px}
+.meter{display:flex;flex-direction:column;gap:8px;width:320px;max-width:100%}
+.meter .row1{display:flex;align-items:baseline;gap:8px}
+.meter .row1 b{font-size:28px;line-height:34px;font-weight:700;letter-spacing:-.02em}
+.meterbar{height:8px;border-radius:4px;background:var(--rule);overflow:hidden}
+.meterbar i{display:block;height:100%;background:var(--juniper);border-radius:4px}
+.missing{display:flex;flex-direction:column;gap:6px}
+.missing li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:4px 12px;font-size:13px;line-height:18px}
+.missing li .uchips{grid-column:1}
+.missing li .link{grid-column:2;grid-row:1}
+.missing li b{font-weight:500}
+.checkin-note{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--attention-soft);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;line-height:18px;color:var(--attention-text)}
+.checkin-note.done{background:var(--healthy-soft);color:var(--healthy-text)}
+.checkin-note .link{color:inherit;text-decoration:underline}
+.prof-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:32px;align-items:start}
+.secnav{position:sticky;top:64px;display:flex;flex-direction:column;gap:2px}
+.secnav button{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;min-height:36px;padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;line-height:16px;color:var(--color-fg-2);text-align:left}
+.secnav button:hover{background:var(--color-muted)}
+.secnav button span{font-size:12px;color:var(--color-fg-muted);font-variant-numeric:tabular-nums}
+.psecs{display:flex;flex-direction:column;gap:12px;min-width:0}
+.psec{border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-card);scroll-margin-top:64px}
+.psec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px 18px;min-height:52px}
+.psec>summary::-webkit-details-marker{display:none}
+.psec>summary b{flex:1;font-size:16px;line-height:20px;font-weight:600}
+.psec>summary .sp{font-size:13px;color:var(--color-fg-muted)}
+.psec>summary .chev{transition:transform .15s}
+.psec[open]>summary .chev{transform:rotate(180deg)}
+.fields{padding:0 18px}
+.fld{display:grid;grid-template-columns:minmax(150px,210px) minmax(0,1fr);gap:8px 24px;padding:16px 0;border-top:1px solid var(--color-line);scroll-margin-top:72px}
+.fld .lab{display:flex;flex-direction:column;gap:6px;min-width:0}
+.fld .lab b{font-size:14px;line-height:18px;font-weight:600}
+.fld .lab .fine{line-height:16px}
+.uchips{display:flex;gap:4px;flex-wrap:wrap}
+.uchip{display:inline-flex;align-items:center;gap:3px;height:20px;padding-inline:7px;border-radius:4px;font-size:11px;line-height:14px;font-weight:500;background:var(--color-muted);color:var(--gray-ink-strong);white-space:nowrap}
+.uchip.ads{background:var(--attention-soft);color:var(--attention-text)}
+.uchip.ai_answers,.uchip.website_faq{background:var(--color-brand-soft);color:var(--juniper)}
+.uchip.reports{background:var(--healthy-soft);color:var(--healthy-text)}
+.fld .body{display:flex;flex-direction:column;gap:8px;min-width:0}
+.fval{font-size:14px;line-height:22px;white-space:pre-wrap}
+.fval .pills{display:flex;gap:6px;flex-wrap:wrap}
+.fval table{border-collapse:collapse;font-size:13px;line-height:16px}
+.fval th,.fval td{padding:4px 12px 4px 0;text-align:left;border-bottom:1px solid var(--color-line)}
+.fval th{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--gray-ink-strong)}
+.prov{font-size:12px;line-height:16px;color:var(--color-fg-muted)}
+.fstates{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.notebox{border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;line-height:19px}
+.notebox.pend{background:var(--attention-soft);color:var(--attention-text)}
+.notebox.ok{background:var(--healthy-soft);color:var(--healthy-text)}
+.notebox.no{background:var(--color-muted);color:var(--gray-ink-strong)}
+.notebox.block{background:var(--critical-soft);color:var(--critical-text)}
+.notebox b{font-weight:600}
+.sugbox{border:1px solid var(--mint);background:var(--color-brand-soft);border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.sugbox p{font-size:13px;line-height:19px;color:var(--color-fg)}
+.sugbox .fine{color:var(--gray-ink-strong)}
+.facts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.editor{display:flex;flex-direction:column;gap:8px}
+.editor textarea.inp{height:auto;min-height:104px;padding:8px 10px;resize:vertical;font-size:14px;line-height:21px}
+.editor input.inp{height:40px;font-size:14px}
+.checks{display:flex;gap:6px 16px;flex-wrap:wrap}
+.checks label{display:inline-flex;align-items:center;gap:6px;min-height:32px;font-size:14px}
+.hist{display:flex;flex-direction:column;gap:6px;border-left:2px solid var(--color-border);padding-left:12px}
+.hist li{font-size:12px;line-height:17px;color:var(--color-fg-2)}
+.hist li b{font-weight:600}
+
+/* ── Profile update review (Round 5) ─────────────────────────────────── */
+.diff{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.diff>div{border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:var(--color-bg)}
+.diff p{font-size:14px;line-height:22px;white-space:pre-wrap}
+.diff del{background:var(--critical-soft);color:var(--critical-text);text-decoration:line-through;border-radius:2px;padding:0 2px}
+.diff ins{background:var(--healthy-soft);color:var(--healthy-text);text-decoration:none;border-radius:2px;padding:0 2px;font-weight:500}
+.fhline{font-size:13px;line-height:19px}
+
+/* ── Profile check-in card (Round 5) ─────────────────────────────────── */
+.ckcard{border-left:3px solid var(--attention)}
+.ckcard .sub{display:block;font-size:11px;line-height:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--attention-text)}
+.todo-h{font-size:12px;line-height:16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--color-fg-muted);padding-top:4px}
+
+.profchip{display:inline-flex;align-items:center;gap:8px;font-size:13px;line-height:16px;font-weight:500;color:var(--copper-ink);min-height:24px}
+.profchip .meterbar{width:72px;height:6px}
+.profchip:hover{text-decoration:underline}
+
 /* AA on tinted surfaces: small muted text steps down to the strong gray shade */
 .pane .eyebrow,.pane .support,.finding .receipt,.receipts .support,.receipts .eyebrow,.tbl tr.top td.support,.tbl .self,
 .tbl tr.rowlink:hover .fine,.tbl tr.rowlink:hover .empty-dash,.kbd,.chip:hover,.sopt:hover span,.sopt[aria-selected="true"] span,.hero .support{color:var(--gray-ink-strong)}
@@ -691,6 +820,19 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   .hero .r{width:auto}
   .btn,.chip,.rchip,.textbtn{min-height:44px}
   .intr{flex-direction:column}
+  .spend-scroll{display:none}
+  .spend-cards{display:flex}
+  .diff{grid-template-columns:1fr}
+  .prof-layout{grid-template-columns:1fr}
+  .secnav{display:none}
+  .fields{padding:0 14px}
+  .psec>summary{padding:12px 14px}
+  .fld{grid-template-columns:1fr}
+  .meter{width:100%}
+  .controls .ctl{flex:1 1 100%;width:100%}
+  .inp.search-inp{width:100%}
+  .controls .inp{height:44px}
+  .togglebtn{min-height:44px}
   /* Approvals and Content rows stack as cards so Review is always in reach. */
   .tscroll .tbl.cards-sm{min-width:0;border:0;background:none}
   .tbl.cards-sm thead{display:none}
@@ -898,7 +1040,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   function rtitle(r) { var t = receipt(r); return t ? ' title="' + t.replace(/&amp;/g, '&') + '"' : ''; }
   function gapsLine(gaps) {
     if (!has(gaps)) return '';
-    var txt = gaps.map(function (g) { return typeof g === 'string' ? g : (g && (g.message || g.detail || g.reason)) || ''; }).filter(Boolean).join(' ');
+    var txt = gaps.map(function (g) { return typeof g === 'string' ? g : (g && (g.message || g.detail || g.reason)) || ''; }).filter(Boolean)
+      .map(function (t) { t = String(t).trim(); return /[.!?”"]$/.test(t) ? t : t + '.'; }).join(' ');
     return txt ? '<p class="gaps">' + esc(txt) + '</p>' : '';
   }
   function staleLabel(iso) {
@@ -972,7 +1115,11 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     arrowLeft: '<path d="m12 19-7-7 7-7M19 12H5"/>',
     history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>',
-    x: '<path d="M18 6 6 18M6 6l12 12"/>'
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    wallet: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+    idcard: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M15 8h2M15 12h2M7 16h10"/>',
+    chevron: '<path d="m6 9 6 6 6-6"/>'
   };
 
   /* ── Sidebar ─────────────────────────────────────────────────────── */
@@ -982,6 +1129,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       { key: 'dashboard', href: '#/dashboard', label: 'Dashboard', icon: 'dashboard' },
       { key: 'approvals', href: '#/approvals', label: 'Approvals', icon: 'inbox', badge: state.waiting },
       { key: 'properties', href: '#/properties', label: 'Properties', icon: 'building', count: companies().length || null },
+      { key: 'spend', href: '#/spend', label: 'Spend', icon: 'wallet' },
+      { key: 'profile', href: '#/property/' + encodeURIComponent(state.companyId || '') + '/profile', label: 'Profile', icon: 'idcard' },
       { key: 'visibility', href: '#/visibility', label: 'Visibility', icon: 'eye' },
       { key: 'content', href: '#/content', label: 'Content', icon: 'file' },
       { key: 'creative', href: '#/creative', label: 'Creative', icon: 'image' },
@@ -1017,6 +1166,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     if (pv) pv.addEventListener('click', function () {
       state.preview = !state.preview;
       try { sessionStorage.setItem(PREVIEW_KEY, state.preview ? '1' : '0'); } catch (e) {}
+      loadBadge();
       if (state.preview && /^#\/signals/.test(location.hash)) location.hash = '#/dashboard'; else route();
     });
   }
@@ -1038,7 +1188,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       bar.className = 'previewbar';
       bar.innerHTML = '<span><b>Previewing as a client.</b> Internal notes, internal trail entries and review flags are hidden, just as a client sees them.</span><span class="grow"></span><button type="button" class="link" data-stop-preview>Stop preview</button>';
       bar.querySelector('[data-stop-preview]').addEventListener('click', function () {
-        state.preview = false; try { sessionStorage.setItem(PREVIEW_KEY, '0'); } catch (e) {} route();
+        state.preview = false; try { sessionStorage.setItem(PREVIEW_KEY, '0'); } catch (e) {} loadBadge(); route();
       });
     } else { bar.hidden = true; bar.innerHTML = ''; }
   }
@@ -1141,9 +1291,13 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   var CAT_LABEL = { cost: 'Cost', vendor: 'Vendor', content: 'Content', creative: 'Creative', compliance: 'Compliance' };
   // Round 4: negotiate is no longer its own category; it reads as a vendor item.
   function catKey(c) { return c === 'negotiate' ? 'vendor' : c; }
+  function catTag(cat, itemId) {
+    var label = String(itemId || '').indexOf('profile_update:') === 0 ? 'profile update' : (CAT_LABEL[cat] || cat || '').toLowerCase();
+    return '<span class="tag ' + esc(cat) + '">' + esc(label) + '</span>';
+  }
   // Every decision opens the Review panel first: one button, one place to decide.
   function reviewBtn(id, cid, cls, label) { return '<button type="button" class="' + cls + '" data-review="' + esc(id) + '" data-company="' + esc(cid || '') + '">' + esc(label || 'Review') + '</button>'; }
-  var SOURCE_LABEL = { hubdb_rec: 'Recommendation', loop_rec: 'Loop recommendation', call_prep: 'Call prep', content_brief: 'Content brief', video_variant: 'Creative', ticket_profile: 'Ticket profile', onboarding_gap: 'Onboarding', portal_ticket: 'Request', service_ticket: 'Service ticket', fair_housing_review: 'Fair Housing review' };
+  var SOURCE_LABEL = { hubdb_rec: 'Recommendation', loop_rec: 'Loop recommendation', call_prep: 'Call prep', content_brief: 'Content brief', video_variant: 'Creative', ticket_profile: 'Ticket profile', onboarding_gap: 'Onboarding', portal_ticket: 'Request', service_ticket: 'Service ticket', fair_housing_review: 'Fair Housing review', profile_update: 'Profile update' };
   var STATUS_LABEL = { to_do: 'Needs you', in_motion: 'In motion', done: 'Done' };
   function reasonChips(attr) { return REASONS.map(function (r) { return '<button type="button" class="rchip" aria-pressed="false" ' + attr + '="' + r[0] + '">' + esc(r[1]) + '</button>'; }).join(''); }
   function approveFlow(btn, id, errEl) {
@@ -1211,7 +1365,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   }
   function dashboardHtml(d) {
     var name = d.greeting_name ? ', ' + d.greeting_name : '';
-    var waiting = d.waiting || [];
+    var checkins = (d.waiting || []).filter(function (w) { return w.kind === 'profile_checkin'; });
+    var waiting = (d.waiting || []).filter(function (w) { return w.kind !== 'profile_checkin'; });
     var top = waiting[0];
     var hero = '';
     if (top) {
@@ -1248,7 +1403,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     }).join('');
     var cards = waiting.slice(0, 3).map(function (w) {
       var wk = catKey(w.category);
-      return '<li class="wcard"><div class="top"><b>' + esc(w.title) + '</b><span class="tag ' + esc(wk) + '">' + esc((CAT_LABEL[wk] || wk).toLowerCase()) + '</span></div>' +
+      return '<li class="wcard"><div class="top"><b>' + esc(w.title) + '</b>' + catTag(wk, w.item_id) + '</div>' +
         (has(w.subtitle) ? '<p>' + esc(w.subtitle) + '</p>' : '') +
         '<div class="acts">' + reviewBtn(w.item_id, w.company_id, 'btn xs outline') + '</div></li>';
     }).join('');
@@ -1256,7 +1411,14 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       '<div class="rail-sep"></div>' +
       '<section class="sec"><h2 class="h-rail">Waiting on you' + (waiting.length ? '<span class="countbadge">' + esc(waiting.length) + '</span>' : '') + '</h2>' +
       (cards ? '<ul class="sec">' + cards + '</ul>' : '<p class="support">Nothing is waiting on you.</p>') +
-      (waiting.length > 3 ? '<a class="link" href="#/approvals">All ' + esc(waiting.length) + ' in Approvals</a>' : '') + '</section>';
+      (waiting.length > 3 ? '<a class="link" href="#/approvals">All ' + esc(waiting.length) + ' in Approvals</a>' : '') +
+      (checkins.length ? '<p class="todo-h">To-dos</p><ul class="sec">' + checkins.slice(0, 3).map(function (ck) {
+        var c = companyById(ck.company_id), n = ck.stale_count || 0;
+        return '<li class="wcard ckcard"><span class="sub">Monthly check-in</span><div class="top"><b>' + esc(ck.title || 'Review your property profile') + '</b></div>' +
+          '<p>' + esc((c ? c.name + ' · ' : '') + n + ' ' + plural(n, 'field') + ' untouched 90+ days') + '</p>' +
+          '<div class="acts"><a class="btn xs outline" href="#/property/' + encodeURIComponent(ck.company_id) + '/profile/stale" data-set-company="' + esc(ck.company_id) + '">Review profile</a></div></li>';
+      }).join('') + '</ul>' + (checkins.length > 3 ? '<p class="support">' + esc(checkins.length - 3) + ' more ' + plural(checkins.length - 3, 'property', 'properties') + ' due for a check-in this month.</p>' : '') : '') +
+      '</section>';
     return { page: page, rail: rail };
   }
 
@@ -1297,7 +1459,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     var body = rows.map(function (row) {
       var sv = val(row.savings_per_year), cat = catKey(row.category);
       return '<tr data-row="' + esc(row.item_id) + '"><td class="name"><a href="#/property/' + encodeURIComponent(row.company_id) + '">' + esc(row.property) + '</a></td>' +
-        '<td>' + esc(row.action) + '</td><td><span class="tag ' + esc(cat) + '">' + esc((CAT_LABEL[cat] || cat).toLowerCase()) + '</span></td>' +
+        '<td>' + esc(row.action) + '</td><td>' + catTag(cat, row.item_id) + '</td>' +
         '<td class="sav"' + rtitle(row.savings_per_year) + '>' + (sv == null ? '<span class="empty-dash">—</span>' : esc(money(sv)) + '/yr') + '</td>' +
         '<td class="acts">' + reviewBtn(row.item_id, row.company_id, 'btn xs outline') + '</td></tr>';
     }).join('');
@@ -1394,6 +1556,39 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     return '<section class="rv-sec"><h3>What the review found</h3>' + (meta ? '<p class="fh-meta">' + esc(meta) + '</p>' : '') +
       (finds ? '<ol class="fh-finds">' + finds + '</ol>' : '<p>Nothing was flagged.</p>') + '</section>';
   }
+  function asText(v) {
+    if (v == null) return '';
+    if (Array.isArray(v)) return v.map(function (x) { return typeof x === 'object' ? JSON.stringify(x) : x; }).join(', ');
+    return typeof v === 'object' ? JSON.stringify(v) : String(v);
+  }
+  function wordDiff(a, b) {
+    // Word-level LCS: what the proposal removes from the current value and what it adds.
+    var x = a ? a.split(/(\s+)/) : [], y = b ? b.split(/(\s+)/) : [], n = x.length, m = y.length, i, j;
+    if (n * m > 250000) return { before: esc(a), after: esc(b) };
+    var L = []; for (i = 0; i <= n; i++) { L.push(new Array(m + 1).fill(0)); }
+    for (i = n - 1; i >= 0; i--) for (j = m - 1; j >= 0; j--) L[i][j] = x[i] === y[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    var before = '', after = ''; i = 0; j = 0;
+    while (i < n && j < m) {
+      if (x[i] === y[j]) { before += esc(x[i]); after += esc(y[j]); i++; j++; }
+      else if (L[i + 1][j] >= L[i][j + 1]) { before += /\S/.test(x[i]) ? '<del>' + esc(x[i]) + '</del>' : esc(x[i]); i++; }
+      else { after += /\S/.test(y[j]) ? '<ins>' + esc(y[j]) + '</ins>' : esc(y[j]); j++; }
+    }
+    for (; i < n; i++) before += /\S/.test(x[i]) ? '<del>' + esc(x[i]) + '</del>' : esc(x[i]);
+    for (; j < m; j++) after += /\S/.test(y[j]) ? '<ins>' + esc(y[j]) + '</ins>' : esc(y[j]);
+    return { before: before, after: after };
+  }
+  function profileUpdateHtml(pu, it) {
+    if (!pu) return '';
+    var cur = asText(pu.current_value), next = asText(pu.proposed_value), d = wordDiff(cur, next);
+    var fh = pu.fair_housing !== undefined ? pu.fair_housing : (it && it.fair_housing_review);
+    return '<section class="rv-sec"><h3>The proposed change · ' + esc(pu.field_label || pu.label || '') + '</h3>' +
+      '<p class="support">Proposed by ' + esc(pu.proposed_by) + ' · ' + esc(mdy(pu.proposed_at)) + '</p>' +
+      '<div class="diff"><div><span class="eyebrow">Live now</span><p>' + (cur ? d.before : '<span class="support">Empty</span>') + '</p></div>' +
+      '<div><span class="eyebrow">Proposed</span><p>' + (next ? d.after : '<span class="support">Empty</span>') + '</p></div></div>' +
+      '<p class="fine">Used in</p>' + usedChips(pu.used_in) +
+      '<p class="fhline">' + (fh ? '<span class="pill ' + (fh.severity === 'high' ? 'critical' : 'attention') + '"><i></i>Fair Housing · ' + esc(fh.severity) + '</span> Flagged: ' + esc((fh.terms || []).join(', '))
+        : '<span class="pill healthy"><i></i>Fair Housing check passed</span> Nothing in the proposed text was flagged.') + '</p></section>';
+  }
   function reviewSections(it) {
     var c = companyById(it.company_id), cat = catKey(it.category), out = '';
     var meta = [c ? c.name : '', it.owner ? 'Owner ' + it.owner : '', it.cost_note || ''].filter(Boolean).join(' · ');
@@ -1402,8 +1597,9 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       '<h2 class="rv-title" id="rv-title">' + esc(it.title) + '</h2>' + (meta ? '<p class="support">' + esc(meta) + '</p>' : '') + '</div>';
     var why = it.why || (has(it.found) || has(it.receipts) ? { text: it.found || '', receipts: it.receipts || [] } : null);
     if (why) out += '<section class="rv-sec"><h3>Why we’re proposing this</h3>' + (has(why.text) ? '<p>' + esc(why.text) + '</p>' : '') + receiptList(why.receipts) +
-      (it.review ? '' : evidenceHtml(it.evidence) + sparkHtml(it.sparkline)) + '</section>';
+      (it.review || it.profile_update ? '' : evidenceHtml(it.evidence) + sparkHtml(it.sparkline)) + '</section>';
     out += fhReviewHtml(it.review);
+    out += profileUpdateHtml(it.profile_update, it);
     var fw = it.for_whom;
     if (fw && (has(fw.text) || has(fw.questions))) out += '<section class="rv-sec"><h3>Who it’s for</h3>' + (has(fw.text) ? '<p>' + esc(fw.text) + '</p>' : '') +
       (has(fw.questions) ? '<p class="fine">' + (cat === 'content' ? 'The renter questions and searches it answers' : 'The questions it answers') + '</p><ul class="rv-qs">' + fw.questions.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ul>' : '') + '</section>';
@@ -1647,11 +1843,472 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       return '<tr class="rowlink" data-href="' + href + '"><td class="name"><a href="' + href + '">' + esc(c.name) + '</a><span class="fine" style="display:block">' + esc([c.city, c.state].filter(Boolean).join(', ')) + '</span></td>' +
         '<td class="num">' + esc(num(c.units)) + '</td>' + cell(p.occupancy, function (v) { return pct(v, 1); }) + cell(p.to_lease_90d, num) + cell(p.leases_month, num) +
         '<td class="num"><span class="pill ' + esc(b) + '"><i></i>' + (score == null ? 'New' : esc(score) + ' · ' + esc(BAND_LABEL[b])) + '</span></td>' +
-        '<td class="num">' + (has(p.status) ? esc(p.status) : '<span class="empty-dash">—</span>') + '</td></tr>';
+        '<td class="num">' + (has(p.status) ? esc(p.status) : '<span class="empty-dash">—</span>') + '</td>' +
+        (function () { var pc = val(p.profile_completeness); return '<td class="num"' + rtitle(p.profile_completeness) + '>' + (pc == null ? '<span class="empty-dash">—</span>' : '<a class="link" href="#/property/' + encodeURIComponent(c.company_id) + '/profile">' + esc(Math.round(pc)) + '%</a>') + '</td></tr>'; })();
     }).join('');
     return '<div class="page"><div class="head"><div class="stack"><h1 class="h-page">Properties</h1><p class="support">Every property you can see, sorted as your account lists them.</p></div>' + staleLabel(d.as_of) + '</div>' + strip +
-      '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">Occupancy</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Leases (month)</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">Occupancy</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Leases (month)</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th><th scope="col" class="num">Profile</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       gapsLine(d.gaps) + '</div>';
+  }
+
+  /* ── Spend (Round 5) ─────────────────────────────────────────────────
+     The spend sheet as a calm table. The server removes internal columns (and
+     the PLE status) for clients and in preview-as-client; the page only shows
+     what it receives. Money never moves from here: "Propose a change" opens
+     New request. Columns: Property · Status (staff) · Market · Manager ·
+     channels · informational ILS columns · internal (staff) · Total. */
+  state.spend = { q: '', market: '', manager: '', status: '', sort: 'property_name', dir: 'asc', showAll: false, showDeal: false };
+  var SPEND_DEFAULT_INTERNAL = ['mgmt_fee'];
+  var SPEND_MONEY_KEYS = { mgmt_fee: 1, deal_amount: 1, zillow_per_month: 1, zillow_per_lease: 1 };
+  function spendQuery(page) {
+    var f = state.spend, qs = ['page=' + page, 'page_size=200', 'sort=' + encodeURIComponent(f.sort), 'dir=' + f.dir];
+    ['q', 'market', 'manager', 'status'].forEach(function (k) { if (f[k]) qs.push(k + '=' + encodeURIComponent(f[k])); });
+    return '/api/workspace/spend-sheet?' + qs.join('&');
+  }
+  function loadSpend() {
+    // Every page of the filtered set, so the table, totals and CSV cover the same rows.
+    function next(page, acc) {
+      return api(spendQuery(page)).then(function (r) {
+        var d = r.data || {}, rows = acc.concat(d.rows || []);
+        if (rows.length < (d.count || 0) && (d.rows || []).length) return next(page + 1, rows);
+        d.rows = rows;
+        return d;
+      });
+    }
+    return next(1, []);
+  }
+  function hasSpendValue(v) { return v != null && v !== 0 && v !== '' && v !== false; }
+  function isMoneyCol(c) { return c.key === 'total' || c.group === 'channel' || !!SPEND_MONEY_KEYS[c.key]; }
+  function spendTableCols(d) {
+    var f = state.spend, rows = d.rows || [], staff = d.scope === 'portfolio';
+    function used(k) { return rows.some(function (r) { return hasSpendValue((r.values || {})[k]); }); }
+    var lead = [{ key: 'property_name', label: 'Property', row: true }];
+    if (staff) lead.push({ key: 'status', label: 'Status', row: true, internal: true });
+    lead.push({ key: 'market', label: 'Market', row: true }, { key: 'manager', label: 'Manager', row: true });
+    var mid = (d.columns || []).filter(function (c) {
+      if (c.group === 'channel' || c.group === 'meta') return f.showAll || used(c.key);
+      if (c.internal) return f.showDeal || SPEND_DEFAULT_INTERNAL.indexOf(c.key) !== -1;
+      return true;
+    });
+    return lead.concat(mid, [{ key: 'total', label: 'Total', row: true }]);
+  }
+  function spendCell(r, c) { return c.row ? r[c.key] : (r.values || {})[c.key]; }
+  function spendFmt(c, v) {
+    if (v === true) return 'Yes';
+    if (v == null || v === '' || v === false) return null;
+    return isMoneyCol(c) && typeof v === 'number' ? money(v) : String(v);
+  }
+  function screenSpend() {
+    renderTop('Spend', '');
+    renderSide('spend');
+    setView('<div class="page">' + spendHead() + '<div data-spend-results><div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading the spend sheet…</div></div></div>');
+    bindSpendControls();
+    refreshSpend();
+  }
+  function spendHead() {
+    var f = state.spend, opts = state.spendFilters || { markets: [], managers: [], statuses: [] };
+    function sel(key, label, list) {
+      return '<label class="ctl" data-spend-ctl="' + key + '"' + (key === 'status' && !list.length ? ' hidden' : '') + '><span>' + label + '</span><select class="inp" data-spend-filter="' + key + '"><option value="">All</option>' +
+        list.map(function (v) { return '<option' + (v === f[key] ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') + '</select></label>';
+    }
+    return '<div class="head"><div class="stack"><h1 class="h-page">Spend</h1><p class="support" data-spend-scope>Monthly contracted spend by channel, from HubSpot deals and line items.</p></div><span data-spend-asof></span></div>' +
+      '<div class="controls" role="search"><label class="ctl"><span>Search</span><input class="inp search-inp" type="search" data-spend-q placeholder="Property name" value="' + esc(f.q) + '"></label>' +
+      sel('market', 'Market', opts.markets) + sel('manager', 'Manager', opts.managers) + sel('status', 'Status', opts.statuses) +
+      '<span class="grow"></span><button type="button" class="togglebtn" data-spend-all aria-pressed="' + f.showAll + '">Show all channels</button>' +
+      '<span data-spend-deal-slot></span>' +
+      '<button type="button" class="btn sm" data-spend-csv>' + ic(I.download, 14) + 'Export CSV</button></div>';
+  }
+  function bindSpendControls() {
+    var f = state.spend, timer = null;
+    var q = view.querySelector('[data-spend-q]');
+    q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(function () { f.q = q.value.trim(); refreshSpend(); }, 250); });
+    view.querySelectorAll('[data-spend-filter]').forEach(function (el) { el.addEventListener('change', function () { f[el.getAttribute('data-spend-filter')] = el.value; refreshSpend(); }); });
+    var all = view.querySelector('[data-spend-all]');
+    all.addEventListener('click', function () { f.showAll = !f.showAll; all.setAttribute('aria-pressed', String(f.showAll)); renderSpend(state.spendData); });
+    view.querySelector('[data-spend-csv]').addEventListener('click', function () { if (state.spendData) exportSpendCsv(state.spendData); });
+  }
+  function refreshSpend() {
+    var box = view.querySelector('[data-spend-results]'); if (!box) return;
+    var my = state.spendSeq = (state.spendSeq || 0) + 1;
+    box.setAttribute('aria-busy', 'true');
+    loadSpend().then(function (d) {
+      if (my !== state.spendSeq || !view.querySelector('[data-spend-results]')) return;
+      state.spendData = d;
+      if (d.scope !== 'portfolio') state.spend.status = '';
+      if (!state.spendFilters || state.spendFiltersScope !== d.scope) {
+        state.spendFilters = d.filters || { markets: [], managers: [], statuses: [] };
+        state.spendFiltersScope = d.scope;
+        [['market', 'markets'], ['manager', 'managers'], ['status', 'statuses']].forEach(function (k) {
+          var el = view.querySelector('[data-spend-filter="' + k[0] + '"]'), list = state.spendFilters[k[1]] || [];
+          if (el) el.innerHTML = '<option value="">All</option>' + list.map(function (v) { return '<option' + (v === state.spend[k[0]] ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('');
+          var ctl = view.querySelector('[data-spend-ctl="' + k[0] + '"]'); if (ctl) ctl.hidden = !list.length;
+        });
+      }
+      renderSpend(d);
+    }).catch(function (e) {
+      if (my !== state.spendSeq || (e && e.status === 401)) return;
+      box.removeAttribute('aria-busy');
+      box.innerHTML = errorHtml(e);
+    });
+  }
+  function renderSpend(d) {
+    var box = view.querySelector('[data-spend-results]'); if (!box || !d) return;
+    box.removeAttribute('aria-busy');
+    var f = state.spend, cols = spendTableCols(d), rows = d.rows || [], staff = d.scope === 'portfolio';
+    var asof = view.querySelector('[data-spend-asof]'); if (asof) asof.innerHTML = staleLabel(d.as_of);
+    var scope = view.querySelector('[data-spend-scope]');
+    if (scope) scope.textContent = (staff ? 'Every managed property’s ' : 'Your properties’ ') + 'monthly contracted spend by channel, from HubSpot deals and line items. Money never moves from this screen.';
+    var slot = view.querySelector('[data-spend-deal-slot]');
+    if (slot) {
+      slot.innerHTML = staff ? '<button type="button" class="togglebtn" data-spend-deal aria-pressed="' + f.showDeal + '">' + ic(I.lock, 12) + 'Deal details</button>' : '';
+      var db = slot.querySelector('[data-spend-deal]');
+      if (db) db.addEventListener('click', function () { f.showDeal = !f.showDeal; renderSpend(d); });
+    }
+    var channelCols = (d.columns || []).filter(function (c) { return c.group === 'channel'; });
+    var metaCols = (d.columns || []).filter(function (c) { return c.group === 'meta'; });
+    var hidden = channelCols.length - cols.filter(function (c) { return c.group === 'channel'; }).length;
+    var tot = d.totals || {};
+    function cellHtml(c, v) { var t = spendFmt(c, v); return t == null ? '<span class="empty-dash">—</span>' : esc(t); }
+    var head = '<tr>' + cols.map(function (c) {
+      var sorted = f.sort === c.key, cls = (isMoneyCol(c) ? 'num' : '') + (c.internal ? ' intcol' : '');
+      return '<th scope="col" class="' + cls + '"' + (sorted ? ' aria-sort="' + (f.dir === 'asc' ? 'ascending' : 'descending') + '"' : '') + '><button type="button" data-spend-sort="' + esc(c.key) + '">' +
+        (c.internal ? ic(I.lock, 10) : '') + esc(c.label) + (sorted ? '<span aria-hidden="true">' + (f.dir === 'asc' ? '↑' : '↓') + '</span>' : '') + '</button></th>';
+    }).join('') + '<th scope="col"><span class="sr-only">Propose a change</span></th></tr>';
+    var body = rows.map(function (r, ri) {
+      return '<tr data-href="' + esc(r.href || ('#/property/' + encodeURIComponent(r.company_id))) + '">' + cols.map(function (c, i) {
+        if (i === 0) return '<td><a href="#/property/' + encodeURIComponent(r.company_id) + '">' + esc(r.property_name || 'Unnamed property') + '</a></td>';
+        return '<td class="' + (isMoneyCol(c) ? 'num' : '') + (c.internal ? ' intcol' : '') + (c.key === 'total' ? ' total' : '') + '">' + cellHtml(c, spendCell(r, c)) + '</td>';
+      }).join('') + '<td><button type="button" class="textbtn" data-spend-propose="' + ri + '">Propose a change</button></td></tr>';
+    }).join('');
+    var foot = rows.length ? '<tfoot><tr>' + cols.map(function (c, i) {
+      if (i === 0) return '<td>Total · ' + esc(num(rows.length)) + ' ' + plural(rows.length, 'property', 'properties') + '</td>';
+      if (c.key === 'total') return '<td class="num">' + cellHtml(c, tot.total) + '</td>';
+      if (c.row || !isMoneyCol(c)) return '<td></td>';
+      return '<td class="num' + (c.internal ? ' intcol' : '') + '">' + cellHtml(c, (tot.values || {})[c.key]) + '</td>';
+    }).join('') + '<td></td></tr></tfoot>' : '';
+    var cards = rows.map(function (r, ri) {
+      var ch = channelCols.map(function (c) { return { c: c, v: (r.values || {})[c.key] }; }).filter(function (x) { return hasSpendValue(x.v); })
+        .sort(function (a, b) { return b.v - a.v; });
+      var li = function (x) { return '<li><span>' + esc(x.c.label) + '</span><b>' + esc(spendFmt(x.c, x.v)) + '</b></li>'; };
+      var extra = metaCols.map(function (c) { return { c: c, v: (r.values || {})[c.key] }; }).filter(function (x) { return hasSpendValue(x.v); }).map(li).join('') +
+        (staff && (r.values || {}).mgmt_fee != null ? '<li class="intcol"><span>' + ic(I.lock, 10) + ' Mgmt fee</span><b>' + esc(money(r.values.mgmt_fee)) + '</b></li>' : '');
+      return '<li class="scard"><div class="top"><a href="#/property/' + encodeURIComponent(r.company_id) + '">' + esc(r.property_name || 'Unnamed property') + '</a><b>' + (r.total == null ? '—' : esc(money(r.total))) + '</b></div>' +
+        '<p class="fine">' + esc([r.status, r.market, r.manager].filter(Boolean).join(' · ')) + '</p>' +
+        (ch.length ? '<ul class="chlist">' + ch.slice(0, 3).map(li).join('') + '</ul>' : '<p class="support">No channel line items yet.</p>') +
+        (ch.length > 3 || extra ? '<details><summary>All channels (' + ch.length + ')</summary><ul class="chlist">' + ch.slice(3).map(li).join('') + extra + '</ul></details>' : '') +
+        '<button type="button" class="btn sm" data-spend-propose="' + ri + '">Propose a change</button></li>';
+    }).join('');
+    box.innerHTML = '<p class="sumline" role="status"><b>' + esc(num(d.count)) + '</b> ' + plural(d.count, 'property', 'properties') + (tot.total != null ? ' · <b>' + esc(money(tot.total)) + '</b> a month' + (staff ? ' including management fees' : '') : '') +
+      (hidden > 0 && !f.showAll ? ' · ' + esc(hidden) + ' ' + plural(hidden, 'channel') + ' with no spend hidden' : '') + '</p>' +
+      (rows.length ? '<div class="spend-scroll" tabindex="0" role="region" aria-label="Spend sheet, scrolls sideways"><table class="stbl"><caption class="sr-only">Monthly spend by property and channel</caption><thead>' + head + '</thead><tbody>' + body + '</tbody>' + foot + '</table></div>' +
+        '<ul class="spend-cards">' + cards + '</ul>' : '<p class="support">No properties match these filters.</p>') +
+      gapsLine(d.gaps);
+    box.querySelectorAll('[data-spend-sort]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-spend-sort'), col = cols.filter(function (c) { return c.key === k; })[0] || {};
+        if (f.sort === k) f.dir = f.dir === 'asc' ? 'desc' : 'asc'; else { f.sort = k; f.dir = isMoneyCol(col) ? 'desc' : 'asc'; }
+        refreshSpend();
+      });
+    });
+    box.querySelectorAll('[data-spend-propose]').forEach(function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openPropose(rows[+b.getAttribute('data-spend-propose')], channelCols.concat(metaCols.filter(function (c) { return /zillow_per_month|costar_package/.test(c.key); })), b); });
+    });
+  }
+  function openPropose(r, pickCols, opener) {
+    drawerOpener = opener; drawerSeq++;
+    document.body.classList.add('drawer-open');
+    var ch = pickCols.map(function (c) { return { c: c, v: (r.values || {})[c.key] }; });
+    var active = ch.filter(function (x) { return hasSpendValue(x.v); }), rest = ch.filter(function (x) { return !hasSpendValue(x.v); });
+    function now(x) { return !hasSpendValue(x.v) ? 'not running' : (typeof x.v === 'number' ? money(x.v) + ' a month' : String(x.v)); }
+    function btn(x) { return '<button type="button" data-pick="' + esc(x.c.key) + '">' + esc(x.c.label) + '<span>' + esc(hasSpendValue(x.v) ? (typeof x.v === 'number' ? money(x.v) + '/mo' : x.v) : 'Not running') + '</span></button>'; }
+    drawerRoot.innerHTML = '<div class="drawer-scrim" data-drawer-close></div><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="pp-title"><div class="drawer-head"><span class="h-rail" id="pp-title">Propose a change · ' + esc(r.property_name) + '</span><span class="grow"></span>' +
+      '<button type="button" class="iconbtn" data-drawer-close aria-label="Close">' + ic(I.x, 18) + '</button></div><div class="drawer-body">' +
+      '<p class="support">Pick the channel. You’ll describe the change in a new request; nothing changes until your RPM team confirms it.</p>' +
+      (active.length ? '<section class="rv-sec"><h3>Running now</h3><div class="picklist">' + active.map(btn).join('') + '</div></section>' : '') +
+      '<section class="rv-sec"><h3>Add a channel</h3><div class="picklist">' + rest.map(btn).join('') + '<button type="button" data-pick="">Something else<span>Describe it</span></button></div></section></div></div>';
+    drawerRoot.querySelector('.iconbtn').focus();
+    drawerRoot.querySelectorAll('[data-pick]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-pick'), x = ch.filter(function (y) { return y.c.key === key; })[0];
+        var text = key ? 'Change to ' + x.c.label + ' at ' + r.property_name + '. Today: ' + now(x) + '.\nWhat should change: '
+          : 'Change to spend at ' + r.property_name + '.\nWhat should change: ';
+        closeReview();
+        setCompany(r.company_id);
+        startRequest(text);
+      });
+    });
+  }
+  function exportSpendCsv(d) {
+    // Only the columns the viewer can see right now, from the rows the page has.
+    var cols = spendTableCols(d);
+    function cell(v) { if (v == null || v === false) return ''; var t = v === true ? 'Yes' : String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
+    var lines = [cols.map(function (c) { return cell(c.label); }).join(',')];
+    (d.rows || []).forEach(function (r) { lines.push(cols.map(function (c) { return cell(spendCell(r, c)); }).join(',')); });
+    lines.push(cols.map(function (c, i) {
+      if (i === 0) return 'Total';
+      if (c.key === 'total') return cell((d.totals || {}).total);
+      return !c.row && isMoneyCol(c) ? cell(((d.totals || {}).values || {})[c.key]) : '';
+    }).join(','));
+    var blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv' }), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'spend-sheet-' + String(d.as_of || '').slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+
+  /* ── Profile (Round 5) ───────────────────────────────────────────────
+     The community brief as a living profile. The server removes internal
+     fields for clients and in preview-as-client. Edits run Fair Housing first;
+     ad-facing edits from clients wait for RPM review. */
+  var USED_LABEL = { ads: 'Ads', website_faq: 'Website FAQ', ai_answers: 'AI answers', reports: 'Reports', internal: 'Internal' };
+  var PROV_SOURCE = { site_scrape: 'the website', aptiq: 'ApartmentIQ', hubspot_company: 'the company record' };
+  var SUG_SOURCE = { site_scrape: 'From the property website', geo_claim: 'From AI answers', fair_housing: 'From the Fair Housing review', ticket: 'From a request' };
+  var DISMISS_REASONS = ['Not accurate', 'Already covered', 'Not for ads'];
+  var TABLE_TYPES = { floorplan_table: 1, tracking_table: 1, documents: 1 };
+  state.profileFlash = {};
+  function usedChips(list) {
+    return '<span class="uchips">' + (list || []).map(function (u) { return '<span class="uchip ' + esc(u) + '">' + (u === 'internal' ? ic(I.lock, 9) : '') + esc(USED_LABEL[u] || u) + '</span>'; }).join('') + '</span>';
+  }
+  function humanOpt(v) { return String(v).replace(/_/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); }); }
+  function isEmptyVal(v) { return v == null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && !v.length); }
+  function listValue(f, v) {
+    // Values arrive as HubSpot holds them: multi-select joined with ";", tables as a JSON array string.
+    if (Array.isArray(v)) return v;
+    if (f.type === 'multiselect') return String(v || '').split(';').map(function (x) { return x.trim(); }).filter(Boolean);
+    if (TABLE_TYPES[f.type]) { try { var parsed = JSON.parse(v); return Array.isArray(parsed) ? parsed : []; } catch (e) { return []; } }
+    return null;
+  }
+  function fieldValueHtml(f, v) {
+    if (isEmptyVal(v)) return '<span class="support">Not filled in yet</span>';
+    if (f.type === 'multiselect' || TABLE_TYPES[f.type]) v = listValue(f, v);
+    if (TABLE_TYPES[f.type] && Array.isArray(v)) {
+      var keys = Object.keys(v[0] || {});
+      return '<div class="tscroll"><table><thead><tr>' + keys.map(function (k) { return '<th scope="col">' + esc(humanOpt(k)) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        v.map(function (row) { return '<tr>' + keys.map(function (k) { return '<td>' + esc(row[k]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+    }
+    if (Array.isArray(v)) return '<span class="pills">' + v.map(function (x) { return '<span class="pill brand">' + esc(humanOpt(x)) + '</span>'; }).join('') + '</span>';
+    if (f.type === 'dropdown') return esc(humanOpt(v));
+    return esc(v);
+  }
+  function provenanceHtml(f) {
+    var p = f.provenance || {};
+    if (p.kind === 'override') return 'Written by ' + esc(p.by || 'your team') + (p.at ? ' · ' + esc(mdy(p.at)) : '') + (p.overrides ? ' · overrides the value from ' + esc(PROV_SOURCE[p.overrides] || p.overrides) : '');
+    if (p.kind === 'resolved') return 'From ' + esc(PROV_SOURCE[p.source] || p.source || 'a connected source') + (p.at ? ' · ' + esc(mdy(p.at)) : '');
+    return 'Nobody has filled this in';
+  }
+  function fieldRowHtml(f, prof, opts) {
+    opts = opts || {};
+    var cid = prof.property.company_id, flash = state.profileFlash[f.key], states = '';
+    if (f.stale) states += '<span class="pill attention"><i></i>Untouched 90+ days</span>';
+    if (f.ad_facing && f.editable !== false && !realInternal()) states += '<span class="pill new">Reviewed by RPM before ads</span>';
+    if (viewInternal() && f.fair_housing_review) states += '<span class="pill fh">' + ic(I.lock, 11) + 'Fair Housing review · ' + esc(f.fair_housing_review.severity) + (has(f.fair_housing_review.terms) ? ' · “' + esc(f.fair_housing_review.terms.join('”, “')) + '”' : '') + '</span>';
+    var notes = '';
+    if (f.pending) notes += '<div class="notebox pend"><b>Pending RPM review.</b> ' + esc(f.pending.by) + ' proposed “' + esc(Array.isArray(f.pending.proposed_value) ? f.pending.proposed_value.join(', ') : f.pending.proposed_value) + '” · ' + esc(mdy(f.pending.at)) +
+      '. The current value stays live until it’s approved.' + (viewInternal() && f.pending.item_id ? ' ' + reviewBtn(f.pending.item_id, cid, 'link', 'Review it') : '') + '</div>';
+    else if (f.review_outcome && f.review_outcome.status === 'approved') notes += '<div class="notebox ok">Approved by RPM' + (f.review_outcome.at ? ' · ' + esc(mdy(f.review_outcome.at)) : '') + '</div>';
+    else if (f.review_outcome && f.review_outcome.status === 'rejected') notes += '<div class="notebox no">Not applied — ' + esc(f.review_outcome.reason || 'RPM kept the current value') + (f.review_outcome.proposed_value ? ' (proposed “' + esc(f.review_outcome.proposed_value) + '”)' : '') + '</div>';
+    if (flash) notes += '<div class="notebox ' + ({ saved: 'ok', pending_review: 'pend', blocked: 'block', confirmed: 'ok' }[flash.kind] || 'ok') + '" role="' + (flash.kind === 'blocked' ? 'alert' : 'status') + '">' + esc(flash.text) + '</div>';
+    var sug = f.suggestion;
+    var sugHtml = sug ? '<div class="sugbox" data-sug="' + esc(sug.id) + '"><p><b>We found</b> “' + esc(Array.isArray(sug.value) ? sug.value.join(', ') : sug.value) + '” — use it?</p><p class="fine">' + esc(SUG_SOURCE[sug.source] || 'Suggested') + '. ' + esc(sug.reason) + '</p>' +
+      (canDecide() ? '<div class="facts"><button type="button" class="btn xs primary" data-sug-accept="' + esc(sug.id) + '">Use it</button><button type="button" class="btn xs" data-sug-dismiss="' + esc(sug.id) + '" aria-expanded="false">Dismiss</button></div>' +
+        '<div class="reasons" data-sug-reasons hidden role="group" aria-label="Why dismiss">' + DISMISS_REASONS.map(function (r) { return '<button type="button" class="rchip" data-sug-reason="' + esc(r) + '">' + esc(r) + '</button>'; }).join('') + '</div>' : '') + '</div>' : '';
+    var acts = '';
+    if (opts.checkin && canDecide()) acts += '<button type="button" class="btn xs outline" data-confirm="' + esc(f.key) + '">' + ic(I.check, 12) + 'Still accurate</button>';
+    var editable = f.editable != null ? f.editable : f.type !== 'readonly';
+    if (canDecide() && editable && !TABLE_TYPES[f.type] && !f.pending) acts += '<button type="button" class="btn xs" data-edit="' + esc(f.key) + '">' + (isEmptyVal(f.value) ? 'Add' : 'Edit') + '</button>';
+    if (!editable || TABLE_TYPES[f.type]) acts += '<button type="button" class="textbtn" data-req-change="' + esc(f.key) + '">Request a change</button>';
+    acts += '<button type="button" class="textbtn" data-history="' + esc(f.key) + '" aria-expanded="false">History</button>';
+    if (!canDecide() && editable) acts += signInLink('Sign in to edit');
+    return '<div class="fld" id="fld-' + esc(f.key) + '" data-field="' + esc(f.key) + '"><div class="lab"><b id="lbl-' + esc(f.key) + '">' + esc(f.label) + '</b>' + (f.hint ? '<span class="fine">' + esc(f.hint) + '</span>' : '') + usedChips(f.used_in) + '</div>' +
+      '<div class="body"><div class="fval" data-fval>' + fieldValueHtml(f, f.value) + '</div><p class="prov">' + provenanceHtml(f) + '</p>' +
+      (states ? '<div class="fstates">' + states + '</div>' : '') + notes + sugHtml +
+      '<div class="facts">' + acts + '</div><div data-editor></div><ol class="hist" data-hist hidden></ol><p class="inline-err" role="alert" hidden data-ferr></p></div></div>';
+  }
+  function editorHtml(f) {
+    var v = f.value;
+    if (f.type === 'multiselect') return '<fieldset class="editor"><legend class="sr-only">' + esc(f.label) + '</legend><div class="checks">' + (f.options || []).map(function (o) {
+      return '<label><input type="checkbox" value="' + esc(o) + '"' + ((listValue(f, v) || []).indexOf(o) !== -1 ? ' checked' : '') + '>' + esc(humanOpt(o)) + '</label>'; }).join('') + '</div>' + editorButtons() + '</fieldset>';
+    if (f.type === 'dropdown') return '<div class="editor"><select class="inp" aria-labelledby="lbl-' + esc(f.key) + '">' + (f.options || []).map(function (o) { return '<option value="' + esc(o) + '"' + (o === v ? ' selected' : '') + '>' + esc(humanOpt(o)) + '</option>'; }).join('') + '</select>' + editorButtons() + '</div>';
+    if (f.type === 'text') return '<div class="editor"><input class="inp" type="text" maxlength="5000" aria-labelledby="lbl-' + esc(f.key) + '" value="' + esc(v || '') + '">' + editorButtons() + '</div>';
+    return '<div class="editor"><textarea class="inp" maxlength="5000" aria-labelledby="lbl-' + esc(f.key) + '">' + esc(v || '') + '</textarea>' + editorButtons() + '</div>';
+  }
+  function savedText(d) {
+    // Only an ad-facing field saved immediately reaches ads with the next daily feed; context and internal fields just save.
+    return d && d.field && d.field.ad_facing ? 'Saved · live in ads tomorrow' : 'Saved';
+  }
+  function editorButtons() { return '<div class="facts"><button type="button" class="btn sm primary" data-save>Save</button><button type="button" class="btn sm ghost" data-cancel>Cancel</button></div>'; }
+  function editorValue(box, f) {
+    if (f.type === 'multiselect') return Array.prototype.filter.call(box.querySelectorAll('input[type=checkbox]'), function (c) { return c.checked; }).map(function (c) { return c.value; });
+    var el = box.querySelector('select,input,textarea'); return el ? el.value : '';
+  }
+  function screenProfile() {
+    var c = company();
+    renderTop('Profile', c ? c.name : '');
+    renderSide('profile');
+    guard(api('/api/workspace/profile?' + cq()), 'the property profile').then(function (r) { if (r) renderProfile(r.data || {}); });
+  }
+  function reloadProfile() {
+    var y = window.scrollY;
+    return api('/api/workspace/profile?' + cq()).then(function (r) { renderProfile(r.data || {}); window.scrollTo(0, y); })
+      .catch(function (e) { if (e && e.status === 401) return; setView(errorHtml(e)); });
+  }
+  function profileFields(prof) { var out = []; (prof.sections || []).forEach(function (sec) { (sec.fields || []).forEach(function (f) { out.push(f); }); }); return out; }
+  function renderProfile(prof) {
+    state.profile = prof;
+    var p = prof.property || {}, comp = prof.completeness || {}, ci = prof.checkin || {}, staleView = state.profileView === 'stale', co = companyById(p.company_id) || {};
+    renderTop('Profile', p.name);
+    var pctv = comp.pct == null ? null : Math.round(comp.pct);
+    var meter = '<div class="meter"><span class="eyebrow">Profile completeness</span><div class="row1"><b>' + (pctv == null ? '—' : esc(pctv) + '%') + '</b><span class="support">complete</span></div>' +
+      '<div class="meterbar" role="img" aria-label="Profile ' + (pctv == null ? 'not scored' : pctv + '% complete') + '"><i style="width:' + (pctv || 0) + '%"></i></div>' +
+      (has(comp.top_missing) ? '<p class="fine">Fill these in first — they matter most:</p><ul class="missing">' + comp.top_missing.map(function (m) {
+        return '<li><b>' + esc(m.label) + '</b>' + usedChips(m.used_in) + '<button type="button" class="link" data-jump="' + esc(m.key) + '">Add</button></li>';
+      }).join('') + '</ul>' : '') + '</div>';
+    var staleN = (ci.stale_fields || []).length;
+    var checkinNote = ci.due && staleN
+      ? '<p class="checkin-note">' + ic(I.history, 14) + '<span><b>Monthly check-in:</b> ' + esc(staleN) + ' ' + plural(staleN, 'field') + ' untouched 90+ days.</span>' +
+        (staleView ? '' : '<a class="link" href="#/property/' + encodeURIComponent(p.company_id) + '/profile/stale">Review them</a>') + '</p>'
+      : '<p class="checkin-note done">' + ic(I.check, 14) + '<span>Check-in done — every field has been touched in the last 90 days.</span></p>';
+    var head = '<div class="prof-head"><div class="who">' + scopedBack() + '<h1 class="h-page">' + (staleView ? 'Review your property profile' : 'Property profile') + '</h1>' +
+      '<p class="support">' + esc([p.name, co.city && co.state ? co.city + ', ' + co.state : ''].filter(Boolean).join(' · ')) + (p.last_updated ? ' · last updated ' + esc(mdy(p.last_updated)) : '') + '</p>' +
+      '<p class="fine">Everything here feeds your ads, website FAQ, AI answers and reports. Changes to ad-facing fields are reviewed by RPM first.</p>' + checkinNote + '</div>' + meter + '</div>';
+    var body;
+    if (staleView) {
+      var stale = profileFields(prof).filter(function (f) { return (ci.stale_fields || []).indexOf(f.key) !== -1; });
+      body = stale.length
+        ? '<section class="sec"><div class="sec-head"><h2 class="h-sec">Still accurate?</h2>' + (canDecide() ? '<button type="button" class="btn sm primary" data-confirm-all>' + ic(I.check, 13) + 'All ' + esc(stale.length) + ' are still accurate</button>' : '') + '</div>' +
+          '<p class="support">Confirm each one, or edit it. Confirming records “reviewed, no change” and resets its clock.</p>' +
+          '<div class="psec"><div class="fields">' + stale.map(function (f) { return fieldRowHtml(f, prof, { checkin: true }); }).join('') + '</div></div>' +
+          '<p><a class="link" href="#/property/' + encodeURIComponent(p.company_id) + '/profile">See the whole profile</a></p></section>'
+        : '<div class="emptybox" style="min-height:240px"><span class="ic">' + ic(I.check, 24).replace('currentColor', '#5B7265') + '</span><b>You’re all caught up</b><p class="support">Every field has been reviewed. We’ll ask again next month.</p>' +
+          '<a class="btn sm" href="#/property/' + encodeURIComponent(p.company_id) + '/profile">See the whole profile</a></div>';
+    } else {
+      var nav = '<nav class="secnav" aria-label="Profile sections">' + (prof.sections || []).map(function (sec) {
+        var sp = sec.completeness && typeof sec.completeness === 'object' ? sec.completeness.pct : sec.completeness;
+        return '<button type="button" data-sec-jump="' + esc(sec.key) + '">' + esc(sec.title) + '<span>' + (sp == null ? '—' : esc(Math.round(sp)) + '%') + '</span></button>';
+      }).join('') + '</nav>';
+      var secs = (prof.sections || []).map(function (sec) {
+        var sp = sec.completeness && typeof sec.completeness === 'object' ? sec.completeness.pct : sec.completeness;
+        return '<details class="psec" id="sec-' + esc(sec.key) + '" open><summary><b>' + esc(sec.title) + '</b><span class="sp">' + (sp == null ? '' : esc(Math.round(sp)) + '% complete') + '</span><span class="chev" aria-hidden="true">' + ic(I.chevron, 16) + '</span></summary>' +
+          '<div class="fields">' + (sec.fields || []).map(function (f) { return fieldRowHtml(f, prof); }).join('') + '</div></details>';
+      }).join('');
+      body = '<div class="prof-layout">' + nav + '<div class="psecs">' + secs + '</div></div>';
+    }
+    setView('<div class="page">' + head + body + gapsLine(prof.gaps) + '</div>');
+    state.profileFlash = {};
+    bindProfile(prof);
+  }
+  function bindProfile(prof) {
+    var cid = prof.property.company_id, byKey = {};
+    profileFields(prof).forEach(function (f) { byKey[f.key] = f; });
+    function row(key) { return view.querySelector('[data-field="' + key + '"]'); }
+    function openEditor(key) {
+      var f = byKey[key], r = row(key); if (!f || !r) return;
+      var slot = r.querySelector('[data-editor]');
+      slot.innerHTML = editorHtml(f);
+      var input = slot.querySelector('textarea,input,select'); if (input) input.focus();
+      var err = r.querySelector('[data-ferr]');
+      slot.querySelector('[data-cancel]').addEventListener('click', function () { slot.innerHTML = ''; var eb = r.querySelector('[data-edit]'); if (eb) eb.focus(); });
+      var save = slot.querySelector('[data-save]');
+      save.addEventListener('click', function () {
+        var value = editorValue(slot, f);
+        save.disabled = true; save.textContent = 'Saving…'; err.hidden = true;
+        var old = slot.querySelector('.notebox.block'); if (old) old.remove();
+        api('/api/workspace/profile/field', { method: 'PATCH', body: { company_id: cid, key: key, value: value } }).then(function (res) {
+          var d = res.data || {};
+          if (d.outcome === 'blocked') {
+            save.disabled = false; save.textContent = 'Save';
+            slot.querySelector('.editor').insertAdjacentHTML('afterbegin', '<div class="notebox block" role="alert"><b>Not saved.</b> ' + esc(String(d.message || '').replace(/^(Not saved|This wasn['’]t saved)\.\s*/, '')) + '</div>');
+            return;
+          }
+          state.profileFlash[key] = d.outcome === 'pending_review' ? { kind: 'pending_review', text: d.message || 'Sent to RPM for review. The current value stays live until RPM approves it.' }
+            : { kind: 'saved', text: savedText(d) };
+          return reloadProfile().then(function () { var nr = row(key); if (nr) nr.scrollIntoView({ block: 'nearest' }); });
+        }).catch(function (e) {
+          save.disabled = false; save.textContent = 'Save';
+          if (e && e.status === 401) return;
+          err.hidden = false; err.textContent = failText(e, 'That didn’t save');
+        });
+      });
+    }
+    view.querySelectorAll('[data-edit]').forEach(function (b) { b.addEventListener('click', function () { openEditor(b.getAttribute('data-edit')); }); });
+    view.querySelectorAll('[data-jump]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-jump'), r = row(key);
+        if (!r) { location.hash = '#/property/' + encodeURIComponent(cid) + '/profile'; return; }
+        var det = r.closest('details'); if (det) det.open = true;
+        r.scrollIntoView({ block: 'start' });
+        if (canDecide()) openEditor(key);
+      });
+    });
+    view.querySelectorAll('[data-sec-jump]').forEach(function (b) {
+      b.addEventListener('click', function () { var sec = view.querySelector('#sec-' + b.getAttribute('data-sec-jump')); if (sec) { sec.open = true; sec.scrollIntoView({ block: 'start' }); sec.querySelector('summary').focus(); } });
+    });
+    view.querySelectorAll('[data-req-change]').forEach(function (b) {
+      b.addEventListener('click', function () { var f = byKey[b.getAttribute('data-req-change')]; startRequest('Change the ' + f.label.toLowerCase() + ' in ' + prof.property.name + '’s profile.\nIt should say: '); });
+    });
+    view.querySelectorAll('[data-history]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-history'), list = row(key).querySelector('[data-hist]');
+        if (!list.hidden) { list.hidden = true; b.setAttribute('aria-expanded', 'false'); return; }
+        b.setAttribute('aria-expanded', 'true'); list.hidden = false; list.innerHTML = '<li>Loading…</li>';
+        var ACT = { edit: 'Edited', reviewed: 'Reviewed, no change', proposed: 'Proposed', approved: 'Approved', rejected: 'Not applied' };
+        api('/api/workspace/profile/history?' + cq() + '&key=' + encodeURIComponent(key)).then(function (r) {
+          var entries = (r.data || {}).entries || [];
+          list.innerHTML = entries.length ? entries.map(function (h) {
+            var v = h.new_value == null ? '' : String(h.new_value);
+            return '<li><b>' + esc(ACT[h.kind] || h.kind) + '</b> · ' + esc(h.by || '') + ' · ' + esc(mdy(h.at)) + (v && typeof v === 'string' ? ' — “' + esc(v.length > 120 ? v.slice(0, 117) + '…' : v) + '”' : '') + (h.note ? ' · ' + esc(h.note) : '') + '</li>';
+          }).join('') : '<li>No changes recorded yet.</li>';
+        }).catch(function (e) { if (e && e.status === 401) return; list.innerHTML = '<li class="inline-err">' + esc(failText(e, 'History didn’t load')) + '</li>'; });
+      });
+    });
+    view.querySelectorAll('[data-sug-accept]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.closest('[data-field]').getAttribute('data-field'), err = row(key).querySelector('[data-ferr]');
+        b.disabled = true; b.textContent = 'Using it…';
+        api('/api/workspace/profile/suggestions/' + encodeURIComponent(b.getAttribute('data-sug-accept')) + '/accept', { method: 'POST', body: { company_id: cid } }).then(function (res) {
+          var d = res.data || {};
+          state.profileFlash[key] = d.outcome === 'blocked' ? { kind: 'blocked', text: d.message } : d.outcome === 'pending_review'
+            ? { kind: 'pending_review', text: 'Sent to RPM for review. The current value stays live until RPM approves it.' } : { kind: 'saved', text: savedText(d) };
+          return reloadProfile();
+        }).catch(function (e) { b.disabled = false; b.textContent = 'Use it'; if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'That didn’t go through'); });
+      });
+    });
+    view.querySelectorAll('[data-sug-dismiss]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var box = b.closest('.sugbox').querySelector('[data-sug-reasons]');
+        box.hidden = !box.hidden; b.setAttribute('aria-expanded', String(!box.hidden));
+        if (!box.hidden) box.querySelector('button').focus();
+      });
+    });
+    view.querySelectorAll('[data-sug-reason]').forEach(function (c) {
+      c.addEventListener('click', function () {
+        var sug = c.closest('.sugbox'), key = c.closest('[data-field]').getAttribute('data-field'), err = row(key).querySelector('[data-ferr]');
+        c.setAttribute('aria-pressed', 'true');
+        api('/api/workspace/profile/suggestions/' + encodeURIComponent(sug.getAttribute('data-sug')) + '/dismiss', { method: 'POST', body: { company_id: cid, reason: c.getAttribute('data-sug-reason') } }).then(function () {
+          sug.outerHTML = '<div class="notebox no" role="status">Dismissed — ' + esc(c.getAttribute('data-sug-reason').toLowerCase()) + '.</div>';
+        }).catch(function (e) { c.setAttribute('aria-pressed', 'false'); if (e && e.status === 401) return; err.hidden = false; err.textContent = failText(e, 'That didn’t go through'); });
+      });
+    });
+    function confirmKeys(keys, btn) {
+      var label = btn.innerHTML; btn.disabled = true; btn.textContent = 'Saving…';
+      api('/api/workspace/profile/checkin', { method: 'POST', body: { company_id: cid, confirmed: keys } }).then(function (res) {
+        keys.forEach(function (k) { state.profileFlash[k] = { kind: 'confirmed', text: 'Marked as still accurate' }; });
+        var r = row(keys[0]);
+        if (keys.length === 1 && r) {
+          var skipped = ((res.data || {}).skipped || []).filter(function (x) { return x.key === keys[0]; })[0];
+          r.querySelector('.facts').insertAdjacentHTML('beforebegin', skipped
+            ? '<div class="notebox no" role="status">Not marked — ' + esc(skipped.reason) + '</div>'
+            : '<div class="notebox ok" role="status">Marked as still accurate</div>');
+          btn.remove();
+          var pill = r.querySelector('.pill.attention'); if (pill) pill.remove();
+          return;
+        }
+        return reloadProfile();
+      }).catch(function (e) { btn.disabled = false; btn.innerHTML = label; if (e && e.status === 401) return; });
+    }
+    view.querySelectorAll('[data-confirm]').forEach(function (b) { b.addEventListener('click', function () { confirmKeys([b.getAttribute('data-confirm')], b); }); });
+    var all = view.querySelector('[data-confirm-all]');
+    if (all) all.addEventListener('click', function () { confirmKeys((prof.checkin || {}).stale_fields || [], all); });
   }
 
   /* ── Property detail (D4I-2, G73-1) ──────────────────────────────── */
@@ -1666,6 +2323,20 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       renderTop('Properties', d.name);
       var h = propertyHtml(d);
       setView(h.page, h.rail);
+      var cid = state.companyId;
+      function showChip(pct) {
+        var chip = view.querySelector('[data-prof-chip]');
+        if (!chip || cid !== state.companyId || pct == null) return;
+        chip.innerHTML = 'Profile ' + esc(Math.round(pct)) + '% complete<span class="meterbar" aria-hidden="true"><i style="width:' + Math.round(pct) + '%"></i></span>';
+        chip.hidden = false;
+      }
+      if (val(d.profile_completeness) != null) { showChip(val(d.profile_completeness)); return; }
+      api('/api/workspace/profile?' + cq()).then(function (pr) {
+        var chip = view.querySelector('[data-prof-chip]'), pct = (((pr.data || {}).completeness) || {}).pct;
+        if (!chip || cid !== state.companyId || pct == null) return;
+        chip.innerHTML = 'Profile ' + esc(Math.round(pct)) + '% complete<span class="meterbar" aria-hidden="true"><i style="width:' + Math.round(pct) + '%"></i></span>';
+        chip.hidden = false;
+      }).catch(function () {});
     });
   }
   function ring(score, b) {
@@ -1683,8 +2354,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       var r = k[x[0]], v = val(r);
       return '<div class="kpi sm"' + rtitle(r) + '><span class="eyebrow">' + x[1] + '</span><span class="v">' + (v == null ? '<span class="empty-dash">—</span>' : esc(x[2](v))) + '</span>' + (receipt(r) ? '<span class="rc">' + receipt(r) + '</span>' : '') + '</div>';
     }).join('');
-    var links = [['media_plan', 'Media plan'], ['visibility', 'Visibility'], ['content', 'Content'], ['creative', 'Creative'], ['report', 'Monthly report']].map(function (x) {
-      var h = linkFor(d, x[0]); return h ? '<a class="btn sm" href="' + esc(h) + '">' + x[1] + '</a>' : '';
+    var links = [['media_plan', 'Media plan'], ['visibility', 'Visibility'], ['content', 'Content'], ['creative', 'Creative'], ['profile', 'Profile'], ['report', 'Monthly report']].map(function (x) {
+      var h = linkFor(d, x[0]) || (x[0] === 'profile' ? '#/property/' + encodeURIComponent(state.companyId) + '/profile' : null); return h ? '<a class="btn sm" href="' + esc(h) + '">' + x[1] + '</a>' : '';
     }).join('');
     var fc = d.exposure_forecast, fHtml = '';
     if (fc && has(fc.months)) {
@@ -1713,7 +2384,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     var page = '<div class="page"><a class="back" href="#/properties">' + ic(I.arrowLeft, 13) + 'All properties</a>' +
       '<div class="proptitle">' + ring(d.health && d.health.score, hb) + '<div class="stack" style="display:flex;flex-direction:column;gap:2px;min-width:0"><h1 class="h-page">' + esc(d.name) + '</h1><p class="support">' + esc(sub) + '</p>' +
       (has(d.objective_reason) ? '<span class="receipt">Objective: ' + esc(d.objective_reason) + '</span>' : '') +
-      (d.health ? '<span class="receipt">Health ' + receipt(d.health) + '</span>' : '') + '</div></div>' +
+      (d.health ? '<span class="receipt">Health ' + receipt(d.health) + '</span>' : '') +
+      '<a class="profchip" data-prof-chip hidden href="#/property/' + encodeURIComponent(state.companyId) + '/profile"></a>' + '</div></div>' +
       (links ? '<div class="scoped-links">' + links + '</div>' : '') +
       '<div class="kpis">' + kp + '</div>' + fHtml + vend + eng + loop + gapsLine(d.gaps) + '</div>';
     var rail = '';
@@ -2260,15 +2932,16 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     if (name === 'signals' && !viewInternal()) name = 'dashboard';
     if (name === 'property' && parts[1]) {
       setCompany(parts[1]);
-      name = parts[2] ? { 'media-plan': 'mediaplan', visibility: 'visibility', content: 'content', creative: 'creative' }[parts[2]] || 'property' : 'property';
+      name = parts[2] ? { 'media-plan': 'mediaplan', visibility: 'visibility', content: 'content', creative: 'creative', profile: 'profile' }[parts[2]] || 'property' : 'property';
     }
     var screens = {
       dashboard: [screenDashboard, 'dashboard'], approvals: [screenApprovals, 'approvals'], item: [screenItem, 'approvals'],
       approved: [screenApproved, 'approvals'], properties: [screenProperties, 'properties'], property: [screenProperty, 'properties'],
       mediaplan: [screenMediaPlan, 'properties'], visibility: [screenVisibility, 'visibility'], content: [screenContent, 'content'],
       creative: [screenCreative, 'creative'], value: [screenValue, 'value'], signals: [screenSignals, 'signals'],
-      ask: [screenAsk, ''], request: [screenRequest, 'approvals']
+      ask: [screenAsk, ''], request: [screenRequest, 'approvals'], spend: [screenSpend, 'spend'], profile: [screenProfile, 'profile']
     };
+    state.profileView = name === 'profile' ? (parts[3] || '') : '';
     var s = screens[name] || screens.dashboard;
     renderSide(s[1]);
     window.scrollTo(0, 0);

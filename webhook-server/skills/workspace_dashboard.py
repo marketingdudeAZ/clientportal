@@ -40,8 +40,9 @@ KPI_ORDER = ("occupancy", "units_to_lease_90d", "leases_this_month", "cost_per_l
              "actions_taken", "waiting_on_you")
 # The last entry (onboarding checks) is dropped for Approvals; keep it last.
 ITEM_SOURCES = ("hubdb_rec", "call_prep", "video_variant", "content_brief", "fair_housing_review",
-                "onboarding_gap")
+                "profile_update", "onboarding_gap")
 MAX_TILES = 50
+MAX_CHECKIN_PROPERTIES = 10
 MAX_VISIBILITY_READS = 25
 
 # event_type → (kind, sentence, visibility). Sentences are fixed; no model writes them.
@@ -72,7 +73,7 @@ ACTIVITY = {
 
 CATEGORY_BY_REC_TYPE = {"budget_change": "cost", "package_upgrade": "vendor", "strategy_change": "content"}
 CATEGORY_BY_SOURCE = {"loop_rec": "cost", "call_prep": "content", "content_brief": "content",
-                      "fair_housing_review": "compliance",
+                      "fair_housing_review": "compliance", "profile_update": "content",
                       "video_variant": "creative", "ticket_profile": "content",
                       "onboarding_gap": "compliance", "portal_ticket": "content", "service_ticket": "content"}
 
@@ -321,6 +322,55 @@ def activity_rows(props: list, internal: bool, gaps: list) -> tuple[list, str | 
     return rows[:20], latest
 
 
+def _add_profile_completeness(rows: list, internal: bool, gaps: list) -> None:
+    """`profile_completeness` on each property row (Round 5), in parallel, cached."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from skills import workspace_profile
+
+    def _one(row):
+        try:
+            return workspace_profile.completeness_metric(row["company_id"], internal)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("profile completeness unavailable for %s: %s", row["company_id"], exc)
+            return None
+
+    if not rows:
+        return
+    with ThreadPoolExecutor(max_workers=min(6, len(rows))) as pool:
+        metrics = list(pool.map(_one, rows))
+    for row, metric in zip(rows, metrics):
+        row["profile_completeness"] = metric
+    if any(m is None for m in metrics):
+        gaps.append(wc.gap("properties.profile_completeness", "Some property profiles could not be read",
+                           source="community_brief"))
+
+
+def profile_checkins(props: list, today: date, gaps: list) -> list:
+    """Client dashboards: one "Review your property profile" to-do per property that is due.
+
+    A to-do, not an approval: it never counts toward waiting_on_you or Approvals.
+    """
+    from skills import workspace_profile
+
+    chosen = props[:MAX_CHECKIN_PROPERTIES]
+    if len(props) > len(chosen):
+        gaps.append(wc.gap("waiting", f"Profile check-ins were read for {len(chosen)} of {len(props)} properties"))
+    cards = []
+    for p in chosen:
+        cid = str(p.get("hubspot_company_id") or "")
+        ctx = wi.PropertyContext(cid, str(p.get("uuid") or ""), str(p.get("name") or ""), p)
+        try:
+            card = workspace_profile.checkin_card(ctx)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("profile check-in unavailable for %s: %s", cid, exc)
+            card = None
+        if card:
+            card.pop("stale_fields", None)
+            cards.append(card)
+    return cards
+
+
 def build_dashboard(email: str, *, internal: bool, today: date | None = None,
                     scope_internal: bool | None = None, **_ignored) -> dict:
     today = today or date.today()
@@ -332,7 +382,7 @@ def build_dashboard(email: str, *, internal: bool, today: date | None = None,
 
     rows, loaded = _aptiq(gaps) if props else ({}, None)
     per_property = scope_items(props, today, gaps) if props else []
-    waiting_items = [(p, i) for p, items in per_property for i in items
+    waiting_items = [(p, i) for p, items in per_property for i in wi.visible_items(items, internal)
                      if i["status"] == "to_do" and i["needs_approval"]]
     waiting_items.sort(key=lambda pi: (wscope.health_score(pi[0]) or 0, wi._sort_key(pi[1])))
 
@@ -361,6 +411,7 @@ def build_dashboard(email: str, *, internal: bool, today: date | None = None,
             "status": p.get("plestatus") or None,
             "health": score, "health_source": "redlight", "band": wscope.health_band(score),
         })
+    _add_profile_completeness(prop_rows, internal, gaps)
     if len(props) > MAX_TILES:
         gaps.append(wc.gap("health_tiles", f"Showing the {MAX_TILES} lowest-health properties of {len(props)}"))
     if prop_rows and len(lease_by_company) < len(prop_rows):
@@ -397,7 +448,8 @@ def build_dashboard(email: str, *, internal: bool, today: date | None = None,
         "health_tiles": tiles,
         "properties": prop_rows,
         "activity": activity,
-        "waiting": [{
+        "waiting": ([] if internal else profile_checkins(props, today, gaps)) + [{
+            "kind": "approval",
             "item_id": i["id"], "company_id": str(p.get("hubspot_company_id") or ""),
             "title": wi.view_item(i, internal)["title"],
             "subtitle": f"{p.get('name') or 'Property'} · {wi.SOURCE_LABELS[i['source']]}",

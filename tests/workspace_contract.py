@@ -106,7 +106,8 @@ def check(value: Any, spec: Any, path: str = "$") -> list[str]:
 # ── shared pieces ────────────────────────────────────────────────────────────
 
 SOURCES = enum("hubdb_rec", "loop_rec", "call_prep", "content_brief", "video_variant",
-               "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket", "fair_housing_review")
+               "ticket_profile", "onboarding_gap", "portal_ticket", "service_ticket", "fair_housing_review",
+               "profile_update")
 LENSES = enum("express", "tailor", "amplify", "evolve")
 STATUSES = enum("to_do", "in_motion", "done")
 KINDS = enum("auto", "queued", "person")
@@ -140,6 +141,14 @@ ITEM = {
     "for_whom": opt({"text": STR, "questions": [STR]}),
     "approving_does": [{"label": STR, "owner": enum("RPM Digital", "vendor", "you"), "when": opt(STR)}],
     "draft": omittable(opt(ITEM_DRAFT)),
+    # Round 5: only on `profile_update` items, which only internal callers see.
+    "profile_update": omittable(opt({
+        "field_key": STR, "field_label": STR, "current_value": opt(STR), "proposed_value": opt(STR),
+        "proposed_by": opt(STR), "proposed_at": opt(STR),
+        "used_in": [enum("ads", "website_faq", "ai_answers", "reports", "internal")],
+        "diff": [{"op": enum("same", "add", "remove"), "text": STR}],
+        "status": enum("pending", "approved", "rejected"), "decided_by": opt(STR), "decided_at": opt(STR),
+        "reason": opt(STR)})),
     "actions": {"approve": BOOL, "not_now": BOOL},
 }
 
@@ -272,11 +281,15 @@ DASHBOARD = {
     "health_tiles": [{"company_id": STR, "name": opt(STR), "score": opt(NUM), "band": BAND}],
     "properties": [{"company_id": STR, "name": opt(STR), "units": opt(INT), "to_lease_90d": opt(METRIC),
                     "occupancy": opt(METRIC), "leases_month": opt(METRIC), "status": opt(STR),
+                    "profile_completeness": omittable(opt(METRIC)),
                     "no_overspend": absent("overspend_per_year"), "health": opt(NUM), "band": BAND}],
     "activity": [{"at": opt(STR), "text": STR, "company_id": opt(STR),
                   "kind": enum("audit", "draft", "check", "flag", "forecast", "decision", "publish"),
                   "visibility": VISIBILITY}],
-    "waiting": [{"item_id": STR, "title": STR, "subtitle": opt(STR), "category": APPROVAL_CATEGORY}],
+    # Round 5: approvals, plus a client's monthly profile check-in (a to-do, not an approval)
+    "waiting": [{"kind": omittable(enum("approval", "profile_checkin")), "item_id": opt(STR),
+                 "company_id": omittable(STR), "title": STR, "subtitle": opt(STR),
+                 "category": opt(APPROVAL_CATEGORY), "stale_count": omittable(INT)}],
     "loop_status": {"running": opt(BOOL), "property_count": INT, "last_pass": opt(STR)},
     "gaps": [GAP],
 }
@@ -294,6 +307,7 @@ APPROVALS = {
 }
 
 PROPERTY_OVERVIEW = {
+    "profile_completeness": omittable(opt(METRIC)),
     "name": opt(STR), "city": opt(STR), "state": opt(STR), "units": opt(INT), "objective": opt(STR),
     "health": opt({"score": NUM, "band": BAND, "source": STR, "as_of": opt(STR)}),
     "kpis": {"ai_visibility": opt(METRIC), "renewal_rate": opt(METRIC), "units_to_lease": opt(METRIC),
@@ -380,7 +394,64 @@ CREATIVE_UPLOAD = {
     "skipped": [{"filename": STR, "reason": STR}],
 }
 
+SPEND_SHEET = {
+    "as_of": opt(STR), "scope": enum("portfolio", "client"), "source": STR,
+    "columns": [{"key": STR, "label": STR, "group": enum("channel", "meta", "internal"), "internal": BOOL}],
+    "rows": [{"company_id": STR, "property_name": opt(STR), "status": opt(STR), "market": opt(STR),
+              "manager": opt(STR), "values": ANY, "total": opt(NUM), "href": STR}],
+    "totals": {"values": ANY, "total": opt(NUM)},
+    "count": INT, "page": INT, "page_size": INT,
+    "filters": {"markets": [STR], "managers": [STR], "statuses": [STR]},
+    "gaps": [GAP],
+}
+
+USED_IN = enum("ads", "website_faq", "ai_answers", "reports", "internal")
+COMPLETENESS = {"pct": opt(NUM), "weighted": BOOL,
+                "top_missing": [{"key": STR, "label": STR, "used_in": [USED_IN]}]}
+PROFILE_FIELD = {
+    "key": STR, "label": STR, "hint": opt(STR), "type": STR, "options": [STR], "section": STR,
+    "value": opt(STR),
+    "provenance": {"kind": enum("override", "resolved", "empty"), "by": opt(STR), "at": opt(STR),
+                   "source": opt(STR), "overrides": opt(STR)},
+    "ad_facing": BOOL, "used_in": [USED_IN], "internal": BOOL, "editable": BOOL,
+    "stale": opt(BOOL), "last_updated": opt(STR),
+    "pending": opt({"proposed_value": STR, "by": opt(STR), "at": opt(STR), "item_id": STR}),
+    "suggestion": opt({"id": STR, "value": STR, "source": enum("site_scrape", "geo_claim", "fair_housing", "ticket"),
+                       "reason": STR}),
+    "review_outcome": opt({"status": enum("approved", "rejected"), "at": opt(STR), "reason": opt(STR),
+                           "proposed_value": STR}),
+    # internal callers only; the key is removed for clients
+    "fair_housing_review": omittable(opt({"severity": STR, "terms": [STR]})),
+}
+PROFILE = {
+    "property": {"company_id": STR, "name": opt(STR), "last_updated": opt(STR)},
+    "completeness": COMPLETENESS,
+    "checkin": {"due": BOOL, "stale_fields": [STR]},
+    "sections": [{"key": STR, "title": STR, "completeness": COMPLETENESS, "fields": [PROFILE_FIELD]}],
+    "gaps": [GAP],
+}
+
+FAIR_HOUSING_RESULT = {"result": enum("clear", "flagged", "blocked"), "severity": omittable(STR),
+                       "terms": omittable([STR])}
+PROFILE_EDIT = {"field": PROFILE_FIELD, "outcome": enum("saved", "pending_review", "blocked"),
+                "fair_housing": FAIR_HOUSING_RESULT, "message": STR}
+
+PROFILE_CHECKIN = {"company_id": STR, "confirmed": [STR], "skipped": [{"key": STR, "reason": STR}],
+                   "checkin": {"due": BOOL, "stale_fields": [STR]}}
+SUGGESTION_DISMISSED = {"suggestion_id": STR, "dismissed": BOOL, "reason": STR}
+PROFILE_HISTORY = {
+    "company_id": STR, "key": STR, "label": STR,
+    "entries": [{"at": opt(STR), "by": opt(STR), "kind": enum("edit", "reviewed", "approved", "proposed", "rejected"),
+                 "old_value": opt(STR), "new_value": opt(STR), "note": opt(STR)}],
+    "gaps": [GAP],
+}
+
 SHAPES.update({
+    "profile_checkin": PROFILE_CHECKIN, "suggestion_dismissed": SUGGESTION_DISMISSED,
+    "profile_history": PROFILE_HISTORY,
+    "profile_edit": PROFILE_EDIT,
+    "profile": PROFILE, "profile_field": PROFILE_FIELD,
+    "spend_sheet": SPEND_SHEET,
     "creative_upload": CREATIVE_UPLOAD,
     "fair_housing_review": FAIR_HOUSING_REVIEW, "fair_housing_run_all": FAIR_HOUSING_RUN_ALL,
     "dashboard": DASHBOARD, "approvals": APPROVALS, "property_overview": PROPERTY_OVERVIEW,
@@ -399,6 +470,7 @@ def assert_shape(value: Any, name: str) -> None:
 # Numbers the contract carries bare: tallies of workspace items, paging and
 # screen parameters, decision-record tallies, not measurements of a property.
 COUNT_KEYS = frozenset({
+    "stale_count",
     "open", "late", "to_do", "in_motion", "done", "count", "hidden_count", "needs_approval",
     "property_count", "item_count", "starting_this_week", "more_items", "quiet_count",
     "channel_count", "pending_changes", "done_count", "comments_count", "range",

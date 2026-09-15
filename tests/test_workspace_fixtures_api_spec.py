@@ -33,6 +33,10 @@ SPEC_BY_FIXTURE = {
     "visibility": wc.VISIBILITY_SCREEN, "content": wc.CONTENT, "creative": wc.CREATIVE, "value": wc.VALUE,
     "create_brief": wc.CREATE_BRIEF, "media_plan_regenerate": REGENERATE_RESULT, "creative_upload": wc.CREATIVE_UPLOAD,
 }
+SPEC_BY_FIXTURE.update({"spend_sheet": wc.SPEND_SHEET, "spend_sheet_client": wc.SPEND_SHEET,
+                        "profile": wc.PROFILE, "profile_client": wc.PROFILE, "profile_edit": wc.PROFILE_EDIT,
+                        "profile_checkin": wc.PROFILE_CHECKIN, "suggestion_dismissed": wc.SUGGESTION_DISMISSED,
+                        "profile_history": wc.PROFILE_HISTORY})
 # Fixtures that hold a list of one shape under a key.
 LIST_FIXTURES = {"approval_items": ("items", wc.ITEM)}
 # Covered by their own contract tests (tests/test_ask.py, tests/test_workspace_report.py).

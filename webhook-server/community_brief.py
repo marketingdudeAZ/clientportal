@@ -364,6 +364,65 @@ FIELDS: dict[str, BriefField] = {
 }
 
 
+# ── Where each field is used (Workspace, Round 5) ──────────────────────────
+#
+# The ONE place `ad_facing` and `used_in` are defined. The Workspace profile,
+# its review rule for client edits, completeness weights and "Used in" chips all
+# derive from `used_in()` / `is_ad_facing()`. Kyle to confirm the classification.
+#
+#   ads          text or facts that can appear in ad copy or location targeting.
+#                A client edit to one is reviewed by RPM before it is written.
+#   website_faq  the GEO voice-pack fields that feed website FAQ answers
+#   ai_answers   the same voice-pack fields, as they feed AI answer content
+#   reports      fields the monthly report narrative reads
+#   internal     staff-only fields (BriefField.internal)
+
+USED_IN_LABELS = {
+    "ads": "Ads", "website_faq": "Website FAQ", "ai_answers": "AI answers",
+    "reports": "Reports", "internal": "Internal",
+}
+
+AD_FACING_KEYS = frozenset({
+    "name", "address", "city", "state", "zip", "domain",
+    "voice_tier", "unit_noun", "advertised_name", "short_name",
+    "taglines", "brand_adjectives", "differentiators", "romance", "residents_love",
+    "floor_plans", "property_amenities", "unit_features",
+    "neighborhood", "nearby_neighborhoods", "landmarks", "neighborhood_highlights",
+    "must_include", "forbidden_phrases",
+})
+
+# GEO voice pack → brief keys: voice and tone → voice_tier; brand adjectives;
+# taglines; what makes it unique → differentiators; selling points →
+# property_amenities + unit_features; units offered → floor_plans;
+# neighborhood(s) → neighborhood + nearby_neighborhoods; landmarks.
+VOICE_PACK_KEYS = frozenset({
+    "voice_tier", "brand_adjectives", "taglines", "differentiators",
+    "property_amenities", "unit_features", "floor_plans",
+    "neighborhood", "nearby_neighborhoods", "landmarks",
+})
+
+REPORT_KEYS = frozenset({"goals", "initiatives", "lifecycle_state", "competitors"})
+
+
+def used_in(field_key: str) -> list[str]:
+    """Where a field's value is used, in USED_IN_LABELS order."""
+    field = FIELDS[field_key]
+    if field.internal:
+        return ["internal"]
+    out = []
+    if field_key in AD_FACING_KEYS:
+        out.append("ads")
+    if field_key in VOICE_PACK_KEYS:
+        out += ["website_faq", "ai_answers"]
+    if field_key in REPORT_KEYS:
+        out.append("reports")
+    return out
+
+
+def is_ad_facing(field_key: str) -> bool:
+    return "ads" in used_in(field_key)
+
+
 # Topics that are fair-housing risk if mentioned in audience targeting.
 # Used by the LLM prompt to avoid generating non-compliant copy AND to
 # flag any forbidden-phrases overrides that might mistakenly include

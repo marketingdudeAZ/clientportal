@@ -899,3 +899,243 @@ Recorded by the API branch (`feature/portal-workspace-api`). Every change is add
     - **Vendor items:** `null`. No source stores a rate email, so approvals names a `draft` gap.
     - **GEO:** no item source carries GEO plans, and no `answer_text` column exists in this repo, so there is nothing to surface.
     - **Fair Housing:** the draft title and body are part of the item's check. At high severity, clients get `draft: null`.
+
+## Round 5 — Spend sheet and Property profile
+
+# Workspace — Round 5: Spend sheet and Property profile (Kyle, 15 Sept 2026)
+
+Copy this file verbatim into `docs/handoffs/PORTAL_WORKSPACE_BUILD_PLAN.md` under a heading "Round 5 — Spend sheet and Property profile".
+
+Kyle: "I need a dashboard that shows all the spend sheet that we have on the current client portal today. I also need the client brief to come over … That's going to be where all the context is, and I need property marketing clients to continually update and optimize that context."
+
+## A. Spend sheet
+
+### Where it comes from today
+- `webhook-server/spend_sheet.py` builds `GET /api/spend-sheet` from HubSpot deals and line items for every managed company (750 after exclusions). It has a serve-stale cache and a pre-warm.
+- The current portal shows it as "Spend Tracker" (`client-portal.html`) and `/accounts` (`hubspot-cms/templates/accounts-table.html`: 16 columns, with the property name linking to the detail page). Both are internal-only today.
+- **Row fields:** `company_id`, `property_name`, `market`, `marketing_manager`, `ple_status`, `deal_id`, `deal_name`, `deal_stage`, `deal_amount`, `close_date`, `quote_status`, `quote_title`, `costar_package`, `cx_bundle`, `zillow_per_lease`, `zillow_per_month`.
+- **SKU columns** (`SKU_COLUMN_MAP`): `search`, `pmax`, `paid_social`, `geofence`, `display`, `retargeting`, `ctv`, `seo`, `social_posting`, `eblast`, `email_drip`, `demand_gen`, `tiktok`, `youtube`, `reputation`, `website_hosting`, `mgmt_fee`.
+
+### Decision: team sees all, clients see theirs
+- **RPM staff** see every managed property, all SKU columns, the management fee and deal/quote details.
+- **Clients** see the same view limited to the properties they can access (`feature_access.companies_for`).
+  - Internal columns are removed by the SERVER, never hidden by the page. Internal columns: `mgmt_fee`, `deal_id`, `deal_name`, `deal_stage`, `deal_amount`, `quote_status`, `quote_title`, `ple_status`.
+  - Clients' totals exclude hidden columns.
+
+### Screen: "Spend" (nav item for everyone, after Properties)
+- A dense but calm v3 table, following the existing table styles.
+  - **Columns:** Property · Status · Market · Manager · one column per channel · Mgmt fee (internal only) · Total.
+  - Channel columns with $0 across the visible rows collapse behind a "Show all channels" toggle.
+  - Sticky header and first column; horizontal scroll inside the table only.
+- **Filters:** search, Market, Manager, Status. Sort by any column. A totals row. "as of … · refreshing" staleness label.
+- **Export CSV:** the page generates it from the rows it has, containing only the columns the viewer can see.
+- **Row click** → Property detail. **"Propose a change"** opens New request prefilled with the property and channel. It never edits spend directly; money never moves on a click.
+- **Mobile:** each property becomes a card showing total and top channels, expandable to all channels.
+- **Preview data:** the 35-property book with realistic line items consistent with the existing preview fixtures (e.g. LYV Broadway's Apartments.com and plan numbers must agree with `plan.json`, property overview and reports).
+
+### API: `GET /api/workspace/spend-sheet?q=&market=&manager=&status=&sort=&dir=&page=&page_size=`
+```json
+{"as_of": "…", "scope": "portfolio|client",
+ "columns": [{"key": "search", "label": "Search", "group": "channel|meta|internal", "internal": false}],
+ "rows": [{"company_id": "…", "property_name": "…", "status": "…", "market": "…", "manager": "…",
+           "values": {"search": 1762, "pmax": null, "mgmt_fee": 450}, "total": 4638, "href": "#/property/<id>"}],
+ "totals": {"values": {"search": 51200}, "total": 162400},
+ "count": 35, "page": 1, "page_size": 50,
+ "filters": {"markets": ["…"], "managers": ["…"], "statuses": ["…"]},
+ "gaps": []}
+```
+- Reuse `spend_sheet.py`, including its cache and pre-warm; don't add HubSpot call sites.
+- Gates: `require_access("workspace")`. Clients are scoped to their companies; internal-only keys never appear in `columns`, `values` or `totals` for a client, or in preview-as-client mode.
+- **Tests:** client scoping; internal column stripping (including totals and preview-as-client); filters and sort; paging; empty values stay null, not 0.
+
+## B. Property profile (the community brief)
+
+### Where it comes from today
+- `webhook-server/community_brief.py` `SECTIONS` holds 13 sections and 55 fields. `BriefField` has `key`, `label`, `hint`, `type`, `options`, `section`, `hs_override`, `hs_resolved`, `internal`.
+  - `resolve_value()` implements override-wins.
+  - `write_field(company_id, field_key, value, …)` writes the human override.
+  - `build_render_context()` renders the brief.
+- **Existing endpoints:**
+  - `GET /api/accounts/property/brief`
+  - `PATCH /api/accounts/property/field`
+  - `GET /api/accounts/property/audit` (edit history via `property_brief_audit.py`)
+  - token-link client review under `/api/community-brief/<token>/*`
+- **Ads link:** `fluency_feed.py` syncs every NON-internal field's override-wins value daily to the "RPM Property Tag Source" sheet that Fluency reads. Client edits can reach live ads the next day.
+- **The 55 fields** (* = internal, 17 of them):
+  - **Identity:** name, address, city, state, zip, domain
+  - **Voice & Positioning:** voice_tier, unit_noun, advertised_name, short_name, former_property_name
+  - **Brand & Story:** taglines, brand_adjectives, differentiators, romance, residents_love, residents_dislike*, target_resident*
+  - **Lifecycle:** lifecycle_state, year_built
+  - **Inventory:** floor_plans, unit_level_details
+  - **Amenities:** property_amenities, unit_features
+  - **Geography:** neighborhood, nearby_neighborhoods, landmarks, neighborhood_highlights, nearby_employers
+  - **Competitors:** competitors
+  - **Strategy & Goals:** goals, initiatives, challenges*, priorities*, onsite_developments, local_partnerships, onsite_events, website_priorities*
+  - **Operations & Tech:** marketing_budget*, pms*, cms*, chatbot*, website_last_updated*, building_style*, asset_class*, elise_ai*, crm*, host_name*
+  - **Guardrails:** must_include, forbidden_phrases, motivations_considerations, excluded_neighborhoods*, client_expectations*
+  - **Tracking & Attribution:** tracking
+  - **Documents:** documents
+
+### Who sees and edits what
+- **Clients** see and edit the 38 non-internal fields. The 17 internal fields are removed server-side for clients and in preview-as-client mode.
+- **RPM staff** see and edit all 55.
+- **R1:** never write `uuid`. Writes go only through `community_brief.write_field` (override properties).
+
+### Decision: context saves now, ad-facing fields are reviewed
+Every edit runs `fair_housing.py` first. A high-severity result blocks the save and says why in plain words; a low-severity result saves with an internal-only review flag.
+
+**Ad-facing fields** are the ones whose text or facts can appear in ad copy or location targeting. A client edit to one becomes a pending **profile update**:
+- The field shows "Pending RPM review" with the proposed value.
+- The current value stays live until approved.
+- Nothing reaches the Fluency feed until approval.
+- RPM staff approve or reject it. On approval, `write_field` runs and the audit log records both the proposer and the approver.
+
+The default ad-facing set:
+- **Identity:** name, address, city, state, zip, domain
+- **Voice & Positioning:** voice_tier, unit_noun, advertised_name, short_name
+- **Brand & Story:** taglines, brand_adjectives, differentiators, romance, residents_love
+- **Inventory and amenities:** floor_plans, property_amenities, unit_features
+- **Geography:** neighborhood, nearby_neighborhoods, landmarks, neighborhood_highlights
+- **Guardrails:** must_include, forbidden_phrases
+
+**Context-only fields** save immediately (with Fair Housing and audit): former_property_name, lifecycle_state, year_built, unit_level_details, nearby_employers, competitors, goals, initiatives, onsite_developments, local_partnerships, onsite_events, motivations_considerations, tracking, documents.
+
+**Internal fields** are staff-only and save immediately for staff.
+
+Rules for the flags:
+- Define `ad_facing` and `used_in` in ONE place (a field-level attribute or a single mapping next to `SECTIONS`), and derive everything from it. List the classification as an open question for Kyle to confirm.
+- RPM staff edits to ad-facing fields save immediately (no self-review), still with Fair Housing and audit.
+
+### Profile-update approvals (RPM side)
+- **New item source `profile_update`.** Visible only to internal users, under the Approvals "Content" chip, labeled "Profile update".
+- **The Review panel shows:** field label, current value, proposed value (with a diff), who proposed it and when, "Used in", Fair Housing result, and Approve / Reject with the one-tap reasons. The client sees the outcome on the field ("Approved by RPM · Sep 16", or "Not applied — <reason>").
+- **Storage:** reuse the existing proposal machinery if it fits (`routes/ticket_profile.py` / `ticket_profile_proposals`). Note that migration 0015 for that table is unapplied in production. If using it isn't viable without the migration, store proposals the same way decisions are stored (loop events / state log), document it, and list it for Kyle. Undo follows the existing undo rules.
+
+### Keeping it fresh (all four, per Kyle)
+1. **Completeness score.** "Profile is 72% complete".
+   - Weights: ad-facing and AI-answer fields weigh more than context fields; internal fields count only for staff.
+   - Show the three empty fields that matter most, with what they'd power.
+   - Contract: `completeness: {pct, weighted: true, top_missing: [{key, label, used_in}]}`.
+   - The score appears on the profile header, on Property detail and as a column on the Properties list.
+2. **Monthly check-in.**
+   - A client-facing "Review your property profile" card on the Dashboard ("Waiting on you" / "Needs you"), once a month per property.
+   - It lists fields not updated in 90+ days, using the audit log dates.
+   - It opens the profile filtered to those fields. Confirming a field unchanged records "reviewed, no change" (audit) and resets its clock.
+   - This is a to-do, not an approval: it does NOT appear in the Approvals table.
+3. **Suggestions from data.** One-tap proposed edits beside the field they affect: "We found … — use it?". Sources:
+   - (a) the auto-resolved value differs from the human override (site scrape / AptIQ via `hs_resolved`);
+   - (b) GEO claims that conflict with a brief field (`geo_claims.conflicts_brief_field`, when rows exist, otherwise a gap);
+   - (c) monthly Fair Housing review findings on profile copy;
+   - (d) existing ticket-to-profile proposals.
+
+   Accepting runs the same edit flow (Fair Housing, and ad-facing review). Dismissing records the reason.
+4. **"Used in" labels on every field:** Ads · Website FAQ · AI answers · Reports · Internal, from the single mapping. Initial mapping:
+   - Ads = the ad-facing set.
+   - Website FAQ and AI answers = the voice-pack fields in `GEO_PROGRAM_BUILD_HANDOFF.md`: voice_tier/voice and tone, brand_adjectives, taglines, differentiators/what makes it unique, selling points, floor_plans/units offered, neighborhood(s), landmarks. Map each to its brief key.
+   - Reports = goals, initiatives, lifecycle_state, competitors.
+   - Internal = internal fields.
+
+### Screen: "Profile" (nav item for everyone; property-scoped; also linked from Property detail)
+- **Header:** property name, completeness meter with the top missing fields, last updated, monthly check-in state.
+- **Section navigation** down the left or top: the 13 sections, each with its own completeness.
+- **Each field row:**
+  - label, hint and "Used in" chips;
+  - the current value, showing override-wins provenance: "Written by Dana R. · Aug 12 · overrides the value from the website", or "From the website · Aug 3";
+  - inline edit (text, long text, list, select per `type`/`options`);
+  - a pending-review state;
+  - a suggestion chip;
+  - a "History" link with the audit entries.
+- **Edit states:** saving → saved ("Saved · live in ads tomorrow" for context fields, or "Sent to RPM for review" for ad-facing fields) → Fair Housing block with plain-language reason.
+- **Mobile:** single column, sections collapsible.
+- **Preview data:** a complete LYV Broadway profile with all 55 fields and realistic values. Include:
+  - some empty fields (so the score is under 100 and top-missing shows);
+  - some fields 90+ days stale;
+  - one pending profile update;
+  - two suggestions (one from the site scrape, one from a GEO claim);
+  - one Fair Housing low-severity flag (internal-only).
+
+  Every other property in the 35-book gets a consistent, lighter profile.
+
+### API
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/workspace/profile?company_id=` | Returns `{property, completeness, checkin: {due, stale_fields: [key]}, sections: [{key, title, completeness, fields: [Field]}], gaps}` |
+| `PATCH /api/workspace/profile/field` | Body `{company_id, key, value}`. Returns `{field, outcome: "saved" \| "pending_review" \| "blocked", fair_housing, message}`. Requires verified identity and company access. Clients can't touch internal keys (403); preview-as-client is read-only (403). |
+| `POST /api/workspace/profile/checkin` | Body `{company_id, confirmed: [key]}`. Records "reviewed, no change". |
+| `POST /api/workspace/profile/suggestions/<id>/accept` | Runs the edit flow. |
+| `POST /api/workspace/profile/suggestions/<id>/dismiss` | Body `{reason}`. |
+| `GET /api/workspace/profile/history?company_id=&key=` | Audit entries for one field. |
+
+**Field shape:**
+```json
+{"key": "taglines", "label": "Taglines", "hint": "…", "type": "…", "options": [...],
+ "value": "…", "provenance": {"kind": "override|resolved|empty", "by": "…", "at": "…", "source": "…"},
+ "ad_facing": true, "used_in": ["ads", "ai_answers"], "internal": false,
+ "stale": false, "last_updated": "…",
+ "pending": {"proposed_value": "…", "by": "…", "at": "…", "item_id": "profile_update:…"} | null,
+ "suggestion": {"id": "…", "value": "…", "source": "site_scrape|geo_claim|fair_housing|ticket", "reason": "…"} | null,
+ "fair_housing_review": {…} | null}
+```
+`fair_housing_review` is internal only.
+
+Dashboard and Properties additions:
+- Dashboard `waiting` can include `{kind: "profile_checkin", company_id, title, stale_count}`.
+- Properties list rows gain `profile_completeness`.
+
+**Tests** (all mocked):
+- internal fields stripped for clients and in preview-as-client;
+- a client edit to an ad-facing field becomes pending and does NOT call `write_field` until approval;
+- a context field saves immediately via `write_field`;
+- a high-severity Fair Housing result blocks the save;
+- a staff edit saves immediately;
+- approve and reject a profile update;
+- the check-in resets staleness;
+- suggestion accept runs the same flow;
+- completeness weighting;
+- R1: nothing writes `uuid`.
+
+## Unchanged rules
+- No retired product name.
+- Money never moves on a click.
+- Receipts on every number; nulls plus gaps, never invented values.
+- Clients see all work; internal notes and internal fields stay private, filtered server-side.
+- Fair Housing on everything client- or channel-facing.
+- HubSpot only through `hubspot_client.py`; Claude only through `skills/llm_gateway.py`.
+
+### Round 5 (API)
+
+42. **Spend sheet.** `GET /api/workspace/spend-sheet` follows the spec shape, plus a top-level `source`.
+    - `columns[]` holds the channel and meta columns. `rows[].values` holds each visible column's value, which is null when the line item is absent.
+    - `rows[].total` sums the channel columns, plus `mgmt_fee` for staff. It is null when every value is null.
+    - Zillow (`zillow_per_month`, `zillow_per_lease`), `costar_package` and `cx_bundle` are `meta` columns and are never in a total.
+    - Internal keys never reach clients or preview-as-client: `mgmt_fee`, `deal_id`, `deal_name`, `deal_stage`, `deal_amount`, `close_date`, `quote_status`, `quote_title` and `ple_status`. For those callers, `rows[].status` is null, `filters.statuses` is `[]` and the status filter is ignored.
+    - Sort takes any visible column key, `property_name`, `market`, `manager` or `total` (`status` is staff-only). Nulls sort last either way.
+    - `page_size` is 1–200, default 50. `totals` cover every filtered row, not just the page. Bad `page`, `page_size`, `dir` or `sort` is 400.
+43. **Profile read.** `GET /api/workspace/profile` follows the spec shape.
+    - Fields add `section`, `editable` (false for read-only HubSpot identity fields), `provenance.overrides` and `review_outcome {status: approved|rejected, at, reason, proposed_value}`.
+    - `value` is null when empty. `stale` is null when the audit table is unavailable, and only human-written (override) values can be stale.
+    - `used_in` values are `ads`, `website_faq`, `ai_answers`, `reports`, `internal`.
+    - `fair_housing_review` is removed, key and all, for clients.
+    - Sections are keyed by slug and carry the full completeness shape.
+    - Completeness weights: fields used in ads or AI answers count 3, everything else 1.
+44. **Profile edit.** `PATCH /api/workspace/profile/field` returns `fair_housing {result: clear|flagged|blocked, severity?, terms?}`.
+    - A low-severity flag appears only for staff; clients get `clear`.
+    - Messages: "Saved · live in ads tomorrow" (non-internal fields), "Saved" (internal fields), "Sent to RPM for review…", or the plain Fair Housing reason when blocked.
+    - A list value is joined into the stored format.
+    - Errors: 400 for invalid values, missing `value` or read-only fields; 403 for an internal key from a client, for preview, or for another company; 401 unverified; 404 for an unknown key.
+45. **Profile updates.** New item source `profile_update`, category `content`, label "Profile update". It is internal only.
+    - It is not in default collection. It is dropped from client dashboard `waiting` and approvals rows, and item detail, decision and undo return 404 for clients and preview-as-client.
+    - Items add `profile_update {field_key, field_label, current_value, proposed_value, proposed_by, proposed_at, used_in, diff[{op, text}], status, decided_by, decided_at, reason}`.
+    - Approve writes through `write_field` with an editor of "<approver> (approved; proposed by <proposer>)". Reject uses the one-tap reasons. A rejection is undoable; an approval is not.
+    - Storage: proposals are `workspace_profile_update_proposed` loop events, and decisions are the ordinary `workspace_decision` events on `profile_update:<id>`, because migration 0015 (`ticket_profile_proposals`) is unapplied in production.
+46. **Check-in.** `POST /api/workspace/profile/checkin` returns `{company_id, confirmed[], skipped[{key, reason}], checkin}`.
+    - Dashboard `waiting` rows add `kind: approval|profile_checkin`. `item_id` and `category` may be null (check-in rows), and `stale_count` appears on check-in rows.
+    - Check-ins appear only for client (and preview-as-client) dashboards, for at most 10 properties, and never count toward `waiting_on_you`.
+47. **Suggestions.** Sources, in priority order: `fair_housing` (the value without the flagged sentence), `ticket`, `geo_claim`, `site_scrape` (the resolved value, from AptIQ or the website).
+    - Accept returns the edit response plus `suggestion_id`.
+    - Dismiss requires `reason` and returns `{suggestion_id, dismissed: true, reason}`.
+    - The `geo_claims` query assumes the columns `claim_text`, `conflicts_brief_field`, `engine`, `created_at` and `property_uuid`.
+48. **History.** `GET /api/workspace/profile/history` returns `{company_id, key, label, entries[{at, by, kind: edit|reviewed|approved|proposed|rejected, old_value, new_value, note}], gaps}`. `by` is a display name ("Dana R.").
+49. **Completeness on lists.** `profile_completeness` (a METRIC with `weighted: true`, source `community_brief`) is added to dashboard `properties[]` rows and to the property overview.
+50. **Loop events.** New registered event types: `workspace_profile_update_proposed`, `workspace_profile_checkin`, `workspace_profile_suggestion_dismissed`.
+51. **CORS.** The preflight allows `PATCH`.

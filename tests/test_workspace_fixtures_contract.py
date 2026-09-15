@@ -542,8 +542,17 @@ def test_gap_shape_everywhere(name):
             assert isinstance(g, dict) and isinstance(g.get("message"), str), f"{name}: gaps are {{message, field?, source?}}"
 
 
+def _without_hints(obj):
+    # Profile field hints are editor guidance that names what never to target ("no age, family status …"); every value is still checked.
+    if isinstance(obj, dict):
+        return {k: _without_hints(v) for k, v in obj.items() if k != "hint"}
+    if isinstance(obj, list):
+        return [_without_hints(v) for v in obj]
+    return obj
+
+
 @pytest.mark.parametrize("name", WORKSPACE_FIXTURES)
 def test_new_fixture_copy_avoids_targeting_language(name):
-    text = json.dumps(load(name)).lower()
+    text = json.dumps(_without_hints(load(name))).lower()
     for phrase in ("radius", "zip code", "zip targeting", "audience layer", "lookalike", "families", "family"):
         assert phrase not in text, f"{name}.json mentions {phrase!r}"

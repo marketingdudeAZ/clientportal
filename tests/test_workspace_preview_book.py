@@ -113,6 +113,12 @@ def test_every_approval_row_opens_its_own_propertys_item():
     for row in pw.approvals()["batch"]["rows"]:
         p = pw.prop(row["company_id"])
         assert row["property"] == p["name"]
+        if row["item_id"].startswith("profile_update:"):
+            # The API titles profile updates by field ("Profile update: Taglines"); the row names the property.
+            it = pw.item(row["item_id"])
+            assert it["company_id"] == p["company_id"]
+            assert not [q["name"] for q in PROPS if q["company_id"] != p["company_id"] and q["name"] in _text(it)]
+            continue
         _assert_item_names_property(row["item_id"], p, "approval row")
 
 
@@ -128,7 +134,8 @@ def test_dashboard_totals_agree_with_the_book():
     assert k["units_to_lease_90d"]["value"] == sum(p["units_to_lease_90d"] for p in known)
     assert k["leases_this_month"]["value"] == sum(p["leases_this_month"] for p in known)
     assert k["cost_per_lease"]["value"] == round(sum(p["spend_last_month"] for p in known) / sum(p["leases_last_month"] for p in known))
-    assert k["waiting_on_you"]["value"] == pw.approvals()["waiting"] == len(pw.approvals()["batch"]["rows"]) == len(d["waiting"])
+    approvals_waiting = [w for w in d["waiting"] if w.get("kind") != "profile_checkin"]
+    assert k["waiting_on_you"]["value"] == pw.approvals()["waiting"] == len(pw.approvals()["batch"]["rows"]) == len(approvals_waiting)
     for row in d["properties"]:
         p = pw.prop(row["company_id"])
         assert (row["occupancy"] or {}).get("value") == (None if p["occupied"] is None else round(p["occupied"] / p["units"], 3))
@@ -144,8 +151,8 @@ def test_approvals_have_no_pacing_and_group_by_what_is_approved():
         assert it["why"] and it["why"]["text"] and isinstance(it["why"]["receipts"], list)
         assert it["for_whom"] and it["for_whom"]["text"] and isinstance(it["for_whom"]["questions"], list)
         assert it["approving_does"] and all(s["owner"] in OWNERS and s["label"] and s["when"] for s in it["approving_does"])
-        if it["category"] == "content":
-            assert it["for_whom"]["questions"], "content items name the renter questions they answer"
+        if it["source"] == "content_brief":
+            assert it["for_whom"]["questions"], "content briefs name the renter questions they answer"
 
 
 def test_creative_recommendations_never_ask_for_a_photo_shoot():
@@ -212,3 +219,255 @@ def test_every_property_has_a_report_defaulting_to_the_last_full_month():
     bromley = client.get("/api/workspace/report?company_id=26136316506&month=2026-06").get_json()
     assert bromley["month"] == "2026-06"
     assert client.get(f"/api/workspace/report?company_id={IDS[0]}&month=2026-09").status_code == 404
+
+
+
+# ── Round 5: spend sheet and property profile ────────────────────────────────
+# Shapes follow the merged API contract (tests/workspace_contract.py); the preview
+# builds them with the API's own helpers, so these tests pin the preview's facts.
+
+import sys as _sys  # noqa: E402
+
+_sys.path.insert(0, str(ROOT / "tests"))
+_sys.path.insert(0, str(ROOT / "webhook-server"))
+import workspace_contract as wc  # noqa: E402
+import community_brief as cb  # noqa: E402
+from skills import workspace_profile as wpr  # noqa: E402
+
+LYV = "18234410021"
+PREVIEW_CLIENT = {"X-Workspace-Preview-Role": "client"}
+CHANNEL_KEYS = {"search", "pmax", "paid_social", "display", "retargeting", "ctv", "geofence", "demand_gen", "youtube", "tiktok",
+                "seo", "social_posting", "reputation", "eblast", "email_drip", "website_hosting"}
+INTERNAL_SPEND_KEYS = {"mgmt_fee", "deal_id", "deal_name", "deal_stage", "deal_amount", "quote_status", "quote_title", "ple_status", "close_date"}
+
+
+@pytest.fixture
+def fresh_profiles():
+    pw._reset_profiles()
+    pw.SWITCHES["client_editor"] = False
+    yield
+    pw._reset_profiles()
+    pw.SWITCHES["client_editor"] = False
+
+
+def _spend_row(sheet, cid):
+    return next(r for r in sheet["rows"] if r["company_id"] == cid)
+
+
+def _package_amount(text):
+    m = re.search(r"\$([\d,]+)", text or "")
+    return int(m.group(1).replace(",", "")) if m else 0
+
+
+def _channels(row):
+    return sum(v for k, v in row["values"].items() if k in CHANNEL_KEYS and v is not None)
+
+
+def test_spend_sheet_lyv_reconciles_with_plan_and_report():
+    staff, client = _spend_row(pw.spend_sheet(page_size=100), LYV), _spend_row(pw.spend_sheet(page_size=100, client=True), LYV)
+    plan = json.loads((FIXTURES / "plan.json").read_text(encoding="utf-8"))
+    report = json.loads((FIXTURES / "report_lyv_broadway_2026_08.json").read_text(encoding="utf-8"))
+    by_channel = {c["channel"]: c["monthly"] for c in plan["channels"]}
+    v = staff["values"]
+    assert v["search"] == by_channel["Paid search"] and v["pmax"] == by_channel["Performance Max"]
+    assert v["seo"] == by_channel["SEO — Standard"] and v["paid_social"] == by_channel["Social — Meta"]
+    assert v["zillow_per_month"] == by_channel["ILS — Zillow"]
+    assert _package_amount(v["costar_package"]) == by_channel["ILS — Apartments.com"]
+    assert _channels(staff) + v["zillow_per_month"] + _package_amount(v["costar_package"]) == plan["monthly_total"] == report["spend"]["total"]["value"]
+    assert client["total"] == _channels(staff), "a client's total is channels only"
+    assert staff["total"] == _channels(staff) + v["mgmt_fee"], "staff totals include the management fee"
+
+
+def test_spend_rows_agree_with_the_book_and_totals_add_up():
+    sheet = pw.spend_sheet(page_size=100)
+    assert sheet["count"] == len(sheet["rows"]) == 35
+    for r in sheet["rows"]:
+        p = pw.prop(r["company_id"])
+        assert all(r["values"][k] != 0 for k in CHANNEL_KEYS), f"{p['name']}: absent channels are null, never 0"
+        if p["spend_last_month"] is None:
+            assert r["total"] is None and all(r["values"][k] is None for k in CHANNEL_KEYS)
+        elif r["company_id"] != "18234410087":
+            spent = _channels(r) + (r["values"]["zillow_per_month"] or 0) + _package_amount(r["values"]["costar_package"])
+            assert spent == p["spend_last_month"], p["name"]
+    assert any("ApartmentList.com" in g["message"] for g in sheet["gaps"]), "Skye Reserve's uncolumned listing is a named gap"
+    assert sheet["totals"]["total"] == sum(r["total"] for r in sheet["rows"] if r["total"] is not None)
+
+
+def test_spend_sheet_strips_internal_columns_for_clients_and_preview_as_client():
+    staff = pw.spend_sheet(page_size=100)
+    assert not wc.check(staff, wc.SPEND_SHEET)
+    assert INTERNAL_SPEND_KEYS - {"ple_status"} <= {c["key"] for c in staff["columns"]}
+    route = pw.app.test_client().get("/api/workspace/spend-sheet?page_size=100", headers=PREVIEW_CLIENT)
+    for sheet in (pw.spend_sheet(page_size=100, client=True), route.get_json()):
+        assert not wc.check(sheet, wc.SPEND_SHEET)
+        assert sheet["scope"] == "client" and sheet["filters"]["statuses"] == []
+        assert not [c for c in sheet["columns"] if c["internal"] or c["key"] in INTERNAL_SPEND_KEYS]
+        assert not [k for r in sheet["rows"] for k in r["values"] if k in INTERNAL_SPEND_KEYS]
+        assert all(r["status"] is None for r in sheet["rows"])
+        assert not set(sheet["totals"]["values"]) & INTERNAL_SPEND_KEYS
+    assert pw.app.test_client().get("/api/workspace/spend-sheet?sort=status", headers=PREVIEW_CLIENT).status_code == 400
+
+
+def test_spend_sheet_filters_sort_and_paging():
+    dfw = pw.spend_sheet(market="Dallas–Fort Worth", page_size=100)
+    assert dfw["count"] and all(r["market"] == "Dallas–Fort Worth" for r in dfw["rows"])
+    totals = [r["total"] for r in pw.spend_sheet(sort="total", direction="desc", page_size=100)["rows"]]
+    assert totals[-1] is None, "rows with no spend sort last"
+    known = [x for x in totals if x is not None]
+    assert known == sorted(known, reverse=True)
+    page4 = pw.spend_sheet(page=4, page_size=10)
+    assert page4["count"] == 35 and len(page4["rows"]) == 5 and page4["page"] == 4
+    assert pw.spend_sheet(q="lyv")["count"] == 1
+
+
+def _fields(prof):
+    return {f["key"]: f for s in prof["sections"] for f in s["fields"]}
+
+
+def test_lyv_profile_has_all_55_fields_and_every_required_state(fresh_profiles):
+    prof = pw.profile(LYV)
+    assert not wc.check(prof, wc.PROFILE)
+    fields = _fields(prof)
+    assert len(prof["sections"]) == 13 and len(fields) == 55
+    assert sum(1 for f in fields.values() if f["internal"]) == 17
+    assert [k for k, f in fields.items() if f["value"] is None], "some fields are empty"
+    assert prof["completeness"]["pct"] < 100 and len(prof["completeness"]["top_missing"]) == 3
+    assert prof["checkin"]["due"] and prof["checkin"]["stale_fields"]
+    assert all(fields[k]["provenance"]["kind"] == "override" for k in prof["checkin"]["stale_fields"]), "only human-written values go stale"
+    assert [k for k, f in fields.items() if f["pending"]] == ["taglines"]
+    assert sorted(f["suggestion"]["source"] for f in fields.values() if f["suggestion"]) == ["geo_claim", "site_scrape"]
+    flags = {k: f["fair_housing_review"] for k, f in fields.items() if f.get("fair_housing_review")}
+    assert list(flags) == ["romance"] and flags["romance"]["severity"] == "low"
+    assert fields["property_amenities"]["provenance"] == {"kind": "override", "by": "Dana R.", "at": "2026-01-15T15:00:00Z", "source": "profile_edit", "overrides": "site_scrape"}
+    for k, f in fields.items():
+        assert f["used_in"] == cb.used_in(k) and f["ad_facing"] == cb.is_ad_facing(k)
+
+
+def test_client_profile_never_carries_internal_fields(fresh_profiles):
+    route = pw.app.test_client().get(f"/api/workspace/profile?company_id={LYV}", headers=PREVIEW_CLIENT).get_json()
+    for prof in (pw.profile(LYV, client=True), route):
+        assert not wc.check(prof, wc.PROFILE)
+        fields = _fields(prof)
+        assert len(fields) == 38 and not [f for f in fields.values() if f["internal"]]
+        assert "fair_housing_review" not in json.dumps(prof)
+        assert "operations_tech" not in [s["key"] for s in prof["sections"]]
+
+
+@pytest.mark.parametrize("company_id", IDS)
+def test_every_profile_is_its_own_property(company_id, fresh_profiles):
+    p, prof = pw.prop(company_id), pw.profile(company_id)
+    assert prof["property"]["name"] == p["name"]
+    assert not [q["name"] for q in PROPS if q["company_id"] != company_id and q["name"] in json.dumps(prof)]
+    if company_id != LYV:
+        assert prof["completeness"]["pct"] < pw.profile(LYV)["completeness"]["pct"], "other profiles are lighter"
+
+
+def test_completeness_weights_ad_facing_over_context_fields(fresh_profiles):
+    fields = list(_fields(pw.profile(LYV)).values())
+    base = wpr.completeness(fields)["pct"]
+    def with_filled(key):
+        return wpr.completeness([dict(f, value="filled") if f["key"] == key else f for f in fields])["pct"]
+    assert with_filled("unit_features") > with_filled("onsite_events") >= base
+
+
+def _patch(client, key, value, headers=None):
+    r = client.patch("/api/workspace/profile/field", json={"company_id": LYV, "key": key, "value": value}, headers=headers or {})
+    return r.status_code, r.get_json()
+
+
+def test_profile_edit_outcomes(fresh_profiles):
+    c = pw.app.test_client()
+    status, body = _patch(c, "short_name", "LYV")
+    assert status == 200 and body["outcome"] == "saved" and body["field"]["value"] == "LYV", "staff edits save immediately"
+    assert not wc.check(body, wc.PROFILE_EDIT)
+    status, body = _patch(c, "voice_tier", ["lifestyle", "luxury"])
+    assert body["outcome"] == "saved" and body["field"]["value"] == "lifestyle;luxury"
+    status, body = _patch(c, "romance", "Perfect for young professionals starting out")
+    assert body["outcome"] == "blocked" and body["fair_housing"]["result"] == "blocked" and "Fair Housing" in body["message"]
+    assert _fields(pw.profile(LYV))["romance"]["value"].startswith("Bright white"), "a block leaves the live value"
+    assert _patch(c, "short_name", "x", PREVIEW_CLIENT)[0] == 403
+    assert _patch(c, "uuid", "x")[0] == 404, "R1: nothing writes uuid"
+    assert _patch(c, "city", "Dallas")[0] == 400, "company-record fields aren't edited here"
+    pw.SWITCHES["client_editor"] = True
+    status, body = _patch(c, "unit_features", "In-home washer and dryer")
+    assert body["outcome"] == "pending_review" and body["field"]["value"] is None
+    assert body["field"]["pending"]["proposed_value"] == "In-home washer and dryer" and not wc.check(body, wc.PROFILE_EDIT)
+    status, body = _patch(c, "onsite_events", "Monthly rooftop yoga")
+    assert body["outcome"] == "saved" and body["field"]["value"] == "Monthly rooftop yoga"
+    assert _patch(c, "pms", "Entrata")[0] == 403
+
+
+def test_profile_update_approve_reject_and_undo(fresh_profiles):
+    c = pw.app.test_client()
+    item_id = "profile_update:0021-taglines"
+    assert item_id in [r["item_id"] for r in pw.approvals(category="content")["batch"]["rows"]]
+    assert item_id not in [r["item_id"] for r in pw.approvals(client=True)["batch"]["rows"]]
+    it = pw.item(item_id)
+    assert not wc.check(pw._public(it), wc.ITEM)
+    assert it["category"] == "content" and not it["client_visible"]
+    assert it["profile_update"]["current_value"] != it["profile_update"]["proposed_value"]
+    assert c.post(f"/api/workspace/work/{item_id}/decision", json={"company_id": LYV, "action": "approve"}).status_code == 200
+    taglines = _fields(pw.profile(LYV))["taglines"]
+    assert taglines["value"] == "Modern Carrollton living, minutes from the Green Line." and taglines["pending"] is None
+    assert taglines["review_outcome"]["status"] == "approved"
+    latest = pw._profile_state(LYV)["taglines"]["entries"][0]
+    assert latest["action"] == "approved" and "Morgan Lee" in latest["by"] and "Dana R." in latest["by"], "the audit names proposer and approver"
+    assert c.post(f"/api/workspace/work/{item_id}/undo", json={"company_id": LYV}).get_json()["undone"]
+    assert _fields(pw.profile(LYV))["taglines"]["pending"]
+    c.post(f"/api/workspace/work/{item_id}/decision", json={"company_id": LYV, "action": "not_now", "reason": "wrong_data"})
+    taglines = _fields(pw.profile(LYV))["taglines"]
+    assert taglines["value"] == "Your space. Your pace. LYV Broadway." and taglines["review_outcome"]["status"] == "rejected"
+
+
+def test_checkin_is_a_client_to_do_resets_staleness_and_is_never_an_approval(fresh_profiles):
+    staff, client = pw.dashboard(), pw.dashboard(client=True)
+    assert not wc.check(staff, wc.DASHBOARD) and not wc.check(client, wc.DASHBOARD)
+    assert not [w for w in staff["waiting"] if w["kind"] == "profile_checkin"], "check-ins are client to-dos"
+    checkins = [w for w in client["waiting"] if w["kind"] == "profile_checkin"]
+    lyv = next(w for w in checkins if w["company_id"] == LYV)
+    stale = pw.profile(LYV, client=True)["checkin"]["stale_fields"]
+    assert lyv["stale_count"] == len(stale) and lyv["item_id"] is None and lyv["category"] is None
+    assert client["kpis"]["waiting_on_you"]["value"] == len([w for w in client["waiting"] if w["kind"] == "approval"])
+    assert not [r for r in pw.approvals()["batch"]["rows"] if "checkin" in r["item_id"]]
+    c = pw.app.test_client()
+    body = c.post("/api/workspace/profile/checkin", json={"company_id": LYV, "confirmed": stale[:2] + ["unit_features", "nope"]}).get_json()
+    assert not wc.check(body, wc.PROFILE_CHECKIN)
+    assert body["confirmed"] == stale[:2] and not set(stale[:2]) & set(body["checkin"]["stale_fields"])
+    assert {s["key"]: s["reason"] for s in body["skipped"]} == {"unit_features": "No value to confirm", "nope": "Unknown field"}
+    history = c.get(f"/api/workspace/profile/history?company_id={LYV}&key={stale[0]}").get_json()
+    assert not wc.check(history, wc.PROFILE_HISTORY) and history["entries"][0]["kind"] == "reviewed"
+
+
+def test_suggestions_accept_through_the_edit_flow_and_dismiss_with_a_reason(fresh_profiles):
+    c = pw.app.test_client()
+    pw.SWITCHES["client_editor"] = True
+    body = c.post("/api/workspace/profile/suggestions/sug-0021-amenities/accept").get_json()
+    assert body["outcome"] == "pending_review", "an ad-facing suggestion from a client goes to review like any edit"
+    assert c.post("/api/workspace/profile/suggestions/sug-0021-landmarks/dismiss", json={}).status_code == 400
+    body = c.post("/api/workspace/profile/suggestions/sug-0021-landmarks/dismiss", json={"reason": "Not near the property"}).get_json()
+    assert not wc.check(body, wc.SUGGESTION_DISMISSED) and body == {"suggestion_id": "sug-0021-landmarks", "dismissed": True, "reason": "Not near the property"}
+    assert pw._profile_state(LYV)["landmarks"]["entries"][0]["note"] == "Not near the property"
+
+
+def test_properties_rows_and_overview_carry_profile_completeness(fresh_profiles):
+    for row in pw.dashboard()["properties"]:
+        metric = row["profile_completeness"]
+        assert metric["value"] == pw.profile(row["company_id"])["completeness"]["pct"] and metric["source"]
+    with pw.app.test_request_context():
+        assert pw.property_overview(LYV)["profile_completeness"]["value"] == pw.profile(LYV)["completeness"]["pct"]
+
+
+def test_save_messages_say_what_actually_happens(fresh_profiles):
+    c = pw.app.test_client()
+    assert _patch(c, "short_name", "LYV")[1]["message"] == "Saved · live in ads tomorrow", "ad-facing, saved immediately by staff"
+    assert _patch(c, "onsite_events", "Monthly rooftop yoga")[1]["message"] == "Saved", "context fields aren't used in ads"
+    assert _patch(c, "pms", "Entrata")[1]["message"] == "Saved", "internal fields just save"
+    pw.SWITCHES["client_editor"] = True
+    assert _patch(c, "unit_features", "In-home washer and dryer")[1]["message"].startswith("Sent to RPM for review")
+
+
+def test_every_profile_update_item_matches_the_item_spec(fresh_profiles):
+    items = pw.profile_update_items()
+    assert items
+    for it in items:
+        assert not wc.check(pw._public(it), wc.ITEM), it["id"]
