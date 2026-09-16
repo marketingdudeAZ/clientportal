@@ -56,6 +56,26 @@ logger = logging.getLogger(__name__)
 ACTIONS = ("approve", "not_now")
 UNDO_WINDOW = timedelta(minutes=10)
 
+# One decision at a time per item. `decide()` confirms the item is still waiting
+# and then calls the handler; two threads that both passed that check would both
+# run it, and for a budget recommendation that is two HubSpot deals and two
+# ClickUp tasks for one approval. Holding a per-item lock across the re-check
+# and the handler means the second caller re-reads the item after the first has
+# finished and gets "not waiting on a decision" instead.
+_item_locks: dict = {}
+_item_locks_guard = threading.Lock()
+
+
+def _item_lock(company_id: str, value: str) -> threading.Lock:
+    """The lock for one item at one property. Small and long-lived: one Lock per
+    item that has ever been decided in this process."""
+    key = (str(company_id), str(value))
+    with _item_locks_guard:
+        lock = _item_locks.get(key)
+        if lock is None:
+            lock = _item_locks[key] = threading.Lock()
+        return lock
+
 # What an approval leaves the item as, when the handler finishes the job itself.
 _APPROVED_STATUS = {"video_variant": "done", "ticket_profile": "done", "profile_update": "done"}
 
@@ -496,29 +516,32 @@ def decide(ctx, value: str, action: str, reason: str | None, actor: str, *,
         raise DecisionError(404, "Item not found")
     if not internal and source in wi.INTERNAL_ONLY_SOURCES:
         raise DecisionError(404, "Item not found")
-    item, _ = wi.find_item(ctx, value, today=today)
-    if item is None:
-        raise DecisionError(404, "Item not found")
-    handler = HANDLERS.get((source, action))
-    if handler is None:
-        raise DecisionError(400, "This item has no approval step")
-    if not item["actions"].get(action):
-        raise DecisionError(400, "This item is not waiting on a decision")
+    # The item is re-read inside the lock, so a second caller sees the state the
+    # first one left rather than the state it read before waiting.
+    with _item_lock(ctx.company_id, value):
+        item, _ = wi.find_item(ctx, value, today=today)
+        if item is None:
+            raise DecisionError(404, "Item not found")
+        handler = HANDLERS.get((source, action))
+        if handler is None:
+            raise DecisionError(400, "This item has no approval step")
+        if not item["actions"].get(action):
+            raise DecisionError(400, "This item is not waiting on a decision")
 
-    try:
-        result = handler(ctx, item, reason, actor)
-    except DecisionError as exc:
-        record_event(ctx, item, action, reason, actor, outcome="failed", detail=exc.message)
-        raise
-    except Exception as exc:  # noqa: BLE001
-        logger.error("workspace decision %s on %s failed: %s", action, value, exc, exc_info=True)
-        record_event(ctx, item, action, reason, actor, outcome="failed", detail=type(exc).__name__)
-        raise DecisionError(502, "The decision could not be completed", type(exc).__name__)
+        try:
+            result = handler(ctx, item, reason, actor)
+        except DecisionError as exc:
+            record_event(ctx, item, action, reason, actor, outcome="failed", detail=exc.message)
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.error("workspace decision %s on %s failed: %s", action, value, exc, exc_info=True)
+            record_event(ctx, item, action, reason, actor, outcome="failed", detail=type(exc).__name__)
+            raise DecisionError(502, "The decision could not be completed", type(exc).__name__)
 
-    outcome = result.get("outcome", "ok")
-    record_event(ctx, item, action, reason, actor, outcome=outcome)
-    now = wc.utc_now().replace(microsecond=0)
-    _remember(ctx, item, action, actor, now)
+        outcome = result.get("outcome", "ok")
+        record_event(ctx, item, action, reason, actor, outcome=outcome)
+        now = wc.utc_now().replace(microsecond=0)
+        _remember(ctx, item, action, actor, now)
     try:
         record = _record(ctx, source, action)
     except Exception as exc:  # noqa: BLE001

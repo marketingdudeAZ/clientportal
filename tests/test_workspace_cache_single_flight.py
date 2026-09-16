@@ -7,6 +7,13 @@ to start 16 simultaneous builds of the same source.
 import threading
 import time
 
+import pathlib
+import sys
+
+TESTS = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(TESTS.parent / "webhook-server"))
+sys.path.insert(0, str(TESTS))
+
 from skills import workspace_cache as wcache
 
 

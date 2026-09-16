@@ -64,6 +64,11 @@ SKU_CHANNELS = {
 }
 MODES = ("always_on", "flighted")
 
+# Line items a client never sees, the media-plan counterpart of
+# workspace_spend.INTERNAL_KEYS. The management fee is RPM's fee, not one of
+# the marketing channels the plan is about.
+INTERNAL_SKUS = frozenset({"mgmt_fee"})
+
 # Words that tie text to a channel. Keys are spend_sheet_to_channels buckets plus
 # the ILS, GBP and website channels Kyle's always-on list names.
 CHANNEL_TERMS = {
@@ -139,10 +144,16 @@ def plan_notes(channel_keys: list, labels: dict, pending: list, objective_reason
     return guard_notes(notes, pending)
 
 
-def channel_rows(by_sku: dict) -> list:
-    """Line items grouped into channel rows: [{key, label, mode, match, amount}]."""
+def channel_rows(by_sku: dict, *, internal: bool = True) -> list:
+    """Line items grouped into channel rows: [{key, label, mode, match, amount}].
+
+    A client never sees the management fee, so for them it is not a row — and
+    not part of the money the plan accounts for either (see build_media_plan).
+    """
     rows: dict = {}
     for sku, amt in (by_sku or {}).items():
+        if not internal and sku in INTERNAL_SKUS:
+            continue
         key, label, mode, match = SKU_CHANNELS.get(sku, (sku, sku.replace("_", " ").capitalize(), "always_on", sku))
         row = rows.setdefault(key, {"key": key, "label": label, "mode": mode, "match": match, "amount": 0.0})
         row["amount"] += wc.to_float(amt) or 0.0
@@ -214,9 +225,14 @@ def build_media_plan(ctx, *, internal: bool = True, today: date | None = None) -
                        "Units to lease come from AptIQ exposure for the next three months only"))
 
     channels, total = [], None
-    rows = channel_rows((row or {}).get("by_sku") or {}) if row else []
+    rows = channel_rows((row or {}).get("by_sku") or {}, internal=internal) if row else []
     if row:
         total = row.get("total") or 0.0
+        if not internal:
+            # The deal total includes the management fee. Rebuild it from the
+            # rows a client can actually see, or the envelope and every share
+            # would be computed against money that is not on the screen.
+            total = round(sum(r["amount"] for r in rows), 2)
         for r in rows:
             amt = round(r["amount"], 2)
             monthly = [amt] * 12 if r["mode"] == "always_on" else flighted_monthly(amt, months, by_month)

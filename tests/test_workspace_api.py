@@ -811,8 +811,9 @@ class TestSignedLinks:
         monkeypatch.setenv("WORKSPACE_SIGNED_LINKS_ENABLED", "false")
         token = wl.mint(INTERNAL, 1)
         assert self._me(client, token).status_code == 401
-        r = self._me(client, token, **{"X-Portal-Email": INTERNAL})
-        assert r.get_json()["verified"] is False and r.get_json()["signed_link"] is False
+        # The token proves nothing with the flag off, and an asserted header is
+        # not proof either, so there is no identity left to answer.
+        assert self._me(client, token, **{"X-Portal-Email": INTERNAL}).status_code == 401
 
     def test_no_secret_is_401(self, client, links, monkeypatch):
         token = wl.mint(INTERNAL, 1)
@@ -886,10 +887,12 @@ class TestContractShapes:
         _allowlist_client(monkeypatch, companies=(CID,))
         monkeypatch.setattr(hubspot_client, "get_company", lambda cid, props=None: {
             "uuid": "u-123", "name": "LYV Broadway", "city": "Carrollton", "state": "TX", "totalunits": "390"})
+        # A signed-in client, which is what production has: can_decide follows
+        # the verified identity (clients are the ones who approve things).
         body = client.get("/api/workspace/me", headers=_h(CLIENT),
-                          environ_overrides=UNVERIFIED).get_json()
+                          environ_overrides=VERIFIED).get_json()
         _shape_ok(body, "me")
-        assert body["role"] == "client" and body["can_decide"] is False
+        assert body["role"] == "client" and body["can_decide"] is True
         assert [c["company_id"] for c in body["companies"]] == [CID]
 
     def test_portfolio_needs_me(self, client, monkeypatch, readers, aptiq):
@@ -1018,11 +1021,13 @@ class TestInternalRoleNeedsProof:
         return client.get(f"/api/workspace/work/call_prep:cp1?company_id={CID}",
                           headers=_h(INTERNAL), environ_overrides=environ).get_json()
 
-    def test_an_asserted_rpm_email_alone_gets_the_client_rendering(self, client, monkeypatch, readers):
+    def test_an_asserted_rpm_email_alone_is_refused(self, client, monkeypatch, readers):
+        # Stronger than stripping the internal fields: the workspace API does
+        # not answer an identity that was only asserted at all (_require_proof).
         monkeypatch.setattr(wi, "load_context", lambda company_id: _ctx())
-        body = self._item(client, UNVERIFIED)
-        assert body["notes"] == [] and body["comments_count"] == 0
-        assert all(t["visibility"] == "client" for t in body["trail"])
+        r = client.get(f"/api/workspace/work/call_prep:cp1?company_id={CID}",
+                       headers=_h(INTERNAL), environ_overrides=UNVERIFIED)
+        assert r.status_code == 401, r.get_json()
 
     def test_a_proven_identity_gets_the_internal_rendering(self, client, monkeypatch, readers):
         monkeypatch.setattr(wi, "load_context", lambda company_id: _ctx())

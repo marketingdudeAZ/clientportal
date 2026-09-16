@@ -95,8 +95,38 @@ def _gate():
     if request.method == "OPTIONS":
         return _preflight()
     if path.startswith(API_PREFIX):
-        return workspace_links.apply_to_request()
+        gate = workspace_links.apply_to_request()
+        if gate:
+            return gate
+        return _require_proof()
     return None
+
+
+def _require_proof():
+    """Refuse an identity that was only asserted, on this blueprint's API.
+
+    `X-Portal-Email` is caller-supplied. Without proof, anyone who knows a
+    client's address can read that client's portfolio, and anyone who knows an
+    RPM address passes the property scope gate portfolio-wide —
+    `require_company_access` says exactly that in its own docstring, and points
+    at PORTAL_STRICT_IDENTITY as the fix. That flag stays off because the legacy
+    portal has users Clerk does not cover yet; the workspace has none, since
+    everyone who reaches it arrives with a Clerk session or a signed link.
+
+    Exempt: server-to-server callers carrying the internal key. Set
+    WORKSPACE_REQUIRE_PROOF=false to fall back to the old behavior.
+    """
+    from _route_utils import is_internal_caller
+    from skills.workspace_links import SIGNED_LINK_ENVIRON
+
+    if os.environ.get("WORKSPACE_REQUIRE_PROOF", "true").strip().lower() in ("0", "false", "no"):
+        return None
+    if is_internal_caller() or identity_is_verified():
+        return None
+    if request.environ.get(SIGNED_LINK_ENVIRON):
+        return None
+    return jsonify({"error": "Authentication required",
+                    "detail": "Sign in, or open this from your preview link."}), 401
 
 
 # ── who is asking ────────────────────────────────────────────────────────────

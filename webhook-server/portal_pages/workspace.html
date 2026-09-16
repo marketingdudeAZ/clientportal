@@ -2446,8 +2446,15 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         return '<div class="frow ch' + (g.key === 'always_on' ? ' flat' : '') + '"><span class="fl">' + esc(c.channel) + '</span><div class="cells">' + c.monthly.map(function (v) { return v ? '<span class="on">' + esc(kfmt(v)) + '</span>' : '<span class="off" aria-label="none">—</span>'; }).join('') + '</div></div>';
       }).join('');
     }).join('');
-    var totals = months.map(function (_, i) { return chans.reduce(function (s, c) { return s + (c.monthly[i] || 0); }, 0); });
-    var tot = chans.length ? '<div class="frow tot"><span class="fl">Total</span><div class="cells">' + totals.map(function (t) { return '<span>' + esc(kfmt(t)) + '</span>'; }).join('') + '</div></div>' : '';
+    // Only total a month where every channel has a number for it. Flighted
+    // channels are null past the three-month exposure forecast, and adding
+    // those in as zero prints a total that is quietly too low.
+    var totals = months.map(function (_, i) {
+      var known = chans.filter(function (c) { return c.monthly[i] != null; });
+      return known.length === chans.length
+        ? known.reduce(function (s, c) { return s + c.monthly[i]; }, 0) : null;
+    });
+    var tot = chans.length ? '<div class="frow tot"><span class="fl">Total</span><div class="cells">' + totals.map(function (t) { return t == null ? '<span class="off" aria-label="not planned yet">\u2014</span>' : '<span>' + esc(kfmt(t)) + '</span>'; }).join('') + '</div></div>' : '';
     var alloc = val(d.allocated), env = val(d.envelope);
     var breakdown = chans.length ? '<section class="sec"><h2 class="h-rail">Channel breakdown</h2><div class="tscroll"><table class="tbl boxed"><thead><tr><th scope="col">Channel</th><th scope="col" class="num">Monthly avg</th><th scope="col" class="num">Annual</th><th scope="col" class="num">% of budget</th><th scope="col" class="num">CPL target</th></tr></thead><tbody>' +
       groups.map(function (g) {
