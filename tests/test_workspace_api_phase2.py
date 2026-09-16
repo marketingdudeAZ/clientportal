@@ -40,6 +40,7 @@ INTERNAL = "dana@rpmliving.com"
 CLIENT = "owner@acme.com"
 CID = "123"
 VERIFIED = {"portal.identity_verified": True}
+UNVERIFIED = {"portal.identity_verified": False}
 
 
 @pytest.fixture(autouse=True)
@@ -72,7 +73,12 @@ def events(monkeypatch):
 def client():
     app = Flask(__name__)
     app.register_blueprint(workspace_bp)
-    return app.test_client()
+    # Every caller here stands for a signed-in session (Clerk, or a verified
+    # link). Internal reads now require a PROVEN identity, so a test client
+    # that only asserts an email would be refused the staff view.
+    c = app.test_client()
+    c.environ_base["portal.identity_verified"] = True
+    return c
 
 
 def _ctx(**props):
@@ -187,7 +193,8 @@ class TestSignalsEndpoint:
     def test_start_work_needs_verified_identity(self, client, monkeypatch, signal_data, events):
         monkeypatch.setattr(wi, "load_context", lambda cid: _ctx())
         r = client.post("/api/workspace/signals/stale_inventory:123:2026-09-14/start-work",
-                        headers={"X-Portal-Email": INTERNAL}, json={"company_id": CID})
+                        headers={"X-Portal-Email": INTERNAL}, json={"company_id": CID},
+                        environ_overrides=UNVERIFIED)
         assert r.status_code == 401
         events.assert_not_called()
 
@@ -313,7 +320,8 @@ class TestFileAndRecent:
     def test_filing_needs_verified_identity(self, client, monkeypatch, events):
         monkeypatch.setattr(wi, "load_context", lambda cid: _ctx())
         r = client.post("/api/workspace/requests", headers={"X-Portal-Email": INTERNAL},
-                        json={"company_id": CID, "tickets": [{"draft_id": "d1", "title": "x", "category": "web"}]})
+                        json={"company_id": CID, "tickets": [{"draft_id": "d1", "title": "x", "category": "web"}]},
+                        environ_overrides=UNVERIFIED)
         assert r.status_code == 401
 
     def test_files_each_ticket_and_reports_failures(self, client, monkeypatch, events):

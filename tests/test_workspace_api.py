@@ -191,7 +191,12 @@ def ctx(monkeypatch):
 def client():
     app = Flask(__name__)
     app.register_blueprint(workspace_bp)
-    return app.test_client()
+    # Every caller here stands for a signed-in session (Clerk, or a verified
+    # link). Internal reads now require a PROVEN identity, so a test client
+    # that only asserts an email would be refused the staff view.
+    c = app.test_client()
+    c.environ_base["portal.identity_verified"] = True
+    return c
 
 
 def _h(email=INTERNAL, **extra):
@@ -201,6 +206,7 @@ def _h(email=INTERNAL, **extra):
 
 
 VERIFIED = {"portal.identity_verified": True}
+UNVERIFIED = {"portal.identity_verified": False}
 PREVIEW = {"X-Workspace-Preview-Role": "client"}
 
 GET_ROUTES = [
@@ -404,7 +410,8 @@ class TestPreviewAsClient:
         c = _ctx()
         monkeypatch.setattr(wi, "load_context", lambda company_id: c)
         r = client.post("/api/workspace/work/hubdb_rec:991/decision", headers=_h(CLIENT, **PREVIEW),
-                        json={"company_id": CID, "action": "approve"})
+                        json={"company_id": CID, "action": "approve"},
+                        environ_overrides=UNVERIFIED)
         assert r.status_code == 401          # not "preview_read_only": the header did nothing
 
 
@@ -415,13 +422,13 @@ def _decide(client, item_id, action="approve", reason=None, *, email=INTERNAL, v
     return client.post(
         f"/api/workspace/work/{item_id}/decision", headers=_h(email),
         json={"company_id": company_id, "action": action, "reason": reason},
-        environ_overrides=VERIFIED if verified else {},
+        environ_overrides=VERIFIED if verified else {"portal.identity_verified": False},
     )
 
 
 def _undo(client, item_id, *, email=INTERNAL, verified=True):
     return client.post(f"/api/workspace/work/{item_id}/undo", headers=_h(email),
-                       json={"company_id": CID}, environ_overrides=VERIFIED if verified else {})
+                       json={"company_id": CID}, environ_overrides=VERIFIED if verified else {"portal.identity_verified": False})
 
 
 LOOP_ID = "loop_rec:" + wi.loop_rec_hash("f1", LOOP_REC)
@@ -727,7 +734,11 @@ SECRET = "test-secret"
 
 
 @pytest.fixture
-def links(monkeypatch):
+def links(monkeypatch, client):
+    # The link IS the identity here, so these start with no session: with one,
+    # apply_to_request() short-circuits ("the verified session wins") and the
+    # token is never read.
+    client.environ_base["portal.identity_verified"] = False
     monkeypatch.setenv("WORKSPACE_SIGNED_LINKS_ENABLED", "true")
     monkeypatch.setenv("WORKSPACE_LINK_SECRET", SECRET)
 
@@ -875,7 +886,8 @@ class TestContractShapes:
         _allowlist_client(monkeypatch, companies=(CID,))
         monkeypatch.setattr(hubspot_client, "get_company", lambda cid, props=None: {
             "uuid": "u-123", "name": "LYV Broadway", "city": "Carrollton", "state": "TX", "totalunits": "390"})
-        body = client.get("/api/workspace/me", headers=_h(CLIENT)).get_json()
+        body = client.get("/api/workspace/me", headers=_h(CLIENT),
+                          environ_overrides=UNVERIFIED).get_json()
         _shape_ok(body, "me")
         assert body["role"] == "client" and body["can_decide"] is False
         assert [c["company_id"] for c in body["companies"]] == [CID]
@@ -994,3 +1006,30 @@ class TestContractHelper:
         assert contract.numbers_without_source({"occupied": {"value": 0.9}}) == ["$.occupied.value"]
         assert contract.numbers_without_source({"occupied": {"value": 0.9, "source": "aptiq"}}) == []
         assert contract.numbers_without_source({"counts": {"to_do": 3}}) == []
+
+
+class TestInternalRoleNeedsProof:
+    """`X-Portal-Email` is caller-supplied, so asserting an RPM address must not
+    by itself buy the internal view — management fee, deal fields, internal notes
+    and the internal trail. Only a proven identity does: a Clerk session, or a
+    signed link, which proves who it is without being able to decide."""
+
+    def _item(self, client, environ):
+        return client.get(f"/api/workspace/work/call_prep:cp1?company_id={CID}",
+                          headers=_h(INTERNAL), environ_overrides=environ).get_json()
+
+    def test_an_asserted_rpm_email_alone_gets_the_client_rendering(self, client, monkeypatch, readers):
+        monkeypatch.setattr(wi, "load_context", lambda company_id: _ctx())
+        body = self._item(client, UNVERIFIED)
+        assert body["notes"] == [] and body["comments_count"] == 0
+        assert all(t["visibility"] == "client" for t in body["trail"])
+
+    def test_a_proven_identity_gets_the_internal_rendering(self, client, monkeypatch, readers):
+        monkeypatch.setattr(wi, "load_context", lambda company_id: _ctx())
+        body = self._item(client, VERIFIED)
+        assert body["notes"] and all(n["visibility"] == "internal" for n in body["notes"])
+
+    def test_a_signed_link_still_reads_the_internal_view(self, client, monkeypatch, readers):
+        monkeypatch.setattr(wi, "load_context", lambda company_id: _ctx())
+        body = self._item(client, {**UNVERIFIED, "workspace.signed_link": True})
+        assert body["notes"] and all(n["visibility"] == "internal" for n in body["notes"])

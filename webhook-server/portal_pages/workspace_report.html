@@ -589,7 +589,7 @@ tr.em td{font-weight:600;color:var(--ink)}
         var bars = STAGES.map(function (k, j) {
           var n = v(s.stages[k]) || 0;
           var h = n ? Math.max(4, shares[j] / peak * 46) : 2;
-          return '<i style="height:' + h.toFixed(1) + 'px;background:' + (n ? s.color : s.color + '33') + '" title="' + esc(STAGE_LABEL[k] + ': ' + fInt(n) + (stageSum[k] ? ' (' + fPct(shares[j]) + ' of stage)' : '')) + '"></i>';
+          return '<i style="height:' + h.toFixed(1) + 'px;background:' + esc(n ? s.color : s.color + '33') + '" title="' + esc(STAGE_LABEL[k] + ': ' + fInt(n) + (stageSum[k] ? ' (' + fPct(shares[j]) + ' of stage)' : '')) + '"></i>';
         }).join('');
         var r = reach(s);
         return '<div class="card' + (i >= 4 ? ' extra' : '') + '"' + (i >= 4 ? ' hidden' : '') + '><div class="t"><i class="dot" style="background:' + s.color + '"></i>' + esc(s.name) + '</div>' +
@@ -666,7 +666,7 @@ tr.em td{font-weight:600;color:var(--ink)}
     var lg = root.querySelector('.flow-legend');
     function focus(i) { svg.querySelectorAll('.rib,.node').forEach(function (n) { n.classList.toggle('faded', i !== null && n.getAttribute('data-s') !== String(i)); }); }
     list.forEach(function (s, i) {
-      var sp = document.createElement('span'); sp.innerHTML = '<i style="background:' + s.color + '"></i>' + esc(s.name);
+      var sp = document.createElement('span'); sp.innerHTML = '<i style="background:' + esc(s.color) + '"></i>' + esc(s.name);
       sp.addEventListener('mouseenter', function () { focus(i); }); sp.addEventListener('mouseleave', function () { focus(null); });
       lg.appendChild(sp);
     });

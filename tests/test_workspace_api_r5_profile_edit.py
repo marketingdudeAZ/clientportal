@@ -84,7 +84,12 @@ def events(monkeypatch):
 def client():
     app = Flask(__name__)
     app.register_blueprint(workspace_bp)
-    return app.test_client()
+    # Every caller here stands for a signed-in session (Clerk, or a verified
+    # link). Internal reads now require a PROVEN identity, so a test client
+    # that only asserts an email would be refused the staff view.
+    c = app.test_client()
+    c.environ_base["portal.identity_verified"] = True
+    return c
 
 
 def _patch(client, key, value, email=CLIENT, verified=True, preview=False):
@@ -92,7 +97,7 @@ def _patch(client, key, value, email=CLIENT, verified=True, preview=False):
     if preview:
         headers["X-Workspace-Preview-Role"] = "client"
     return client.patch(URL, json={"company_id": CID, "key": key, "value": value}, headers=headers,
-                        environ_overrides=VERIFIED if verified else {})
+                        environ_overrides=VERIFIED if verified else {"portal.identity_verified": False})
 
 
 def _ok(r):

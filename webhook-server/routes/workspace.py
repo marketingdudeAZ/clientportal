@@ -102,8 +102,20 @@ def _gate():
 # ── who is asking ────────────────────────────────────────────────────────────
 
 def _real_internal() -> bool:
+    """Internal role, and the identity was PROVEN rather than asserted.
+
+    `X-Portal-Email` alone is caller-supplied, so trusting it here would hand
+    the internal view — management fee, deal and quote fields, the 17 internal
+    profile fields, internal notes and Fair Housing flags — to anyone who knows
+    an RPM address. A Clerk session or a verified signed link is required.
+    The link still cannot write: `_write_gate` demands `identity_is_verified()`,
+    which a link sets only when WORKSPACE_SIGNED_LINKS_CAN_DECIDE is on.
+    """
     from feature_access import ROLE_INTERNAL, role_for
-    return role_for(current_portal_email()) == ROLE_INTERNAL
+    from skills.workspace_links import SIGNED_LINK_ENVIRON
+
+    proven = bool(identity_is_verified() or request.environ.get(SIGNED_LINK_ENVIRON))
+    return proven and role_for(current_portal_email()) == ROLE_INTERNAL
 
 
 def _preview_role() -> str | None:

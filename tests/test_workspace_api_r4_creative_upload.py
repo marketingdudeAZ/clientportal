@@ -50,7 +50,12 @@ def _offline(monkeypatch):
 def client():
     app = Flask(__name__)
     app.register_blueprint(workspace_bp)
-    return app.test_client()
+    # Every caller here stands for a signed-in session (Clerk, or a verified
+    # link). Internal reads now require a PROVEN identity, so a test client
+    # that only asserts an email would be refused the staff view.
+    c = app.test_client()
+    c.environ_base["portal.identity_verified"] = True
+    return c
 
 
 def _stored(property_uuid, files, metadata):
@@ -62,7 +67,7 @@ def _stored(property_uuid, files, metadata):
 def _post(client, files, email=INTERNAL, verified=True, **form):
     data = {"company_id": CID, **form, "files": [(io.BytesIO(b"bytes"), name) for name in files]}
     return client.post(URL, data=data, content_type="multipart/form-data", headers={"X-Portal-Email": email},
-                       environ_overrides=VERIFIED if verified else {})
+                       environ_overrides=VERIFIED if verified else {"portal.identity_verified": False})
 
 
 class TestUpload:

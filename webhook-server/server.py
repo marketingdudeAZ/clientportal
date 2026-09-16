@@ -53,6 +53,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+# Werkzeug refuses a body over this before reading it, so a large or
+# many-file upload cannot be buffered into the worker's memory first.
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_REQUEST_BODY_MB", "150")) * 1024 * 1024
 
 # Render terminates TLS at its proxy, so without this request.url is
 # http:// inside the app while callers signed/requested https://. That

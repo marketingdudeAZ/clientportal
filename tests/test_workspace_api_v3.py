@@ -42,6 +42,7 @@ CID = "123"
 CID2 = "456"
 TS = "2026-09-14T00:00:00Z"
 VERIFIED = {"portal.identity_verified": True}
+UNVERIFIED = {"portal.identity_verified": False}
 TODAY = date(2026, 9, 14)
 
 PROPS = [
@@ -84,7 +85,12 @@ def _offline(monkeypatch):
 def client():
     app = Flask(__name__)
     app.register_blueprint(workspace_bp)
-    return app.test_client()
+    # Every caller here stands for a signed-in session (Clerk, or a verified
+    # link). Internal reads now require a PROVEN identity, so a test client
+    # that only asserts an email would be refused the staff view.
+    c = app.test_client()
+    c.environ_base["portal.identity_verified"] = True
+    return c
 
 
 def _h(email=INTERNAL, **extra):
@@ -425,7 +431,8 @@ class TestVisibility:
     def test_create_brief_needs_verified_identity(self, client, snapshot):
         with mock.patch("routes.seo.start_content_brief") as start:
             r = client.post("/api/workspace/visibility/create-brief", headers=_h(),
-                            json={"company_id": CID, "hub_keyword": "parking faq"})
+                            json={"company_id": CID, "hub_keyword": "parking faq"},
+                            environ_overrides=UNVERIFIED)
         assert r.status_code == 401
         start.assert_not_called()
 
@@ -580,7 +587,8 @@ class TestMediaPlan:
     def test_regenerate_needs_verified_identity(self, client, plan):
         import portal_tickets
         with mock.patch.object(portal_tickets, "create_ticket") as create:
-            r = client.post("/api/workspace/media-plan/regenerate", headers=_h(), json={"company_id": CID})
+            r = client.post("/api/workspace/media-plan/regenerate", headers=_h(),
+                            json={"company_id": CID}, environ_overrides=UNVERIFIED)
         assert r.status_code == 401
         create.assert_not_called()
 

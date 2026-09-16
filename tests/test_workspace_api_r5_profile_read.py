@@ -209,7 +209,12 @@ class TestRoute:
     def client(self):
         app = Flask(__name__)
         app.register_blueprint(workspace_bp)
-        return app.test_client()
+        # Every caller here stands for a signed-in session (Clerk, or a verified
+        # link). Internal reads now require a PROVEN identity, so a test client
+        # that only asserts an email would be refused the staff view.
+        c = app.test_client()
+        c.environ_base["portal.identity_verified"] = True
+        return c
 
     def _get(self, client, email, preview=False):
         headers = {"X-Portal-Email": email}
