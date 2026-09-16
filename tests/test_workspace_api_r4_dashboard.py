@@ -65,20 +65,20 @@ class TestLeasing:
         assert "IN (111, 222)" in sql and "h_ms_lease" in sql
 
     def test_kpis_cover_hyly_properties_and_say_so(self, monkeypatch):
-        by_start = {"2026-09-01": {111: 3, 222: 5}, "2026-08-01": {111: 4, 222: 0}}
+        # Only this month's leases are read now: last month's were fetched solely
+        # to divide contracted spend by them.
+        by_start = {"2026-09-01": {111: 3, 222: 5}}
         monkeypatch.setattr(wlease, "leases_by_property", lambda pids, start, end, lake=None: by_start[start])
-        spend = {"1": 2000.0, "2": 3000.0}
-        monkeypatch.setattr(wcache, "monthly_spend", lambda cid: ({"total": spend.get(cid, 0.0)}, None))
         gaps = []
         leases, cost, by_company = wdash.leasing_kpis(PROPS, TODAY, gaps)
         assert by_company == {"1": 3, "2": 5}
         assert leases["value"] == 8 and leases["source"] == "hyly_lake.pai_journey"
         assert leases["properties"] == 2 and leases["period"] == "2026-09-01 to 2026-09-14"
-        # property 2 had no August leases, so only property 1's spend and leases count
-        assert cost["value"] == 500.0 and cost["spend"] == 2000.0 and cost["leases"] == 4
-        assert cost["period"] == "2026-08" and cost["properties"] == 1
+        # Cost per lease is Hyly's figure and Hyly spend is not connected, so it
+        # comes back empty with the reason rather than as the contracted amount.
+        assert cost is None
         messages = " ".join(g["message"] for g in gaps)
-        assert "2 of 3 properties" in messages and "contracted" in messages
+        assert "2 of 3 properties" in messages and "Hyly spend" in messages
 
     def test_no_bigquery_is_a_gap_not_zero(self, monkeypatch):
         monkeypatch.setattr(wlease, "leases_by_property", lambda *a, **k: None)

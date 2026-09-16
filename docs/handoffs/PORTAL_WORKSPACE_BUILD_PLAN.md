@@ -1139,3 +1139,28 @@ Dashboard and Properties additions:
 49. **Completeness on lists.** `profile_completeness` (a METRIC with `weighted: true`, source `community_brief`) is added to dashboard `properties[]` rows and to the property overview.
 50. **Loop events.** New registered event types: `workspace_profile_update_proposed`, `workspace_profile_checkin`, `workspace_profile_suggestion_dismissed`.
 51. **CORS.** The preflight allows `PATCH`.
+
+## Round 6 — cost per lease comes from Hyly, or not at all (16 Sept 2026)
+
+Kyle: "hyly calculates it and I would want it only from that source."
+
+**Finding.** `hyly_export.spend_manager` is named in `skills/workspace_report.py`
+(`SRC_EXPORT_SPEND`) but nothing populates it: `gather_live` returns
+`"vendors": []`, `total_spend` is never assigned, and the report carries its own
+gap — "Spend by vendor lives in an object outside the metric library allowlist"
+and "Needs spend, which isn't connected for this month." So the report's cost
+per lease is null in production today.
+
+**Change.** The dashboard KPI used to divide HubSpot contracted line items by
+Hyly leases. That is a different number — what a property agreed to pay, not
+what was spent — so it is gone. `leasing_kpis` no longer reads the spend cache,
+and no longer fetches last month's leases (they existed only as the divisor).
+
+**Contract.** `kpis.cost_per_lease` is `null`, with
+`{field: "kpis.cost_per_lease", source: "hyly", message: "Cost per lease comes
+from Hyly spend, which is not connected yet"}` in `gaps`. The preview book
+matches, so the demo shows what production shows.
+
+**To restore it:** connect `hyly_export.spend_manager` — an allowlist entry, the
+access, and the query in `gather_live` — and both the report and the dashboard
+then read the same Hyly figure.

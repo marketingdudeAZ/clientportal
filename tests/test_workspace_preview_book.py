@@ -133,7 +133,10 @@ def test_dashboard_totals_agree_with_the_book():
     assert k["occupancy"]["value"] == round(sum(p["occupied"] for p in known) / sum(p["units"] for p in known), 3)
     assert k["units_to_lease_90d"]["value"] == sum(p["units_to_lease_90d"] for p in known)
     assert k["leases_this_month"]["value"] == sum(p["leases_this_month"] for p in known)
-    assert k["cost_per_lease"]["value"] == round(sum(p["spend_last_month"] for p in known) / sum(p["leases_last_month"] for p in known))
+    # Cost per lease is Hyly's figure and Hyly spend is not connected, so the
+    # demo shows what production shows: nothing, with the reason in gaps.
+    assert k["cost_per_lease"] is None
+    assert any(g["field"] == "kpis.cost_per_lease" for g in d["gaps"])
     approvals_waiting = [w for w in d["waiting"] if w.get("kind") != "profile_checkin"]
     assert k["waiting_on_you"]["value"] == pw.approvals()["waiting"] == len(pw.approvals()["batch"]["rows"]) == len(approvals_waiting)
     for row in d["properties"]:

@@ -95,10 +95,6 @@ def _occ(p):
     return None if p["occupied"] is None else round(p["occupied"] / p["units"], 3)
 
 
-def _cpl(p):
-    return None if not p["leases_last_month"] else round(p["spend_last_month"] / p["leases_last_month"])
-
-
 def _trail(at, actor, text, visibility="client"):
     return {"at": at, "actor": actor, "text": text, "visibility": visibility}
 
@@ -343,7 +339,6 @@ def dashboard(client: bool = False) -> dict:
     ps = props()
     known = [p for p in ps if p["occupied"] is not None]
     occupied, units_known = sum(p["occupied"] for p in known), sum(p["units"] for p in known)
-    leases_lm, spend_lm = sum(p["leases_last_month"] for p in known), sum(p["spend_last_month"] for p in known)
     waiting = _waiting_items() + ([] if client else profile_update_items())
     actions_taken = sum(_h(p["company_id"] + "auto", 3, 11) for p in known)
     vis = round(sum(p["ai_visibility"] for p in known) / len(known))
@@ -351,7 +346,7 @@ def dashboard(client: bool = False) -> dict:
         "occupancy": _metric(round(occupied / units_known, 3), "aptiq"),
         "units_to_lease_90d": _metric(sum(p["units_to_lease_90d"] for p in known), "aptiq_exposure"),
         "leases_this_month": _metric(sum(p["leases_this_month"] for p in known), "hyly", "2026-09-14T11:00:00Z"),
-        "cost_per_lease": _metric(round(spend_lm / leases_lm), "hubspot_line_items+hyly", "2026-09-01T06:00:00Z"),
+        "cost_per_lease": None,
         "ai_visibility": _metric(vis, "geo_brand_mentions", "2026-09-14T08:14:00Z"),
         "actions_taken": _metric(actions_taken, "automatic workspace_decision and loop events, last 30 days"),
         "waiting_on_you": _metric(len(waiting), "workspace_inbox"),
@@ -377,7 +372,8 @@ def dashboard(client: bool = False) -> dict:
         "waiting": (profile_checkins() if client else []) + [{"kind": "approval", "item_id": it["id"], "company_id": it["company_id"], "title": it["title"],
                                                                "subtitle": it["cost_note"] or (it["why"] or {}).get("text"), "category": it["category"]} for it in waiting],
         "loop_status": {"running": True, "property_count": len(ps), "last_pass": "2026-09-14T08:00:00Z"},
-        "gaps": [{"message": "Cedar Falls Commons has no ApartmentIQ read yet, so its occupancy and exposure are left out of the totals.", "field": "kpis.occupancy", "source": "aptiq"}],
+        "gaps": [{"message": "Cedar Falls Commons has no ApartmentIQ read yet, so its occupancy and exposure are left out of the totals.", "field": "kpis.occupancy", "source": "aptiq"},
+                 {"message": "Cost per lease comes from Hyly spend, which is not connected yet.", "field": "kpis.cost_per_lease", "source": "hyly"}],
     }
 
 

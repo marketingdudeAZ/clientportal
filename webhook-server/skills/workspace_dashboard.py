@@ -228,8 +228,7 @@ def units_to_lease_kpi(props: list, rows: dict, loaded: str | None) -> dict | No
 
 def leasing_kpis(props: list, today: date, gaps: list) -> tuple:
     """(leases_this_month, cost_per_lease, {company_id: leases month to date})."""
-    import calendar
-    from skills import workspace_cache, workspace_leasing
+    from skills import workspace_leasing
 
     ids = workspace_leasing.hyly_ids(props)
     if not ids:
@@ -243,7 +242,6 @@ def leasing_kpis(props: list, today: date, gaps: list) -> tuple:
     last_start = last_end.replace(day=1)
     try:
         mtd = workspace_leasing.leases_by_property(list(ids.values()), month_start.isoformat(), today.isoformat())
-        prev = workspace_leasing.leases_by_property(list(ids.values()), last_start.isoformat(), last_end.isoformat())
     except Exception as exc:  # noqa: BLE001
         gaps.append(wc.gap("kpis.leases_this_month", f"Hyly leases could not be read ({type(exc).__name__})",
                            source="hyly"))
@@ -259,30 +257,15 @@ def leasing_kpis(props: list, today: date, gaps: list) -> tuple:
         gaps.append(wc.gap("kpis.leases_this_month", f"Leases cover the Hyly beta properties only ({coverage})",
                            source="hyly"))
 
-    spend_total, lease_total, counted = 0.0, 0, 0
-    for cid, pid in ids.items():
-        n = (prev or {}).get(pid) or 0
-        try:
-            row, _ = workspace_cache.monthly_spend(cid)
-        except Exception:  # noqa: BLE001
-            continue
-        if not n or not row.get("total"):
-            continue
-        spend_total += float(row["total"])
-        lease_total += n
-        counted += 1
+    # Cost per lease is Hyly's figure: Hyly spend over Hyly leases. The spend half
+    # (hyly_export.spend_manager) is not connected yet, and the contracted HubSpot
+    # line items are a different number -- what a property agreed to pay, not what
+    # was spent. So this stays empty and says why, rather than showing a figure
+    # from a source it does not claim to come from.
     cost = None
-    if lease_total:
-        cost = wc.metric(round(spend_total / lease_total, 2), "hubspot_line_items ÷ hyly_lake.pai_journey",
-                         wc.now_iso(), period=f"{last_start:%Y-%m}", spend=round(spend_total, 2),
-                         spend_source="hubspot_line_items", leases=lease_total,
-                         leases_source="hyly_lake.pai_journey", properties=counted)
-        gaps.append(wc.gap("kpis.cost_per_lease", "Spend is the contracted monthly line items, not billed spend",
-                           source="hubspot_line_items"))
-    else:
-        gaps.append(wc.gap("kpis.cost_per_lease",
-                           f"No property had both leases and line items in {calendar.month_name[last_start.month]}",
-                           source="hyly"))
+    gaps.append(wc.gap("kpis.cost_per_lease",
+                       "Cost per lease comes from Hyly spend, which is not connected yet",
+                       source="hyly"))
     by_company = {cid: mtd.get(pid) for cid, pid in ids.items()}
     return leases, cost, by_company
 
