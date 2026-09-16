@@ -1164,3 +1164,30 @@ matches, so the demo shows what production shows.
 **To restore it:** connect `hyly_export.spend_manager` — an allowlist entry, the
 access, and the query in `gather_live` — and both the report and the dashboard
 then read the same Hyly figure.
+
+### Round 6 — measured, not asserted (16 Sept 2026)
+
+Same in-process, write-guarded harness as the earlier `smoke3.json` run, against
+live HubSpot/BigQuery, same portfolio:
+
+| | before | after |
+|---|---|---|
+| `build_dashboard`, cold | 9.2s | 6.5s |
+| `build_dashboard`, warm | — | 1.8s |
+| per-property `loop_events` reads | ~120 | 0 |
+
+The zero is the point: `workspace_history.property_events()` reads every
+property's events in one query and primes the caches the per-property readers
+already consult, so `fair_housing_review`, the stored profile events and the
+decision history each cost nothing during the fan-out.
+
+Cache warm is ~107s and now runs at boot on a daemon thread, so no user pays it.
+
+**Still outstanding, and deliberately not done here:** `_add_profile_completeness`
+triggers a second full HubSpot company read per row, because its field set
+differs from the one `load_context` cached, so the two cannot share
+`hubspot_client`'s cache. Fixing it means widening `SCOPE_FIELDS` for every
+portfolio screen or batching the brief read through HubSpot's batch-read
+endpoint — a tradeoff to decide, not a mechanical change. The per-property HubDB
+adapters inside `collect()` (`hubdb_rec`, `content_brief`) are the other half of
+the remaining 6.5s.
