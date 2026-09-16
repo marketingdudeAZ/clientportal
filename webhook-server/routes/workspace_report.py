@@ -31,15 +31,34 @@ workspace_report_bp = Blueprint("workspace_report", __name__)
 
 _PAGE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                      "portal_pages", "workspace_report.html")
-_TRUTHY = {"1", "true", "yes", "on"}
-
-
 def _enabled() -> bool:
-    return os.environ.get("WORKSPACE_ENABLED", "").strip().lower() in _TRUTHY
+    """The same flag function every other workspace route uses.
+
+    This used to parse WORKSPACE_ENABLED itself and accept "on", which no other
+    reader did — so WORKSPACE_ENABLED=on served the report while every
+    /api/workspace/* route and the /workspace page 404'd.
+    """
+    from skills.workspace_links import workspace_enabled
+    return workspace_enabled()
 
 
 def _not_found():
     return jsonify({"error": "not_found"}), 404
+
+
+@workspace_report_bp.before_request
+def _apply_signed_link():
+    """Honor X-Workspace-Link here too.
+
+    routes/workspace.py applies it for /api/workspace/* on its own blueprint;
+    without the same step here the report page forwards a valid token and
+    require_access() still answers 401.
+    """
+    from skills import workspace_links
+
+    if request.method == "OPTIONS" or not request.path.startswith("/api/workspace/"):
+        return None
+    return workspace_links.apply_to_request()
 
 
 @workspace_report_bp.route("/api/workspace/report", methods=["GET"])

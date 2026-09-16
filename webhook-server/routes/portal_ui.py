@@ -17,6 +17,7 @@ service regardless of Render's root-directory setting.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 
@@ -104,8 +105,9 @@ def portal_page():
 
 
 def _workspace_enabled() -> bool:
-    """WORKSPACE_ENABLED, read from the environment at request time."""
-    return os.environ.get("WORKSPACE_ENABLED", "").strip().lower() in ("1", "true", "yes")
+    """WORKSPACE_ENABLED — the one flag function every workspace route shares."""
+    from skills.workspace_links import workspace_enabled
+    return workspace_enabled()
 
 
 @portal_ui_bp.route("/workspace", methods=["GET"])
@@ -122,6 +124,13 @@ def workspace_page():
         return Response("Not found", status=404, mimetype="text/plain")
     resp = _serve(_WORKSPACE)
     if resp.status_code == 200:
+        # The page ships with an empty publishable key and is given the real one
+        # here, the way routes/workspace_report.py does it. A key committed into
+        # the file is the key production would run on.
+        pk = os.environ.get("CLERK_PUBLISHABLE_KEY", "").strip()
+        if pk.startswith("pk_"):
+            resp.set_data(resp.get_data(as_text=True).replace(
+                "window.__CLERK_PK__ = '';", f"window.__CLERK_PK__ = {json.dumps(pk)};", 1))
         resp.headers["Cache-Control"] = "no-store"
         resp.headers["Referrer-Policy"] = "no-referrer"
     return resp

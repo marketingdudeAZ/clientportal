@@ -14,7 +14,7 @@
      Clerk session and carry Authorization: Bearer <session JWT>.
    - There is no ?email= identity on this page. */
 (function () {
-  var LINK_KEY = 'workspace_link';
+  var LINK_KEY = 'ws.link';   // must match workspace.html — the token is written there
   try {
     var u = new URL(window.location.href);
     var t = u.searchParams.get('t');
