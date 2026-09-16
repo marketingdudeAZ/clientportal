@@ -51,6 +51,9 @@ class _Entry:
         self.built_at: float | None = None
         self.refreshing = False
         self.lock = threading.Lock()
+        # Held for the LENGTH of a build, where `lock` only guards the fields.
+        # Without it every thread that arrives cold starts its own build.
+        self.build_lock = threading.Lock()
         self.last_error: str | None = None
 
     def _refresh(self) -> None:
@@ -85,17 +88,28 @@ class _Entry:
         return value, wc.to_iso_ts(built_at)
 
     def _build_now(self) -> None:
-        with self.lock:
-            if self.value is not None:
-                return
-            self.refreshing = True
-        self._refresh()
+        """Build once, however many threads arrive cold at the same moment.
+
+        `_refresh()` runs outside `lock`, so a second thread used to find
+        `value` still None and start a build of its own — up to 16 of them on
+        waitress, each rebuilding the 27MB AptIQ CSV or the full spend sheet.
+        Late arrivals now wait for the first build and read its result.
+        """
+        with self.build_lock:
+            with self.lock:
+                if self.value is not None:
+                    return
+                self.refreshing = True
+            self._refresh()
 
     def warm(self) -> dict:
         t0 = time.time()
-        with self.lock:
-            self.refreshing = True
-        self._refresh()
+        # Same lock as the cold path: the boot warm and the first request that
+        # beats it must not build the same source twice.
+        with self.build_lock:
+            with self.lock:
+                self.refreshing = True
+            self._refresh()
         return {"source": self.name, "ok": self.last_error is None and self.value is not None,
                 "seconds": round(time.time() - t0, 2), "error": self.last_error,
                 "as_of": wc.to_iso_ts(self.built_at)}
