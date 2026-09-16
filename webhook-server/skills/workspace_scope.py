@@ -53,17 +53,31 @@ def properties_in_scope(email: str, internal: bool) -> dict:
     gaps: list = []
     if not internal:
         import hubspot_client
+        from concurrent.futures import ThreadPoolExecutor
         from feature_access import companies_for
-        props = []
-        for cid in sorted(companies_for(email)):
+
+        def _one(cid):
             try:
                 p = dict(hubspot_client.get_company(cid, SCOPE_FIELDS) or {})
             except Exception as exc:  # noqa: BLE001
                 logger.warning("workspace scope: company %s unreadable: %s", cid, exc)
-                gaps.append(wc.gap("properties", f"Property {cid} could not be read"))
-                continue
+                return cid, None
             p["hubspot_company_id"] = cid
-            props.append(p)
+            return cid, p
+
+        # One HubSpot GET per company, but concurrently: read serially, a
+        # 35-property book spent 35 round trips before any screen could start,
+        # and this runs on every portfolio screen. Bounded so a large book does
+        # not open a socket per property.
+        cids = sorted(companies_for(email))
+        props = []
+        if cids:
+            with ThreadPoolExecutor(max_workers=min(8, len(cids))) as pool:
+                for cid, p in pool.map(_one, cids):   # map keeps the sorted order
+                    if p is None:
+                        gaps.append(wc.gap("properties", f"Property {cid} could not be read"))
+                    else:
+                        props.append(p)
         return {"properties": props, "label": f"Your properties · {len(props)}", "gaps": gaps}
 
     from skills import workspace_portfolio

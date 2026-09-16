@@ -187,16 +187,23 @@ def visibility_kpi(props: list, gaps: list) -> dict | None:
         gaps.append(wc.gap("kpis.ai_visibility", "HUBDB_AI_MENTIONS_TABLE_ID is not configured", source="ai_mentions"))
         return None
     scores, as_of = [], None
-    for p in props[:MAX_VISIBILITY_READS]:
-        uuid = str(p.get("uuid") or "").strip()
-        if not uuid:
-            continue
+    uuids = [u for u in (str(p.get("uuid") or "").strip() for p in props[:MAX_VISIBILITY_READS]) if u]
+
+    def _snapshot(uuid):
         try:
-            snap = ai_mentions.get_latest_snapshot(uuid)
+            return ai_mentions.get_latest_snapshot(uuid)
         except Exception as exc:  # noqa: BLE001
             logger.debug("ai mentions read failed for %s: %s", uuid, exc)
-            continue
-        if snap.get("composite_index") is not None:
+            return None
+
+    # Read concurrently: these are up to 25 HubDB round trips, and every other
+    # fan-out on this screen is already pooled.
+    snaps = []
+    if uuids:
+        with ThreadPoolExecutor(max_workers=min(8, len(uuids))) as pool:
+            snaps = list(pool.map(_snapshot, uuids))
+    for snap in snaps:
+        if snap and snap.get("composite_index") is not None:
             scores.append(float(snap["composite_index"]))
             stamp = wc.to_iso_ts(snap.get("scanned_at"))
             as_of = max(as_of, stamp) if (as_of and stamp) else (stamp or as_of)

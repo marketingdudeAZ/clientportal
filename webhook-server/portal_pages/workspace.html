@@ -1075,7 +1075,9 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     var changed = String(id) !== String(state.companyId);
     state.companyId = String(id);
     try { localStorage.setItem(COMPANY_KEY, state.companyId); } catch (e) {}
-    if (changed && state.me) loadBadge();
+    // No loadBadge() here: the badge is portfolio-wide, so it counts the same
+    // whichever property is selected.
+    if (changed) renderSide(state.active);
   }
   function loadBadge() {
     // The badge sits on Approvals, which lists every property's waiting items,
@@ -1357,6 +1359,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       if (!r) return;
       var d = r.data || {};
       state.loop = d.loop_status || state.loop;
+      var w = ((d.kpis || {}).waiting_on_you || {}).value;
+      if (w != null) state.waiting = w;
       if (d.scope_label) renderTop('Dashboard', d.scope_label);
       renderSide('dashboard');
       var h = dashboardHtml(d);
@@ -1821,6 +1825,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       if (!r) return;
       var d = r.data || {};
       state.loop = d.loop_status || state.loop;
+      var w = ((d.kpis || {}).waiting_on_you || {}).value;
+      if (w != null) state.waiting = w;
       renderSide('properties');
       setView(propertiesHtml(d));
     });
