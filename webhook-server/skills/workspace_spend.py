@@ -27,7 +27,7 @@ from skills import workspace_common as wc
 
 logger = logging.getLogger(__name__)
 
-SOURCE = "spend_sheet: HubSpot deals and line items"
+SOURCE = "spend_sheet: your signed agreements"
 
 # key → label, in the order the table shows them. Every SKU column spend_sheet
 # builds except the management fee, which is internal.

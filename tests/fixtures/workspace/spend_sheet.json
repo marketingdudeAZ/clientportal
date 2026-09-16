@@ -1,7 +1,7 @@
 {
   "as_of": "2026-09-15T06:10:00Z",
   "scope": "portfolio",
-  "source": "spend_sheet: HubSpot deals and line items",
+  "source": "spend_sheet: your signed agreements",
   "columns": [
     {
       "key": "search",
