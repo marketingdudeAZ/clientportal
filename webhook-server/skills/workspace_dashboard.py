@@ -103,12 +103,37 @@ def greeting_name(email: str, gaps: list) -> str | None:
     return name or None
 
 
+def _prime_property_caches(chosen: list) -> None:
+    """One batched loop_events read for the whole page, instead of three per
+    property. Best effort: if it fails, each reader still does its own query."""
+    from skills import workspace_fair_housing_review as fhr
+    from skills import workspace_history as whist
+    from skills import workspace_profile as wpr
+
+    pairs = [(str(p.get("hubspot_company_id") or ""), str(p.get("uuid") or "")) for p in chosen]
+    pairs = [(c, u) for c, u in pairs if c and u]
+    if not pairs:
+        return
+    try:
+        events = whist.property_events([u for _, u in pairs])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("workspace dashboard: batched loop events failed: %s", exc)
+        return
+    if events is None:
+        return
+    by_company = {c: events.get(u, []) for c, u in pairs}
+    fhr.prime(by_company)
+    wpr.prime_stored(by_company)
+
+
 def scope_items(props: list, today: date, gaps: list, sources=ITEM_SOURCES) -> list:
     """[(props, items)] for the worst-health properties in scope, cheap sources only."""
     chosen = wscope.worst_first(props)[:wscope.MAX_ITEM_PROPERTIES]
     if len(props) > len(chosen):
         gaps.append(wc.gap("items", f"Work items were read for the {len(chosen)} properties with the "
                                     f"lowest health of {len(props)} in scope"))
+
+    _prime_property_caches(chosen)
 
     def _one(p):
         try:

@@ -983,9 +983,19 @@ def decision_history(ctx: PropertyContext, gaps: list) -> dict | None:
         gaps.append(wc.gap("trail", "Decision history is unavailable: BigQuery is not configured",
                            internal=True))
         return None
+    return history_from_events(loop_writer.query_recent(ctx.uuid, limit=500))
+
+
+def history_from_events(events: list) -> dict:
+    """The same map, built from events a caller already has.
+
+    Split out so a portfolio screen can read every property's loop events in one
+    batched query (workspace_history.property_events) and build each property's
+    history from the result, instead of one query per property.
+    """
     decisions: dict = {}
     undos: list = []
-    for ev in loop_writer.query_recent(ctx.uuid, limit=500):
+    for ev in events:
         etype = ev.get("event_type")
         if etype not in (DECISION_EVENT, UNDO_EVENT):
             continue

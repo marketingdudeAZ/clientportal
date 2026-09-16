@@ -237,12 +237,24 @@ def store_record(ctx, record: dict) -> None:
                        status="completed", payload=record)
 
 
+def prime(events_by_company: dict) -> None:
+    """Fill the newest-review cache for many properties from one batched read.
+
+    A property with no review is cached as None, so it does not fall through to
+    a query of its own — membership, not truthiness, decides a hit.
+    """
+    with _lock:
+        for cid, events in events_by_company.items():
+            _latest[str(cid)] = next(
+                (e["payload"] for e in events
+                 if e.get("event_type") == EVENT and isinstance(e.get("payload"), dict)), None)
+
+
 def latest(ctx, gaps: list) -> dict | None:
     """The newest stored review for a property, or None."""
     with _lock:
-        hit = _latest.get(ctx.company_id)
-    if hit:
-        return hit
+        if ctx.company_id in _latest:
+            return _latest[ctx.company_id]
     if not ctx.uuid:
         return None
     import loop_writer

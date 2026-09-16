@@ -319,6 +319,32 @@ def _stored_events(ctx, gaps: list) -> dict:
     return out
 
 
+def prime_stored(events_by_company: dict) -> None:
+    """Fill the stored-events cache for many properties from one batched read,
+    building exactly what _stored_events would have built per property."""
+    from skills import workspace_inbox as wi
+
+    now = time.monotonic()
+    with _lock:
+        for cid, events in events_by_company.items():
+            out = {"proposals": [], "dismissed": {}, "checkins": [],
+                   "history": wi.history_from_events(events)}
+            for ev in events:
+                payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else None
+                if not payload:
+                    continue
+                etype = ev.get("event_type")
+                if etype == PROPOSAL_EVENT and payload.get("proposal_id"):
+                    out["proposals"].append(payload)
+                elif etype == DISMISSED_EVENT and payload.get("suggestion_id"):
+                    out["dismissed"][payload["suggestion_id"]] = payload.get("reason") or ""
+                elif etype == CHECKIN_EVENT:
+                    at = wc.to_datetime(ev.get("occurred_at"))
+                    if at:
+                        out["checkins"].append(at)
+            _stored[str(cid)] = (now, out)
+
+
 def proposals(ctx, gaps: list) -> list:
     """Every profile update for the property, newest first, with its status."""
     with _lock:

@@ -137,6 +137,46 @@ def auto_approve_candidates(decs: list, *, min_n: int = AUTO_APPROVE_MIN_DECISIO
     return out
 
 
+PROPERTY_EVENT_TYPES = ("workspace_fair_housing_review", "workspace_profile_update_proposed",
+                        "workspace_profile_checkin", "workspace_profile_suggestion_dismissed",
+                        "workspace_decision", "workspace_decision_undone")
+
+
+def property_events(uuids: list, *, types=PROPERTY_EVENT_TYPES,
+                    per_property: int = 500) -> dict | None:
+    """{property_uuid: [event, ...]} newest first, in ONE query.
+
+    The per-property readers each call loop_writer.query_recent, so a portfolio
+    screen covering 40 properties asked this table 120 times (fair-housing
+    review, stored profile events, decision history). This asks once.
+    """
+    client, table = _client()
+    if client is None:
+        return None
+    from google.cloud import bigquery
+    ids = sorted({str(u) for u in uuids if u})
+    if not ids:
+        return {}
+    sql = f"""
+      SELECT event_id, stage, event_type, occurred_at, source, property_uuid, company_id, payload
+      FROM `{table}`
+      WHERE property_uuid IN UNNEST(@uuids)
+        AND event_type IN UNNEST(@types)
+      QUALIFY ROW_NUMBER() OVER (PARTITION BY property_uuid ORDER BY occurred_at DESC) <= @per
+      ORDER BY occurred_at DESC
+    """
+    rows = _query(sql, [
+        bigquery.ArrayQueryParameter("uuids", "STRING", ids),
+        bigquery.ArrayQueryParameter("types", "STRING", list(types)),
+        bigquery.ScalarQueryParameter("per", "INT64", int(per_property)),
+    ])
+    out: dict = {u: [] for u in ids}
+    for r in rows:
+        r["payload"] = _payload(r.get("payload"))
+        out.setdefault(str(r.get("property_uuid")), []).append(r)
+    return out
+
+
 def recent_events(uuids: list, *, days: int = 30, limit: int = 50) -> list | None:
     client, table = _client()
     if client is None:
