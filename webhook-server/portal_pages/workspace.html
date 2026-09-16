@@ -1025,13 +1025,13 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   var WORDS = ['No','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve'];
   function word(n, lower) { var w = (n >= 0 && n < WORDS.length) ? WORDS[n] : String(n); return lower ? w.toLowerCase() : w; }
   function plural(n, one, many) { return n === 1 ? one : (many || one + 's'); }
-  var SOURCES = { aptiq: 'ApartmentIQ', hubspot: 'HubSpot', hubspot_line_items: 'HubSpot line items', ga4: 'GA4', google_ads: 'Google Ads',
-    hyly: 'Hyly', fluency: 'Fluency', yardi: 'Yardi', bigquery: 'BigQuery', clickup: 'ClickUp', ai_mentions: 'AI visibility audit',
-    redlight: 'Red Light', forecasting: 'Exposure forecast', workspace_inbox: 'Workspace', workspace_decisions: 'Workspace decisions',
-    hubdb_rec: 'Recommendations', soci: 'SOCi', geo_sources: 'GEO citation tracking', geo_brand_mentions: 'GEO brand mentions',
-    geo_responses: 'GEO responses', hubspot_company: 'HubSpot company record', aptiq_exposure: 'ApartmentIQ exposure',
-    'hubspot_line_items+hyly': 'HubSpot line items and Hyly', fair_housing_review: 'Monthly Fair Housing review', geo_prompts: 'GEO prompts',
-    geo_fanout: 'GEO fan-out', geo_plans: 'GEO content plans' };
+  var SOURCES = { aptiq: 'ApartmentIQ', hubspot: 'Your property record', hubspot_line_items: 'Your signed agreement', ga4: 'Google Analytics', google_ads: 'Google Ads',
+    hyly: 'Leasing system', fluency: 'Ad delivery', yardi: 'Yardi', bigquery: 'RPM data warehouse', clickup: 'RPM work queue', ai_mentions: 'AI visibility audit',
+    redlight: 'RPM health score', forecasting: 'Exposure forecast', workspace_inbox: 'This portal', workspace_decisions: 'Decisions in this portal',
+    hubdb_rec: 'Recommendations', soci: 'Reputation platform', geo_sources: 'AI answer citations', geo_brand_mentions: 'AI answer mentions',
+    geo_responses: 'AI answers', hubspot_company: 'Your property record', aptiq_exposure: 'ApartmentIQ exposure',
+    'hubspot_line_items+hyly': 'Your agreement and leasing data', fair_housing_review: 'Monthly Fair Housing review', geo_prompts: 'AI questions tracked',
+    geo_fanout: 'AI follow-up searches', geo_plans: 'AI content plans' };
   function sourceName(s) { return SOURCES[s] || s || ''; }
   function receipt(r) {
     if (!r || typeof r !== 'object' || (!r.source && !r.as_of)) return '';
@@ -1911,7 +1911,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       return '<label class="ctl" data-spend-ctl="' + key + '"' + (key === 'status' && !list.length ? ' hidden' : '') + '><span>' + label + '</span><select class="inp" data-spend-filter="' + key + '"><option value="">All</option>' +
         list.map(function (v) { return '<option' + (v === f[key] ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') + '</select></label>';
     }
-    return '<div class="head"><div class="stack"><h1 class="h-page">Spend</h1><p class="support" data-spend-scope>Monthly contracted spend by channel, from HubSpot deals and line items.</p></div><span data-spend-asof></span></div>' +
+    return '<div class="head"><div class="stack"><h1 class="h-page">Spend</h1><p class="support" data-spend-scope>Monthly contracted spend by channel, from your signed agreements.</p></div><span data-spend-asof></span></div>' +
       '<div class="controls" role="search"><label class="ctl"><span>Search</span><input class="inp search-inp" type="search" data-spend-q placeholder="Property name" value="' + esc(f.q) + '"></label>' +
       sel('market', 'Market', opts.markets) + sel('manager', 'Manager', opts.managers) + sel('status', 'Status', opts.statuses) +
       '<span class="grow"></span><button type="button" class="togglebtn" data-spend-all aria-pressed="' + f.showAll + '">Show all channels</button>' +
@@ -1957,7 +1957,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     var f = state.spend, cols = spendTableCols(d), rows = d.rows || [], staff = d.scope === 'portfolio';
     var asof = view.querySelector('[data-spend-asof]'); if (asof) asof.innerHTML = staleLabel(d.as_of);
     var scope = view.querySelector('[data-spend-scope]');
-    if (scope) scope.textContent = (staff ? 'Every managed property’s ' : 'Your properties’ ') + 'monthly contracted spend by channel, from HubSpot deals and line items. Money never moves from this screen.';
+    if (scope) scope.textContent = (staff ? 'Every managed property’s ' : 'Your properties’ ') + 'monthly contracted spend by channel, from your signed agreements. Money never moves from this screen.';
     var slot = view.querySelector('[data-spend-deal-slot]');
     if (slot) {
       slot.innerHTML = staff ? '<button type="button" class="togglebtn" data-spend-deal aria-pressed="' + f.showDeal + '">' + ic(I.lock, 12) + 'Deal details</button>' : '';
@@ -2877,8 +2877,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       var t = (st.sent.tickets || []).filter(function (x) { return x.draft_id === c.draft_id; })[0] || {};
       return '<div class="tcard"><div class="ttop"><b>' + esc(t.title || 'Request') + '</b><span class="pill healthy"><i></i>Filed</span></div>' + (c.work_item_id ? '<a class="link" href="#/item/' + encodeURIComponent(c.work_item_id) + '">Follow it</a>' : '') + '</div>';
     }).join('') : '';
-    var foot = n ? (n === 1 ? 'It lands' : (n === 2 ? 'Both land' : 'All ' + word(n, true) + ' land')) + ' in ClickUp with every field filled in. You never open it — status comes back here.' : '';
-    return '<div class="req"><section class="req-l" aria-labelledby="req-h"><div class="stack" style="display:flex;flex-direction:column;gap:6px"><h1 class="req-h" id="req-h">What do you need?</h1><p class="req-sub">Write it how you’d say it. No form, no dropdowns, no ClickUp.</p></div>' +
+    var foot = n ? (n === 1 ? 'It lands' : (n === 2 ? 'Both land' : 'All ' + word(n, true) + ' land')) + ' with the team that does the work, every field filled in. You never touch a ticket — status comes back here.' : '';
+    return '<div class="req"><section class="req-l" aria-labelledby="req-h"><div class="stack" style="display:flex;flex-direction:column;gap:6px"><h1 class="req-h" id="req-h">What do you need?</h1><p class="req-sub">Write it how you’d say it. No form, no dropdowns, nothing to learn.</p></div>' +
       '<label class="req-box"><span class="sr-only">Describe what you need</span><textarea data-req-text rows="6" placeholder="For example: the A1 photos are from before the renovation. Can we reshoot before the October wave?">' + esc(st.text) + '</textarea></label>' +
       '<div class="req-row">' + (n ? '<button type="button" class="link" data-draft>Draft again</button>' : '') + '<span class="grow"></span><span class="support">' + esc(teams.length ? 'Goes to ' + teams.join(' and ') + ', not to your AM’s inbox' : 'Goes to the team that does the work, not to your AM’s inbox') + '</span></div>' +
       '<p class="inline-err" role="alert" hidden data-req-err></p>' +
