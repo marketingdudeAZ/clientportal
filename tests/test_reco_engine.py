@@ -201,9 +201,13 @@ class TestProducers:
                 def boom(company_id, today=None):
                     raise RuntimeError("google ads is down")
                 return boom
+            if name == "reco_seo":
+                return lambda company_id, today=None: {
+                    "recommendations": [reco(rule_key="seo_thing")], "gaps": [],
+                    "rules_run": ["seo_thing"], "rules_skipped": []}
             return lambda company_id, today=None: {
-                "recommendations": [reco(rule_key="seo_thing")], "gaps": [],
-                "rules_run": ["seo_thing"], "rules_skipped": []}
+                "recommendations": [], "gaps": [], "rules_run": [],
+                "rules_skipped": []}
 
         monkeypatch.setattr(engine, "_producer", fake)
         out = engine.for_property("555", today=TODAY)
@@ -268,3 +272,57 @@ class TestWorkItemShape:
                                                 "requires_signed_deal": False,
                                                 "fair_housing_review": True}))
         assert item["fair_housing_review"] is True
+
+
+class TestSignalsAdapter:
+    """The shipped signals feed the same queue instead of living beside it."""
+
+    def _built(self, monkeypatch, signals, gaps=None):
+        import types
+        fake = types.SimpleNamespace(
+            build_signals=lambda email, company_id=None, today=None: {
+                "signals": signals, "gaps": gaps or []})
+        monkeypatch.setitem(sys.modules, "skills.workspace_signals", fake)
+        return engine.signals_producer("555", today=TODAY)
+
+    def test_a_signal_becomes_a_contract_recommendation(self, monkeypatch):
+        out = self._built(monkeypatch, [{
+            "id": "stale_inventory:555:2026-09-17", "company_id": "555",
+            "property_name": "Test Property", "kind": "stale_inventory",
+            "severity": "warning", "title": "12 units past 90 days",
+            "detail": "Twelve one-bedroom units have sat 90+ days.",
+            "metric": {"value": 12, "source": "aptiq", "as_of": "2026-09-16"},
+        }])
+        rec = out["recommendations"][0]
+        assert engine.validate(rec) is None
+        assert rec["rule_key"] == "stale_inventory"
+        assert rec["severity"] == "medium"            # "warning" maps across
+        assert rec["action"]["kind"] == "new_ad_group"
+        assert rec["action"]["requires_signed_deal"] is True
+        assert rec["receipts"][0]["source"] == "aptiq"
+
+    def test_a_signal_with_no_metric_becomes_an_observation(self, monkeypatch):
+        """No receipt, no action. It can still be seen, it just cannot ask."""
+        out = self._built(monkeypatch, [{
+            "id": "data_stale:555:x", "kind": "data_stale", "severity": "info",
+            "title": "Feed is behind", "detail": "The last report is 6 days old.",
+            "metric": None}])
+        rec = out["recommendations"][0]
+        assert engine.validate(rec) is None
+        assert rec["action"]["kind"] == "none" and rec["receipts"] == []
+
+    def test_signal_failures_are_gaps_not_crashes(self, monkeypatch):
+        import types
+
+        def boom(email, company_id=None, today=None):
+            raise RuntimeError("bigquery is down")
+
+        monkeypatch.setitem(sys.modules, "skills.workspace_signals",
+                            types.SimpleNamespace(build_signals=boom))
+        out = engine.signals_producer("555", today=TODAY)
+        assert out["recommendations"] == []
+        assert out["gaps"][0]["source"] == "workspace_signals"
+
+    def test_signals_are_a_registered_producer(self):
+        assert "workspace_signals" in engine.PRODUCERS
+        assert engine._producer("workspace_signals") is engine.signals_producer

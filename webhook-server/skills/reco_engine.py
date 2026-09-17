@@ -37,7 +37,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # Producers, in the order their output is considered when scores tie.
-PRODUCERS: Tuple[str, ...] = ("reco_digital", "reco_seo")
+# `workspace_signals` is not a new rule set — it is the one that already ships
+# (occupancy drop, stale inventory, lease wave, lead drop, spend pacing, data
+# stale). It is adapted here rather than re-implemented, so the portal has ONE
+# queue instead of a signals list beside a recommendations list.
+PRODUCERS: Tuple[str, ...] = ("workspace_signals", "reco_digital", "reco_seo")
 
 CATEGORIES = ("cost", "vendors", "content", "creative", "compliance")
 SEVERITIES = {"high": 3.0, "medium": 2.0, "low": 1.0}
@@ -252,11 +256,92 @@ def rank_and_suppress(recos: List[Dict[str, Any]],
 
 # --- producers -------------------------------------------------------------
 
+# Severity words the existing signals use, mapped onto this contract's.
+_SIGNAL_SEVERITY = {"critical": "high", "high": "high", "warning": "medium",
+                    "medium": "medium", "info": "low", "low": "low"}
+
+# What the shipped signals are really telling you to do. Anything unmapped
+# becomes an observation rather than a guess at an action.
+_SIGNAL_ACTION = {
+    "stale_inventory": ("new_ad_group", "cost", ["paid_search", "ils"]),
+    "lease_wave": ("budget_change", "cost", ["paid_search", "pmax"]),
+    "lead_drop": ("tracking_fix", "cost", ["paid_search", "website"]),
+    "occupancy_drop": ("none", "cost", ["paid_search"]),
+    "spend_pacing": ("none", "cost", ["paid_search"]),
+    "data_stale": ("none", "compliance", ["website"]),
+}
+
+
+def signals_producer(company_id: str, today: Optional[date] = None) -> Dict[str, Any]:
+    """Adapt the signals that already ship into the shared contract.
+
+    Deliberately an ADAPTER, not a rewrite: `skills/workspace_signals.py` is
+    live, tested and tuned, and a second implementation of "is this property
+    slipping" would drift from it within a month.
+    """
+    out: Dict[str, Any] = {"company_id": company_id, "recommendations": [],
+                           "gaps": [], "rules_run": [], "rules_skipped": []}
+    try:
+        from skills import workspace_signals as ws
+    except Exception as exc:  # noqa: BLE001
+        out["gaps"].append(_gap("signals", "workspace_signals",
+                                "The signals module is not available here."))
+        logger.info("reco_engine: workspace_signals unavailable (%s)", exc)
+        return out
+    try:
+        built = ws.build_signals("", company_id=company_id, today=today) or {}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("reco_engine: signals failed for %s: %s", company_id, exc,
+                     exc_info=True)
+        out["gaps"].append(_gap("signals", "workspace_signals",
+                                "Signals could not be built for this property."))
+        return out
+
+    out["gaps"].extend(built.get("gaps") or [])
+    for signal in built.get("signals") or []:
+        kind = signal.get("kind") or "signal"
+        action_kind, category, channels = _SIGNAL_ACTION.get(
+            kind, ("none", "cost", []))
+        metric = signal.get("metric") or {}
+        receipts = []
+        if metric.get("source"):
+            receipts.append({"label": signal.get("title") or kind,
+                             "value": metric.get("value"),
+                             "source": metric.get("source"),
+                             "as_of": metric.get("as_of")})
+        out["rules_run"].append(kind)
+        out["recommendations"].append({
+            "id": signal.get("id") or "%s:%s" % (kind, company_id),
+            "company_id": company_id,
+            "property_name": signal.get("property_name"),
+            "rule_key": kind,
+            "category": category,
+            "channels": channels,
+            "severity": _SIGNAL_SEVERITY.get(
+                str(signal.get("severity") or "").lower(), "medium"),
+            "confidence": 8 if receipts else 5,
+            "found": signal.get("detail") or signal.get("title") or "",
+            "receipts": receipts,
+            "expect": None,
+            "if_skip": None,
+            "action": {"kind": action_kind if receipts else "none", "params": {},
+                       "executor": "portal",
+                       # A budget move still needs a signature, same as any other.
+                       "requires_signed_deal": action_kind in SPEND_INCREASING_KINDS,
+                       "fair_housing_review": False},
+            "start_by": None,
+            "verify": None,
+        })
+    return out
+
+
 def _producer(name: str) -> Optional[Callable]:
     """Import a producer's `run`, or None when that module is not present.
 
     Producers are developed independently; a missing one is a gap, not a crash.
     """
+    if name == "workspace_signals":
+        return signals_producer
     try:
         module = __import__("skills.%s" % name, fromlist=["run"])
     except Exception as exc:  # noqa: BLE001
