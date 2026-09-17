@@ -11,6 +11,7 @@ from .ils import ils_bp
 from .budget_sync_api import budget_sync_api_bp
 from .clickup import clickup_bp
 from .loop import loop_bp
+from .mcp import mcp_bp
 from .onboarding import onboarding_bp
 from .paid import paid_bp
 from .portal import portal_bp
@@ -39,6 +40,10 @@ def register_all(app):
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(property_brief_bp)
     app.register_blueprint(loop_bp)
+
+    # MCP endpoint: read-only portal context for an external agent platform.
+    # 404s unless a machine token is configured (MCP_BEARER_TOKEN / MCP_TOKENS).
+    app.register_blueprint(mcp_bp)
     # Portal QA feedback -> ClickUp. Internal-only; the widget
     # hides itself unless CLICKUP_LIST_PORTAL_FEEDBACK is set.
     app.register_blueprint(feedback_bp)
