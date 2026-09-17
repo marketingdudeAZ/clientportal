@@ -212,6 +212,12 @@ def _float(value: Any) -> Optional[float]:
         return None
 
 
+def _money(amount: float) -> str:
+    """'154.50', or '155' when it is whole. Never rounded down to look smaller."""
+    cents = round(float(amount) * 100)
+    return str(cents // 100) if cents % 100 == 0 else "%.2f" % (cents / 100.0)
+
+
 def _fact_for(query: str) -> Optional[str]:
     """Which brief fact a fan-out query needs. None when we cannot tell."""
     blob = str(query or "").lower()
@@ -456,6 +462,325 @@ def rule_availability_not_machine_readable(data: Dict[str, Any]) -> List[Dict[st
         verify_metric="plan pages carrying readable availability markup", verify_days=30)
 
 
+# ── rule 3 — questions we are not in the answer to ───────────────────────────
+
+def _fh_ok(text: Any) -> bool:
+    """True when a phrase is safe to turn into a page brief.
+
+    A renter may type anything; that does not make it something we should
+    write a page around. A tracked question carrying protected-class
+    vocabulary is dropped from the brief rather than passed through, because
+    the brief is our copy even when the question was someone else's.
+    """
+    return _fair_housing_review([str(text or "")]) is None
+
+
+def _measured(question: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+    """(engines that answered without us, engines that measured at all).
+
+    An engine with no reading for a question is not a miss. Counting it as
+    one would turn thin coverage into a finding, which is the failure mode
+    this whole module exists to avoid.
+    """
+    missing, measured = [], []
+    for engine, state in (question.get("engines") or {}).items():
+        named = (state or {}).get("named")
+        cited = (state or {}).get("cited")
+        if named is None and cited is None:
+            continue
+        measured.append(engine)
+        if not (named or cited):
+            missing.append(engine)
+    return missing, measured
+
+
+def rule_share_of_answer_gap(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Tracked questions where the engines answer without this community."""
+    questions = [q for q in _clean_list(data.get("questions")) if q.get("text")]
+    if not questions:
+        return []
+
+    gaps: List[Dict[str, Any]] = []
+    per_engine: Dict[str, Dict[str, int]] = {}
+    for question in questions:
+        missing, measured = _measured(question)
+        for engine in measured:
+            bucket = per_engine.setdefault(engine, {"measured": 0, "missing": 0})
+            bucket["measured"] += 1
+            if engine in missing:
+                bucket["missing"] += 1
+        if missing and _fh_ok(question.get("text")):
+            gaps.append({"question": question.get("text"),
+                         "topic": question.get("topic"),
+                         "intent": question.get("intent"),
+                         "engines_missing": sorted(missing),
+                         "fact_required": _fact_for(question.get("text"))})
+    if not gaps or not per_engine:
+        return []
+
+    source = data.get("questions_source") or "ai_mentions"
+    as_of = _iso_day(data.get("questions_as_of")) or _iso_day(data.get("as_of"))
+    measured_total = sum(b["measured"] for b in per_engine.values())
+    missing_total = sum(b["missing"] for b in per_engine.values())
+
+    receipts = []
+    for engine in sorted(per_engine):
+        bucket = per_engine[engine]
+        receipts.append(_receipt(
+            "%s answered without this community" % engine,
+            "%d of %d question%s measured" % (bucket["missing"], bucket["measured"],
+                                              "" if bucket["measured"] == 1 else "s"),
+            source, as_of))
+
+    fanout = []
+    for row in _clean_list(data.get("fanout")):
+        query = str(row.get("query") or "").strip()
+        if not query or not _fh_ok(query):
+            continue
+        fanout.append({"query": query, "engine": row.get("engine"),
+                       "times_seen": _int(row.get("count")),
+                       "fact_required": _fact_for(query)})
+    if fanout:
+        receipts.append(_receipt("Follow-up searches the engines ran",
+                                 len(fanout), data.get("fanout_source") or source, as_of))
+
+    # Citation-only sources cannot tell "named but not linked" from "absent",
+    # so the finding is the same but our confidence in it is not.
+    knows_named = any((s or {}).get("named") is not None
+                      for q in questions for s in (q.get("engines") or {}).values())
+    share = 1.0 - (float(missing_total) / measured_total) if measured_total else 0.0
+    severity = "high" if share <= 0.25 else ("medium" if share <= 0.6 else "low")
+
+    return _emit(
+        "seo_share_of_answer_gap", data,
+        category="content", channels=[CHANNEL_AI_SEARCH, CHANNEL_WEBSITE],
+        severity=severity, confidence=9 if knows_named else 6,
+        found=("The engines answer %d of the %d tracked question readings without "
+               "naming this community." % (missing_total, measured_total)),
+        receipts=receipts,
+        expect=("One page per question, answering it with this community's own "
+                "facts. %d question%s currently have%s nowhere to point."
+                % (len(gaps), "" if len(gaps) == 1 else "s", "s" if len(gaps) == 1 else "")),
+        if_skip=("The engines keep answering these questions with listing sites and "
+                 "other communities, which is where the renter goes next."),
+        action={"kind": "content_brief", "executor": "portal",
+                "requires_signed_deal": True, "fair_housing_review": True,
+                "params": {"questions": gaps, "fanout": fanout,
+                           "one_page_per": "question",
+                           "differentiation_gate": True,
+                           "measured_by": source}},
+        verify_metric="tracked questions naming this community", verify_days=45)
+
+
+# ── rule 4 — an engine repeating something that stopped being true ───────────
+
+def rule_answer_quotes_stale_fact(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """An engine is telling renters something the brief says is no longer so.
+
+    This is the failure mode that costs a tour: the renter arrives holding a
+    pet policy or a fee we changed months ago.
+    """
+    claims = _clean_list(data.get("claims"))
+    facts = data.get("brief_facts") or {}
+    if not claims or not facts:
+        return []
+
+    conflicts = []
+    for claim in claims:
+        field = str(claim.get("conflicts_brief_field") or "").strip()
+        text = str(claim.get("claim_text") or "").strip()
+        if not field or not text:
+            continue
+        current = (facts.get(field) or {}).get("value")
+        if not current:
+            continue
+        if _norm(text) == _norm(current):
+            continue
+        conflicts.append({"field": field, "label": (facts.get(field) or {}).get("label") or field,
+                          "claimed": text, "correct": str(current),
+                          "engine": claim.get("engine"), "cited_url": claim.get("source_url"),
+                          "as_of": _iso_day(claim.get("as_of"))})
+    if not conflicts:
+        return []
+
+    source = data.get("claims_source") or "geo_claims"
+    receipts = []
+    for row in conflicts[:6]:
+        receipts.append(_receipt("%s says the %s is “%s”"
+                                 % (row["engine"] or "An engine", row["label"], row["claimed"]),
+                                 row["cited_url"] or "no source linked", source, row["as_of"]))
+        receipts.append(_receipt("The brief records “%s”" % row["correct"],
+                                 row["label"], "community_brief",
+                                 _iso_day((facts.get(row["field"]) or {}).get("last_edited"))))
+
+    money = {"fees", "fee_schedule", "specials", "concessions", "pricing"}
+    severity = "high" if any(r["field"] in money or r["field"].startswith("pet")
+                             for r in conflicts) else "medium"
+    fields = ", ".join(sorted({r["label"] for r in conflicts}))
+
+    return _emit(
+        "seo_answer_quotes_stale_fact", data,
+        category="compliance", channels=[CHANNEL_AI_SEARCH, CHANNEL_WEBSITE],
+        severity=severity, confidence=8,
+        found="An engine is quoting a %s that the brief says is out of date." % fields,
+        receipts=receipts,
+        expect=("The current %s stated plainly on the page the engines cite, so the "
+                "next answer carries it." % fields),
+        if_skip=("Renters keep arriving with the old %s, and the correction happens "
+                 "on a tour instead of on the page." % fields),
+        action={"kind": "page_fix", "executor": "human",
+                "requires_signed_deal": False, "fair_housing_review": True,
+                "params": {"corrections": conflicts, "source_of_truth": "community_brief"}},
+        verify_metric="engine answers carrying the current facts", verify_days=30)
+
+
+# ── rule 5 (new) — the total a renter will actually pay ──────────────────────
+
+def rule_fee_transparency_gap(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Engines name the real cost as the problem, and the page does not show it.
+
+    This is an honest-pricing fix, not a persuasion tactic. A renter who finds
+    the recurring charges on the pricing page can decide; one who finds them
+    after a tour has been misled, and the engines are already saying so.
+    """
+    signals = _clean_list(data.get("fee_signals"))
+    fees = data.get("fees") or {}
+    if not signals or not fees:
+        return []
+    if fees.get("disclosed") is not False:        # None means we never checked
+        return []
+
+    known = _clean_list(fees.get("known_fees"))
+    source = data.get("fee_signals_source") or "ai_answers"
+    receipts = []
+    for signal in signals[:4]:
+        quote = str(signal.get("quote") or "").strip()
+        if not quote:
+            continue
+        receipts.append(_receipt("%s names cost as a weakness"
+                                 % (signal.get("engine") or "An engine"),
+                                 quote, source, _iso_day(signal.get("as_of"))))
+    if not receipts:
+        return []
+
+    monthly = sum(_float(f.get("amount")) or 0.0 for f in known
+                  if str(f.get("period") or "monthly").lower().startswith("month"))
+    for fee in known[:6]:
+        receipts.append(_receipt("Recurring charge recorded: %s" % (fee.get("name") or "fee"),
+                                 fee.get("amount"), fee.get("source") or "community_brief",
+                                 _iso_day(fee.get("as_of"))))
+    receipts.append(_receipt("Pricing page checked for a charges table",
+                             fees.get("page_url") or "pricing page",
+                             data.get("pages_source") or "site_crawl",
+                             _iso_day(data.get("pages_as_of")) or _iso_day(data.get("as_of"))))
+
+    expect = ("Base rent and the recurring charges shown together on the pricing "
+              "page, so the total is on the page a renter decides from.")
+    if monthly:
+        # To the cent. Rounding a charge down is the same failure the rule is
+        # about, in miniature.
+        expect = ("Base rent and $%s a month of recurring charges shown together on "
+                  "the pricing page, so the total is on the page a renter decides "
+                  "from." % _money(monthly))
+
+    return _emit(
+        "seo_fee_transparency_gap", data,
+        category="compliance", channels=[CHANNEL_WEBSITE, CHANNEL_AI_SEARCH],
+        severity="high", confidence=8,
+        found=("Engines name added charges as this community's weakness, and the "
+               "pricing page does not show them."),
+        receipts=receipts,
+        expect=expect,
+        if_skip=("The complaint keeps getting repeated back to every renter who "
+                 "asks, and the first honest number arrives after a tour."),
+        action={"kind": "page_fix", "executor": "human",
+                "requires_signed_deal": False, "fair_housing_review": True,
+                "params": {"add": "a plain table of recurring monthly charges beside base rent",
+                           "charges": [{"name": f.get("name"), "amount": _float(f.get("amount")),
+                                        "period": f.get("period") or "monthly"} for f in known],
+                           "page": fees.get("page_url"),
+                           "rule": "state what is charged; never present a charge as a discount"}},
+        verify_metric="engine answers naming cost as a weakness", verify_days=60)
+
+
+# ── rule 6 (new) — nothing in the form engines actually quote ────────────────
+
+def rule_answer_format_gap(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Whole topics where every comparable community is named and this one is not.
+
+    The gate matters here more than anywhere: the answer is one genuinely
+    useful page per real question, not the same page published 109 times.
+    """
+    coverage = _clean_list(data.get("topic_coverage"))
+    if not coverage:
+        return []
+
+    absent = []
+    for row in coverage:
+        topic = str(row.get("topic") or "").strip()
+        ours = _int(row.get("our_mentions"))
+        theirs = _int(row.get("competitor_mentions")) or 0
+        prompts = _int(row.get("prompts")) or 0
+        if not topic or ours is None:
+            continue
+        if ours == 0 and theirs > 0 and prompts >= 1 and _fh_ok(topic):
+            absent.append({"topic": topic, "questions": prompts,
+                           "others_named": theirs,
+                           "communities": len(_clean_list(row.get("competitors")) or
+                                              row.get("competitors") or []),
+                           "fact_required": _fact_for(topic)})
+    if not absent:
+        return []
+
+    source = data.get("topic_coverage_source") or "ai_answer_tracking"
+    as_of = _iso_day(data.get("questions_as_of")) or _iso_day(data.get("as_of"))
+    receipts = []
+    for row in absent[:6]:
+        receipts.append(_receipt(
+            "Topic “%s”: this community named 0 times" % row["topic"],
+            "%d other communities named %d times across %d question%s"
+            % (row["communities"], row["others_named"], row["questions"],
+               "" if row["questions"] == 1 else "s"),
+            source, as_of))
+
+    formats = _clean_list(data.get("cited_formats"))
+    ours = {str(f).strip().lower() for f in (data.get("our_formats") or [])}
+    missing_formats = []
+    for fmt in formats:
+        name = str(fmt.get("format") or "").strip()
+        share = _float(fmt.get("share"))
+        if not name:
+            continue
+        if name.lower() not in ours:
+            missing_formats.append({"format": name, "share": share})
+            receipts.append(_receipt("Engines cite %s for these questions" % name,
+                                     ("%d%% of citations" % round(share * 100))
+                                     if share is not None else "cited",
+                                     source, as_of))
+
+    return _emit(
+        "seo_answer_format_gap", data,
+        category="content", channels=[CHANNEL_AI_SEARCH, CHANNEL_WEBSITE],
+        severity="high" if len(absent) >= 2 else "medium", confidence=8,
+        found=("On %d topic%s the engines name comparable communities and never "
+               "this one." % (len(absent), "" if len(absent) == 1 else "s")),
+        receipts=receipts,
+        expect=("One page per topic, each answering a question a renter actually "
+                "asks with facts only this community can give. Each draft goes "
+                "through the differentiation gate before it is published."),
+        if_skip=("These topics stay someone else's answer, and the community is "
+                 "absent from the moment a renter is choosing."),
+        action={"kind": "content_brief", "executor": "portal",
+                "requires_signed_deal": True, "fair_housing_review": True,
+                "params": {"topics": absent, "formats_engines_cite": missing_formats,
+                           "one_page_per": "question",
+                           "differentiation_gate": True,
+                           "purpose_test": ("write it only if a resident would want to "
+                                            "read it; a page written to rank is the "
+                                            "thing the policy forbids")}},
+        verify_metric="topics where the engines name this community", verify_days=60)
+
+
 # ── registry ─────────────────────────────────────────────────────────────────
 # Each entry: the function, the data keys it cannot work without, and the
 # sentence run() records when those keys are empty. The requirement list is
@@ -464,6 +789,10 @@ def rule_availability_not_machine_readable(data: Dict[str, Any]) -> List[Dict[st
 RULES: Dict[str, Callable[[Dict[str, Any]], List[Dict[str, Any]]]] = {
     "seo_missing_floor_plan_page": rule_missing_floor_plan_page,
     "seo_availability_not_machine_readable": rule_availability_not_machine_readable,
+    "seo_share_of_answer_gap": rule_share_of_answer_gap,
+    "seo_answer_quotes_stale_fact": rule_answer_quotes_stale_fact,
+    "seo_fee_transparency_gap": rule_fee_transparency_gap,
+    "seo_answer_format_gap": rule_answer_format_gap,
 }
 
 REQUIREMENTS: Dict[str, Dict[str, Any]] = {
@@ -474,6 +803,25 @@ REQUIREMENTS: Dict[str, Dict[str, Any]] = {
     "seo_availability_not_machine_readable": {
         "needs": ("pages", "availability"),
         "why": "Judging markup needs a read of the site and a measured availability figure.",
+    },
+    "seo_share_of_answer_gap": {
+        "needs": ("questions",),
+        "why": ("AI answers are not measured for this property yet — no tracked "
+                "questions from the vendor, the GEO tables or the mentions audit."),
+    },
+    "seo_answer_quotes_stale_fact": {
+        "needs": ("claims", "brief_facts"),
+        "why": ("Catching a stale answer needs both what an engine said and what "
+                "the brief currently records."),
+    },
+    "seo_fee_transparency_gap": {
+        "needs": ("fee_signals", "fees"),
+        "why": ("Needs an engine naming cost as a weakness and a check of whether "
+                "the pricing page discloses the charges."),
+    },
+    "seo_answer_format_gap": {
+        "needs": ("topic_coverage",),
+        "why": "Needs per-topic coverage for this community and comparable ones.",
     },
 }
 
@@ -564,11 +912,263 @@ def gather(company_id: str, *, today: Optional[date] = None) -> Tuple[Dict[str, 
 
     _gather_brief(company_id, data, gaps)
     _gather_availability(identity, data, gaps)
+    _gather_ai_answers(identity, data, gaps)
 
-    gaps.append(_gap("pages", "site_crawl",
-                     "No read of this property's website is stored, so page-level "
-                     "rules cannot run. A crawl or an outside tracker supplies it."))
+    if not data.get("pages"):
+        gaps.append(_gap("pages", "site_crawl",
+                         "No read of this property's website is stored, so page-level "
+                         "rules cannot run. A crawl or the vendor's site health "
+                         "supplies it."))
     return data, gaps
+
+
+def _gather_ai_answers(identity: Any, data: Dict[str, Any],
+                       gaps: List[Dict[str, str]]) -> None:
+    """AI-answer facts, vendor first, then our own tracking, then the audit.
+
+    The vendor measures this for the properties it has a project for — one of
+    them today — so the fallbacks are not a nicety. Where both exist the
+    vendor wins for AI-answer facts, and every receipt says which one it was.
+    """
+    props = identity.to_dict() if identity is not None else {}
+    domain = props.get("website") or props.get("domain")
+    if domain and _merge_vendor(str(domain), data, gaps):
+        return
+    if props.get("uuid") and _merge_geo(str(props["uuid"]), data, gaps):
+        return
+    if props.get("uuid") and _merge_ai_mentions(identity, data, gaps):
+        return
+    gaps.append(_gap("questions", "ai_answer_tracking",
+                     "AI answers are not measured for this property yet, so what "
+                     "the engines say about it is unknown rather than fine."))
+
+
+def _merge_vendor(domain: str, data: Dict[str, Any],
+                  gaps: List[Dict[str, str]]) -> bool:
+    """The vendor connector, when a project exists for this website."""
+    try:
+        import searchable_client as sc
+    except Exception as exc:  # noqa: BLE001 — unconfigured server, not an error
+        logger.debug("reco_seo: vendor connector unavailable (%s)", exc)
+        return False
+    try:
+        project = sc.project_for_domain(domain)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("reco_seo: vendor lookup failed for %s (%s)", domain, exc)
+        project = None
+    project_id = (project or {}).get("id") if isinstance(project, dict) else project
+    if not project_id:
+        gaps.append(_gap("questions", "searchable",
+                         "No AI-visibility project exists for %s yet; this property "
+                         "is not being measured by the vendor." % domain))
+        return False
+
+    payload = {}
+    for name in ("visibility", "sentiment", "sources", "site_health", "opportunities"):
+        reader = getattr(sc, name, None)
+        if not callable(reader):
+            continue
+        try:
+            payload[name] = reader(project_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.info("reco_seo: vendor %s failed for %s (%s)", name, project_id, exc)
+    merged = merge_searchable(data, **payload)
+    if not merged:
+        gaps.append(_gap("questions", "searchable",
+                         "The vendor project for %s has no readings yet." % domain))
+    return merged
+
+
+def merge_searchable(data: Dict[str, Any], *, visibility: Any = None,
+                     sentiment: Any = None, sources: Any = None,
+                     site_health: Any = None, opportunities: Any = None) -> bool:
+    """Vendor payloads → the keys the rules read. Returns whether anything landed.
+
+    Kept separate from the connector on purpose: the shape a vendor returns is
+    the thing most likely to change, and this is the only place that knows it.
+    Anything unrecognized is ignored rather than guessed at.
+    """
+    landed = False
+    _ = opportunities        # read by the queue, not by a rule
+
+    questions = _questions_from_visibility(visibility)
+    if questions:
+        data["questions"] = questions
+        data["questions_source"] = "searchable"
+        data["questions_as_of"] = _iso_day((visibility or {}).get("as_of")) or data.get("as_of")
+        landed = True
+
+    topics = _topics_from_visibility(visibility)
+    if topics:
+        data["topic_coverage"] = topics
+        data["topic_coverage_source"] = "searchable"
+        landed = True
+
+    signals = _fee_signals_from_sentiment(sentiment)
+    if signals:
+        data["fee_signals"] = signals
+        data["fee_signals_source"] = "searchable_sentiment"
+        landed = True
+
+    pages = _pages_from_site_health(site_health)
+    if pages:
+        data["pages"] = pages
+        data["pages_source"] = "searchable_site_health"
+        landed = True
+
+    formats = _clean_list((sources or {}).get("formats") if isinstance(sources, dict) else None)
+    if formats:
+        data["cited_formats"] = [{"format": f.get("format") or f.get("type"),
+                                  "share": _float(f.get("share"))} for f in formats]
+        landed = True
+    return landed
+
+
+def _questions_from_visibility(payload: Any) -> List[Dict[str, Any]]:
+    """Per-prompt, per-engine readings.
+
+    A platform with no reading for a prompt comes back as null, and stays null:
+    "we did not measure it" is not "the engine left us out".
+    """
+    if not isinstance(payload, dict):
+        return []
+    rows = payload.get("prompts") or payload.get("questions") or []
+    out: List[Dict[str, Any]] = []
+    for row in _clean_list(rows):
+        text = str(row.get("text") or row.get("prompt") or "").strip()
+        if not text:
+            continue
+        engines: Dict[str, Dict[str, Any]] = {}
+        for entry in _clean_list(row.get("platformBreakdown") or row.get("engines")):
+            name = str(entry.get("platform") or entry.get("engine") or "").strip()
+            if not name:
+                continue
+            engines[name] = {"named": entry.get("mentioned"), "cited": entry.get("cited")}
+        if isinstance(row.get("engines"), dict):
+            for name, state in row["engines"].items():
+                engines[str(name)] = {"named": (state or {}).get("named"),
+                                      "cited": (state or {}).get("cited")}
+        if not engines:
+            continue
+        topics = row.get("topics") or []
+        topic = None
+        if topics:
+            first = topics[0]
+            topic = first.get("name") if isinstance(first, dict) else str(first)
+        out.append({"text": text, "topic": topic or row.get("topic"),
+                    "intent": row.get("intentCategory") or row.get("intent"),
+                    "branded": bool(row.get("isBranded") or row.get("branded")),
+                    "engines": engines,
+                    "responses": _int((row.get("metrics") or {}).get("totalResponses"))})
+    return out
+
+
+def _topics_from_visibility(payload: Any) -> List[Dict[str, Any]]:
+    """Per-topic coverage for this community against comparable ones."""
+    if not isinstance(payload, dict):
+        return []
+    out = []
+    for row in _clean_list(payload.get("topics")):
+        name = str(row.get("topic") or row.get("name") or "").strip()
+        if not name:
+            continue
+        out.append({"topic": name,
+                    "prompts": _int(row.get("prompts") or row.get("promptCount")),
+                    "our_mentions": _int(row.get("our_mentions") or row.get("brandMentions")),
+                    "competitor_mentions": _int(row.get("competitor_mentions") or
+                                                row.get("competitorMentions")),
+                    "competitors": row.get("competitors") or []})
+    return out
+
+
+_FEE_WORDS = ("fee", "fees", "cost", "charge", "charges", "expensive", "pricing")
+
+
+def _fee_signals_from_sentiment(payload: Any) -> List[Dict[str, Any]]:
+    """The weaknesses an engine states aloud, narrowed to what it costs."""
+    if not isinstance(payload, dict):
+        return []
+    out = []
+    for row in _clean_list(payload.get("weaknesses") or payload.get("negatives")):
+        quote = str(row.get("quote") or row.get("text") or "").strip()
+        if not quote:
+            continue
+        if any(word in quote.lower() for word in _FEE_WORDS):
+            out.append({"quote": quote, "engine": row.get("platform") or row.get("engine"),
+                        "as_of": row.get("as_of") or row.get("date")})
+    return out
+
+
+def _pages_from_site_health(payload: Any) -> List[Dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    out = []
+    for row in _clean_list(payload.get("pages")):
+        url = str(row.get("url") or "").strip()
+        if not url:
+            continue
+        page = {"url": url, "title": row.get("title"),
+                "meta_description": row.get("metaDescription") or row.get("meta_description"),
+                "h1": row.get("h1"), "page_type": row.get("type") or row.get("page_type")}
+        for key in ("jsonld_types", "internal_links_in", "headings", "word_count"):
+            if key in row:
+                page[key] = row[key]
+        out.append(page)
+    return out
+
+
+def _merge_geo(uuid: str, data: Dict[str, Any], gaps: List[Dict[str, str]]) -> bool:
+    """Our own GEO tracking tables, where the pilot has written rows."""
+    try:
+        from skills import workspace_visibility as wv
+        ctx = type("Ctx", (), {"uuid": uuid, "company_id": data.get("company_id"),
+                               "props": {}})()
+        local: List[Any] = []
+        audit = wv.geo_audit(ctx, local)
+    except Exception as exc:  # noqa: BLE001 — tables absent until the pilot runs
+        logger.debug("reco_seo: GEO tables unavailable for %s (%s)", uuid, exc)
+        return False
+    if not audit or not audit.get("prompts"):
+        return False
+    from skills import workspace_visibility as wv  # noqa: F811 — same module, local scope
+    questions = []
+    for row in wv._group_prompts(audit["prompts"]):
+        questions.append({"text": row.get("text"), "topic": row.get("topic"),
+                          "intent": row.get("intent"), "engines": row.get("engines") or {}})
+    if not questions:
+        return False
+    data["questions"] = questions
+    data["questions_source"] = "geo_responses"
+    data["fanout"] = [{"query": f.get("query_text"), "engine": f.get("engine"),
+                       "count": _int(f.get("n"))} for f in (audit.get("fanout") or [])]
+    data["fanout_source"] = "geo_fanout"
+    _ = gaps
+    return True
+
+
+def _merge_ai_mentions(identity: Any, data: Dict[str, Any],
+                       gaps: List[Dict[str, str]]) -> bool:
+    """The weekly mentions audit: citation per prompt, and nothing finer."""
+    try:
+        from skills import workspace_visibility as wv
+        ctx = type("Ctx", (), {"uuid": identity.to_dict().get("uuid"),
+                               "company_id": data.get("company_id"), "props": {}})()
+        local: List[Any] = []
+        rows = wv.ai_mentions_prompts(ctx, local)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("reco_seo: mentions audit unavailable (%s)", exc)
+        return False
+    if not rows:
+        return False
+    data["questions"] = [{"text": r.get("text"), "topic": r.get("topic"),
+                          "intent": r.get("intent"), "engines": r.get("engines") or {}}
+                         for r in rows]
+    data["questions_source"] = "ai_mentions"
+    gaps.append(_gap("questions.named", "ai_mentions",
+                     "The mentions audit records whether a page was cited, not "
+                     "whether the community was named, so a gap here is measured "
+                     "less precisely than the vendor measures it."))
+    return True
 
 
 def _gather_brief(company_id: str, data: Dict[str, Any], gaps: List[Dict[str, str]]) -> None:
