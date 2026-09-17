@@ -278,10 +278,16 @@ class TestSignalsAdapter:
     """The shipped signals feed the same queue instead of living beside it."""
 
     def _built(self, monkeypatch, signals, gaps=None):
+        """`from skills import workspace_signals` reads the package ATTRIBUTE,
+        so patching sys.modules alone passes alone and fails in a full run once
+        another test has already imported the real module."""
         import types
+
+        import skills
         fake = types.SimpleNamespace(
             build_signals=lambda email, company_id=None, today=None: {
                 "signals": signals, "gaps": gaps or []})
+        monkeypatch.setattr(skills, "workspace_signals", fake, raising=False)
         monkeypatch.setitem(sys.modules, "skills.workspace_signals", fake)
         return engine.signals_producer("555", today=TODAY)
 
@@ -317,8 +323,10 @@ class TestSignalsAdapter:
         def boom(email, company_id=None, today=None):
             raise RuntimeError("bigquery is down")
 
-        monkeypatch.setitem(sys.modules, "skills.workspace_signals",
-                            types.SimpleNamespace(build_signals=boom))
+        import skills
+        broken = types.SimpleNamespace(build_signals=boom)
+        monkeypatch.setattr(skills, "workspace_signals", broken, raising=False)
+        monkeypatch.setitem(sys.modules, "skills.workspace_signals", broken)
         out = engine.signals_producer("555", today=TODAY)
         assert out["recommendations"] == []
         assert out["gaps"][0]["source"] == "workspace_signals"
