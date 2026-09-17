@@ -25,9 +25,11 @@ and on those 109 — availability 87, analytics 79, paid 77, funnel 14, uuid 109
 Hyly is NOT everywhere, so every funnel number here is null-with-a-gap on 95 of
 109 properties and the screen says so rather than printing a zero.
 
-`market` is blank on 104 of the 109, so nothing groups by it. Rows carry the
-value when it is set and `"Market not set"` is the honest answer otherwise;
-`grouping` names state as the field that is actually populated.
+Market is read from `rpmmarket`, not `market`: the field the property resolver
+reads is set on 5 of the 109, `rpmmarket` on all 109 (skills/rpmi_roster.py
+records the sweep). `grouping` is still decided from the rows in hand rather
+than asserted, so if that ever stops being true the screen groups by state and
+says why instead of printing empty headings.
 
 Cost control: every read here is portfolio-wide and batched — one paged roster
 search, the shared AptIQ and spend caches, one BigQuery lease query and one
@@ -340,6 +342,34 @@ def _rank_key(row: dict):
     return (-(risk["value"] if risk else -1), (row["name"] or "").lower())
 
 
+def _grouping(rows: list) -> tuple:
+    """(how the list groups, the gap that explains it or None).
+
+    Measured, not assumed. `market` — the field the property resolver reads —
+    is set on 5 of the 109 managed RPMI properties; `rpmmarket` is set on all
+    109 (skills/rpmi_roster.py records the sweep that established this). So the
+    grouping is decided from the rows in hand rather than hard-coded: market
+    when most rows carry one, state when they don't, and the gap says which
+    happened. Neither answer is invented and neither is silent.
+    """
+    if not rows:
+        return {"field": "state", "label": "State",
+                "note": "No properties to group yet."}, None
+    blank = sum(1 for r in rows if not r["market"])
+    if blank * 2 <= len(rows):
+        note = "Grouped by market."
+        if blank:
+            note += f" {blank} of {len(rows)} properties have no market set."
+        gap = (wc.gap("market", f"Market is not set on {blank} of {len(rows)} properties; "
+                                "those are grouped as “Market not set”.", source="hubspot_company")
+               if blank else None)
+        return {"field": "market", "label": "Market", "note": note}, gap
+    return ({"field": "state", "label": "State",
+             "note": "Grouped by state: market is not filled in on most of these properties."},
+            wc.gap("market", f"Market is not set on {blank} of {len(rows)} properties, so the list "
+                             "groups by state instead.", source="hubspot_company"))
+
+
 # ── payload ──────────────────────────────────────────────────────────────────
 
 def build_rpmi(email: str = "", *, today: date = None, internal: bool = True) -> dict:
@@ -366,10 +396,9 @@ def build_rpmi(email: str = "", *, today: date = None, internal: bool = True) ->
     for entry in coverage["sources"]:
         entry["missing"] = len(props) - entry["count"]
 
-    no_market = sum(1 for r in rows if not r["market"])
-    if no_market:
-        gaps.append(wc.gap("market", f"Market is not set on {no_market} of {len(rows)} properties, so "
-                                     "the list groups by state instead.", source="hubspot_company"))
+    grouping, market_gap = _grouping(rows)
+    if market_gap:
+        gaps.append(market_gap)
 
     return {
         "as_of": wc.now_iso(),
@@ -382,8 +411,7 @@ def build_rpmi(email: str = "", *, today: date = None, internal: bool = True) ->
         "totals": _totals(rows, props, aptiq_rows, aptiq_as_of, spend_as_of, lease_as_of, recs_as_of,
                           roster_as_of),
         "coverage": coverage,
-        "grouping": {"field": "state", "label": "State",
-                     "note": "Grouped by state: market is not filled in on most of these properties."},
+        "grouping": grouping,
         "properties": rows,
         "gaps": wc.gaps_for(gaps, internal=internal),
     }
