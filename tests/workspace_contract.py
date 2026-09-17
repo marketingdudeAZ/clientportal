@@ -292,7 +292,7 @@ SHAPES = {
     "decision_request": DECISION_REQUEST, "undo_result": UNDO_RESULT, "not_undoable": NOT_UNDOABLE,
     "property": PROPERTY, "performance": PERFORMANCE, "plan": PLAN, "client_view": CLIENT_VIEW,
     "signals": SIGNALS, "start_work": START_WORK, "draft": DRAFT, "filed": FILED, "recent": RECENT,
-    "search": SEARCH, "error": ERROR,
+    "search": SEARCH, "error": ERROR, "rpmi": RPMI,
 }
 
 # ── v3 rebuild screens ───────────────────────────────────────────────────────

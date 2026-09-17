@@ -15,7 +15,7 @@ screen reports on.
 | totals.available_units       | sum of AptIQ advertised available units                  |
 | totals.leases_last_month     | Hyly lake leases, last full month (Hyly properties only) |
 | totals.spend_monthly         | contracted deal line items, management fee excluded      |
-| totals.open_recommendations  | HubDB recommendation rows still pending                  |
+| totals.open_recommendations  | `reco_engine.for_portfolio` — what it surfaces per prop   |
 | properties[].units_at_risk   | AptIQ advertised available units (see the caveat below)  |
 | properties[].cost_per_lease  | contracted monthly spend ÷ last full month's Hyly leases |
 | coverage                     | how many properties carry each source's join key         |
@@ -29,10 +29,11 @@ Hyly is NOT everywhere, so every funnel number here is null-with-a-gap on 95 of
 value when it is set and `"Market not set"` is the honest answer otherwise;
 `grouping` names state as the field that is actually populated.
 
-Cost control: every read here is portfolio-wide and batched — one roster search,
-the shared AptIQ and spend caches, one HubDB read and one BigQuery query. There
-is no per-property fan-out; that is the shape that took the tickets tab down
-(see `skills/workspace_portfolio.py`).
+Cost control: every read here is portfolio-wide and batched — one paged roster
+search, the shared AptIQ and spend caches, one BigQuery lease query and one
+`reco_engine.for_portfolio` pass. Nothing here opens a property context per row;
+that is the shape that took the tickets tab down (see
+`skills/workspace_portfolio.py`).
 
 Caveat kept from the Portfolio contract: "units at risk" in the build plan means
 units vacant 90+ days, and no per-unit feed exists for that. What is reported is
@@ -65,8 +66,6 @@ ROSTER_FIELDS = (
     "aptiq_property_id", "hyly_property_id", "ga4_property_id", "google_ads_customer_id",
 )
 ROSTER_TTL = float(os.environ.get("WORKSPACE_RPMI_TTL", "900"))
-_ROSTER_PAGE = 100
-_ROSTER_MAX_PAGES = 20
 
 # key → (join field on the company, client-safe label, the sentence a row shows
 # when the key is missing).
@@ -94,37 +93,25 @@ _roster_lock = threading.Lock()
 def _search_roster() -> list:
     """Every HubSpot company whose `client` is one of `CLIENT_VALUES`.
 
-    Paged CRM search. The set is ~116 records, so this is one or two round
-    trips — far short of the portfolio-scale pagination flakiness
-    `portfolio.fetch_portfolio` works around with a full LIST enumeration.
+    `hubspot_client.search_companies` pages to the end with no `limit`, which
+    is exactly what a roster read needs: this set is ~116 records and the
+    pre-fix version of that helper returned ten of them with no signal that
+    more existed.
     """
     import hubspot_client
 
-    payload = {
-        "filterGroups": [{"filters": [{"propertyName": "client", "operator": "IN",
-                                       "values": list(CLIENT_VALUES)}]}],
-        "properties": list(ROSTER_FIELDS),
-        "limit": _ROSTER_PAGE,
-    }
-    rows, seen, after = [], set(), None
-    for _ in range(_ROSTER_MAX_PAGES):
-        body = dict(payload)
-        if after:
-            body["after"] = after
-        resp = hubspot_client._request(
-            "POST", f"{hubspot_client.API_BASE}/crm/v3/objects/companies/search", json=body)
-        data = resp.json()
-        for company in data.get("results") or []:
-            cid = str(company.get("id") or "")
-            if not cid or cid in seen:
-                continue
-            seen.add(cid)
-            props = dict(company.get("properties") or {})
-            props["hubspot_company_id"] = cid
-            rows.append(props)
-        after = ((data.get("paging") or {}).get("next") or {}).get("after")
-        if not after:
-            break
+    results = hubspot_client.search_companies(
+        [{"propertyName": "client", "operator": "IN", "values": list(CLIENT_VALUES)}],
+        properties=list(ROSTER_FIELDS))
+    rows, seen = [], set()
+    for company in results or []:
+        cid = str(company.get("id") or "")
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        props = dict(company.get("properties") or {})
+        props["hubspot_company_id"] = cid
+        rows.append(props)
     return rows
 
 
@@ -205,22 +192,48 @@ def _spend(gaps: list) -> tuple:
     return out, as_of
 
 
-def _open_recommendations(props: list, gaps: list) -> tuple:
-    """{uuid: pending recommendation cards}, as_of — one HubDB read, not 109."""
-    from config import HUBDB_RECOMMENDATIONS_TABLE_ID
-    if not HUBDB_RECOMMENDATIONS_TABLE_ID:
-        gaps.append(wc.gap("open_recommendations", "Recommendations aren’t connected, so open counts "
-                                                   "are unknown.", source="hubdb_rec"))
+def reco_context(p: dict, aptiq_rows: dict, aptiq_as_of) -> dict:
+    """One property as `reco_engine.for_portfolio` wants it.
+
+    `exposure` is the share of units unleased, which is what
+    `reco_engine.exposure_weight` ranks on; without AptIQ it stays absent and
+    the property is weighted down rather than guessed at.
+    """
+    occupancy, _ = _aptiq_metrics(p, aptiq_rows, aptiq_as_of)
+    ctx = {"company_id": str(p.get("hubspot_company_id") or ""),
+           "name": str(p.get("name") or "").strip() or None,
+           "units": wc.to_int(p.get("totalunits"))}
+    if occupancy is not None:
+        ctx["exposure"] = round(max(0.0, 1.0 - occupancy["value"]), 4)
+    return ctx
+
+
+def _open_recommendations(props: list, aptiq_rows: dict, aptiq_as_of, today: date,
+                          gaps: list) -> tuple:
+    """({company_id: recommendations needing a person}, as_of).
+
+    One `reco_engine.for_portfolio` call for the whole roster — the engine owns
+    what counts as open (validated, not refused, not already decided, not
+    deduped), so this screen never keeps a second definition of the same thing.
+    """
+    from skills import reco_engine
+    try:
+        out = reco_engine.for_portfolio(
+            [reco_context(p, aptiq_rows, aptiq_as_of) for p in props], today=today)
+    except Exception as exc:  # noqa: BLE001 — a rule engine outage is a gap, not a 500
+        logger.warning("workspace rpmi: recommendation queue unavailable: %s", exc)
+        gaps.append(wc.gap("open_recommendations", "The recommendation queue could not be read just "
+                                                   "now, so open counts are unknown.",
+                           source="workspace_inbox"))
         return None, None
-    from hubdb_helpers import read_rows
-    wanted = {str(p.get("uuid") or "").strip() for p in props}
-    wanted.discard("")
-    counts = {u: 0 for u in wanted}
-    for row in read_rows(HUBDB_RECOMMENDATIONS_TABLE_ID, limit=1000) or []:
-        uuid = str(row.get("property_uuid") or "").strip()
-        if uuid in counts and str(row.get("status") or "").strip().lower() == "pending":
-            counts[uuid] += 1
-    return counts, wc.now_iso()
+    for gap in out.get("gaps") or []:
+        message = gap.get("message") if isinstance(gap, dict) else str(gap)
+        if message:
+            gaps.append(wc.gap("open_recommendations", message, source="workspace_inbox",
+                               internal=True))
+    counts = dict((cid, (outcome.get("counts") or {}).get("surfaced", 0))
+                  for cid, outcome in (out.get("properties") or {}).items())
+    return counts, out.get("as_of") or wc.now_iso()
 
 
 def last_full_month(today: date) -> tuple:
@@ -271,7 +284,6 @@ def sources_for(p: dict) -> dict:
 def _row(p, aptiq_rows, aptiq_as_of, spend, spend_as_of, leases, lease_as_of, recs, recs_as_of,
          roster_as_of):
     cid = str(p.get("hubspot_company_id") or "")
-    uuid = str(p.get("uuid") or "").strip()
     have = sources_for(p)
     gaps: list = []
 
@@ -296,7 +308,8 @@ def _row(p, aptiq_rows, aptiq_as_of, spend, spend_as_of, leases, lease_as_of, re
                          leases=lease_count, spend=monthly)
 
     market = str(p.get("rpmmarket") or "").strip() or None
-    open_recs = None if recs is None else wc.metric(recs.get(uuid, 0), "hubdb_rec", recs_as_of)
+    open_recs = (None if recs is None
+                 else wc.metric(recs.get(cid, 0), "workspace_inbox", recs_as_of))
     return {
         "company_id": cid,
         "name": str(p.get("name") or "").strip() or None,
@@ -339,7 +352,8 @@ def build_rpmi(email: str = "", *, today: date = None, internal: bool = True) ->
 
     aptiq_rows, aptiq_as_of = _aptiq(gaps) if props else ({}, None)
     spend, spend_as_of = _spend(gaps) if props else ({}, None)
-    recs, recs_as_of = _open_recommendations(props, gaps) if props else (None, None)
+    recs, recs_as_of = (_open_recommendations(props, aptiq_rows, aptiq_as_of, today, gaps)
+                        if props else (None, None))
     leases, lease_month, lease_as_of = _leases(props, today, gaps) if props else ({}, None, None)
 
     rows = [_row(p, aptiq_rows, aptiq_as_of, spend, spend_as_of, leases, lease_as_of,
@@ -402,6 +416,6 @@ def _totals(rows, props, aptiq_rows, aptiq_as_of, spend_as_of, lease_as_of, recs
                                     properties=len(spends)) if spend_total is not None else None),
         "cost_per_lease": (wc.metric(cost, "hubspot_line_items+hyly", lease_as_of,
                                      properties=len(leases)) if cost is not None else None),
-        "open_recommendations": (wc.metric(sum(recs), "hubdb_rec", recs_as_of)
+        "open_recommendations": (wc.metric(sum(recs), "workspace_inbox", recs_as_of)
                                  if recs else None),
     }
