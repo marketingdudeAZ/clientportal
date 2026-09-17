@@ -108,7 +108,10 @@ def _envelope(payload: Dict[str, Any], status: int = 200,
         body = "event: message\ndata: %s\n\n" % json.dumps(payload)
         resp = Response(body, status=status, mimetype="text/event-stream")
         resp.headers["Cache-Control"] = "no-store"
-        resp.headers["Connection"] = "keep-alive"
+        # Never set Connection here: waitress rejects hop-by-hop headers from a
+        # WSGI app (PEP 3333) with an AssertionError, which the client sees as a
+        # 500. X-Accel-Buffering keeps a proxy from buffering the event instead.
+        resp.headers["X-Accel-Buffering"] = "no"
     else:
         resp = Response(json.dumps(payload), status=status,
                         mimetype="application/json")

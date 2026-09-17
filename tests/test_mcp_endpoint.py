@@ -127,6 +127,19 @@ class TestProtocol:
         assert text.startswith("event: message\ndata: ")
         assert json.loads(text.split("data: ", 1)[1].strip())["result"] == {}
 
+    @pytest.mark.parametrize("accept", ["application/json, text/event-stream",
+                                        "application/json"])
+    def test_no_hop_by_hop_headers_reach_the_wsgi_server(self, client, accept):
+        """waitress raises AssertionError on Connection/Transfer-Encoding etc.
+        (PEP 3333), which a client sees as a 500. Werkzeug's dev server allows
+        them, so only a test like this catches it before deploy."""
+        resp = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
+                           headers=dict(AUTH, Accept=accept))
+        assert resp.status_code == 200
+        forbidden = {"connection", "keep-alive", "transfer-encoding", "upgrade",
+                     "proxy-authenticate", "proxy-authorization", "te", "trailer"}
+        assert not forbidden & {k.lower() for k in resp.headers.keys()}
+
     def test_plain_json_when_it_does_not(self, client):
         resp, payload = _rpc(client, "ping")
         assert resp.mimetype == "application/json"
