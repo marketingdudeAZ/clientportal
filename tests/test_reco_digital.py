@@ -333,6 +333,193 @@ def test_conversion_overcounting_silent_without_ga4_or_below_ratio():
                                       TODAY) == []
 
 
+# ── 7. dormant ad groups ─────────────────────────────────────────────────────
+
+def dormant_ctx() -> rd.DigitalContext:
+    return ctx(
+        availability=plans(plan("A1", 1, 24, rent=1600), plan("B2", 2, 3, rent=2100)),
+        ads=ads(ad_groups=[
+            group("1 Bedroom Apartments", 0.0, impressions=0, clicks=0, conversions=0),
+            group("Studio Apartments", 0.0, impressions=0, clicks=0, conversions=0,
+                  status="PAUSED"),
+            group("Brand", 900.0)]))
+
+
+def test_dormant_ad_groups_fires_and_rebuilds_where_units_are_empty():
+    reco = rd.dormant_ad_groups(dormant_ctx(), TODAY)[0]
+    assert reco["severity"] == "high"
+    assert reco["action"]["kind"] == "new_ad_group"       # a plan with vacancy is dark
+    assert reco["action"]["requires_signed_deal"] is True
+    assert reco["action"]["params"]["zero_impression_ad_groups"] == \
+        ["1 Bedroom Apartments"]
+    assert reco["action"]["params"]["paused_ad_groups"] == ["Studio Apartments"]
+
+
+def test_dormant_ad_groups_cleans_up_when_no_vacant_plan_matches():
+    c = ctx(availability=plans(plan("B2", 2, 8)),
+            ads=ads(ad_groups=[group("Pet Friendly", 0.0, impressions=0, clicks=0,
+                                     conversions=0, status="PAUSED"),
+                               group("Brand", 900.0)]))
+    reco = rd.dormant_ad_groups(c, TODAY)[0]
+    assert reco["action"]["kind"] == "pause"
+    assert reco["action"]["requires_signed_deal"] is False
+
+
+def test_dormant_ad_groups_silent_without_data_or_vacancy():
+    assert rd.dormant_ad_groups(empty_ctx(), TODAY) == []
+    live = ctx(availability=plans(plan("A1", 1, 24)),
+               ads=ads(ad_groups=[group("1 Bedroom Apartments", 900.0)]))
+    assert rd.dormant_ad_groups(live, TODAY) == []
+    no_vacancy = ctx(availability=plans(plan("A1", 1, 0)),
+                     ads=ads(ad_groups=[group("1 Bedroom", 0.0, impressions=0)]))
+    assert rd.dormant_ad_groups(no_vacancy, TODAY) == []
+
+
+# ── 8. creative gaps ─────────────────────────────────────────────────────────
+
+def creative_ctx() -> rd.DigitalContext:
+    return ctx(ads=ads(
+        campaigns=[{"campaign_name": "Search", "cost": 2600.0, "clicks": 500,
+                    "conversions": 20}],
+        sitelink_count=0,
+        ads=[{"ad_group_name": "1 Bedroom Apartments", "ad_type": "RESPONSIVE_SEARCH_AD",
+              "headlines": ["a", "b", "c"], "descriptions": ["d"],
+              "days_since_change": 240},
+             {"ad_group_name": "Brand", "ad_type": "RESPONSIVE_SEARCH_AD",
+              "headlines": ["a"] * 12, "descriptions": ["d"] * 4,
+              "days_since_change": 260}]))
+
+
+def test_creative_gaps_fires_and_never_proposes_a_photo_shoot():
+    reco = rd.creative_gaps(creative_ctx(), TODAY)[0]
+    assert reco["severity"] == "high"
+    assert reco["action"]["kind"] == "creative_refresh"
+    assert reco["action"]["fair_housing_review"] is True
+    assert "no new photo shoot" in reco["action"]["params"]["build_from"]
+    assert "photo shoot" not in reco["expect"]
+    assert reco["action"]["params"]["days_since_change"] == 240
+
+
+def test_creative_gaps_silent_when_the_assets_are_there():
+    assert rd.creative_gaps(empty_ctx(), TODAY) == []
+    healthy = ctx(ads=ads(
+        campaigns=[{"campaign_name": "Search", "cost": 2600.0, "clicks": 500,
+                    "conversions": 20}],
+        sitelink_count=6,
+        ads=[{"ad_group_name": "Brand", "headlines": ["a"] * 12,
+              "descriptions": ["d"] * 4, "days_since_change": 20}]))
+    assert rd.creative_gaps(healthy, TODAY) == []
+
+
+# ── 9. budget pacing (internal only) ─────────────────────────────────────────
+
+def pacing_ctx(cost=1200.0) -> rd.DigitalContext:
+    return ctx(authorized={"by_sku": {"search": 3000.0, "pmax": 500.0, "seo": 900.0},
+                           "deal_id": "88123", "as_of": "2026-09-01"},
+               window={"days": 30},
+               ads=ads(campaigns=[{"campaign_name": "Search", "cost": cost,
+                                   "clicks": 200, "conversions": 8}]))
+
+
+def test_budget_pacing_fires_and_is_marked_internal():
+    reco = rd.budget_pacing(pacing_ctx(), TODAY)[0]
+    assert reco["rule_key"] in rd.INTERNAL_ONLY_RULES
+    assert reco["action"]["params"]["internal_only"] is True
+    assert reco["action"]["params"]["direction"] == "increase"
+    assert reco["found"].startswith("Internal only")
+    assert reco["severity"] == "high"            # $1,200 against $3,500 authorized
+    assert reco["action"]["requires_signed_deal"] is True
+
+
+def test_budget_pacing_flags_an_overspend_too():
+    reco = rd.budget_pacing(pacing_ctx(cost=5200.0), TODAY)[0]
+    assert reco["action"]["params"]["direction"] == "reduce"
+    assert "above what the deal authorizes" in reco["if_skip"]
+
+
+def test_budget_pacing_silent_on_plan_and_without_authorization():
+    assert rd.budget_pacing(pacing_ctx(cost=3500.0), TODAY) == []
+    assert rd.budget_pacing(empty_ctx(), TODAY) == []
+    no_deal = ctx(ads=ads(campaigns=[{"campaign_name": "Search", "cost": 1200.0,
+                                      "clicks": 200, "conversions": 8}]))
+    assert rd.budget_pacing(no_deal, TODAY) == []
+
+
+def test_budget_pacing_shares_its_bands_with_workspace_signals():
+    """One definition of "off pace", so the queue and the signals page agree."""
+    from skills import workspace_signals
+    import inspect
+    source = inspect.getsource(rd.budget_pacing)
+    assert "from skills.workspace_signals import" in source
+    assert hasattr(workspace_signals, "spend_pacing")
+    assert not hasattr(rd, "PACE_MED_LOW")
+
+
+# ── readers ──────────────────────────────────────────────────────────────────
+
+def test_normalize_ads_rows_accepts_gaql_paths_and_micros():
+    rows = rd.normalize_ads_rows("campaigns", [{
+        "campaign.name": "Search — Availability",
+        "campaign.status": "ENABLED",
+        "metrics.cost_micros": 3_000_000_000,
+        "metrics.clicks": 600,
+        "metrics.search_budget_lost_impression_share": 0.34}])
+    assert rows[0]["campaign_name"] == "Search — Availability"
+    assert rows[0]["cost"] == 3000.0
+    assert rows[0]["search_budget_lost_is"] == 0.34
+
+
+def test_normalize_floor_plans_dedups_and_keeps_rent_optional():
+    rows = [{"Floor Plan Name": "A1", "Beds": "1", "Baths": "1", "Avg Sq Ft": "712",
+             "Available Units": "148", "Days on Market": "95", "Avg Asking Rent": "1650"},
+            {"Floor Plan Name": "A1", "Beds": "1", "Baths": "1", "Avg Sq Ft": "712",
+             "Available Units": "148", "Days on Market": "95", "Avg Asking Rent": "1650"},
+            {"Floor Plan Name": "S1", "Beds": "0", "Baths": "1", "Avg Sq Ft": "548",
+             "Available Units": "96", "Days on Market": "60"}]
+    plans_out = rd.normalize_floor_plans(rows)
+    assert len(plans_out) == 2
+    assert plans_out[0]["asking_rent"] == 1650.0
+    assert plans_out[1]["asking_rent"] is None      # no rent column, no invented number
+
+
+def test_fetch_ads_degrades_when_the_google_ads_seam_is_unconfigured():
+    import google_ads_islost as seam
+    with pytest.raises(seam.GoogleAdsNotConfigured):
+        rd.fetch_ads("4869803719")
+
+
+def test_gather_reports_a_gap_per_unreachable_source(monkeypatch):
+    """A property with no ids at all: five named gaps, zero invented numbers."""
+    from skills import property_resolver
+
+    class Identity(object):
+        company_id, uuid, name, domain, unit_count = "6001", "u-1", "The Atwood", "x.com", "320"
+        ga4_property_id = None
+
+        def to_dict(self):
+            return {"aptiq_property_id": None, "google_ads_customer_id": None,
+                    "hyly_property_id": None}
+
+    monkeypatch.setattr(property_resolver, "resolve", lambda ident: Identity())
+    monkeypatch.setattr(rd, "GA4_READER", None)
+    monkeypatch.setattr(rd, "TAG_READER", None)
+    import spend_sheet
+    monkeypatch.setattr(spend_sheet, "get_company_monthly_spend",
+                        lambda cid: {"by_sku": {"search": 3000.0}, "deal_id": "88123"})
+
+    context = rd.gather("6001", today=TODAY)
+    sources = {g["source"] for g in context.gaps}
+    assert {"aptiq", "google_ads", "hubspot_company", "tag_manager"} <= sources
+    assert context.ads == {}
+    assert context.floor_plans() == []
+    # Every rule stays silent, and nothing is reported as skipped: there is no
+    # data, which is not the same as a failure.
+    out = rd.run("6001", today=TODAY, context=context)
+    assert out["recommendations"] == []
+    assert out["rules_skipped"] == []
+    assert len(out["rules_run"]) == len(rd.RULES)
+
+
 # ── Fair Housing ─────────────────────────────────────────────────────────────
 
 def test_no_rule_can_emit_a_targeting_action():
@@ -388,6 +575,9 @@ ALL_FIXTURES = {
     "homepage_landing_page": homepage_ctx,
     "conversion_tracking_broken": tracking_ctx,
     "conversion_overcounting": overcount_ctx,
+    "dormant_ad_groups": dormant_ctx,
+    "creative_gaps": creative_ctx,
+    "budget_pacing": pacing_ctx,
 }
 
 

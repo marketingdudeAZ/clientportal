@@ -100,8 +100,16 @@ EXECUTORS = ("ninjacat", "portal", "human")
 # without a signed deal, so `_rec` sets it rather than trusting each rule.
 SPEND_INCREASING_KINDS = frozenset({"budget_change", "new_ad_group"})
 
-# Rules whose output is internal and must never be rendered to a client.
+# Rules whose output is internal and must never be rendered to a client. Empty
+# on purpose: the internal-only rule in this family is budget pacing against
+# authorized spend, and that already exists as `workspace_signals.spend_pacing`.
+# The aggregator still reads this, so a future internal rule declares itself.
 INTERNAL_ONLY_RULES = frozenset({"budget_pacing"})
+
+# The paid search SKU on the signed deal, and the channel name
+# `recommendation_gen` reasons over. `geofence` is deliberately not here: it is a
+# targeting product, and nothing in this module may propose a change to one.
+PAID_SEARCH_SKU = "search"
 
 # ── Fair Housing ─────────────────────────────────────────────────────────────
 # Substrings that only appear when an action steers by audience or geography.
@@ -127,7 +135,9 @@ VACANCY_MIN_UNITS = 6                 # a bucket worth its own ad group
 VACANCY_MIN_UNITS_HIGH = 15
 VACANCY_SPEND_SHARE = 0.05            # "roughly nothing is pointed at it"
 
-IS_LOST_MIN = 0.10                    # budget-lost impression share worth acting on
+# Severity only. Whether there is a recommendation at all is
+# `recommendation_gen.Guardrails.min_is_lost_pct`, which is the same 10% and is
+# not restated here.
 IS_LOST_HIGH = 0.25
 
 WASTE_MIN_USD = 100.0
@@ -150,8 +160,8 @@ RSA_MIN_DESCRIPTIONS = 3
 SITELINK_MIN = 4
 CREATIVE_STALE_DAYS = 180
 
-PACE_LOW, PACE_HIGH = 0.75, 1.15
-PACE_LOW_HIGH, PACE_HIGH_HIGH = 0.50, 1.30
+# Pacing bands are NOT redefined here. `workspace_signals.spend_pacing` owns
+# them, and budget_pacing imports them, so the two surfaces cannot drift apart.
 
 # How soon a person should start, by severity.
 START_BY_DAYS = {"high": 2, "medium": 7, "low": 14}
@@ -166,6 +176,12 @@ def _now_iso() -> str:
 
 def _today(today: Optional[date] = None) -> date:
     return today or date.today()
+
+
+def _quarter(today: date) -> str:
+    """`recommendation_gen`'s period bucket, so its idempotency key matches the
+    one the self-checkout path already writes."""
+    return "%d-Q%d" % (today.year, (today.month - 1) // 3 + 1)
 
 
 def _gap(field: str, source: str, message: str) -> Dict[str, str]:
@@ -381,6 +397,7 @@ class DigitalContext(object):
     def __init__(self, company_id: str, *, property_name: Optional[str] = None,
                  uuid: Optional[str] = None, domain: Optional[str] = None,
                  units: Optional[int] = None,
+                 marketing_status: Optional[str] = None,
                  ads: Optional[Dict[str, Any]] = None,
                  availability: Optional[Dict[str, Any]] = None,
                  ga4: Optional[Dict[str, Any]] = None,
@@ -394,6 +411,9 @@ class DigitalContext(object):
         self.uuid = uuid
         self.domain = domain
         self.units = units
+        # Red Light marketing status (RED / YELLOW / GREEN). It is
+        # `recommendation_gen`'s trigger, not ours.
+        self.marketing_status = marketing_status
         self.ads = ads or {}
         self.availability = availability or {}
         self.ga4 = ga4 or {}
@@ -557,14 +577,34 @@ def spend_not_on_vacancy(ctx: DigitalContext, today: date) -> List[Dict[str, Any
         verify_metric="paid search clicks and leads for these floor plans")]
 
 
+def _islost_rows(campaigns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Ad rows in the shape `google_ads_islost.parse_islost` already aggregates."""
+    return [{"channel_type": (c.get("channel_type") or "SEARCH"),
+             "budget_lost_is": _f(c.get("search_budget_lost_is"))}
+            for c in campaigns]
+
+
 def impression_share_lost(ctx: DigitalContext, today: date) -> List[Dict[str, Any]]:
     """Budget-capped search campaigns at a property that still has vacancy.
 
-    Budget-lost impression share says how much of the available demand the
-    budget never reached. Quantified in clicks at the campaign's own CPC —
-    leads only when the leasing funnel exists for the property, because platform
-    conversions have overstated verified leads by up to 9x here.
+    A WRAPPER, not a second implementation. `recommendation_gen` already owns
+    this decision — its `Guardrails` (10% minimum loss, +50% maximum step,
+    $10,000 ceiling) and its recovery math decide whether there is a
+    recommendation and what the budget should be — and
+    `google_ads_islost.parse_islost` already aggregates the metric. This rule
+    supplies the inputs, adds the two things that core cannot know (that the
+    property still has units to lease, and what the extra budget buys in clicks
+    at the account's own CPC), bounds the first step by `loop_autopilot`'s
+    existing caps, and maps the result into the shared contract.
+
+    Leads are quantified only when the leasing funnel exists for the property:
+    platform conversions have overstated verified leads by up to 9x here.
     """
+    import google_ads_islost as gads
+    import recommendation_gen as rg
+    # Autopilot's bound on a single step, imported so there is one definition.
+    from loop_autopilot import MAX_ABSOLUTE_AMOUNT, MAX_PERCENT_OF_CHANNEL
+
     rule_key = "impression_share_lost"
     campaigns = [c for c in ctx.ads_rows("campaigns")
                  if _f(c.get("search_budget_lost_is")) is not None
@@ -577,15 +617,36 @@ def impression_share_lost(ctx: DigitalContext, today: date) -> List[Dict[str, An
     clicks = sum(_f(c.get("clicks")) or 0.0 for c in campaigns)
     if cost <= 0 or clicks <= 0:
         return []
-    lost = sum((_f(c.get("search_budget_lost_is")) or 0.0) * (_f(c.get("cost")) or 0.0)
-               for c in campaigns) / cost          # cost-weighted, not a flat average
-    lost = min(max(lost, 0.0), 0.95)
-    if lost < IS_LOST_MIN:
+    lost = (gads.parse_islost(_islost_rows(campaigns)) or {}).get("paid_search")
+    if lost is None:
+        return []
+
+    # The existing decision core. Its current budget is the authorized paid
+    # search amount from the signed deal; the Red Light status is its trigger.
+    # Where either is unknown, the account's own measured spend and a YELLOW-
+    # equivalent "the budget is capped" state stand in — never a bigger number
+    # than the guardrails allow either way.
+    authorized = _f((ctx.authorized.get("by_sku") or {}).get(PAID_SEARCH_SKU))
+    signal = rg.ChannelSignal(
+        channel=PAID_SEARCH_SKU,
+        current_budget=authorized if authorized else round(cost, 2),
+        impression_share_lost_pct=lost,
+        marketing_status=(ctx.marketing_status or "YELLOW").upper(),
+        active=True,
+    )
+    base = rg.recommend_for_channel(ctx.uuid, ctx.company_id, signal, _quarter(today))
+    if base is None:                      # a guardrail said no; that answer stands
+        return []
+
+    first_step = round(min(base.delta,
+                           signal.current_budget * MAX_PERCENT_OF_CHANNEL,
+                           MAX_ABSOLUTE_AMOUNT), 2)
+    if first_step <= 0:
         return []
 
     cpc = cost / clicks
-    extra_clicks = clicks * lost / (1.0 - lost)
-    extra_cost = extra_clicks * cpc
+    extra_clicks = first_step / cpc
+    extra_cost = first_step
     severity = "high" if (lost >= IS_LOST_HIGH and vacant >= VACANCY_MIN_UNITS) else "medium"
 
     receipts = [
@@ -809,7 +870,10 @@ def conversion_tracking_broken(ctx: DigitalContext, today: date) -> List[Dict[st
         defects.append({"what": "spend with no tracked conversion", "severity": "high",
                         "receipt": _receipt("Spend with zero recorded conversions",
                                             _money(cost), "google_ads", as_of)})
-    if "property_id" in ctx.ga4 and not ctx.ga4.get("property_id"):
+    # A missing GA4 id is only a finding once there is spend it should be
+    # measuring. With no ad account read at all it is a coverage gap, which
+    # `gather` already reports — not a card telling somebody to fix nothing.
+    if cost is not None and "property_id" in ctx.ga4 and not ctx.ga4.get("property_id"):
         defects.append({"what": "no GA4 property id on the record", "severity": "medium",
                         "receipt": _receipt("GA4 property id", "not set",
                                             "hubspot_company", ctx.ga4.get("as_of"))})
@@ -908,6 +972,220 @@ def conversion_overcounting(ctx: DigitalContext, today: date) -> List[Dict[str, 
         verify_metric="Google Ads conversions against the GA4 site total")]
 
 
+def dormant_ad_groups(ctx: DigitalContext, today: date) -> List[Dict[str, Any]]:
+    """Ad groups that are switched off, or on and invisible, while units sit empty.
+
+    A paused ad group inside a running campaign is usually something nobody ever
+    turned back on. A zero-impression ad group that is enabled is worse: it
+    looks live in every report and reaches nobody.
+    """
+    rule_key = "dormant_ad_groups"
+    groups = ctx.ads_rows("ad_groups")
+    vacant = ctx.available_units
+    if not groups or not vacant:
+        return []
+
+    silent, paused = [], []
+    for group in groups:
+        status = str(group.get("status") or "").upper()
+        campaign_status = str(group.get("campaign_status") or "ENABLED").upper()
+        name = group.get("ad_group_name") or ""
+        impressions = _i(group.get("impressions"))
+        if status == "ENABLED" and impressions == 0:
+            silent.append(name)
+        elif status == "PAUSED" and campaign_status == "ENABLED":
+            paused.append(name)
+    dormant = silent + paused
+    if len(dormant) < DORMANT_MIN:
+        return []
+
+    vacancy = ctx.vacancy_by_bucket()
+    wanted = [name for name in dormant
+              if buckets_in_text(name) & set(vacancy)]        # dormant where units are empty
+    severity = "high" if len(dormant) >= DORMANT_MIN_HIGH or wanted else "medium"
+    kind = "new_ad_group" if wanted else "pause"
+
+    receipts = [_receipt("Ad groups enabled with no impressions", len(silent),
+                         "google_ads", ctx.ads_as_of),
+                _receipt("Ad groups paused inside a running campaign", len(paused),
+                         "google_ads", ctx.ads_as_of),
+                _receipt("Units available now", vacant, "aptiq",
+                         ctx.availability.get("as_of"))]
+    if wanted:
+        receipts.append(_receipt("Of those, ad groups for plans with vacancy",
+                                 ", ".join(wanted[:6]), "google_ads", ctx.ads_as_of))
+
+    if kind == "new_ad_group":
+        expect = ("Rebuilt and live, these ad groups put the empty plans back in front "
+                  "of renters who are already searching for them.")
+        if_skip = ("The plans they were built for keep relying on the general campaigns, "
+                   "which are competing for the same budget.")
+    else:
+        expect = ("Removed, the account shows what is actually running, and reports stop "
+                  "counting structure that reaches nobody.")
+        if_skip = ("Reports keep listing ad groups that reach nobody, and the next person "
+                   "to review the account starts from a false picture.")
+
+    return [_rec(
+        ctx, today, rule_key=rule_key, category="cost", channels=["paid_search"],
+        severity=severity, confidence=9,
+        found=("%d ad groups are dormant — %d enabled with no impressions, %d paused "
+               "inside a running campaign — while %d units are available."
+               % (len(dormant), len(silent), len(paused), vacant)),
+        receipts=receipts, expect=expect, if_skip=if_skip, kind=kind,
+        params={"zero_impression_ad_groups": silent[:25],
+                "paused_ad_groups": paused[:25],
+                "ad_groups_for_vacant_plans": wanted[:25],
+                "funding": "reallocate within the authorized paid search budget"},
+        executor="ninjacat", fair_housing_review=bool(wanted),
+        verify_metric="impressions by ad group")]
+
+
+def creative_gaps(ctx: DigitalContext, today: date) -> List[Dict[str, Any]]:
+    """Thin responsive ads, missing sitelinks, creative nobody has touched in months.
+
+    Built from assets that already exist — the community brief, the floor-plan
+    pages, approved photography on file. This rule never proposes a photo shoot.
+    """
+    rule_key = "creative_gaps"
+    creatives = ctx.ads_rows("ads")
+    cost = ctx.ads_cost
+    if not creatives or not cost:
+        return []
+
+    thin, stale_days = [], None
+    for ad in creatives:
+        headlines = len(ad.get("headlines") or [])
+        descriptions = len(ad.get("descriptions") or [])
+        if headlines < RSA_MIN_HEADLINES or descriptions < RSA_MIN_DESCRIPTIONS:
+            thin.append({"ad_group": ad.get("ad_group_name"), "headlines": headlines,
+                         "descriptions": descriptions})
+        age = _i(ad.get("days_since_change"))
+        if age is not None:
+            stale_days = age if stale_days is None else min(stale_days, age)
+
+    sitelinks = _i(ctx.ads.get("sitelink_count"))
+    stale = stale_days is not None and stale_days >= CREATIVE_STALE_DAYS
+    if not thin and not stale and (sitelinks is None or sitelinks >= SITELINK_MIN):
+        return []
+
+    defects = []
+    receipts = []
+    if thin:
+        defects.append("%d of %d responsive ads are below the asset counts the auction "
+                       "expects" % (len(thin), len(creatives)))
+        worst = min(thin, key=lambda t: t["headlines"])
+        receipts.append(_receipt("Thinnest ad",
+                                 "%s — %d headlines, %d descriptions"
+                                 % (worst["ad_group"], worst["headlines"],
+                                    worst["descriptions"]),
+                                 "google_ads", ctx.ads_as_of))
+        receipts.append(_receipt("Headlines expected per responsive ad",
+                                 RSA_MIN_HEADLINES, "google_ads", ctx.ads_as_of))
+    if sitelinks is not None and sitelinks < SITELINK_MIN:
+        defects.append("the account runs %s sitelinks"
+                       % ("no" if sitelinks == 0 else "only %d" % sitelinks))
+        receipts.append(_receipt("Sitelinks in the account", sitelinks, "google_ads",
+                                 ctx.ads_as_of))
+    if stale:
+        defects.append("no ad has changed in %d days" % stale_days)
+        receipts.append(_receipt("Days since any ad changed", stale_days, "google_ads",
+                                 ctx.ads_as_of))
+    receipts.append(_receipt("Spend behind this creative (30 days)", _money(cost),
+                             "google_ads", ctx.ads_as_of))
+
+    severity = "high" if (thin and sitelinks == 0 and cost >= 500) else "medium"
+    return [_rec(
+        ctx, today, rule_key=rule_key, category="creative", channels=["paid_search"],
+        severity=severity, confidence=8,
+        found="The ads carrying %s a month are underbuilt: %s." % (_money(cost),
+                                                                   "; ".join(defects)),
+        receipts=receipts,
+        expect=("A fuller set of headlines, descriptions and sitelinks, written from the "
+                "community brief and the floor-plan pages already published, gives the "
+                "auction more to work with at the same budget."),
+        if_skip=("The same few lines keep serving against competitors running full "
+                 "asset sets, and click-through stays where it is."),
+        kind="creative_refresh",
+        params={"thin_ads": thin[:25], "sitelink_count": sitelinks,
+                "days_since_change": stale_days,
+                "build_from": ("the community brief, the published floor-plan pages and "
+                               "photography already on file — no new photo shoot"),
+                "review": "Fair Housing review before anything publishes"},
+        executor="portal", fair_housing_review=True,
+        verify_metric="paid search click-through rate")]
+
+
+def budget_pacing(ctx: DigitalContext, today: date) -> List[Dict[str, Any]]:
+    """INTERNAL ONLY. Google Ads run rate against what the signed deal authorizes.
+
+    NOT a second pacing number. `workspace_signals.spend_pacing` owns the bands
+    and this rule imports them, so the two can never disagree about what "off
+    pace" means. What differs is the measurement and the surface: signals reads
+    delivered spend from `ninjacat_metrics` and lands on the signals page, this
+    reads cost from the Google Ads API — the NinjaCat feed has missed real spend
+    before — and lands in the ranked queue, which has no signals adapter.
+
+    Pacing never goes to a client; it is an account-management number, and the
+    portal's product rules are explicit about that. It is worth carrying because
+    both directions cost real money: an underspend is service the client paid
+    for and did not get, an overspend is money nobody authorized.
+    """
+    from skills.workspace_signals import (PACE_HIGH_HIGH, PACE_HIGH_LOW,
+                                          PACE_MED_HIGH, PACE_MED_LOW)
+
+    rule_key = "budget_pacing"
+    by_sku = ctx.authorized.get("by_sku") or {}
+    authorized = sum(_f(by_sku.get(key)) or 0.0 for key in (PAID_SEARCH_SKU, "pmax"))
+    cost = ctx.ads_cost
+    days = _i(ctx.window.get("days")) or WINDOW_DAYS
+    if not authorized or cost is None or days <= 0:
+        return []
+
+    import calendar
+    days_in_month = calendar.monthrange(today.year, today.month)[1]
+    run_rate = cost / days * days_in_month
+    ratio = run_rate / authorized
+    if PACE_MED_LOW <= ratio <= PACE_MED_HIGH:
+        return []
+
+    over = ratio > 1.0
+    severity = "high" if (ratio < PACE_HIGH_LOW or ratio > PACE_HIGH_HIGH) else "medium"
+    delta = abs(run_rate - authorized)
+    receipts = [
+        _receipt("Authorized paid search per month", _money(authorized),
+                 "hubspot_deal_line_items", ctx.authorized.get("as_of")),
+        _receipt("Google Ads spend in the last %d days" % days, _money(cost),
+                 "google_ads", ctx.ads_as_of),
+        _receipt("Run rate for the month", _money(run_rate), "google_ads", ctx.ads_as_of),
+        _receipt("Pacing", "%d%% of authorized" % round(ratio * 100),
+                 "google_ads vs hubspot_deal_line_items", ctx.ads_as_of),
+    ]
+    return [_rec(
+        ctx, today, rule_key=rule_key, category="cost", channels=["paid_search"],
+        severity=severity, confidence=9,
+        found=("Internal only — not for a client: Google Ads is pacing at %d%% of the "
+               "%s authorized for paid search."
+               % (round(ratio * 100), _money(authorized))),
+        receipts=receipts,
+        expect=("Daily budgets brought back in line put the month within a few percent "
+                "of the %s authorized, a swing of about %s."
+                % (_money(authorized), _money(delta))),
+        if_skip=(("The month closes about %s above what the deal authorizes, which "
+                  "nobody has signed for." % _money(delta)) if over else
+                 ("The month closes about %s under what the client paid for, and the "
+                  "service is not delivered." % _money(delta))),
+        kind="budget_change",
+        params={"internal_only": True, "for_team": "account management",
+                "direction": "reduce" if over else "increase",
+                "authorized_monthly_usd": round(authorized, 2),
+                "run_rate_monthly_usd": round(run_rate, 2),
+                "difference_usd": round(delta, 2),
+                "deal_id": ctx.authorized.get("deal_id")},
+        executor="portal", fair_housing_review=False,
+        verify_metric="Google Ads spend against authorized spend")]
+
+
 # ── registry and entry point ─────────────────────────────────────────────────
 
 RULES: "OrderedDict[str, Callable[[DigitalContext, date], List[Dict[str, Any]]]]" = OrderedDict((
@@ -917,6 +1195,9 @@ RULES: "OrderedDict[str, Callable[[DigitalContext, date], List[Dict[str, Any]]]]
     ("homepage_landing_page", homepage_landing_page),
     ("conversion_tracking_broken", conversion_tracking_broken),
     ("conversion_overcounting", conversion_overcounting),
+    ("dormant_ad_groups", dormant_ad_groups),
+    ("creative_gaps", creative_gaps),
+    ("budget_pacing", budget_pacing),
 ))
 
 
@@ -977,6 +1258,315 @@ def run(company_id: str, *, today: Optional[date] = None,
             "as_of": _now_iso()}
 
 
-def gather(company_id: str, *, today: Optional[date] = None) -> DigitalContext:
-    """Placeholder until the live readers land in this file (pass 3)."""
-    return DigitalContext(str(company_id))
+# ══════════════════════════════════════════════════════════════════════════════
+# LIVE READERS — every one of them degrades to a gap, never to a zero.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# GA4 and the tag setup have no connector in this repo. These are the seams the
+# portal fills when they do; unset, the rules that need them stay silent and
+# `gather` records why. Signatures:
+#   GA4_READER(ga4_property_id, start_date, end_date) -> {sessions, conversions, as_of}
+#   TAG_READER(identity: dict) -> {"<name>_id": value, ..., "source", "as_of"}
+GA4_READER: Optional[Callable[[str, str, str], Dict[str, Any]]] = None
+TAG_READER: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None
+
+# The five reads the rules need, in GAQL. They run through the existing
+# credential-gated seam `google_ads_islost._run_gaql`, so this module adds no
+# second set of credentials. NOTE for whoever implements that seam: field names
+# moved in v25 (date segments were renamed and account-level assets changed
+# shape), so verify each query against the API version in use before trusting a
+# silent empty result.
+ADS_QUERIES = {
+    "campaigns": (
+        "SELECT campaign.id, campaign.name, campaign.status, "
+        "campaign.advertising_channel_type, campaign_budget.amount_micros, "
+        "metrics.cost_micros, metrics.clicks, metrics.impressions, "
+        "metrics.conversions, metrics.search_budget_lost_impression_share "
+        "FROM campaign WHERE segments.date DURING LAST_30_DAYS"),
+    "ad_groups": (
+        "SELECT ad_group.id, ad_group.name, ad_group.status, campaign.name, "
+        "campaign.status, metrics.impressions, metrics.clicks, metrics.cost_micros, "
+        "metrics.conversions FROM ad_group WHERE segments.date DURING LAST_30_DAYS"),
+    "keywords": (
+        "SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, "
+        "ad_group.name, metrics.cost_micros, metrics.clicks, metrics.impressions, "
+        "metrics.conversions FROM keyword_view WHERE segments.date DURING LAST_30_DAYS"),
+    "search_terms": (
+        "SELECT search_term_view.search_term, campaign.name, metrics.cost_micros, "
+        "metrics.clicks, metrics.conversions FROM search_term_view "
+        "WHERE segments.date DURING LAST_30_DAYS"),
+    "ads": (
+        "SELECT ad_group.name, ad_group_ad.ad.id, ad_group_ad.ad.type, "
+        "ad_group_ad.ad.responsive_search_ad.headlines, "
+        "ad_group_ad.ad.responsive_search_ad.descriptions, "
+        "ad_group_ad.ad.final_urls, ad_group_ad.status FROM ad_group_ad "
+        "WHERE ad_group_ad.status != 'REMOVED'"),
+    # Sitelinks and the other extensions are account- and campaign-level assets;
+    # this is one of the v25 shape changes worth verifying before trusting it.
+    "assets": ("SELECT asset.type, asset.id, campaign.name FROM campaign_asset "
+               "WHERE campaign_asset.status != 'REMOVED'"),
+}
+
+# Each field: our key -> the aliases a row may carry. A `*_micros` match is
+# divided by a million, so the seam may hand back either form.
+_ALIASES = {
+    "campaigns": {
+        "campaign_id": ("campaign_id", "campaign.id"),
+        "campaign_name": ("campaign_name", "campaign.name"),
+        "status": ("status", "campaign.status"),
+        "channel_type": ("channel_type", "campaign.advertising_channel_type"),
+        "budget": ("budget", "campaign_budget.amount_micros"),
+        "cost": ("cost", "cost_micros", "metrics.cost_micros"),
+        "clicks": ("clicks", "metrics.clicks"),
+        "impressions": ("impressions", "metrics.impressions"),
+        "conversions": ("conversions", "metrics.conversions"),
+        "search_budget_lost_is": ("search_budget_lost_is", "budget_lost_is",
+                                  "metrics.search_budget_lost_impression_share"),
+    },
+    "ad_groups": {
+        "ad_group_name": ("ad_group_name", "ad_group.name"),
+        "status": ("status", "ad_group.status"),
+        "campaign_name": ("campaign_name", "campaign.name"),
+        "campaign_status": ("campaign_status", "campaign.status"),
+        "impressions": ("impressions", "metrics.impressions"),
+        "clicks": ("clicks", "metrics.clicks"),
+        "cost": ("cost", "cost_micros", "metrics.cost_micros"),
+        "conversions": ("conversions", "metrics.conversions"),
+        "final_urls": ("final_urls", "ad_group_ad.ad.final_urls"),
+    },
+    "keywords": {
+        "keyword": ("keyword", "ad_group_criterion.keyword.text"),
+        "match_type": ("match_type", "ad_group_criterion.keyword.match_type"),
+        "ad_group_name": ("ad_group_name", "ad_group.name"),
+        "cost": ("cost", "cost_micros", "metrics.cost_micros"),
+        "clicks": ("clicks", "metrics.clicks"),
+        "impressions": ("impressions", "metrics.impressions"),
+        "conversions": ("conversions", "metrics.conversions"),
+    },
+    "search_terms": {
+        "search_term": ("search_term", "search_term_view.search_term"),
+        "campaign_name": ("campaign_name", "campaign.name"),
+        "cost": ("cost", "cost_micros", "metrics.cost_micros"),
+        "clicks": ("clicks", "metrics.clicks"),
+        "conversions": ("conversions", "metrics.conversions"),
+    },
+    "ads": {
+        "ad_group_name": ("ad_group_name", "ad_group.name"),
+        "ad_id": ("ad_id", "ad_group_ad.ad.id"),
+        "ad_type": ("ad_type", "ad_group_ad.ad.type"),
+        "headlines": ("headlines", "ad_group_ad.ad.responsive_search_ad.headlines"),
+        "descriptions": ("descriptions",
+                         "ad_group_ad.ad.responsive_search_ad.descriptions"),
+        "final_urls": ("final_urls", "ad_group_ad.ad.final_urls"),
+        "days_since_change": ("days_since_change",),
+    },
+    "assets": {
+        "asset_type": ("asset_type", "asset.type"),
+        "asset_id": ("asset_id", "asset.id"),
+        "campaign_name": ("campaign_name", "campaign.name"),
+    },
+}
+
+
+def normalize_ads_rows(kind: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Library-agnostic rows in, the shape the rules read out."""
+    out = []
+    for row in rows or []:
+        mapped: Dict[str, Any] = {}
+        for key, aliases in _ALIASES[kind].items():
+            for alias in aliases:
+                if alias in row and row[alias] is not None:
+                    value = row[alias]
+                    if alias.endswith("_micros"):
+                        value = round((_f(value) or 0.0) / 1_000_000.0, 2)
+                    mapped[key] = value
+                    break
+        out.append(mapped)
+    return out
+
+
+def fetch_ads(customer_id: str) -> Dict[str, Any]:
+    """The five Google Ads reads for one property. Raises when unconfigured."""
+    import google_ads_islost as seam
+
+    ads: Dict[str, Any] = {"customer_id": customer_id, "available": True,
+                           "as_of": date.today().isoformat()}
+    for kind, query in ADS_QUERIES.items():
+        ads[kind] = normalize_ads_rows(kind, seam._run_gaql(customer_id, query))
+    ads["sitelink_count"] = len([a for a in ads.get("assets") or []
+                                 if "SITELINK" in str(a.get("asset_type") or "").upper()])
+    return ads
+
+
+def normalize_floor_plans(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """AptIQ floor-plan export rows -> the plans the rules read.
+
+    The export repeats a plan across rows, so each plan is counted once, on the
+    same identity `apt_iq_reader.read_floor_plans` dedups on.
+    """
+    plans, seen = [], set()
+    for row in rows or []:
+        name = str(row.get("Floor Plan Name") or "").strip()
+        beds = _i(row.get("Beds"))
+        identity = (name, beds, _f(row.get("Baths")), _i(row.get("Avg Sq Ft")))
+        if not name or identity in seen:
+            continue
+        seen.add(identity)
+        rent = None
+        for key in ("Avg Asking Rent", "Asking Rent", "Avg Rent", "Effective Rent"):
+            if _f(row.get(key)) is not None:
+                rent = _f(row.get(key))
+                break
+        plans.append({"name": name, "beds": beds, "baths": _f(row.get("Baths")),
+                      "sqft": _i(row.get("Avg Sq Ft")),
+                      "available_units": _i(row.get("Available Units")) or 0,
+                      "days_on_market": _i(row.get("Days on Market")),
+                      "asking_rent": rent})
+    return plans
+
+
+def gather(company_id: str, *, today: Optional[date] = None,
+           window_days: int = WINDOW_DAYS) -> DigitalContext:
+    """Read every source the rules need for one property.
+
+    Each source is read on its own and each failure becomes a gap, so a property
+    with AptIQ but no Google Ads credentials still gets every rule that AptIQ
+    alone can answer. Nothing here writes anywhere (R1 is safe through this
+    path).
+    """
+    from skills import property_resolver
+
+    day = _today(today)
+    end = day - timedelta(days=1)
+    start = end - timedelta(days=window_days - 1)
+    identity = property_resolver.resolve(str(company_id))
+    ids = identity.to_dict()
+
+    ctx = DigitalContext(
+        identity.company_id or str(company_id), property_name=identity.name,
+        uuid=identity.uuid, domain=identity.domain, units=_i(identity.unit_count),
+        window={"days": window_days, "start": start.isoformat(), "end": end.isoformat()},
+        ga4={"property_id": identity.ga4_property_id})
+    gaps = ctx.gaps          # append to the context's own list, not a copy of it
+
+    # -- availability (AptIQ): 87 of 109 properties ---------------------------
+    aptiq_id = str(ids.get("aptiq_property_id") or "").strip()
+    if not aptiq_id:
+        gaps.append(_gap("availability", "aptiq",
+                         "This property has no availability id, so vacancy by floor "
+                         "plan is not connected for it."))
+    else:
+        try:
+            from skills import workspace_cache
+            plans, as_of = workspace_cache.aptiq_floor_plans()
+            rows = plans.get(aptiq_id) or []
+            ctx.availability = {"as_of": as_of, "source": "aptiq_floor_plans",
+                                "floor_plans": normalize_floor_plans(rows)}
+            if not rows:
+                gaps.append(_gap("availability", "aptiq_floor_plans",
+                                 "The floor-plan export holds no rows for this property "
+                                 "today."))
+        except Exception as exc:  # noqa: BLE001
+            logger.info("reco_digital: aptiq unavailable for %s: %s", company_id, exc)
+            gaps.append(_gap("availability", "aptiq_floor_plans",
+                             "The availability export could not be read (%s)."
+                             % type(exc).__name__))
+
+    # -- Google Ads: 77 of 109, and only once the API seam is configured ------
+    import google_ads_islost as seam
+    cid = seam.extract_property_cid(ids.get("google_ads_customer_id") or "")
+    if not cid:
+        gaps.append(_gap("ads", "google_ads",
+                         "This property has no Google Ads customer id, so paid search "
+                         "is not connected for it."))
+    else:
+        try:
+            ctx.ads = fetch_ads(cid)
+        except seam.GoogleAdsNotConfigured:
+            gaps.append(_gap("ads", "google_ads",
+                             "The Google Ads API is not configured on this server, so "
+                             "the paid search rules did not run."))
+        except Exception as exc:  # noqa: BLE001
+            logger.error("reco_digital: google ads read failed for %s: %s", company_id,
+                         exc, exc_info=True)
+            gaps.append(_gap("ads", "google_ads",
+                             "Google Ads could not be read (%s)." % type(exc).__name__))
+
+    # -- GA4 and the tag setup: hooks until those connectors exist ------------
+    if not identity.ga4_property_id:
+        gaps.append(_gap("ga4", "hubspot_company",
+                         "This property has no GA4 property id on its record."))
+    elif GA4_READER is None:
+        gaps.append(_gap("ga4", "ga4",
+                         "GA4 has no connector on this server, so site conversions "
+                         "could not be compared with the platform's own count."))
+    else:
+        try:
+            site = GA4_READER(identity.ga4_property_id, start.isoformat(),
+                              end.isoformat()) or {}
+            ctx.ga4 = dict(site, property_id=identity.ga4_property_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("reco_digital: ga4 read failed for %s: %s", company_id, exc)
+            gaps.append(_gap("ga4", "ga4", "GA4 could not be read (%s)."
+                             % type(exc).__name__))
+
+    if TAG_READER is None:
+        gaps.append(_gap("tags", "tag_manager",
+                         "The tag setup is not readable from this server, so "
+                         "placeholder measurement ids cannot be checked here."))
+    else:
+        try:
+            ctx.tags = TAG_READER(ids) or {}
+        except Exception as exc:  # noqa: BLE001
+            logger.error("reco_digital: tag read failed for %s: %s", company_id, exc)
+            gaps.append(_gap("tags", "tag_manager", "The tag setup could not be read "
+                                                    "(%s)." % type(exc).__name__))
+
+    # -- authorized spend (internal) -----------------------------------------
+    try:
+        import spend_sheet
+        authorized = spend_sheet.get_company_monthly_spend(ctx.company_id) or {}
+        ctx.authorized = {"by_sku": authorized.get("by_sku") or {},
+                          "deal_id": authorized.get("deal_id"), "as_of": _now_iso()}
+    except Exception as exc:  # noqa: BLE001
+        logger.info("reco_digital: spend sheet unavailable for %s: %s", company_id, exc)
+        gaps.append(_gap("authorized", "hubspot_deal_line_items",
+                         "Authorized spend could not be read, so no budget change can "
+                         "be proposed against it."))
+
+    # -- Red Light status: `recommendation_gen`'s trigger for a budget change --
+    try:
+        import hubspot_client
+        company = hubspot_client.get_company(ctx.company_id, ["redlight_status"]) or {}
+        ctx.marketing_status = (company.get("redlight_status") or "").upper() or None
+    except Exception as exc:  # noqa: BLE001
+        logger.info("reco_digital: red light status unavailable for %s: %s",
+                    company_id, exc)
+        gaps.append(_gap("marketing_status", "red_light",
+                         "The marketing status could not be read (%s)."
+                         % type(exc).__name__))
+
+    # -- leasing funnel: a bonus on the 14 properties that have it -----------
+    hyly_id = str(ids.get("hyly_property_id") or "").strip()
+    clicks = sum(_f(c.get("clicks")) or 0.0 for c in ctx.ads_rows("campaigns"))
+    if hyly_id and clicks:
+        try:
+            import hyly_client
+            if hyly_client.is_configured():
+                channels = hyly_client.get_channel_summary(
+                    hyly_id, start_date=start.isoformat(), end_date=end.isoformat()) or {}
+                leads = sum((data or {}).get("leads") or 0
+                            for name, data in channels.items()
+                            if name != "_total" and _is_paid_search_channel(name))
+                if leads:
+                    ctx.funnel = {"leads": float(leads), "clicks": clicks,
+                                  "as_of": end.isoformat(), "source": "hyly_rollup"}
+        except Exception as exc:  # noqa: BLE001 — the funnel is a bonus, never a blocker
+            logger.info("reco_digital: funnel unavailable for %s: %s", company_id, exc)
+
+    return ctx
+
+
+def _is_paid_search_channel(name: Any) -> bool:
+    text = str(name or "").lower()
+    return "paid search" in text or text in ("sem", "ppc", "google ads", "google_ads")
