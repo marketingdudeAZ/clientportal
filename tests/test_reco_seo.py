@@ -284,6 +284,191 @@ class AnswerFormatGapTests(ContractTests):
         self.assertEqual(reco_seo.rule_answer_format_gap(base(topic_coverage=[])), [])
 
 
+TEMPLATE = ("Set in the heart of the neighborhood, the community offers "
+            "thoughtfully designed homes with quartz counters, stainless "
+            "appliances and generous closets, plus a resort style pool, a "
+            "fitness studio open around the clock and a lounge built for "
+            "working from home. Come see what elevated living looks like "
+            "here, where every detail has been considered for you.")
+
+
+class DifferentiationGateTests(ContractTests):
+    DRAFTS = [{"company_id": "1001", "title": "Amenities at the community",
+               "text": TEMPLATE}]
+    CORPUS = [{"company_id": "2002", "property_name": "Another Community",
+               "title": "Amenities", "text": TEMPLATE.replace("neighborhood", "district")}]
+
+    def test_holds_a_draft_that_matches_another_property(self):
+        out = reco_seo.rule_near_duplicate_page(base(drafts=self.DRAFTS, corpus=self.CORPUS))
+        self.assert_contract(out)
+        self.assertTrue(out[0]["action"]["params"]["publish_blocked"])
+        self.assertEqual(out[0]["severity"], "medium")      # 86% overlap
+        self.assertEqual(out[0]["action"]["params"]["pairs"][0]["at_property"],
+                         "Another Community")
+
+    def test_a_page_published_verbatim_elsewhere_is_high(self):
+        corpus = [dict(self.CORPUS[0], text=TEMPLATE)]
+        out = reco_seo.rule_near_duplicate_page(base(drafts=self.DRAFTS, corpus=corpus))
+        self.assertEqual(out[0]["severity"], "high")
+
+    def test_silent_when_the_draft_is_its_own_page(self):
+        drafts = [{"company_id": "1001", "title": "Our two-bedroom homes",
+                   "text": ("Our B2 plan is 1,080 square feet with a galley kitchen "
+                            "that opens onto the living room, a covered balcony facing "
+                            "the courtyard, and a second bathroom off the hall. Four of "
+                            "them are open this month, and valet trash is billed at "
+                            "thirty five dollars a month on top of rent.")}]
+        self.assertEqual(
+            reco_seo.rule_near_duplicate_page(base(drafts=drafts, corpus=self.CORPUS)), [])
+
+    def test_ignores_a_draft_too_short_to_judge(self):
+        drafts = [{"company_id": "1001", "title": "Short", "text": "Pool and gym."}]
+        self.assertEqual(
+            reco_seo.rule_near_duplicate_page(base(drafts=drafts, corpus=self.CORPUS)), [])
+
+    def test_silent_without_anything_to_compare_against(self):
+        self.assertEqual(
+            reco_seo.rule_near_duplicate_page(base(drafts=self.DRAFTS, corpus=[])), [])
+
+    def test_similarity_is_zero_on_an_empty_side(self):
+        self.assertEqual(reco_seo.similarity(TEMPLATE, ""), 0.0)
+
+
+class MoneyPageMetadataTests(ContractTests):
+    PAGES = [page("https://example.com/", title="Home", meta_description="", h1="Welcome"),
+             page("https://example.com/floorplans", title="", meta_description="Plans", h1=""),
+             page("https://example.com/blog/spring", title="Spring", meta_description="x",
+                  h1="Spring")]
+
+    def test_fires_only_on_the_pages_a_renter_lands_on(self):
+        out = reco_seo.rule_money_page_metadata_gap(base(pages=self.PAGES))
+        self.assert_contract(out)
+        urls = [p["url"] for p in out[0]["action"]["params"]["pages"]]
+        self.assertEqual(sorted(urls), ["https://example.com/",
+                                        "https://example.com/floorplans"])
+
+    def test_catches_a_title_shared_between_two_pages(self):
+        pages = [page("https://example.com/floorplans", title="Apartments",
+                      meta_description="d", h1="h"),
+                 page("https://example.com/availability", title="Apartments",
+                      meta_description="d", h1="h")]
+        out = reco_seo.rule_money_page_metadata_gap(base(pages=pages))
+        self.assertIn("a title shared with another page here",
+                      out[0]["action"]["params"]["pages"][0]["problems"])
+
+    def test_silent_when_every_landing_page_is_complete(self):
+        pages = [page("https://example.com/", title="Home", meta_description="d", h1="h")]
+        self.assertEqual(reco_seo.rule_money_page_metadata_gap(base(pages=pages)), [])
+
+    def test_silent_when_the_crawl_captured_no_metadata(self):
+        pages = [{"url": "https://example.com/"}]
+        self.assertEqual(reco_seo.rule_money_page_metadata_gap(base(pages=pages)), [])
+
+
+class OrphanPageTests(ContractTests):
+    PAGES = [page("https://example.com/", internal_links_in=0),
+             page("https://example.com/floorplans/a1", internal_links_in=0),
+             page("https://example.com/floorplans", internal_links_in=7)]
+
+    def test_fires_on_the_unlinked_page_and_spares_the_homepage(self):
+        out = reco_seo.rule_orphan_page(base(pages=self.PAGES))
+        self.assert_contract(out)
+        self.assertEqual(out[0]["action"]["params"]["pages"],
+                         ["https://example.com/floorplans/a1"])
+        self.assertEqual(out[0]["action"]["kind"], "internal_link")
+
+    def test_silent_when_everything_is_linked(self):
+        pages = [page("https://example.com/floorplans", internal_links_in=3)]
+        self.assertEqual(reco_seo.rule_orphan_page(base(pages=pages)), [])
+
+    def test_silent_when_the_crawl_never_counted_links(self):
+        self.assertEqual(
+            reco_seo.rule_orphan_page(base(pages=[page("https://example.com/x")])), [])
+
+
+class LocalProfileTests(ContractTests):
+    LOCAL = {"source": "business_profile", "as_of": "2026-09-10",
+             "profile": {"primary_category": "", "hours": [], "phone": "(480) 555-0111",
+                         "website": "https://example.com", "description": "A community."},
+             "listings": [{"source": "the profile", "name": "Vitri Apartments",
+                           "address": "15000 N Scottsdale Rd", "phone": "(480) 555-0111"},
+                          {"source": "a listing site", "name": "Vitri Apartments",
+                           "address": "15000 North Scottsdale Road", "phone": "(480) 555-0199"}]}
+
+    def test_fires_on_empty_fields_and_facts_that_disagree(self):
+        out = reco_seo.rule_local_profile_gap(base(local=self.LOCAL))
+        self.assert_contract(out)
+        fixes = out[0]["action"]["params"]["fix"]
+        self.assertIn("no primary category", fixes)
+        self.assertIn("no opening hours", fixes)
+        self.assertIn("a phone number that differs between listings", fixes)
+        # "N ... Rd" and "North ... Road" are one address written two ways.
+        self.assertNotIn("a street address that differs between listings", fixes)
+
+    def test_silent_when_the_profile_is_complete_and_consistent(self):
+        local = {"profile": {"primary_category": "Apartment building",
+                             "hours": ["Mon 9-6"], "phone": "(480) 555-0111",
+                             "website": "https://example.com", "description": "A community."},
+                 "listings": [{"source": "a", "name": "Vitri", "phone": "480-555-0111"},
+                              {"source": "b", "name": "Vitri", "phone": "(480) 555-0111"}]}
+        self.assertEqual(reco_seo.rule_local_profile_gap(base(local=local)), [])
+
+    def test_silent_without_a_profile_or_a_second_listing(self):
+        self.assertEqual(reco_seo.rule_local_profile_gap(base(local={"listings": []})), [])
+
+
+class CoreWebVitalsTests(ContractTests):
+    VITALS = [{"url": "https://example.com/floorplans", "lcp_ms": 4800, "inp_ms": 120,
+               "cls": 0.04, "mobile_usable": True, "source": "crux_field",
+               "as_of": "2026-09-14"},
+              {"url": "https://example.com/", "lcp_ms": 1800, "inp_ms": 90, "cls": 0.02,
+               "mobile_usable": True, "source": "crux_field", "as_of": "2026-09-14"}]
+
+    def test_fires_on_the_measured_page_that_is_too_slow(self):
+        out = reco_seo.rule_core_web_vitals_blocking(base(vitals=self.VITALS))
+        self.assert_contract(out)
+        self.assertEqual(out[0]["severity"], "high")          # past the poor threshold
+        self.assertEqual(len(out[0]["action"]["params"]["pages"]), 1)
+
+    def test_a_page_unusable_on_a_phone_is_always_high(self):
+        vitals = [dict(self.VITALS[1], mobile_usable=False)]
+        out = reco_seo.rule_core_web_vitals_blocking(base(vitals=vitals))
+        self.assertEqual(out[0]["severity"], "high")
+
+    def test_silent_when_every_measured_page_is_inside_the_thresholds(self):
+        self.assertEqual(
+            reco_seo.rule_core_web_vitals_blocking(base(vitals=[self.VITALS[1]])), [])
+
+    def test_silent_without_measurements(self):
+        self.assertEqual(reco_seo.rule_core_web_vitals_blocking(base(vitals=[])), [])
+
+
+class BriefFreshnessTests(ContractTests):
+    FACTS = {"pet_policy": {"label": "pet policy", "value": "two pets per home",
+                            "last_edited": "2026-01-04"},
+             "fees": {"label": "fees", "value": "valet trash $35",
+                      "last_edited": "2026-09-01"},
+             "parking": {"label": "parking", "value": "garage included",
+                         "last_edited": None}}
+
+    def test_fires_on_the_field_nobody_has_confirmed(self):
+        out = reco_seo.rule_brief_fact_stale(base(brief_facts=self.FACTS))
+        self.assert_contract(out)
+        self.assertEqual(out[0]["action"]["params"]["confirm_or_update"], ["pet_policy"])
+        self.assertEqual(out[0]["severity"], "high")          # over 180 days
+
+    def test_a_field_with_no_recorded_edit_date_is_never_called_stale(self):
+        facts = {"parking": self.FACTS["parking"]}
+        self.assertEqual(reco_seo.rule_brief_fact_stale(base(brief_facts=facts)), [])
+
+    def test_silent_when_everything_was_confirmed_recently(self):
+        facts = {"fees": self.FACTS["fees"]}
+        self.assertEqual(reco_seo.rule_brief_fact_stale(base(brief_facts=facts)), [])
+
+    def test_silent_without_a_brief(self):
+        self.assertEqual(reco_seo.rule_brief_fact_stale(base(brief_facts={})), [])
+
+
 class VendorNormalizerTests(unittest.TestCase):
     """Against the shape the vendor actually returned for a real property."""
 
@@ -412,11 +597,25 @@ class NoTargetingOrProtectedClassTests(unittest.TestCase):
             self.assertIsNone(review, "%s: %s" % (reco["rule_key"], review))
 
     def test_copy_producing_actions_all_route_to_review(self):
-        copy_kinds = {"content_brief", "page_fix", "listing_change"}
+        """Anything that writes words a renter reads goes to review — and
+        anything that does not stays out of it, declaring so in its params.
+        A performance ticket sitting in a copy queue is noise, and noise is
+        how a review stops being read.
+        """
+        seen = set()
         for reco in _every_recommendation():
-            if reco["action"]["kind"] in copy_kinds:
-                self.assertTrue(reco["action"]["fair_housing_review"],
-                                "%s produces copy without review" % reco["rule_key"])
+            seen.add(reco["rule_key"])
+            action = reco["action"]
+            writes_copy = reco["rule_key"] in reco_seo.COPY_PRODUCING_RULES
+            self.assertEqual(action["fair_housing_review"], writes_copy,
+                             "%s: the review flag disagrees with what it produces"
+                             % reco["rule_key"])
+            if not writes_copy:
+                self.assertIs(action["params"].get("changes_copy"), False,
+                              "%s skips review without declaring it writes no copy"
+                              % reco["rule_key"])
+        self.assertEqual(seen, set(reco_seo.RULES),
+                         "a rule never fires in these fixtures, so nothing here checks it")
 
     def test_a_rule_cannot_smuggle_targeting_through_params(self):
         """The emitter drops it even if a future rule builds one."""
@@ -454,6 +653,12 @@ FIRING_CASES = [
     base(topic_coverage=AnswerFormatGapTests.COVERAGE,
          cited_formats=[{"format": "ranked lists", "share": 0.6}],
          our_formats=[]),
+    base(drafts=DifferentiationGateTests.DRAFTS, corpus=DifferentiationGateTests.CORPUS),
+    base(pages=MoneyPageMetadataTests.PAGES),
+    base(pages=OrphanPageTests.PAGES),
+    base(local=LocalProfileTests.LOCAL),
+    base(vitals=CoreWebVitalsTests.VITALS),
+    base(brief_facts=BriefFreshnessTests.FACTS),
 ]
 
 

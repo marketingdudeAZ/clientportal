@@ -341,7 +341,10 @@ def rule_missing_floor_plan_page(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         name = str(plan.get("name") or "").strip()
         if not name:
             continue
-        if name.lower() in declared or _norm(name).strip() and _norm(name) in blob:
+        token = _norm(name)
+        if name.lower() in declared:
+            continue
+        if token.strip() and token in blob:
             continue
         missing.append(plan)
     if not missing:
@@ -452,7 +455,8 @@ def rule_availability_not_machine_readable(data: Dict[str, Any]) -> List[Dict[st
                  "community from listing sites rather than from its own site."),
         action={"kind": "schema", "executor": "human",
                 "requires_signed_deal": False, "fair_housing_review": False,
-                "params": {"markup": list(AVAILABILITY_SCHEMA_TYPES[:3]),
+                "params": {"changes_copy": False,
+                           "markup": list(AVAILABILITY_SCHEMA_TYPES[:3]),
                            "pages": [p.get("url") for p in pages[:10] if p.get("url")],
                            "fields": ["availability", "unit count", "square footage"]
                                      + (["price"] if rent else []),
@@ -781,10 +785,439 @@ def rule_answer_format_gap(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         verify_metric="topics where the engines name this community", verify_days=60)
 
 
+# ── rule 7 — the differentiation gate ────────────────────────────────────────
+
+def _shingles(text: Any, size: int = DUPLICATE_SHINGLE_SIZE) -> set:
+    words = _words(text)
+    if len(words) < size:
+        return set()
+    return {tuple(words[i:i + size]) for i in range(len(words) - size + 1)}
+
+
+def similarity(left: Any, right: Any) -> float:
+    """Jaccard overlap of five-word runs. 0.0 when either side is too short."""
+    a, b = _shingles(left), _shingles(right)
+    if not a or not b:
+        return 0.0
+    return round(len(a & b) / float(len(a | b)), 4)
+
+
+def rule_near_duplicate_page(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """A draft that reads like another community's page, caught before publishing.
+
+    109 properties publishing the same page with the name swapped is the
+    pattern the scaled-content policy exists to catch, and it is also simply
+    a page no resident wanted. The gate runs on drafts, because after
+    publication the remedy is a removal rather than an edit.
+    """
+    drafts = [d for d in _clean_list(data.get("drafts")) if d.get("text")]
+    corpus = [c for c in _clean_list(data.get("corpus")) if c.get("text")]
+    if not drafts or not corpus:
+        return []
+
+    pairs = []
+    for draft in drafts:
+        if len(_words(draft.get("text"))) < DUPLICATE_MIN_WORDS:
+            continue
+        for other in corpus:
+            if str(other.get("company_id") or "") == str(draft.get("company_id") or
+                                                         data.get("company_id")) \
+                    and (other.get("url") or other.get("title")) == \
+                    (draft.get("url") or draft.get("title")):
+                continue
+            score = similarity(draft.get("text"), other.get("text"))
+            if score >= DUPLICATE_WARN:
+                pairs.append({"draft": draft.get("title") or draft.get("url"),
+                              "matches": other.get("title") or other.get("url"),
+                              "at_property": other.get("property_name"),
+                              "overlap": score})
+    if not pairs:
+        return []
+
+    pairs.sort(key=lambda p: -p["overlap"])
+    worst = pairs[0]["overlap"]
+    receipts = [_receipt("Drafts compared", len(drafts), "content_briefs",
+                         _iso_day(data.get("as_of")))]
+    for pair in pairs[:5]:
+        receipts.append(_receipt("“%s” overlaps “%s”" % (pair["draft"], pair["matches"]),
+                                 "%d%% of its five-word runs" % round(pair["overlap"] * 100),
+                                 "differentiation_gate", _iso_day(data.get("as_of"))))
+
+    return _emit(
+        "seo_near_duplicate_page", data,
+        category="compliance", channels=[CHANNEL_WEBSITE, CHANNEL_ORGANIC],
+        severity="high" if worst >= DUPLICATE_HIGH else "medium", confidence=9,
+        found=("%d draft%s read like a page already written for another community."
+               % (len(pairs), "" if len(pairs) == 1 else "s")),
+        receipts=receipts,
+        expect=("Each page rewritten around facts only this community can give — "
+                "its plans, its charges, its street — or dropped. Nothing publishes "
+                "at this overlap."),
+        if_skip=("The portfolio publishes the same page under 100 names, which is "
+                 "the pattern the scaled-content policy is written to catch, and "
+                 "no reader is served by either copy."),
+        action={"kind": "content_brief", "executor": "portal",
+                "requires_signed_deal": False, "fair_housing_review": True,
+                "params": {"publish_blocked": True, "gate": "differentiation",
+                           "pairs": pairs,
+                           "threshold": DUPLICATE_WARN,
+                           "rewrite_around": ["floor_plans", "availability", "fees",
+                                              "what is within walking distance"]}},
+        verify_metric="drafts clearing the differentiation gate", verify_days=21)
+
+
+# ── rule 8 — the pages a renter lands on ─────────────────────────────────────
+
+def _is_money_page(page: Dict[str, Any]) -> bool:
+    if page.get("is_money_page") is not None:
+        return bool(page["is_money_page"])
+    page_type = str(page.get("page_type") or "").strip().lower()
+    if page_type:
+        return page_type in MONEY_PAGE_TYPES
+    url = str(page.get("url") or "").lower()
+    path = url.split("//", 1)[-1]
+    path = path[path.find("/"):] if "/" in path else "/"
+    if path in ("/", ""):
+        return True
+    return any(hint in path for hint in _MONEY_PATH_HINTS)
+
+
+def rule_money_page_metadata_gap(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Titles, descriptions and headings missing on the pages that matter."""
+    pages = _clean_list(data.get("pages"))
+    read = [p for p in pages if any(k in p for k in ("title", "meta_description", "h1"))]
+    money = [p for p in read if _is_money_page(p)]
+    if not money:
+        return []
+
+    titles: Dict[str, List[str]] = {}
+    for page in money:
+        title = str(page.get("title") or "").strip().lower()
+        if title:
+            titles.setdefault(title, []).append(str(page.get("url") or ""))
+
+    defects = []
+    for page in money:
+        problems = []
+        if not str(page.get("title") or "").strip():
+            problems.append("no title")
+        elif len(titles.get(str(page["title"]).strip().lower(), [])) > 1:
+            problems.append("a title shared with another page here")
+        if not str(page.get("meta_description") or "").strip():
+            problems.append("no description")
+        if "h1" in page and not str(page.get("h1") or "").strip():
+            problems.append("no heading")
+        headings = page.get("headings")
+        if isinstance(headings, list):
+            h1s = [h for h in headings
+                   if str((h or {}).get("level") if isinstance(h, dict) else "").strip() == "1"]
+            if len(h1s) > 1:
+                problems.append("more than one top heading")
+        if problems:
+            defects.append({"url": page.get("url"), "problems": problems})
+    if not defects:
+        return []
+
+    source = data.get("pages_source") or "site_crawl"
+    as_of = _iso_day(data.get("pages_as_of")) or _iso_day(data.get("as_of"))
+    receipts = [_receipt("Pages a renter lands on, checked", len(money), source, as_of)]
+    for row in defects[:6]:
+        receipts.append(_receipt(row["url"] or "a page", ", ".join(row["problems"]),
+                                 source, as_of))
+
+    return _emit(
+        "seo_money_page_metadata_gap", data,
+        category="content", channels=[CHANNEL_ORGANIC, CHANNEL_WEBSITE],
+        severity="high" if len(defects) >= 3 else "medium", confidence=9,
+        found=("%d of the %d pages a renter lands on are missing the title, "
+               "description or heading that says what they are."
+               % (len(defects), len(money))),
+        receipts=receipts,
+        expect=("Each of those pages naming itself: what the page is, which "
+                "community, and what a renter can do on it."),
+        if_skip=("Search results and AI answers keep describing these pages in "
+                 "whatever words they can scrape together."),
+        action={"kind": "page_fix", "executor": "human",
+                "requires_signed_deal": False, "fair_housing_review": True,
+                "params": {"pages": defects,
+                           "write": "one title and one description per page, "
+                                    "describing that page and nothing else"}},
+        verify_metric="landing pages carrying their own title and description",
+        verify_days=30)
+
+
+def rule_orphan_page(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Pages nothing on the site links to."""
+    pages = [p for p in _clean_list(data.get("pages")) if "internal_links_in" in p]
+    if not pages:
+        return []
+
+    orphans = []
+    for page in pages:
+        if _int(page.get("internal_links_in")) != 0:
+            continue
+        url = str(page.get("url") or "")
+        path = url.split("//", 1)[-1]
+        path = path[path.find("/"):] if "/" in path else "/"
+        if path in ("/", "") or str(page.get("page_type") or "").lower() in ("home", "homepage"):
+            continue
+        orphans.append(url)
+    if not orphans:
+        return []
+
+    source = data.get("pages_source") or "site_crawl"
+    as_of = _iso_day(data.get("pages_as_of")) or _iso_day(data.get("as_of"))
+    receipts = [_receipt("Pages with a link count", len(pages), source, as_of)]
+    for url in orphans[:8]:
+        receipts.append(_receipt(url, "nothing on the site links here", source, as_of))
+
+    return _emit(
+        "seo_orphan_page", data,
+        category="content", channels=[CHANNEL_WEBSITE, CHANNEL_ORGANIC],
+        severity="medium", confidence=8,
+        found=("%d page%s on the site %s reachable from no other page."
+               % (len(orphans), "" if len(orphans) == 1 else "s",
+                  "is" if len(orphans) == 1 else "are")),
+        receipts=receipts,
+        expect=("Each of those pages linked from the page it belongs under — a "
+                "plan page from the plan list, a neighborhood page from the "
+                "neighborhood section."),
+        if_skip=("They stay invisible to anything that finds pages by following "
+                 "links, which is most of what reads the site."),
+        action={"kind": "internal_link", "executor": "human",
+                "requires_signed_deal": False, "fair_housing_review": False,
+                "params": {"changes_copy": False, "pages": orphans,
+                           "link_from": "the section index the page belongs under"}},
+        verify_metric="pages with at least one link in", verify_days=30)
+
+
+# ── rule 9 — the profile a renter finds before the site ──────────────────────
+
+def _digits(value: Any) -> str:
+    return re.sub(r"\D", "", str(value or ""))
+
+
+# "15000 N Scottsdale Rd" and "15000 North Scottsdale Road" are the same
+# address written two ways. Flagging that as an inconsistency across 100
+# properties would bury the listings that genuinely disagree.
+_STREET_FORMS = {
+    "n": "north", "s": "south", "e": "east", "w": "west",
+    "ne": "northeast", "nw": "northwest", "se": "southeast", "sw": "southwest",
+    "st": "street", "rd": "road", "ave": "avenue", "av": "avenue",
+    "blvd": "boulevard", "dr": "drive", "ln": "lane", "ct": "court",
+    "pkwy": "parkway", "hwy": "highway", "cir": "circle", "trl": "trail",
+    "ste": "suite", "apt": "apartment", "bldg": "building", "fl": "floor",
+}
+
+
+def _address_key(value: Any) -> str:
+    """An address reduced to its words, with the usual abbreviations expanded."""
+    return " ".join(_STREET_FORMS.get(w, w) for w in _words(value))
+
+
+def rule_local_profile_gap(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Business-profile gaps, and the same community described three ways.
+
+    A renter who searches the community by name meets the profile before the
+    site, and so does an engine looking for the basic facts.
+    """
+    local = data.get("local") or {}
+    profile = local.get("profile") or {}
+    listings = _clean_list(local.get("listings"))
+    if not profile and len(listings) < 2:
+        return []
+
+    source = local.get("source") or "business_profile"
+    as_of = _iso_day(local.get("as_of")) or _iso_day(data.get("as_of"))
+    receipts, defects = [], []
+
+    for key, label in (("primary_category", "no primary category"),
+                       ("hours", "no opening hours"),
+                       ("phone", "no phone number"),
+                       ("website", "no link to the property site"),
+                       ("description", "no description")):
+        if key in profile and not profile.get(key):
+            defects.append(label)
+            receipts.append(_receipt("Business profile: %s" % label, "empty", source, as_of))
+
+    if len(listings) >= 2:
+        for field, reader, label in (("name", lambda v: _norm(v).strip(), "name"),
+                                     ("address", _address_key, "street address"),
+                                     ("phone", _digits, "phone number")):
+            values = {}
+            for row in listings:
+                if not row.get(field):
+                    continue
+                values.setdefault(reader(row[field]), []).append(row.get("source") or "a listing")
+            if len(values) > 1:
+                defects.append("a %s that differs between listings" % label)
+                for value, where in list(values.items())[:4]:
+                    receipts.append(_receipt("%s on %s" % (label.capitalize(),
+                                                           ", ".join(where)),
+                                             value, source, as_of))
+    if not defects:
+        return []
+
+    return _emit(
+        "seo_local_profile_gap", data,
+        category="vendors", channels=[CHANNEL_LOCAL, CHANNEL_ORGANIC],
+        severity="high" if len(defects) >= 3 else "medium", confidence=8,
+        found="The business profile for this community is %s." % ", ".join(defects[:3]),
+        receipts=receipts,
+        expect=("One set of facts — name, street address, phone, hours, category — "
+                "matching across the profile and the listings that carry it."),
+        if_skip=("A renter searching the community by name meets three versions of "
+                 "it, and so does anything that reads those listings."),
+        action={"kind": "listing_change", "executor": "human",
+                "requires_signed_deal": False, "fair_housing_review": True,
+                "params": {"fix": defects, "match_to": "the property site",
+                           "route": "the listings vendor that owns these profiles"}},
+        verify_metric="profile fields matching the property site", verify_days=30)
+
+
+# ── rule 10 — pages too slow or too awkward to use ───────────────────────────
+
+def rule_core_web_vitals_blocking(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Measured field performance on the pages a renter has to use."""
+    rows = _clean_list(data.get("vitals"))
+    if not rows:
+        return []
+
+    failing, receipts, severe = [], [], False
+    for row in rows:
+        url = str(row.get("url") or "")
+        problems = []
+        lcp = _float(row.get("lcp_ms"))
+        inp = _float(row.get("inp_ms"))
+        cls = _float(row.get("cls"))
+        if lcp is not None and lcp > CWV_LCP_MS:
+            problems.append("takes %.1fs to show its main content" % (lcp / 1000.0))
+            severe = severe or lcp >= CWV_LCP_POOR_MS
+        if inp is not None and inp > CWV_INP_MS:
+            problems.append("waits %dms before responding to a tap" % int(inp))
+        if cls is not None and cls > CWV_CLS:
+            problems.append("shifts under the reader by %.2f" % cls)
+        if row.get("mobile_usable") is False:
+            problems.append("is not usable on a phone")
+            severe = True
+        if not problems:
+            continue
+        failing.append({"url": url, "problems": problems})
+        receipts.append(_receipt(url or "a page", "; ".join(problems),
+                                 row.get("source") or "field_measurement",
+                                 _iso_day(row.get("as_of")) or _iso_day(data.get("as_of"))))
+    if not failing:
+        return []
+
+    receipts.insert(0, _receipt("Pages with field measurements", len(rows),
+                                rows[0].get("source") or "field_measurement",
+                                _iso_day(rows[0].get("as_of")) or _iso_day(data.get("as_of"))))
+    return _emit(
+        "seo_core_web_vitals_blocking", data,
+        category="vendors", channels=[CHANNEL_WEBSITE, CHANNEL_ORGANIC],
+        severity="high" if severe else "medium", confidence=8,
+        found=("%d page%s measured slower or less usable than the threshold a "
+               "renter will sit through." % (len(failing), "" if len(failing) == 1 else "s")),
+        receipts=receipts,
+        expect=("Those pages inside the thresholds: main content under %.1fs, a "
+                "response under %dms, and usable on a phone."
+                % (CWV_LCP_MS / 1000.0, CWV_INP_MS)),
+        if_skip=("Renters leave before the page finishes, and the site keeps being "
+                 "ranked on how it performs rather than what it says."),
+        action={"kind": "page_fix", "executor": "human",
+                "requires_signed_deal": False, "fair_housing_review": False,
+                "params": {"pages": failing, "changes_copy": False,
+                           "thresholds": {"main_content_ms": CWV_LCP_MS,
+                                          "response_ms": CWV_INP_MS, "shift": CWV_CLS},
+                           "route": "the website vendor that owns this template"}},
+        verify_metric="pages inside the field thresholds", verify_days=45)
+
+
+# ── rule 11 — facts nobody has confirmed in a season ─────────────────────────
+
+def rule_brief_fact_stale(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Brief fields that feed the site's FAQ and AI answers, untouched 90+ days.
+
+    Nothing here says the fact is wrong — only that nobody has confirmed it
+    since the spring, while the engines have been quoting it all along.
+    """
+    facts = data.get("brief_facts") or {}
+    if not facts:
+        return []
+    today = _today(data.get("_today"))
+
+    stale = []
+    measured = 0
+    for key, field in facts.items():
+        if not isinstance(field, dict):
+            continue
+        feeds = [str(f).lower() for f in (field.get("feeds") or [])]
+        quoted = key in QUOTED_FACT_FIELDS or any(
+            f in ("website_faq", "ai_answers") for f in feeds)
+        if not quoted or not field.get("value"):
+            continue
+        age = _days_since(field.get("last_edited"), today)
+        if age is None:
+            continue
+        measured += 1
+        if age >= STALE_FIELD_DAYS:
+            stale.append({"key": key, "label": field.get("label") or key, "days": age,
+                          "last_edited": _iso_day(field.get("last_edited"))})
+    if not stale or not measured:
+        return []
+
+    stale.sort(key=lambda s: -s["days"])
+    receipts = [_receipt("Quoted facts with a recorded edit date", measured,
+                         "community_brief", _iso_day(data.get("as_of")))]
+    for row in stale[:6]:
+        receipts.append(_receipt("“%s” last confirmed" % row["label"],
+                                 "%s, %d days ago" % (row["last_edited"], row["days"]),
+                                 "community_brief", row["last_edited"]))
+
+    oldest = stale[0]
+    return _emit(
+        "seo_brief_fact_stale", data,
+        category="content", channels=[CHANNEL_AI_SEARCH, CHANNEL_WEBSITE],
+        severity="high" if oldest["days"] >= 2 * STALE_FIELD_DAYS else "medium",
+        confidence=7,
+        found=("%d fact%s the site's FAQ and the AI answers quote %s not been "
+               "confirmed in %d days." % (len(stale), "" if len(stale) == 1 else "s",
+                                          "has" if len(stale) == 1 else "have",
+                                          oldest["days"])),
+        receipts=receipts,
+        expect=("Each of those confirmed or corrected, so what the FAQ says and "
+                "what an engine repeats are both current."),
+        if_skip=("They keep being quoted as current, and the first time anyone "
+                 "checks is when a renter disagrees with one."),
+        action={"kind": "page_fix", "executor": "portal",
+                "requires_signed_deal": False, "fair_housing_review": True,
+                "params": {"confirm_or_update": [s["key"] for s in stale],
+                           "feeds": ["the website FAQ", "AI answers"],
+                           "threshold_days": STALE_FIELD_DAYS}},
+        verify_metric="quoted facts confirmed in the last 90 days", verify_days=30)
+
+
 # ── registry ─────────────────────────────────────────────────────────────────
 # Each entry: the function, the data keys it cannot work without, and the
 # sentence run() records when those keys are empty. The requirement list is
 # what makes "we did not measure this" different from "nothing is wrong".
+
+# The rules whose action puts words in front of a renter. Every one of them
+# sets `fair_housing_review: true`; the rest change markup, links or load time
+# and would only add noise to a copy review. Stated here rather than inferred
+# from the action kind, because "page_fix" covers both a rewritten paragraph
+# and a template that loads too slowly.
+COPY_PRODUCING_RULES = frozenset({
+    "seo_missing_floor_plan_page",
+    "seo_share_of_answer_gap",
+    "seo_answer_quotes_stale_fact",
+    "seo_fee_transparency_gap",
+    "seo_answer_format_gap",
+    "seo_near_duplicate_page",
+    "seo_money_page_metadata_gap",
+    "seo_local_profile_gap",
+    "seo_brief_fact_stale",
+})
 
 RULES: Dict[str, Callable[[Dict[str, Any]], List[Dict[str, Any]]]] = {
     "seo_missing_floor_plan_page": rule_missing_floor_plan_page,
@@ -793,6 +1226,12 @@ RULES: Dict[str, Callable[[Dict[str, Any]], List[Dict[str, Any]]]] = {
     "seo_answer_quotes_stale_fact": rule_answer_quotes_stale_fact,
     "seo_fee_transparency_gap": rule_fee_transparency_gap,
     "seo_answer_format_gap": rule_answer_format_gap,
+    "seo_near_duplicate_page": rule_near_duplicate_page,
+    "seo_money_page_metadata_gap": rule_money_page_metadata_gap,
+    "seo_orphan_page": rule_orphan_page,
+    "seo_local_profile_gap": rule_local_profile_gap,
+    "seo_core_web_vitals_blocking": rule_core_web_vitals_blocking,
+    "seo_brief_fact_stale": rule_brief_fact_stale,
 }
 
 REQUIREMENTS: Dict[str, Dict[str, Any]] = {
@@ -822,6 +1261,33 @@ REQUIREMENTS: Dict[str, Dict[str, Any]] = {
     "seo_answer_format_gap": {
         "needs": ("topic_coverage",),
         "why": "Needs per-topic coverage for this community and comparable ones.",
+    },
+    "seo_near_duplicate_page": {
+        "needs": ("drafts", "corpus"),
+        "why": ("The gate needs drafts to check and the pages already written "
+                "for other communities to check them against."),
+    },
+    "seo_money_page_metadata_gap": {
+        "needs": ("pages",),
+        "why": "Needs a read of the site that captured titles, descriptions and headings.",
+    },
+    "seo_orphan_page": {
+        "needs": ("pages",),
+        "why": "Needs a read of the site that counted the links into each page.",
+    },
+    "seo_local_profile_gap": {
+        "needs": ("local",),
+        "why": ("Needs the business profile and the listings that repeat it; "
+                "neither is connected to the portal yet."),
+    },
+    "seo_core_web_vitals_blocking": {
+        "needs": ("vitals",),
+        "why": "Needs field performance measurements for this property's pages.",
+    },
+    "seo_brief_fact_stale": {
+        "needs": ("brief_facts",),
+        "why": ("Needs a last-edited date per brief field; the brief stores the "
+                "values but not when each one was last confirmed."),
     },
 }
 
@@ -1130,7 +1596,6 @@ def _merge_geo(uuid: str, data: Dict[str, Any], gaps: List[Dict[str, str]]) -> b
         return False
     if not audit or not audit.get("prompts"):
         return False
-    from skills import workspace_visibility as wv  # noqa: F811 — same module, local scope
     questions = []
     for row in wv._group_prompts(audit["prompts"]):
         questions.append({"text": row.get("text"), "topic": row.get("topic"),
