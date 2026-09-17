@@ -181,6 +181,9 @@ main.content{display:flex;flex:1;min-height:0;align-items:stretch}
 .tag.creative{background:var(--color-muted);color:var(--gray-ink-strong)}
 .tag.compliance{background:var(--critical-soft);color:var(--critical-text)}
 .tag.internal{background:var(--color-muted);color:var(--gray-ink-strong);gap:4px}
+/* A source this property does not have. Muted on purpose: it names a gap, it is not a warning. */
+.tag.missing{background:var(--color-muted);color:var(--gray-ink-strong)}
+.tags{display:inline-flex;gap:4px;flex-wrap:wrap}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
 .dot.healthy{background:var(--healthy)} .dot.attention{background:var(--attention)} .dot.warning{background:var(--warning)} .dot.critical{background:var(--critical)} .dot.new{background:var(--new)} .dot.brand{background:var(--copper)}
 .t-healthy{color:var(--healthy-text)} .t-attention{color:var(--attention-text)} .t-warning{color:var(--warning-text)} .t-critical{color:var(--critical-text)} .t-new{color:var(--new-text)} .t-brand{color:var(--copper-ink)}
@@ -1153,7 +1156,9 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         (n.count ? '<span class="count">' + esc(n.count) + '</span>' : '') + '</a>';
     }
     var html = logo + '<div class="nav">' + navItems().map(link).join('');
-    if (viewInternal()) html += '<p class="nav-label">RPM only</p>' + link({ key: 'signals', href: '#/signals', label: 'Signals', icon: 'signal' });
+    if (viewInternal()) html += '<p class="nav-label">RPM only</p>' +
+      link({ key: 'signals', href: '#/signals', label: 'Signals', icon: 'signal' }) +
+      link({ key: 'rpmi', href: '#/rpmi', label: 'RPMI', icon: 'building' });
     html += '</div><div class="side-grow"></div>';
     if (state.loop) {
       html += '<div class="loopcard" role="status"><i class="' + (state.loop.running ? 'on' : '') + '" aria-hidden="true"></i><div><b>' + (state.loop.running === true ? 'Loop running' : (state.loop.running === false ? 'Loop paused' : 'Loop status unavailable')) + '</b>' +
@@ -2933,6 +2938,177 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 
 
 
+  /* ── RPMI (RPM only) ─────────────────────────────────────────────────
+     The RPM Investments book in one view. Coverage leads, because coverage is
+     the honest headline: availability is on most of the roster and the leasing
+     funnel on a fraction of it, so most rows are partial by design.
+
+     Two rules the rest of this page already follows, applied strictly here:
+     a number we do not have is left OUT rather than drawn as a dash, and the
+     row says what it is missing in the same words a client would read. The
+     table reuses .tbl, .controls and the sumline; nothing new was invented. */
+  state.rpmi = { q: '', sort: 'units_at_risk', dir: 'desc' };
+  var RPMI_COLS = [
+    { key: 'name', label: 'Property' },
+    { key: 'where', label: 'City / state' },
+    { key: 'units', label: 'Units', num: true, fmt: num },
+    { key: 'occupancy', label: 'Occupancy', num: true, fmt: function (v) { return pct(v, 1); } },
+    { key: 'units_at_risk', label: 'Units at risk', num: true, fmt: num },
+    { key: 'leases_last_month', label: 'Leases', num: true, fmt: num },
+    { key: 'cost_per_lease', label: 'Cost / lease', num: true, fmt: money },
+    { key: 'spend_monthly', label: 'Spend', num: true, fmt: moneyK },
+    { key: 'open_recommendations', label: 'Open', num: true, fmt: num },
+    { key: 'missing', label: 'Not connected' }
+  ];
+  var RPMI_KPIS = [
+    ['units', 'Units'], ['occupancy', 'Occupancy'], ['units_at_risk', 'Units at risk'],
+    ['leases_last_month', 'Leases last month'], ['cost_per_lease', 'Cost per lease'],
+    ['spend_monthly', 'Spend a month'], ['open_recommendations', 'Open recommendations']
+  ];
+  var RPMI_KPI_FMT = {
+    units: num, occupancy: function (v) { return pct(v, 1); }, units_at_risk: num,
+    leases_last_month: num, cost_per_lease: money, spend_monthly: moneyK, open_recommendations: num
+  };
+
+  function rpmiWhere(r) { return [r.city, r.state].filter(Boolean).join(', '); }
+  function rpmiSortable(c) { return c.key !== 'missing'; }
+  function rpmiValue(r, key) {
+    if (key === 'name') return (r.name || '').toLowerCase();
+    if (key === 'where') return rpmiWhere(r).toLowerCase();
+    return val(r[key]);
+  }
+  function rpmiLabels(d) {
+    var out = {};
+    (((d.coverage || {}).sources) || []).forEach(function (s) { out[s.key] = s.label; });
+    return out;
+  }
+  function rpmiMissing(r) {
+    return Object.keys(r.sources || {}).filter(function (k) { return !r.sources[k]; });
+  }
+  function rpmiRows(d) {
+    var f = state.rpmi, q = f.q.toLowerCase();
+    var rows = (d.properties || []).filter(function (r) {
+      if (!q) return true;
+      return (r.name || '').toLowerCase().indexOf(q) !== -1 || rpmiWhere(r).toLowerCase().indexOf(q) !== -1;
+    });
+    // A missing number never outranks a known one, whichever way the column sorts.
+    var dir = f.dir === 'asc' ? 1 : -1;
+    return rows.slice().sort(function (a, b) {
+      var x = rpmiValue(a, f.sort), y = rpmiValue(b, f.sort);
+      if (x == null && y == null) return (a.name || '').localeCompare(b.name || '');
+      if (x == null) return 1;
+      if (y == null) return -1;
+      if (x === y) return (a.name || '').localeCompare(b.name || '');
+      return x > y ? dir : -dir;
+    });
+  }
+
+  function screenRpmi() {
+    renderTop('RPMI', '');
+    renderSide('rpmi');
+    setView('<div class="page">' + rpmiHead() + '<div data-rpmi-results>' +
+      '<div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading the RPMI portfolio…</div></div></div>');
+    bindRpmiControls();
+    guard(api('/api/workspace/rpmi'), 'the RPMI portfolio').then(function (r) {
+      if (!r) return;
+      state.rpmiData = r.data || {};
+      renderRpmi();
+    }).catch(function (e) {
+      var box = view.querySelector('[data-rpmi-results]');
+      if (box && !(e && e.status === 401)) box.innerHTML = errorHtml(e);
+    });
+  }
+  function rpmiHead() {
+    return '<div class="head"><div class="stack"><h1 class="h-page">RPMI</h1>' +
+      '<p class="support" data-rpmi-scope>The RPM Investments portfolio, ranked by units at risk.</p></div>' +
+      '<span data-rpmi-asof></span></div>' +
+      '<div class="controls" role="search"><label class="ctl"><span>Search</span>' +
+      '<input class="inp search-inp" type="search" data-rpmi-q placeholder="Property, city or state" value="' + esc(state.rpmi.q) + '"></label></div>';
+  }
+  function bindRpmiControls() {
+    var q = view.querySelector('[data-rpmi-q]'), timer = null;
+    if (!q) return;
+    q.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () { state.rpmi.q = q.value.trim(); renderRpmi(); }, 200);
+    });
+  }
+  function renderRpmi() {
+    var box = view.querySelector('[data-rpmi-results]'), d = state.rpmiData;
+    if (!box || !d) return;
+    var scope = view.querySelector('[data-rpmi-scope]');
+    if (scope && has(d.scope_label)) scope.textContent = d.scope_label + ' — ranked by units at risk.';
+    var asof = view.querySelector('[data-rpmi-asof]');
+    if (asof) asof.innerHTML = staleLabel(d.as_of);
+
+    if (!(d.properties || []).length) {
+      box.innerHTML = '<div class="state"><h2>No RPM Investments properties to show</h2>' +
+        '<p>' + esc(((d.gaps || [])[0] || {}).message || 'Nothing is set up for reporting here yet.') + '</p></div>';
+      return;
+    }
+
+    var rows = rpmiRows(d), labels = rpmiLabels(d), f = state.rpmi;
+    // KPI strip: only the numbers we actually have. A null is left out, not dashed.
+    var kpis = RPMI_KPIS.map(function (k) { return { key: k[0], label: k[1], r: (d.totals || {})[k[0]] }; })
+      .filter(function (k) { return val(k.r) != null; })
+      .map(function (k) {
+        return '<div class="kpi sm"' + rtitle(k.r) + '><span class="eyebrow">' + esc(k.label) + '</span>' +
+          '<span class="v">' + esc(RPMI_KPI_FMT[k.key](val(k.r))) + '</span>' +
+          (receipt(k.r) ? '<span class="rc">' + receipt(k.r) + '</span>' : '') + '</div>';
+      }).join('');
+
+    var cov = d.coverage || {}, of = cov.property_count || 0;
+    var strip = (cov.sources || []).map(function (s, i) {
+      return '<b>' + esc(s.label) + '</b> on ' + esc(num(s.count)) + (i === 0 ? ' of ' + esc(num(of)) : '');
+    }).join(' · ');
+
+    var head = '<tr>' + RPMI_COLS.map(function (c) {
+      var sorted = f.sort === c.key, cls = c.num ? 'num' : '';
+      if (!rpmiSortable(c)) return '<th scope="col" class="' + cls + '">' + esc(c.label) + '</th>';
+      return '<th scope="col" class="' + cls + '"' + (sorted ? ' aria-sort="' + (f.dir === 'asc' ? 'ascending' : 'descending') + '"' : '') +
+        '><button type="button" data-rpmi-sort="' + esc(c.key) + '">' + esc(c.label) +
+        (sorted ? '<span aria-hidden="true">' + (f.dir === 'asc' ? '↑' : '↓') + '</span>' : '') + '</button></th>';
+    }).join('') + '</tr>';
+
+    var body = rows.map(function (r) {
+      var href = r.href || ('#/property/' + encodeURIComponent(r.company_id));
+      var miss = rpmiMissing(r);
+      var why = (r.gaps || []).map(function (g) { return g.message; }).filter(Boolean).join(' ');
+      return '<tr class="rowlink" data-href="' + esc(href) + '">' + RPMI_COLS.map(function (c) {
+        if (c.key === 'name') return '<td class="name"><a href="' + esc(href) + '">' + esc(r.name || 'Unnamed property') + '</a></td>';
+        if (c.key === 'where') return '<td>' + (has(rpmiWhere(r)) ? esc(rpmiWhere(r)) : '') + '</td>';
+        if (c.key === 'missing') {
+          return '<td>' + (miss.length
+            ? '<span class="tags"' + (why ? ' title="' + esc(why).replace(/&amp;/g, '&') + '"' : '') + '>' +
+              miss.map(function (k) { return '<span class="tag missing">' + esc(labels[k] || k) + '</span>'; }).join('') + '</span>'
+            : '') + '</td>';
+        }
+        var v = val(r[c.key]);
+        // Hidden, not dashed: the "Not connected" column says why it is blank.
+        return '<td class="num"' + rtitle(r[c.key]) + '>' + (v == null ? '' : esc(c.fmt(v))) + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+
+    box.innerHTML = (kpis ? '<div class="kpis">' + kpis + '</div>' : '') +
+      (strip ? '<p class="sumline">' + strip + '</p>' : '') +
+      '<p class="sumline" role="status"><b>' + esc(num(rows.length)) + '</b> ' + plural(rows.length, 'property', 'properties') +
+      (rows.length !== (d.properties || []).length ? ' of ' + esc(num((d.properties || []).length)) : '') + '</p>' +
+      (rows.length
+        ? '<div class="tscroll"><table class="tbl"><caption class="sr-only">RPM Investments properties, ranked by units at risk</caption>' +
+          '<thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>'
+        : '<p class="support">No properties match that search.</p>') +
+      gapsLine(d.gaps);
+
+    box.querySelectorAll('[data-rpmi-sort]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-rpmi-sort');
+        if (f.sort === key) f.dir = f.dir === 'asc' ? 'desc' : 'asc';
+        else { f.sort = key; f.dir = (key === 'name' || key === 'where') ? 'asc' : 'desc'; }
+        renderRpmi();
+      });
+    });
+  }
+
   /* ── Router ──────────────────────────────────────────────────────── */
   function route() {
     stopTimer();
@@ -2942,7 +3118,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     if (name === 'work' || name === 'client') name = 'approvals';
     if (name === 'portfolio') name = 'dashboard';
     if (name === 'reports') { window.location.href = reportHref(); return; }
-    if (name === 'signals' && !viewInternal()) name = 'dashboard';
+    if ((name === 'signals' || name === 'rpmi') && !viewInternal()) name = 'dashboard';
     if (name === 'property' && parts[1]) {
       setCompany(parts[1]);
       name = parts[2] ? { 'media-plan': 'mediaplan', visibility: 'visibility', content: 'content', creative: 'creative', profile: 'profile' }[parts[2]] || 'property' : 'property';
@@ -2952,7 +3128,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       approved: [screenApproved, 'approvals'], properties: [screenProperties, 'properties'], property: [screenProperty, 'properties'],
       mediaplan: [screenMediaPlan, 'properties'], visibility: [screenVisibility, 'visibility'], content: [screenContent, 'content'],
       creative: [screenCreative, 'creative'], value: [screenValue, 'value'], signals: [screenSignals, 'signals'],
-      ask: [screenAsk, ''], request: [screenRequest, 'approvals'], spend: [screenSpend, 'spend'], profile: [screenProfile, 'profile']
+      ask: [screenAsk, ''], request: [screenRequest, 'approvals'], spend: [screenSpend, 'spend'], profile: [screenProfile, 'profile'],
+      rpmi: [screenRpmi, 'rpmi']
     };
     state.profileView = name === 'profile' ? (parts[3] || '') : '';
     var s = screens[name] || screens.dashboard;

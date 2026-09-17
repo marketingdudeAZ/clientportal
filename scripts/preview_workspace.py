@@ -946,6 +946,115 @@ def value():
     return jsonify(value_data())
 
 
+# ── RPMI roll-up ─────────────────────────────────────────────────────────────
+#
+# Built from the same preview book, with coverage deliberately uneven so the
+# partial states are what you see first: availability on most of the roster,
+# the leasing funnel on a handful. The live endpoint's shape is pinned by
+# tests/workspace_contract.py ("rpmi") and tests/test_workspace_rpmi.py.
+
+RPMI_SOURCE_LABELS = [("aptiq", "Availability"), ("ga4", "Analytics"),
+                      ("google_ads", "Paid"), ("hyly", "Funnel")]
+
+
+def _rpmi_sources(p: dict) -> dict:
+    """Which feeds this property carries, spread the way the real roster is."""
+    n = _h(p["company_id"], 0, 99)
+    return {"aptiq": p["occupied"] is not None, "ga4": n >= 25, "google_ads": n >= 30,
+            "hyly": p["leases_this_month"] is not None and n >= 85}
+
+
+def rpmi_data() -> dict:
+    import calendar
+    rows, month = [], LAST_FULL_MONTH
+    _y, _m = (int(part) for part in month.split("-"))
+    month_end = "%s-%02d" % (month, calendar.monthrange(_y, _m)[1])
+    for p in props():
+        have = _rpmi_sources(p)
+        gaps, occ = [], _occ(p)
+        avail = (p["units"] - p["occupied"]) if have["aptiq"] else None
+        if not have["aptiq"]:
+            gaps.append({"field": "units_at_risk", "source": "aptiq",
+                         "message": "Availability and occupancy aren’t connected here yet, so units "
+                                    "at risk is unknown."})
+        leases = p["leases_last_month"] if have["hyly"] else None
+        if leases is None:
+            gaps.append({"field": "leases_last_month", "source": "hyly",
+                         "message": "The leasing funnel isn’t connected here, so leases and cost per "
+                                    "lease are unknown."})
+        for key, message in (("ga4", "Website analytics isn’t connected here yet."),
+                             ("google_ads", "Paid search isn’t connected here yet.")):
+            if not have[key]:
+                gaps.append({"field": key, "source": key, "message": message})
+        spend = p["spend_last_month"] if have["google_ads"] else None
+        if spend is None:
+            gaps.append({"field": "spend_monthly", "source": "hubspot_line_items",
+                         "message": "No contracted line items are on file, so monthly spend is unknown."})
+        cost = round(spend / leases, 2) if (spend and leases) else None
+        rows.append({
+            "company_id": p["company_id"], "name": p["name"], "city": p["city"], "state": p["state"],
+            "market": None, "status": _status(p), "href": "#/property/" + p["company_id"],
+            "units": _metric(p["units"], "hubspot_company"),
+            "occupancy": _metric(occ, "aptiq") if have["aptiq"] else None,
+            "available_units": _metric(avail, "aptiq") if have["aptiq"] else None,
+            "units_at_risk": _metric(avail, "aptiq") if have["aptiq"] else None,
+            "leases_last_month": _metric(leases, "hyly", month_end),
+            "cost_per_lease": (_metric(cost, "hubspot_line_items+hyly", month_end) if cost else None),
+            "spend_monthly": _metric(spend, "hubspot_line_items"),
+            "open_recommendations": _metric(len(_items_for(p)), "workspace_inbox"),
+            "sources": have, "gaps": gaps,
+        })
+    rows.sort(key=lambda r: (-(r["units_at_risk"]["value"] if r["units_at_risk"] else -1),
+                             (r["name"] or "").lower()))
+
+    def _known(key):
+        return [r[key]["value"] for r in rows if r[key]]
+
+    avail_known, spend_known, lease_known = _known("units_at_risk"), _known("spend_monthly"), _known("leases_last_month")
+    occ_rows = [r for r in rows if r["occupancy"]]
+    units_occ = sum(r["units"]["value"] for r in occ_rows)
+    weighted = sum(r["occupancy"]["value"] * r["units"]["value"] for r in occ_rows)
+    totals = {
+        "units": _metric(sum(r["units"]["value"] for r in rows), "hubspot_company"),
+        "occupancy": (dict(_metric(round(weighted / units_occ, 4), "aptiq"), units=units_occ)
+                      if units_occ else None),
+        "available_units": (dict(_metric(sum(avail_known), "aptiq"), properties=len(avail_known))
+                            if avail_known else None),
+        "units_at_risk": (dict(_metric(sum(avail_known), "aptiq"), properties=len(avail_known))
+                          if avail_known else None),
+        "leases_last_month": (dict(_metric(sum(lease_known), "hyly", month_end), properties=len(lease_known))
+                              if lease_known else None),
+        "spend_monthly": (dict(_metric(sum(spend_known), "hubspot_line_items"), properties=len(spend_known))
+                          if spend_known else None),
+        "cost_per_lease": (dict(_metric(round(sum(spend_known) / sum(lease_known), 2),
+                                        "hubspot_line_items+hyly", month_end), properties=len(lease_known))
+                           if spend_known and sum(lease_known) else None),
+        "open_recommendations": _metric(sum(r["open_recommendations"]["value"] for r in rows), "workspace_inbox"),
+    }
+    coverage = {"property_count": len(rows), "sources": [
+        {"key": key, "label": label, "count": sum(1 for r in rows if r["sources"][key]),
+         "missing": sum(1 for r in rows if not r["sources"][key])}
+        for key, label in RPMI_SOURCE_LABELS]}
+    no_market = sum(1 for r in rows if not r["market"])
+    return {
+        "as_of": AS_OF, "scope_label": "RPM Investments · %d managed properties" % len(rows),
+        "client_values": ["RPMI", "RPM Investments"],
+        "record_count": len(rows) + 7, "property_count": len(rows),
+        "period": {"leases_month": month}, "totals": totals, "coverage": coverage,
+        "grouping": {"field": "state", "label": "State",
+                     "note": "Grouped by state: market is not filled in on most of these properties."},
+        "properties": rows,
+        "gaps": [{"field": "market", "source": "hubspot_company",
+                  "message": "Market is not set on %d of %d properties, so the list groups by state "
+                             "instead." % (no_market, len(rows))}],
+    }
+
+
+@app.get("/api/workspace/rpmi")
+def rpmi():
+    return jsonify(rpmi_data())
+
+
 # The monthly report page and its API, at the same paths production uses.
 @app.get("/workspace/report")
 def report_page():
