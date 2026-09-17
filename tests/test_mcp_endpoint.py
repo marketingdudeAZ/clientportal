@@ -543,3 +543,83 @@ class TestNewTools:
         assert mcp_context._ms_to_iso("1789516800000").startswith("2026-09-16")
         for junk in (None, "", "not-a-number", "  "):
             assert mcp_context._ms_to_iso(junk) is None
+
+
+class TestAvailabilityFloorPlans:
+    """Regression: the AptIQ snapshot has no `floor_plans` key, so reading one
+    always produced an empty list and a gap that blamed the wrong thing. Per-plan
+    data lives in the floor-plan sheet and in the brief's plan table."""
+
+    def test_plans_come_from_the_floor_plan_sheet(self, monkeypatch):
+        import skills
+        monkeypatch.setattr(mcp_context, "_resolve",
+                            lambda _id: (_Identity(aptiq_property_id="ap-1"), None))
+        fake_cache = types.SimpleNamespace(aptiq_floor_plans=lambda: (
+            {"ap-1": [{"Floor Plan Name": "S1", "Available Units": "12",
+                       "Days on Market": "95"}]}, "2026-09-16T00:00:00Z"))
+        monkeypatch.setattr(skills, "workspace_cache", fake_cache, raising=False)
+        monkeypatch.setitem(sys.modules, "skills.workspace_cache", fake_cache)
+        monkeypatch.setitem(sys.modules, "apartmentiq_client", types.SimpleNamespace(
+            get_property_snapshot=lambda pid: {"occupancy": 0.94, "_source": "api",
+                                               "as_of": "2026-09-16"}))
+        out = mcp_context.get_availability("555")
+        assert out["floor_plans"] == [{"name": "S1", "available_units": "12",
+                                       "days_on_market": "95"}]
+        assert out["floor_plans_source"] == "aptiq_floor_plan_sheet"
+        assert out["occupancy"]["value"] == 0.94
+        assert not any(g["field"] == "floor_plans" for g in out["gaps"])
+
+    def test_the_brief_answers_when_there_is_no_aptiq_id(self, monkeypatch):
+        """A property with no availability id still has a plan table in its brief.
+        The old order returned nothing for these."""
+        import skills
+        monkeypatch.setattr(mcp_context, "_resolve",
+                            lambda _id: (_Identity(aptiq_property_id=None), None))
+        broken_cache = types.SimpleNamespace(
+            aptiq_floor_plans=lambda: (_ for _ in ()).throw(RuntimeError("no sheet")))
+        monkeypatch.setattr(skills, "workspace_cache", broken_cache, raising=False)
+        monkeypatch.setitem(sys.modules, "skills.workspace_cache", broken_cache)
+        fake_brief = types.SimpleNamespace(
+            load_company_state=lambda cid: {"fluency_floor_plans_json": "[...]"},
+            resolve_value=lambda props, resolved, override: props.get(resolved),
+            _build_floorplan_table=lambda raw: [
+                {"name": "A1", "beds": 1, "baths": 1, "sqft": 720,
+                 "total_units": 40, "available": 6}])
+        monkeypatch.setitem(sys.modules, "community_brief", fake_brief)
+        out = mcp_context.get_availability("555")
+        assert out["floor_plans"][0]["name"] == "A1"
+        assert out["floor_plans"][0]["available_units"] == 6
+        assert out["floor_plans_source"] == "community_brief"
+        assert any("no availability id" in g["message"] for g in out["gaps"])
+
+    def test_no_source_at_all_gaps_without_claiming_zero(self, monkeypatch):
+        import skills
+        monkeypatch.setattr(mcp_context, "_resolve",
+                            lambda _id: (_Identity(aptiq_property_id=None), None))
+        broken = types.SimpleNamespace(
+            aptiq_floor_plans=lambda: (_ for _ in ()).throw(RuntimeError("no sheet")))
+        monkeypatch.setattr(skills, "workspace_cache", broken, raising=False)
+        monkeypatch.setitem(sys.modules, "skills.workspace_cache", broken)
+        monkeypatch.setitem(sys.modules, "community_brief", types.SimpleNamespace(
+            load_company_state=lambda cid: {},
+            resolve_value=lambda *a: "",
+            _build_floorplan_table=lambda raw: []))
+        out = mcp_context.get_availability("555")
+        assert out["floor_plans"] == []
+        assert out["occupancy"] is None and out["available_units"] is None
+        assert {g["field"] for g in out["gaps"]} == {"floor_plans", "occupancy"}
+
+    def test_units_prefer_the_field_that_is_actually_populated(self, monkeypatch):
+        """`unit_count` does not exist as a HubSpot property; `totalunits` does."""
+        import skills
+        ident = _Identity(aptiq_property_id=None)
+        ident._d["totalunits"] = "312"
+        monkeypatch.setattr(mcp_context, "_resolve", lambda _id: (ident, None))
+        broken = types.SimpleNamespace(
+            aptiq_floor_plans=lambda: (_ for _ in ()).throw(RuntimeError("x")))
+        monkeypatch.setattr(skills, "workspace_cache", broken, raising=False)
+        monkeypatch.setitem(sys.modules, "skills.workspace_cache", broken)
+        monkeypatch.setitem(sys.modules, "community_brief", types.SimpleNamespace(
+            load_company_state=lambda cid: {}, resolve_value=lambda *a: "",
+            _build_floorplan_table=lambda raw: []))
+        assert mcp_context.get_availability("555")["units"] == "312"
