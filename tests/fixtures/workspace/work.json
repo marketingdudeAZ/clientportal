@@ -1,0 +1,375 @@
+{
+  "summary": {
+    "open": 6,
+    "late": 1,
+    "needs_approval": 2,
+    "next_deadline": "2026-09-14"
+  },
+  "counts": {
+    "to_do": 3,
+    "in_motion": 3,
+    "done": 11
+  },
+  "groups": {
+    "late": [
+      {
+        "id": "hubdb_rec:1004",
+        "source": "hubdb_rec",
+        "source_id": "1004",
+        "title": "Ten units have sat 90+ days — one for 306 days",
+        "found": "10 of the 44 available units are stale. Six are A1 one-beds priced $1,385 against a $1,370 floorplan average.",
+        "expect": "Days on market for the six A1s drops under 60 within four weeks of the reprice.",
+        "if_skip": "The A1s keep sitting into renewal season, when seven more one-bedrooms open.",
+        "receipts": [
+          {
+            "label": "10 of 44 available units listed 90+ days",
+            "source": "aptiq",
+            "as_of": "2026-09-14T13:04:00Z"
+          }
+        ],
+        "channels": [
+          "paid_search",
+          "listing"
+        ],
+        "lens": "amplify",
+        "start_by": "2026-08-24",
+        "due": "2026-08-24",
+        "status": "to_do",
+        "needs_approval": true,
+        "client_visible": true,
+        "owner": "Dana R.",
+        "comments_count": 3,
+        "cost_note": null,
+        "steps": [
+          {
+            "when": "2026-09-14",
+            "label": "Hide #1321 from the syndication feed",
+            "channel": "listing",
+            "kind": "auto",
+            "status": "pending"
+          },
+          {
+            "when": "2026-09-15",
+            "label": "Five A1s repriced to $1,362 — $8 under the plan average",
+            "channel": "listing",
+            "kind": "queued",
+            "status": "pending"
+          },
+          {
+            "when": "2026-09-17",
+            "label": "Concession moves from B plans to A plans for three weeks",
+            "channel": "paid_search",
+            "kind": "person",
+            "status": "pending"
+          }
+        ],
+        "trail": [
+          {
+            "at": "2026-08-24T14:10:00Z",
+            "actor": "availability monitor",
+            "text": "Opened",
+            "visibility": "client"
+          }
+        ],
+        "actions": {
+          "approve": true,
+          "not_now": true
+        },
+        "notes": [
+          {
+            "at": "2026-09-04T15:05:00Z",
+            "actor": "Marcus J.",
+            "text": "The owner wants the pricing team to sign off before the concession moves.",
+            "visibility": "internal"
+          }
+        ],
+        "evidence": {
+          "columns": [
+            "Unit",
+            "Plan",
+            "Days listed",
+            "Rent",
+            "vs plan avg"
+          ],
+          "rows": [
+            [
+              "#1321",
+              "S1",
+              "306",
+              "$1,294",
+              "+$14"
+            ],
+            [
+              "#1238",
+              "A1",
+              "103",
+              "$1,380",
+              "+$10"
+            ],
+            [
+              "#1317",
+              "A1",
+              "63",
+              "$1,385",
+              "+$15"
+            ]
+          ],
+          "more_count": 7
+        },
+        "sparkline": null,
+        "fair_housing_review": null,
+        "why": {
+          "text": "10 of the 44 available units are stale. Six are A1 one-beds priced $1,385 against a $1,370 floorplan average.",
+          "receipts": [
+            {
+              "label": "10 of 44 available units listed 90+ days",
+              "source": "aptiq",
+              "as_of": "2026-09-14T13:04:00Z"
+            }
+          ]
+        },
+        "for_whom": null,
+        "approving_does": [
+          {
+            "label": "Hide #1321 from the syndication feed",
+            "owner": "RPM Digital",
+            "when": "2026-09-14"
+          },
+          {
+            "label": "Five A1s repriced to $1,362 — $8 under the plan average",
+            "owner": "RPM Digital",
+            "when": "2026-09-15"
+          },
+          {
+            "label": "Concession moves from B plans to A plans for three weeks",
+            "owner": "RPM Digital",
+            "when": "2026-09-17"
+          }
+        ]
+      }
+    ],
+    "this_week": [
+      {
+        "id": "hubdb_rec:991",
+        "source": "hubdb_rec",
+        "source_id": "991",
+        "title": "Flight paid onto one-bedrooms before the October 5 wave",
+        "found": "Seven units open the week of Oct 5 — the largest wave this quarter. Four are A1/A3 one-beds, already our slowest plans.",
+        "expect": null,
+        "if_skip": null,
+        "receipts": [
+          {
+            "label": "7 units, week of Oct 5",
+            "source": "aptiq",
+            "as_of": "2026-09-14T13:04:00Z"
+          }
+        ],
+        "channels": [
+          "paid_search",
+          "pmax",
+          "ils"
+        ],
+        "lens": "amplify",
+        "start_by": "2026-09-14",
+        "due": null,
+        "status": "to_do",
+        "needs_approval": true,
+        "client_visible": true,
+        "owner": "Dana R.",
+        "comments_count": 0,
+        "cost_note": "Draft ready — $600 for 3 weeks",
+        "steps": [
+          {
+            "when": "2026-09-14",
+            "label": "Paid search ad groups for A1 and A3 turned on",
+            "channel": "paid_search",
+            "kind": "person",
+            "status": "pending"
+          },
+          {
+            "when": "2026-09-21",
+            "label": "One-bedroom listings refreshed with current photos",
+            "channel": "ils",
+            "kind": "queued",
+            "status": "pending"
+          }
+        ],
+        "trail": [
+          {
+            "at": "2026-09-08T12:00:00Z",
+            "actor": "forecast",
+            "text": "Opened",
+            "visibility": "client"
+          }
+        ],
+        "actions": {
+          "approve": true,
+          "not_now": true
+        },
+        "notes": [],
+        "evidence": null,
+        "sparkline": {
+          "label": "units coming available, by week",
+          "points": [
+            {
+              "x": "2026-09-07",
+              "y": 3
+            },
+            {
+              "x": "2026-09-14",
+              "y": 1
+            },
+            {
+              "x": "2026-09-21",
+              "y": 3
+            },
+            {
+              "x": "2026-09-28",
+              "y": 2
+            },
+            {
+              "x": "2026-10-05",
+              "y": 7
+            },
+            {
+              "x": "2026-10-12",
+              "y": 1
+            },
+            {
+              "x": "2026-10-19",
+              "y": 1
+            },
+            {
+              "x": "2026-10-26",
+              "y": 4
+            },
+            {
+              "x": "2026-11-02",
+              "y": 1
+            }
+          ],
+          "highlight_index": 4
+        },
+        "fair_housing_review": null,
+        "why": {
+          "text": "Seven units open the week of Oct 5 — the largest wave this quarter. Four are A1/A3 one-beds, already our slowest plans.",
+          "receipts": [
+            {
+              "label": "7 units, week of Oct 5",
+              "source": "aptiq",
+              "as_of": "2026-09-14T13:04:00Z"
+            }
+          ]
+        },
+        "for_whom": null,
+        "approving_does": [
+          {
+            "label": "Paid search ad groups for A1 and A3 turned on",
+            "owner": "RPM Digital",
+            "when": "2026-09-14"
+          },
+          {
+            "label": "One-bedroom listings refreshed with current photos",
+            "owner": "RPM Digital",
+            "when": "2026-09-21"
+          }
+        ]
+      },
+      {
+        "id": "service_ticket:5521",
+        "source": "service_ticket",
+        "source_id": "5521",
+        "title": "Renewal-season creative set",
+        "found": "Renewal season opens October 1. Contracted work — the ticket files itself Tuesday, no approval needed.",
+        "expect": null,
+        "if_skip": null,
+        "receipts": [],
+        "channels": [
+          "creative",
+          "email"
+        ],
+        "lens": "tailor",
+        "start_by": "2026-09-15",
+        "due": "2026-10-01",
+        "status": "in_motion",
+        "needs_approval": false,
+        "client_visible": true,
+        "owner": "Creative Services",
+        "comments_count": 0,
+        "cost_note": null,
+        "steps": [],
+        "trail": [
+          {
+            "at": "2026-09-01T15:00:00Z",
+            "actor": "contract schedule",
+            "text": "Opened",
+            "visibility": "client"
+          }
+        ],
+        "actions": {
+          "approve": false,
+          "not_now": false
+        },
+        "notes": [],
+        "evidence": null,
+        "sparkline": null,
+        "fair_housing_review": null,
+        "why": {
+          "text": "Renewal season opens October 1. Contracted work — the ticket files itself Tuesday, no approval needed.",
+          "receipts": []
+        },
+        "for_whom": null,
+        "approving_does": []
+      },
+      {
+        "id": "onboarding_gap:yardi",
+        "source": "onboarding_gap",
+        "source_id": "yardi",
+        "title": "Connect Yardi so lease dates reach the plan",
+        "found": null,
+        "expect": null,
+        "if_skip": null,
+        "receipts": [],
+        "channels": [],
+        "lens": "express",
+        "start_by": "2026-09-18",
+        "due": null,
+        "status": "to_do",
+        "needs_approval": false,
+        "client_visible": true,
+        "owner": "Marcus J.",
+        "comments_count": 0,
+        "cost_note": null,
+        "steps": null,
+        "trail": [],
+        "actions": {
+          "approve": false,
+          "not_now": true
+        },
+        "notes": [],
+        "evidence": null,
+        "sparkline": null,
+        "fair_housing_review": null,
+        "why": null,
+        "for_whom": null,
+        "approving_does": []
+      }
+    ],
+    "later": {
+      "count": 3,
+      "titles": [
+        "2027 budget draft",
+        "Second unit wave",
+        "Q4 creative refresh"
+      ]
+    }
+  },
+  "hidden_count": 41,
+  "gaps": [
+    {
+      "message": "Renewal dates are missing because Yardi is not connected.",
+      "field": "groups.later",
+      "source": "yardi"
+    }
+  ]
+}

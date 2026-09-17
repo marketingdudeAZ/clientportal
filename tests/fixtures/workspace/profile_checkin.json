@@ -1,0 +1,23 @@
+{
+  "checkin": {
+    "due": false,
+    "stale_fields": [
+      "residents_love",
+      "property_amenities",
+      "competitors",
+      "pms",
+      "must_include"
+    ]
+  },
+  "company_id": "18234410021",
+  "confirmed": [
+    "romance",
+    "goals"
+  ],
+  "skipped": [
+    {
+      "key": "unit_features",
+      "reason": "No value to confirm"
+    }
+  ]
+}

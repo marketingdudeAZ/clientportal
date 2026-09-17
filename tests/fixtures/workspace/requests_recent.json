@@ -1,0 +1,8 @@
+{
+  "as_of": "2026-09-14T14:02:00Z",
+  "recent": [
+    {"title": "Update the pool-closure notice", "status": "done", "status_date": "2026-09-11", "work_item_id": "portal_ticket:4402"},
+    {"title": "New tour video for the clubhouse", "status": "in_progress", "status_date": "2026-09-09", "work_item_id": "portal_ticket:4388"},
+    {"title": "Fix the Google Business hours", "status": "done", "status_date": "2026-09-02", "work_item_id": "portal_ticket:4351"}
+  ]
+}

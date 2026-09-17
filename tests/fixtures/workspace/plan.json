@@ -1,0 +1,68 @@
+{
+  "monthly_total": 4638,
+  "channel_count": 6,
+  "pending_changes": 2,
+  "channels": [
+    {
+      "channel": "Paid search",
+      "monthly": 1762,
+      "share": 0.38,
+      "cost_per_lease": 391,
+      "pointed_at": "All floorplans",
+      "status": "pending",
+      "status_note": "+$600 pending"
+    },
+    {
+      "channel": "Performance Max",
+      "monthly": 1077,
+      "share": 0.23,
+      "cost_per_lease": 538,
+      "pointed_at": "All floorplans",
+      "status": "running",
+      "status_note": null
+    },
+    {
+      "channel": "SEO — Standard",
+      "monthly": 800,
+      "share": 0.17,
+      "cost_per_lease": 178,
+      "pointed_at": "Floorplan pages",
+      "status": "ended",
+      "status_note": "Term ended 8/28"
+    },
+    {
+      "channel": "ILS — Zillow",
+      "monthly": 556,
+      "share": 0.12,
+      "cost_per_lease": 93,
+      "pointed_at": "One-beds",
+      "status": "running",
+      "status_note": null
+    },
+    {
+      "channel": "Social — Meta",
+      "monthly": 243,
+      "share": 0.05,
+      "cost_per_lease": null,
+      "pointed_at": "Renewal-season creative",
+      "status": "pending",
+      "status_note": "Creative pending"
+    },
+    {
+      "channel": "ILS — Apartments.com",
+      "monthly": 200,
+      "share": 0.04,
+      "cost_per_lease": null,
+      "pointed_at": "All floorplans",
+      "status": "running",
+      "status_note": null
+    }
+  ],
+  "caveat": "Zillow leases at $93 and Performance Max at $538. Both numbers come from last-touch attribution, which flatters whatever a prospect saw last. Treat the ratio as real and the absolute as directional before moving money on it.",
+  "gaps": [
+    {
+      "message": "Cost per lease is missing for Social and Apartments.com — no lease was attributed to either this quarter.",
+      "field": "channels[].cost_per_lease"
+    }
+  ]
+}

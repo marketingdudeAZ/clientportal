@@ -22,6 +22,8 @@ from .redlight import redlight_lite_bp
 from .self_checkout import self_checkout_bp
 from .seo import seo_bp
 from .ticket_profile import ticket_profile_bp
+from .workspace_report import workspace_report_bp
+from .workspace import workspace_bp
 from .webhooks import register_webhook_blueprints
 
 
@@ -56,4 +58,8 @@ def register_all(app):
     # Ticket → property-profile loop — every endpoint 404s until
     # TICKET_PROFILE_LOOP_ENABLED=true, so this is inert until the flag flips.
     app.register_blueprint(ticket_profile_bp)
+    app.register_blueprint(workspace_report_bp)
+    # Portal Workspace API — every endpoint 404s until WORKSPACE_ENABLED=true,
+    # so this is inert until the flag flips.
+    app.register_blueprint(workspace_bp)
     register_webhook_blueprints(app)

@@ -39,6 +39,27 @@ try:
     #
     # This multiplies against portal_tickets._FETCH_WORKERS (4), so the
     # process-wide worst case is 16 × 4 = 64 concurrent ClickUp sockets.
+    # Warm the workspace caches on a daemon thread before any client arrives.
+    # _Entry.get() builds synchronously when cold, and these take ~100s to
+    # build, so without this the first user after every deploy, restart or
+    # instance replacement pays that inside their own request. Daemon, so it
+    # never holds up the port bind or shutdown; failures are logged, not fatal.
+    def _warm_workspace_caches():
+        try:
+            from skills.workspace_links import workspace_enabled
+            if not workspace_enabled():
+                return
+            from skills import workspace_cache
+            result = workspace_cache.warm()
+            print(f"=== workspace caches warmed (ok={result['ok']}) ===", flush=True)
+        except Exception as exc:  # noqa: BLE001 — a cold cache is slow, not broken
+            print(f"=== workspace cache warm failed: {type(exc).__name__}: {exc} ===",
+                  flush=True)
+
+    import threading
+    threading.Thread(target=_warm_workspace_caches, name="ws-cache-warm",
+                     daemon=True).start()
+
     threads = int(os.environ.get("WEB_THREADS", "16"))
     print(f"=== STEP 5: starting waitress on 0.0.0.0:{port} (threads={threads}) ===",
           flush=True)

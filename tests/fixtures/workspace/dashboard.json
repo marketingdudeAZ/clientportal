@@ -1,0 +1,1397 @@
+{
+  "greeting_name": "Dana",
+  "as_of": "2026-09-14T13:04:00Z",
+  "scope_label": "Your 35 properties",
+  "kpis": {
+    "occupancy": {
+      "value": 0.9,
+      "source": "aptiq",
+      "as_of": "2026-09-14T13:04:00Z"
+    },
+    "units_to_lease_90d": {
+      "value": 1362,
+      "source": "aptiq_exposure",
+      "as_of": "2026-09-14T13:04:00Z"
+    },
+    "leases_this_month": {
+      "value": 145,
+      "source": "hyly",
+      "as_of": "2026-09-14T11:00:00Z"
+    },
+    "cost_per_lease": {
+      "value": 438,
+      "source": "hubspot_line_items+hyly",
+      "as_of": "2026-09-01T06:00:00Z"
+    },
+    "ai_visibility": {
+      "value": 59,
+      "source": "geo_brand_mentions",
+      "as_of": "2026-09-14T08:14:00Z"
+    },
+    "actions_taken": {
+      "value": 259,
+      "source": "automatic workspace_decision and loop events, last 30 days",
+      "as_of": "2026-09-14T13:04:00Z"
+    },
+    "waiting_on_you": {
+      "value": 10,
+      "source": "workspace_inbox",
+      "as_of": "2026-09-14T13:04:00Z"
+    }
+  },
+  "health_tiles": [
+    {
+      "company_id": "18234410021",
+      "name": "LYV Broadway",
+      "score": 82,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410087",
+      "name": "Skye Reserve",
+      "score": 58,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410150",
+      "name": "The Maddux at Shadowood",
+      "score": 41,
+      "band": "warning"
+    },
+    {
+      "company_id": "18234410203",
+      "name": "Arbor Hills Flats",
+      "score": 55,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410112",
+      "name": "Remi West Dallas",
+      "score": 74,
+      "band": "healthy"
+    },
+    {
+      "company_id": "26136316506",
+      "name": "The Bromley at Brighton Crossing",
+      "score": 78,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410241",
+      "name": "Solana at Stone Oak",
+      "score": 28,
+      "band": "critical"
+    },
+    {
+      "company_id": "18234410489",
+      "name": "Marlowe Midtown",
+      "score": 64,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410526",
+      "name": "The Grove at Alamo Ranch",
+      "score": 64,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410452",
+      "name": "Vireo Uptown",
+      "score": 65,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410338",
+      "name": "Palisade at Eastside",
+      "score": 66,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410325",
+      "name": "Mercer Park",
+      "score": 69,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410553",
+      "name": "Lakeside at Las Colinas",
+      "score": 69,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410361",
+      "name": "Harbor Point Lofts",
+      "score": 73,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410382",
+      "name": "Coral Vue",
+      "score": 73,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410468",
+      "name": "The Harlow",
+      "score": 75,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410416",
+      "name": "The Stanton",
+      "score": 76,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410473",
+      "name": "Ridgeview at Sandy Springs",
+      "score": 76,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410507",
+      "name": "Parkline Lowry",
+      "score": 77,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410346",
+      "name": "The Ashford at Katy Trail",
+      "score": 78,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410302",
+      "name": "Alta Frisco Station",
+      "score": 79,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410403",
+      "name": "Belmont Terrace",
+      "score": 80,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410530",
+      "name": "Oak & Olive",
+      "score": 80,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410428",
+      "name": "Elm & Ivy",
+      "score": 82,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410395",
+      "name": "Wren at Lake Nona",
+      "score": 83,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410447",
+      "name": "Summit at Barton Creek",
+      "score": 83,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410359",
+      "name": "Juniper Row",
+      "score": 85,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410431",
+      "name": "Cypress Landing",
+      "score": 85,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410511",
+      "name": "Saddle Ridge",
+      "score": 86,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410494",
+      "name": "Aspen Crossing",
+      "score": 89,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410317",
+      "name": "The Kenzie at Legacy West",
+      "score": 90,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410545",
+      "name": "Sonora Vista",
+      "score": 90,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410374",
+      "name": "The Lark at Seminole Heights",
+      "score": 91,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410568",
+      "name": "Bexley Crossing",
+      "score": 91,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410266",
+      "name": "Cedar Falls Commons",
+      "score": null,
+      "band": "new"
+    }
+  ],
+  "properties": [
+    {
+      "company_id": "18234410021",
+      "name": "LYV Broadway",
+      "units": 390,
+      "occupancy": {
+        "value": 0.918,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 48,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 7,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 85,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 82,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410087",
+      "name": "Skye Reserve",
+      "units": 982,
+      "occupancy": {
+        "value": 0.76,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 274,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 14,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Lease-up",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 58,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410150",
+      "name": "The Maddux at Shadowood",
+      "units": 287,
+      "occupancy": {
+        "value": 0.93,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 29,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 41,
+      "band": "warning"
+    },
+    {
+      "company_id": "18234410203",
+      "name": "Arbor Hills Flats",
+      "units": 204,
+      "occupancy": {
+        "value": 0.887,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 23,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 3,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 55,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410112",
+      "name": "Remi West Dallas",
+      "units": 336,
+      "occupancy": {
+        "value": 0.851,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 62,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 6,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 74,
+      "band": "healthy"
+    },
+    {
+      "company_id": "26136316506",
+      "name": "The Bromley at Brighton Crossing",
+      "units": 299,
+      "occupancy": {
+        "value": 0.896,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 32,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 5,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 78,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410241",
+      "name": "Solana at Stone Oak",
+      "units": 156,
+      "occupancy": {
+        "value": 0.923,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 17,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 3,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 28,
+      "band": "critical"
+    },
+    {
+      "company_id": "18234410489",
+      "name": "Marlowe Midtown",
+      "units": 276,
+      "occupancy": {
+        "value": 0.938,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 27,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 64,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410526",
+      "name": "The Grove at Alamo Ranch",
+      "units": 248,
+      "occupancy": {
+        "value": 0.944,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 19,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 64,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410452",
+      "name": "Vireo Uptown",
+      "units": 330,
+      "occupancy": {
+        "value": 0.9,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 50,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 65,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410338",
+      "name": "Palisade at Eastside",
+      "units": 344,
+      "occupancy": {
+        "value": 0.901,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 45,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 66,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410325",
+      "name": "Mercer Park",
+      "units": 268,
+      "occupancy": {
+        "value": 0.951,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 25,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 69,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410553",
+      "name": "Lakeside at Las Colinas",
+      "units": 360,
+      "occupancy": {
+        "value": 0.867,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 63,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 6,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 69,
+      "band": "attention"
+    },
+    {
+      "company_id": "18234410361",
+      "name": "Harbor Point Lofts",
+      "units": 258,
+      "occupancy": {
+        "value": 0.938,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 31,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 3,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 73,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410382",
+      "name": "Coral Vue",
+      "units": 306,
+      "occupancy": {
+        "value": 0.859,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 55,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 73,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410468",
+      "name": "The Harlow",
+      "units": 254,
+      "occupancy": {
+        "value": 0.945,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 28,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 3,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 75,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410416",
+      "name": "The Stanton",
+      "units": 350,
+      "occupancy": {
+        "value": 0.954,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 40,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 5,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 76,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410473",
+      "name": "Ridgeview at Sandy Springs",
+      "units": 312,
+      "occupancy": {
+        "value": 0.869,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 64,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 5,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 76,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410507",
+      "name": "Parkline Lowry",
+      "units": 196,
+      "occupancy": {
+        "value": 0.883,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 32,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 3,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 77,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410346",
+      "name": "The Ashford at Katy Trail",
+      "units": 221,
+      "occupancy": {
+        "value": 0.941,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 21,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 3,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 78,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410302",
+      "name": "Alta Frisco Station",
+      "units": 318,
+      "occupancy": {
+        "value": 0.921,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 38,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 79,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410403",
+      "name": "Belmont Terrace",
+      "units": 240,
+      "occupancy": {
+        "value": 0.946,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 24,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 3,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 80,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410530",
+      "name": "Oak & Olive",
+      "units": 214,
+      "occupancy": {
+        "value": 0.967,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 14,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 3,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 80,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410428",
+      "name": "Elm & Ivy",
+      "units": 212,
+      "occupancy": {
+        "value": 0.939,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 15,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 3,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 82,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410395",
+      "name": "Wren at Lake Nona",
+      "units": 280,
+      "occupancy": {
+        "value": 0.95,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 24,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 83,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410447",
+      "name": "Summit at Barton Creek",
+      "units": 188,
+      "occupancy": {
+        "value": 0.941,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 19,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 2,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 83,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410359",
+      "name": "Juniper Row",
+      "units": 176,
+      "occupancy": {
+        "value": 0.903,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 19,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 3,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 85,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410431",
+      "name": "Cypress Landing",
+      "units": 264,
+      "occupancy": {
+        "value": 0.943,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 27,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 85,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410511",
+      "name": "Saddle Ridge",
+      "units": 300,
+      "occupancy": {
+        "value": 0.88,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 48,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 5,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 86,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410494",
+      "name": "Aspen Crossing",
+      "units": 228,
+      "occupancy": {
+        "value": 0.908,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 28,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 89,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410317",
+      "name": "The Kenzie at Legacy West",
+      "units": 412,
+      "occupancy": {
+        "value": 0.942,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 40,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 7,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 90,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410545",
+      "name": "Sonora Vista",
+      "units": 286,
+      "occupancy": {
+        "value": 0.906,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 33,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 4,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 90,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410374",
+      "name": "The Lark at Seminole Heights",
+      "units": 192,
+      "occupancy": {
+        "value": 0.948,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 16,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 2,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 91,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410568",
+      "name": "Bexley Crossing",
+      "units": 232,
+      "occupancy": {
+        "value": 0.888,
+        "source": "aptiq",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "to_lease_90d": {
+        "value": 32,
+        "source": "aptiq_exposure",
+        "as_of": "2026-09-14T13:04:00Z"
+      },
+      "leases_month": {
+        "value": 3,
+        "source": "hyly",
+        "as_of": "2026-09-14T11:00:00Z"
+      },
+      "status": "Stabilized",
+      "profile_completeness": {
+        "value": 33,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": 91,
+      "band": "healthy"
+    },
+    {
+      "company_id": "18234410266",
+      "name": "Cedar Falls Commons",
+      "units": 160,
+      "occupancy": null,
+      "to_lease_90d": null,
+      "leases_month": null,
+      "status": null,
+      "profile_completeness": {
+        "value": 15,
+        "source": "community_brief",
+        "as_of": "2026-09-15T13:00:00Z",
+        "weighted": true
+      },
+      "health": null,
+      "band": "new"
+    }
+  ],
+  "activity": [
+    {
+      "at": "2026-09-14T13:02:00Z",
+      "text": "Audited the Apartments.com package — LYV Broadway",
+      "company_id": "18234410021",
+      "kind": "audit",
+      "visibility": "client"
+    },
+    {
+      "at": "2026-09-14T12:46:00Z",
+      "text": "Drafted a rate email to Apartments.com — Remi West Dallas",
+      "company_id": "18234410112",
+      "kind": "draft",
+      "visibility": "client"
+    },
+    {
+      "at": "2026-09-14T12:04:00Z",
+      "text": "Ran a visibility check — The Bromley at Brighton Crossing",
+      "company_id": "26136316506",
+      "kind": "check",
+      "visibility": "client"
+    },
+    {
+      "at": "2026-09-14T09:30:00Z",
+      "text": "Noted for the owner call: renewal concern at Skye Reserve",
+      "company_id": "18234410087",
+      "kind": "flag",
+      "visibility": "internal"
+    },
+    {
+      "at": "2026-09-01T06:12:00Z",
+      "text": "Monthly Fair Housing review — no issues — Remi West Dallas",
+      "company_id": "18234410112",
+      "kind": "check",
+      "visibility": "client"
+    },
+    {
+      "at": "2026-09-13T08:10:00Z",
+      "text": "Updated the exposure forecast — Arbor Hills Flats",
+      "company_id": "18234410203",
+      "kind": "forecast",
+      "visibility": "client"
+    }
+  ],
+  "waiting": [
+    {
+      "kind": "approval",
+      "item_id": "hubdb_rec:00211",
+      "company_id": "18234410021",
+      "title": "Step down Apartments.com Premium to Standard at LYV Broadway",
+      "subtitle": "Saves $25,200 a year",
+      "category": "cost"
+    },
+    {
+      "kind": "approval",
+      "item_id": "call_prep:00213",
+      "company_id": "18234410021",
+      "title": "Send the Apartments.com rate email for LYV Broadway",
+      "subtitle": "Est. $6,000 a year",
+      "category": "vendor"
+    },
+    {
+      "kind": "approval",
+      "item_id": "content_brief:00214",
+      "company_id": "18234410021",
+      "title": "FAQ page: pet policy and breed restrictions at LYV Broadway",
+      "subtitle": "Renters ask AI engines about pets before they tour, and nothing on LYV Broadway's site answers it.",
+      "category": "content"
+    },
+    {
+      "kind": "approval",
+      "item_id": "content_brief:65064",
+      "company_id": "26136316506",
+      "title": "FAQ page: pet policy and breed restrictions at The Bromley at Brighton Crossing",
+      "subtitle": "Renters ask AI engines about pets before they tour, and nothing on The Bromley at Brighton Crossing's site answers it.",
+      "category": "content"
+    },
+    {
+      "kind": "approval",
+      "item_id": "call_prep:01123",
+      "company_id": "18234410112",
+      "title": "Send the Apartments.com rate email for Remi West Dallas",
+      "subtitle": "Est. $6,000 a year",
+      "category": "vendor"
+    },
+    {
+      "kind": "approval",
+      "item_id": "hubdb_rec:00872",
+      "company_id": "18234410087",
+      "title": "Add Zillow Promoted at Skye Reserve",
+      "subtitle": "Adds $480 a month — drafted for signature",
+      "category": "vendor"
+    },
+    {
+      "kind": "approval",
+      "item_id": "fair_housing_review:0087-2026-09",
+      "company_id": "18234410087",
+      "title": "Your monthly Fair Housing review for Skye Reserve found 2 items",
+      "subtitle": "The monthly review of Skye Reserve's website, listings and images found wording and an image that need a person's call.",
+      "category": "compliance"
+    },
+    {
+      "kind": "approval",
+      "item_id": "hubdb_rec:02031",
+      "company_id": "18234410203",
+      "title": "Step down Apartments.com Premium to Standard at Arbor Hills Flats",
+      "subtitle": "Saves $30,000 a year",
+      "category": "cost"
+    },
+    {
+      "kind": "approval",
+      "item_id": "video_variant:01505",
+      "company_id": "18234410150",
+      "title": "Build new pool and clubhouse ad creative for The Maddux at Shadowood from existing assets",
+      "subtitle": "The Maddux at Shadowood's ads are worn out, and the assets to replace them already exist.",
+      "category": "creative"
+    },
+    {
+      "kind": "approval",
+      "item_id": "profile_update:0021-taglines",
+      "company_id": "18234410021",
+      "title": "Profile update: Taglines",
+      "subtitle": "Morgan Lee edited an ad-facing field on LYV Broadway's profile. Ad-facing edits wait for RPM review before they reach ads.",
+      "category": "content"
+    }
+  ],
+  "loop_status": {
+    "running": true,
+    "property_count": 35,
+    "last_pass": "2026-09-14T08:00:00Z"
+  },
+  "gaps": [
+    {
+      "message": "Cedar Falls Commons has no ApartmentIQ read yet, so its occupancy and exposure are left out of the totals.",
+      "field": "kpis.occupancy",
+      "source": "aptiq"
+    }
+  ]
+}

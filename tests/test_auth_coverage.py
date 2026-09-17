@@ -49,6 +49,10 @@ AUTH_MARKERS = (
     "_is_authorized",              # INTERNAL_KEY/PORTAL_EMAIL (loop blueprint helper)
     "_is_internal",                # INTERNAL_KEY (loop blueprint internal-only helper)
     "_gate",                       # PILOT_ROSTER (portal-tickets blueprint)
+    "_caller_label",               # MACHINE_TOKEN (MCP endpoint: bearer token,
+                                   # constant-time matched against MCP_TOKENS /
+                                   # MCP_BEARER_TOKEN; there is no portal user
+                                   # on that path, so no portal marker applies)
     # INTERNAL_KEY (budget-sync blueprint). This test reads the HANDLER's own
     # source, so a check one call deeper is invisible to it: budget_sync_api's
     # handlers call _guard(), which calls _is_internal() — already a marker —

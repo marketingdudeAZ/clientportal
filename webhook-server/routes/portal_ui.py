@@ -17,6 +17,7 @@ service regardless of Render's root-directory setting.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 
@@ -31,6 +32,7 @@ portal_ui_bp = Blueprint("portal_ui", __name__)
 _PAGES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "portal_pages")
 _DEMO = os.path.join(_PAGES_DIR, "demo.html")
 _LITE = os.path.join(_PAGES_DIR, "portal.html")
+_WORKSPACE = os.path.join(_PAGES_DIR, "workspace.html")
 
 # Representative portfolio metrics for the Red Light preview — the rollout
 # dataset, so the Lite page shows real-shaped scoring + next steps.
@@ -100,6 +102,38 @@ def portal_page():
     else:
         page = config_js + page
     return Response(page, mimetype="text/html")
+
+
+def _workspace_enabled() -> bool:
+    """WORKSPACE_ENABLED — the one flag function every workspace route shares."""
+    from skills.workspace_links import workspace_enabled
+    return workspace_enabled()
+
+
+@portal_ui_bp.route("/workspace", methods=["GET"])
+def workspace_page():
+    """The simplified client workspace (screens per the Paper workspace file).
+
+    Served as-is: no identity is injected and no query parameter is read. The
+    page authenticates itself (Clerk Bearer, or a signed preview link sent as
+    X-Workspace-Link), and every API route checks that identity server-side.
+    404 unless WORKSPACE_ENABLED is on, so the route does not exist in prod
+    until it is switched on.
+    """
+    if not _workspace_enabled():
+        return Response("Not found", status=404, mimetype="text/plain")
+    resp = _serve(_WORKSPACE)
+    if resp.status_code == 200:
+        # The page ships with an empty publishable key and is given the real one
+        # here, the way routes/workspace_report.py does it. A key committed into
+        # the file is the key production would run on.
+        pk = os.environ.get("CLERK_PUBLISHABLE_KEY", "").strip()
+        if pk.startswith("pk_"):
+            resp.set_data(resp.get_data(as_text=True).replace(
+                "window.__CLERK_PK__ = '';", f"window.__CLERK_PK__ = {json.dumps(pk)};", 1))
+        resp.headers["Cache-Control"] = "no-store"
+        resp.headers["Referrer-Policy"] = "no-referrer"
+    return resp
 
 
 @portal_ui_bp.route("/portal/lite", methods=["GET"])

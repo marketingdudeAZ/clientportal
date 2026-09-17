@@ -1,0 +1,18 @@
+{
+  "uploaded": [
+    {
+      "filename": "Pool at dusk.jpg",
+      "file_url": "https://files.preview.invalid/lyvbroadway/lyvbroadway-pool-at-dusk.jpg",
+      "thumbnail_url": null,
+      "asset_name": "lyvbroadway-pool-at-dusk",
+      "category": "photos",
+      "subcategory": null
+    }
+  ],
+  "skipped": [
+    {
+      "filename": "floorplans.zip",
+      "reason": "only photos and videos"
+    }
+  ]
+}

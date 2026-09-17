@@ -1,0 +1,26 @@
+{
+  "as_of": "2026-09-14T14:02:00Z",
+  "tickets": [
+    {
+      "draft_id": "d1",
+      "title": "Reshoot A1 photography — post-renovation",
+      "category": "creative",
+      "team": "Creative Marketing Services",
+      "needed_by": "2026-09-28",
+      "needed_by_reason": "7 units open Oct 5",
+      "attached_context": ["Property address", "Market", "PM contact", "Brand kit"],
+      "warnings": []
+    },
+    {
+      "draft_id": "d2",
+      "title": "Correct the A1 floorplan page — washer/dryer callout",
+      "category": "web",
+      "team": "Web team",
+      "needed_by": "2026-09-15",
+      "needed_by_reason": "live copy error",
+      "attached_context": [],
+      "warnings": ["A wrong amenity is also wrong in the paid ads and the ILS feeds. We'll flag those too."]
+    }
+  ],
+  "gaps": []
+}

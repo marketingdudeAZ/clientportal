@@ -109,6 +109,33 @@ def _email_for_user(user_id: str) -> str:
         return ""
 
 
+def _allowed_parties() -> list:
+    """Origins whose tokens this API accepts, from CLERK_AUTHORIZED_PARTIES.
+
+    A Clerk session token carries `azp` — the origin that minted it — and no
+    `aud`. Without checking it, ANY validly-signed token from the same Clerk
+    instance is accepted, including one minted for a different site on that
+    instance. Unset means "accept any origin", which is the historical
+    behavior and stays the default so nothing locks out on deploy.
+    """
+    raw = (os.environ.get("CLERK_AUTHORIZED_PARTIES") or "").strip()
+    return [p.strip().rstrip("/") for p in raw.split(",") if p.strip()]
+
+
+def _authorized_party_ok(claims: dict) -> bool:
+    allowed = _allowed_parties()
+    if not allowed:
+        return True
+    azp = (claims.get("azp") or "").strip().rstrip("/")
+    if not azp:
+        logger.warning("clerk_auth: token has no azp but authorized parties are set")
+        return False
+    if azp in allowed:
+        return True
+    logger.warning("clerk_auth: token rejected — azp %s is not an authorized party", azp)
+    return False
+
+
 def verify_bearer(auth_header: str) -> Optional[dict]:
     """Verify `Authorization: Bearer <clerk session JWT>`.
 
@@ -136,6 +163,8 @@ def verify_bearer(auth_header: str) -> Optional[dict]:
         )
         user_id = claims.get("sub") or ""
         if not user_id:
+            return None
+        if not _authorized_party_ok(claims):
             return None
         # Prefer an email claim if the instance's token template includes one.
         email = (claims.get("email") or "").lower().strip() or _email_for_user(user_id)

@@ -324,6 +324,17 @@ def content_briefs():
     if not hub_keyword:
         return jsonify({"error": "cluster_hub_keyword is required"}), 400
 
+    start_content_brief(company_id, property_uuid, hub_keyword, payload)
+    return jsonify({"status": "generating", "hub_keyword": hub_keyword}), 202
+
+def start_content_brief(company_id, property_uuid, hub_keyword, payload):
+    """Generate and persist a content brief on a background thread.
+
+    Module-callable brief path: /api/content/briefs and the workspace
+    create-brief action both use it. The SEO-tier gate stays with each caller.
+    """
+    payload = payload or {}
+
     # Kick off generation in a background thread so the HTTP request returns fast.
     def _generate():
         try:
@@ -388,7 +399,6 @@ def content_briefs():
             logger.error("brief generation failed: %s", exc, exc_info=True)
 
     threading.Thread(target=_generate, daemon=True).start()
-    return jsonify({"status": "generating", "hub_keyword": hub_keyword}), 202
 
 
 @seo_bp.route("/api/content/briefs/<brief_id>", methods=["GET", "OPTIONS"])
@@ -429,16 +439,28 @@ def content_brief_approve():
     if not brief_id:
         return jsonify({"error": "brief_id is required"}), 400
 
+    body, status = approve_content_brief(
+        brief_id, company_id=company_id, property_uuid=property_uuid,
+        property_name=payload.get("property_name") or "",
+    )
+    return jsonify(body), status
+
+
+def approve_content_brief(brief_id, *, company_id, property_uuid, property_name=""):
+    """Route an approved brief to the Content team. Returns (body, status).
+
+    Module-callable approve handler: the route above and the workspace decision
+    endpoint both use it. The SEO-tier gate stays with each caller.
+    """
     from config import HUBDB_CONTENT_BRIEFS_TABLE_ID
     from hubdb_helpers import read_rows
     rows = read_rows(HUBDB_CONTENT_BRIEFS_TABLE_ID, filters={"brief_id": brief_id}) if HUBDB_CONTENT_BRIEFS_TABLE_ID else []
     if not rows:
-        return jsonify({"error": "Brief not found"}), 404
+        return {"error": "Brief not found"}, 404
     brief = rows[0]
 
     try:
         from approval_agent import route_approval
-        property_name = payload.get("property_name") or ""
         result = route_approval(
             rec_id=brief_id,
             rec_type="content_brief",
@@ -448,10 +470,10 @@ def content_brief_approve():
             rec_title=brief.get("h1", "") or brief.get("hub_keyword", ""),
             rec_body=brief.get("outline_json", "") + "\n\n" + (brief.get("meta_description", "") or ""),
         )
-        return jsonify(result)
+        return result, 200
     except Exception as e:
         logger.error("content brief approve failed: %s", e, exc_info=True)
-        return jsonify({"error": "Approval failed"}), 500
+        return {"error": "Approval failed"}, 500
 
 
 @seo_bp.route("/api/content/decay", methods=["GET", "OPTIONS"])

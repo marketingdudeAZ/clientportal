@@ -1,0 +1,24 @@
+{
+  "company_id": "18234410021",
+  "entries": [
+    {
+      "at": "2026-09-15T13:00:00Z",
+      "by": "Dana R.",
+      "kind": "reviewed",
+      "new_value": "Bright white quartz kitchens, oversized windows and a rooftop lounge that catches the sunset over Downtown Carrollton.",
+      "note": null,
+      "old_value": "Bright white quartz kitchens, oversized windows and a rooftop lounge that catches the sunset over Downtown Carrollton."
+    },
+    {
+      "at": "2026-03-02T15:00:00Z",
+      "by": "Morgan Lee",
+      "kind": "edit",
+      "new_value": "Bright white quartz kitchens, oversized windows and a rooftop lounge that catches the sunset over Downtown Carrollton.",
+      "note": null,
+      "old_value": null
+    }
+  ],
+  "gaps": [],
+  "key": "romance",
+  "label": "Romance Paragraph"
+}

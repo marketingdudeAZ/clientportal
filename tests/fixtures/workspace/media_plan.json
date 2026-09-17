@@ -1,0 +1,264 @@
+{
+  "as_of": "2026-09-14T13:04:00Z",
+  "fiscal_year": "FY 2026-27",
+  "envelope": {
+    "value": 87500,
+    "source": "hubspot_line_items",
+    "as_of": "2026-09-01T12:00:00Z"
+  },
+  "objective": "Stabilize",
+  "generated_at": "2026-09-01T08:00:00Z",
+  "months": [
+    {
+      "month": "2026-09",
+      "units_to_lease": 48
+    },
+    {
+      "month": "2026-10",
+      "units_to_lease": 45
+    },
+    {
+      "month": "2026-11",
+      "units_to_lease": 42
+    },
+    {
+      "month": "2026-12",
+      "units_to_lease": 39
+    },
+    {
+      "month": "2027-01",
+      "units_to_lease": 36
+    },
+    {
+      "month": "2027-02",
+      "units_to_lease": 32
+    },
+    {
+      "month": "2027-03",
+      "units_to_lease": 29
+    },
+    {
+      "month": "2027-04",
+      "units_to_lease": 26
+    },
+    {
+      "month": "2027-05",
+      "units_to_lease": 23
+    },
+    {
+      "month": "2027-06",
+      "units_to_lease": 20
+    },
+    {
+      "month": "2027-07",
+      "units_to_lease": 17
+    },
+    {
+      "month": "2027-08",
+      "units_to_lease": 14
+    }
+  ],
+  "channels": [
+    {
+      "channel": "Google Business Profile",
+      "mode": "always_on",
+      "monthly": [
+        150,
+        150,
+        150,
+        150,
+        150,
+        150,
+        150,
+        150,
+        150,
+        150,
+        150,
+        150
+      ],
+      "source": "hubspot_line_items",
+      "annual": 1800,
+      "monthly_avg": 150,
+      "share": 0.022,
+      "cpl_target": null
+    },
+    {
+      "channel": "SEO / content",
+      "mode": "always_on",
+      "monthly": [
+        800,
+        800,
+        800,
+        800,
+        800,
+        800,
+        800,
+        800,
+        800,
+        800,
+        800,
+        800
+      ],
+      "source": "hubspot_line_items",
+      "annual": 9600,
+      "monthly_avg": 800,
+      "share": 0.117,
+      "cpl_target": null
+    },
+    {
+      "channel": "Website",
+      "mode": "always_on",
+      "monthly": [
+        120,
+        120,
+        120,
+        120,
+        120,
+        120,
+        120,
+        120,
+        120,
+        120,
+        120,
+        120
+      ],
+      "source": "hubspot_line_items",
+      "annual": 1440,
+      "monthly_avg": 120,
+      "share": 0.018,
+      "cpl_target": null
+    },
+    {
+      "channel": "Apartments.com base listing",
+      "mode": "always_on",
+      "monthly": [
+        900,
+        900,
+        900,
+        900,
+        900,
+        900,
+        900,
+        900,
+        900,
+        900,
+        900,
+        900
+      ],
+      "source": "hubspot_line_items",
+      "annual": 10800,
+      "monthly_avg": 900,
+      "share": 0.132,
+      "cpl_target": null
+    },
+    {
+      "channel": "Paid search",
+      "mode": "flighted",
+      "monthly": [
+        2700,
+        2550,
+        2400,
+        2200,
+        2050,
+        1800,
+        1650,
+        1450,
+        1300,
+        1150,
+        950,
+        800
+      ],
+      "source": "hubspot_line_items",
+      "annual": 21000,
+      "monthly_avg": 1750,
+      "share": 0.257,
+      "cpl_target": 32
+    },
+    {
+      "channel": "Performance Max",
+      "mode": "flighted",
+      "monthly": [
+        1550,
+        1450,
+        1350,
+        1250,
+        1150,
+        1050,
+        950,
+        850,
+        750,
+        650,
+        550,
+        450
+      ],
+      "source": "hubspot_line_items",
+      "annual": 12000,
+      "monthly_avg": 1000,
+      "share": 0.147,
+      "cpl_target": 45
+    },
+    {
+      "channel": "Meta",
+      "mode": "flighted",
+      "monthly": [
+        950,
+        850,
+        800,
+        750,
+        700,
+        600,
+        550,
+        500,
+        450,
+        400,
+        350,
+        250
+      ],
+      "source": "hubspot_line_items",
+      "annual": 7150,
+      "monthly_avg": 596,
+      "share": 0.087,
+      "cpl_target": 58
+    },
+    {
+      "channel": "Apartments.com Premium upgrade",
+      "mode": "flighted",
+      "monthly": [
+        2350,
+        2200,
+        2050,
+        1900,
+        1750,
+        1550,
+        1400,
+        1250,
+        1100,
+        950,
+        800,
+        700
+      ],
+      "source": "hubspot_line_items",
+      "annual": 18000,
+      "monthly_avg": 1500,
+      "share": 0.22,
+      "cpl_target": null
+    }
+  ],
+  "allocated": {
+    "value": 81790,
+    "source": "hubspot_line_items",
+    "as_of": "2026-09-01T12:00:00Z"
+  },
+  "notes": [
+    "Always-on channels stay flat all year at LYV Broadway: Google Business Profile, SEO / content and the website.",
+    "Flighted spend at LYV Broadway peaks in September, following the exposure forecast.",
+    "Apartments.com is shown at today's rate while \"Step down Apartments.com Premium to Standard at LYV Broadway\" waits on your decision. Approving it changes this plan.",
+    "Apartments.com is shown at today's rate while \"Send the Apartments.com rate email for LYV Broadway\" waits on your decision. Approving it changes this plan."
+  ],
+  "gaps": [
+    {
+      "message": "SEO, website and listing channels have no cost-per-lead target.",
+      "field": "channels[].cpl_target"
+    }
+  ]
+}

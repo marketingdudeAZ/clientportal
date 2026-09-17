@@ -1,0 +1,64 @@
+{
+  "as_of": "2026-09-14T13:04:00Z",
+  "counts": {"high": 2, "medium": 3, "low": 1},
+  "signals": [
+    {
+      "id": "occupancy_drop:18234410087:2026-09-14", "company_id": "18234410087", "property_name": "Skye Reserve",
+      "kind": "occupancy_drop", "severity": "high",
+      "title": "Occupancy down 3.1 points in 30 days",
+      "detail": "76.0% today against 79.1% on Aug 15.",
+      "metric": {"value": 0.76, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+      "change": {"from": 0.791, "to": 0.76, "window_days": 30},
+      "detected_at": "2026-09-14T13:10:00Z", "work_item_id": null
+    },
+    {
+      "id": "stale_inventory:18234410021:2026-08-24", "company_id": "18234410021", "property_name": "LYV Broadway",
+      "kind": "stale_inventory", "severity": "high",
+      "title": "Units listed 90+ days went from 4 to 10",
+      "detail": "Six of the ten are A1 one-bedrooms.",
+      "metric": {"value": 10, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+      "change": {"from": 4, "to": 10, "window_days": 60},
+      "detected_at": "2026-08-24T14:10:00Z", "work_item_id": "hubdb_rec:1004"
+    },
+    {
+      "id": "lease_wave:18234410112:2026-09-13", "company_id": "18234410112", "property_name": "Remi West Dallas",
+      "kind": "lease_wave", "severity": "medium",
+      "title": "Nine leases end the week of Oct 12",
+      "detail": "Three times the usual weekly count for this property.",
+      "metric": {"value": 9, "source": "aptiq", "as_of": "2026-09-13T13:04:00Z"},
+      "change": {"from": 3, "to": 9, "window_days": 90},
+      "detected_at": "2026-09-13T13:12:00Z", "work_item_id": null
+    },
+    {
+      "id": "spend_pacing:18234410150:2026-09-14", "company_id": "18234410150", "property_name": "The Maddux at Shadowood",
+      "kind": "spend_pacing", "severity": "medium",
+      "title": "Paid search has spent 71% of the month by day 14",
+      "detail": "On pace to run out around Sep 20.",
+      "metric": {"value": 0.71, "source": "hubspot_line_items", "as_of": "2026-09-14T12:30:00Z"},
+      "change": {"from": 0.47, "to": 0.71, "window_days": 14},
+      "detected_at": "2026-09-14T12:40:00Z", "work_item_id": null
+    },
+    {
+      "id": "data_stale:18234410112:2026-09-14", "company_id": "18234410112", "property_name": "Remi West Dallas",
+      "kind": "data_stale", "severity": "medium",
+      "title": "ApartmentIQ data is 3 days old",
+      "detail": "Last successful read was Sep 11. Occupancy and availability here may be behind.",
+      "metric": {"value": 3, "source": "aptiq", "as_of": "2026-09-11T13:04:00Z"},
+      "change": {"from": 1, "to": 3, "window_days": 3},
+      "detected_at": "2026-09-14T13:05:00Z", "work_item_id": null
+    },
+    {
+      "id": "stale_inventory:18234410150:2026-09-12", "company_id": "18234410150", "property_name": "The Maddux at Shadowood",
+      "kind": "stale_inventory", "severity": "low",
+      "title": "Two units crossed 60 days listed",
+      "detail": "Both are B2 two-bedrooms.",
+      "metric": {"value": 2, "source": "aptiq", "as_of": "2026-09-14T13:04:00Z"},
+      "change": {"from": 0, "to": 2, "window_days": 30},
+      "detected_at": "2026-09-12T13:08:00Z", "work_item_id": null
+    }
+  ],
+  "gaps": [
+    {"message": "Lead signals need GA4, which is not connected for 12 of these properties.", "source": "ga4"},
+    {"message": "Reputation signals need SOCi, which has no connector yet.", "source": "soci"}
+  ]
+}

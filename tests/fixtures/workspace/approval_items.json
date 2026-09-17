@@ -1,0 +1,875 @@
+{
+  "items": [
+    {
+      "id": "hubdb_rec:00211",
+      "source": "hubdb_rec",
+      "source_id": "00211",
+      "company_id": "18234410021",
+      "title": "Step down Apartments.com Premium to Standard at LYV Broadway",
+      "found": "LYV Broadway pays $4,100 a month for Apartments.com Premium. Hyly attributes 2 leases to it in the last six months.",
+      "expect": "Standard costs $2,000 a month. We expect lead volume at LYV Broadway to hold within 10%, and we check again after 60 days.",
+      "if_skip": "Premium renews on Oct 1 at $4,100 a month. Nothing else changes at LYV Broadway.",
+      "receipts": [
+        {
+          "label": "Premium package, $4,100/mo",
+          "source": "hubspot_line_items",
+          "as_of": "2026-09-14T12:30:00Z"
+        },
+        {
+          "label": "2 leases attributed in 6 months",
+          "source": "hyly",
+          "as_of": "2026-09-14T11:00:00Z"
+        }
+      ],
+      "evidence": {
+        "columns": [
+          "",
+          "Running now",
+          "Proposed"
+        ],
+        "rows": [
+          [
+            "Monthly cost",
+            "$4,100",
+            "$2,000"
+          ],
+          [
+            "Package",
+            "Premium",
+            "Standard"
+          ],
+          [
+            "Leases, last 6 months",
+            "2",
+            "—"
+          ]
+        ],
+        "more_count": 0
+      },
+      "sparkline": null,
+      "channels": [
+        "ils"
+      ],
+      "lens": "amplify",
+      "start_by": null,
+      "due": "2026-10-01",
+      "status": "to_do",
+      "needs_approval": true,
+      "client_visible": true,
+      "owner": "Marcus J.",
+      "comments_count": 0,
+      "cost_note": "Saves $25,200 a year",
+      "steps": [],
+      "trail": [
+        {
+          "at": "2026-09-14T08:12:00Z",
+          "actor": "vendor audit",
+          "text": "Opened for LYV Broadway",
+          "visibility": "client"
+        },
+        {
+          "at": "2026-09-14T09:40:00Z",
+          "actor": "Marcus J.",
+          "text": "Checked the LYV Broadway contract end date: Oct 1",
+          "visibility": "internal"
+        }
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T09:41:00Z",
+          "actor": "Marcus J.",
+          "text": "Copy the regional manager on the LYV Broadway email.",
+          "visibility": "internal"
+        }
+      ],
+      "actions": {
+        "approve": true,
+        "not_now": true
+      },
+      "fair_housing_review": null,
+      "why": {
+        "text": "LYV Broadway is paying for Premium placement that isn't producing leases.",
+        "receipts": [
+          {
+            "label": "Premium package, $4,100/mo",
+            "source": "hubspot_line_items",
+            "as_of": "2026-09-14T12:30:00Z"
+          },
+          {
+            "label": "2 leases attributed in 6 months",
+            "source": "hyly",
+            "as_of": "2026-09-14T11:00:00Z"
+          }
+        ]
+      },
+      "for_whom": {
+        "text": "LYV Broadway's leasing goal: 48 units to lease in the next 90 days at 92% occupancy today.",
+        "questions": []
+      },
+      "approving_does": [
+        {
+          "label": "We email the Apartments.com rep to move LYV Broadway to Standard at renewal",
+          "owner": "RPM Digital",
+          "when": "Within 2 business days"
+        },
+        {
+          "label": "The rep confirms the new package and rate",
+          "owner": "vendor",
+          "when": "Before Oct 1"
+        },
+        {
+          "label": "You sign the revised line item; the budget changes only after signature",
+          "owner": "you",
+          "when": "When the rep confirms"
+        }
+      ],
+      "category": "cost",
+      "draft": null,
+      "review": null
+    },
+    {
+      "id": "call_prep:00213",
+      "source": "call_prep",
+      "source_id": "00213",
+      "company_id": "18234410021",
+      "title": "Send the Apartments.com rate email for LYV Broadway",
+      "found": "LYV Broadway pays $3,100 a month for Apartments.com Gold. Comparable RPM properties in Carrollton pay about $500 less for the same package.",
+      "expect": "A $500 a month reduction at LYV Broadway's October renewal.",
+      "if_skip": "LYV Broadway's package renews at $3,100 a month.",
+      "receipts": [
+        {
+          "label": "Gold package, $3,100/mo",
+          "source": "hubspot_line_items",
+          "as_of": "2026-09-14T12:30:00Z"
+        }
+      ],
+      "evidence": null,
+      "sparkline": null,
+      "channels": [
+        "ils"
+      ],
+      "lens": "amplify",
+      "start_by": null,
+      "due": "2026-10-15",
+      "status": "to_do",
+      "needs_approval": true,
+      "client_visible": true,
+      "owner": "Marcus J.",
+      "comments_count": 0,
+      "cost_note": "Est. $6,000 a year",
+      "steps": [],
+      "trail": [
+        {
+          "at": "2026-09-14T12:46:00Z",
+          "actor": "vendor audit",
+          "text": "Drafted the email for LYV Broadway",
+          "visibility": "client"
+        }
+      ],
+      "notes": [],
+      "actions": {
+        "approve": true,
+        "not_now": true
+      },
+      "fair_housing_review": null,
+      "why": {
+        "text": "LYV Broadway pays more than comparable RPM properties in Carrollton for the same Apartments.com package.",
+        "receipts": [
+          {
+            "label": "Gold package, $3,100/mo",
+            "source": "hubspot_line_items",
+            "as_of": "2026-09-14T12:30:00Z"
+          }
+        ]
+      },
+      "for_whom": {
+        "text": "LYV Broadway's leasing goal: keep the same listing reach for less.",
+        "questions": []
+      },
+      "approving_does": [
+        {
+          "label": "RPM Digital sends the drafted email about LYV Broadway from your account manager's address",
+          "owner": "RPM Digital",
+          "when": "Within 1 business day"
+        },
+        {
+          "label": "The rep replies with a revised rate",
+          "owner": "vendor",
+          "when": "Before the October renewal"
+        },
+        {
+          "label": "You approve the new rate before anything is signed",
+          "owner": "you",
+          "when": "When the rep replies"
+        }
+      ],
+      "category": "vendor",
+      "draft": {
+        "kind": "email",
+        "title": "LYV Broadway — Apartments.com package review",
+        "body": "Hi [Rep],\n\nWe've been reviewing ILS performance across our portfolio and want to talk about the LYV Broadway package before it renews in October. LYV Broadway is on Gold at $3,100 a month; comparable RPM properties in Carrollton pay about $500 less for the same placement. Could we set up 20 minutes this week to review LYV Broadway's rate?\n\nThanks,\nMarcus"
+      },
+      "review": null
+    },
+    {
+      "id": "content_brief:00214",
+      "source": "content_brief",
+      "source_id": "00214",
+      "company_id": "18234410021",
+      "title": "FAQ page: pet policy and breed restrictions at LYV Broadway",
+      "found": "Perplexity named LYV Broadway in 0 of 4 questions about pet policy. The answers cited other Carrollton properties.",
+      "expect": "LYV Broadway cited in Perplexity pet-policy answers within 30 days of publishing.",
+      "if_skip": "Pet-policy questions about Carrollton apartments keep going to other properties' pages.",
+      "receipts": [
+        {
+          "label": "0 of 4 Perplexity questions",
+          "source": "geo_brand_mentions",
+          "as_of": "2026-09-14T08:14:00Z"
+        }
+      ],
+      "evidence": null,
+      "sparkline": null,
+      "channels": [
+        "website",
+        "seo"
+      ],
+      "lens": "tailor",
+      "start_by": null,
+      "due": null,
+      "status": "to_do",
+      "needs_approval": true,
+      "client_visible": true,
+      "owner": "Dana R.",
+      "comments_count": 0,
+      "cost_note": null,
+      "steps": [],
+      "trail": [
+        {
+          "at": "2026-09-14T08:14:00Z",
+          "actor": "visibility audit",
+          "text": "Drafted for LYV Broadway",
+          "visibility": "client"
+        }
+      ],
+      "notes": [],
+      "actions": {
+        "approve": true,
+        "not_now": true
+      },
+      "fair_housing_review": null,
+      "why": {
+        "text": "Renters ask AI engines about pets before they tour, and nothing on LYV Broadway's site answers it.",
+        "receipts": [
+          {
+            "label": "0 of 4 Perplexity questions",
+            "source": "geo_brand_mentions",
+            "as_of": "2026-09-14T08:14:00Z"
+          }
+        ]
+      },
+      "for_whom": {
+        "text": "Renters with pets comparing apartments in Carrollton.",
+        "questions": [
+          "Does LYV Broadway allow large dogs?",
+          "pet friendly apartments carrollton tx",
+          "lyv broadway pet rent and deposit",
+          "breed restrictions apartments carrollton"
+        ]
+      },
+      "approving_does": [
+        {
+          "label": "RPM Digital publishes the FAQ to LYV Broadway's site",
+          "owner": "RPM Digital",
+          "when": "Within 5 business days"
+        },
+        {
+          "label": "We re-check the AI answers about LYV Broadway",
+          "owner": "RPM Digital",
+          "when": "30 days after publishing"
+        }
+      ],
+      "category": "content",
+      "draft": {
+        "kind": "faq",
+        "title": "Pets at LYV Broadway",
+        "body": "Can I bring my pet to LYV Broadway?\nYes. LYV Broadway welcomes up to two pets per home.\n\nIs there a weight limit?\nThere's no weight limit for dogs at LYV Broadway. Some breeds are restricted under our insurance policy; the leasing team can confirm before you apply.\n\nWhat does it cost?\nA one-time pet fee and monthly pet rent apply per pet. Assistance animals are not pets and have no fees.\n\nIs there a dog park?\nLYV Broadway has an on-site pet area. Ask the leasing team for current hours."
+      },
+      "review": null
+    },
+    {
+      "id": "content_brief:65064",
+      "source": "content_brief",
+      "source_id": "65064",
+      "company_id": "26136316506",
+      "title": "FAQ page: pet policy and breed restrictions at The Bromley at Brighton Crossing",
+      "found": "Perplexity named The Bromley at Brighton Crossing in 0 of 4 questions about pet policy. The answers cited other Brighton properties.",
+      "expect": "The Bromley at Brighton Crossing cited in Perplexity pet-policy answers within 30 days of publishing.",
+      "if_skip": "Pet-policy questions about Brighton apartments keep going to other properties' pages.",
+      "receipts": [
+        {
+          "label": "0 of 4 Perplexity questions",
+          "source": "geo_brand_mentions",
+          "as_of": "2026-09-14T08:14:00Z"
+        }
+      ],
+      "evidence": null,
+      "sparkline": null,
+      "channels": [
+        "website",
+        "seo"
+      ],
+      "lens": "tailor",
+      "start_by": null,
+      "due": null,
+      "status": "to_do",
+      "needs_approval": true,
+      "client_visible": true,
+      "owner": "Dana R.",
+      "comments_count": 0,
+      "cost_note": null,
+      "steps": [],
+      "trail": [
+        {
+          "at": "2026-09-14T08:14:00Z",
+          "actor": "visibility audit",
+          "text": "Drafted for The Bromley at Brighton Crossing",
+          "visibility": "client"
+        }
+      ],
+      "notes": [],
+      "actions": {
+        "approve": true,
+        "not_now": true
+      },
+      "fair_housing_review": null,
+      "why": {
+        "text": "Renters ask AI engines about pets before they tour, and nothing on The Bromley at Brighton Crossing's site answers it.",
+        "receipts": [
+          {
+            "label": "0 of 4 Perplexity questions",
+            "source": "geo_brand_mentions",
+            "as_of": "2026-09-14T08:14:00Z"
+          }
+        ]
+      },
+      "for_whom": {
+        "text": "Renters with pets comparing apartments in Brighton.",
+        "questions": [
+          "Does The Bromley at Brighton Crossing allow large dogs?",
+          "pet friendly apartments brighton co",
+          "the bromley at brighton crossing pet rent and deposit",
+          "breed restrictions apartments brighton"
+        ]
+      },
+      "approving_does": [
+        {
+          "label": "RPM Digital publishes the FAQ to The Bromley at Brighton Crossing's site",
+          "owner": "RPM Digital",
+          "when": "Within 5 business days"
+        },
+        {
+          "label": "We re-check the AI answers about The Bromley at Brighton Crossing",
+          "owner": "RPM Digital",
+          "when": "30 days after publishing"
+        }
+      ],
+      "category": "content",
+      "draft": {
+        "kind": "faq",
+        "title": "Pets at The Bromley at Brighton Crossing",
+        "body": "Can I bring my pet to The Bromley at Brighton Crossing?\nYes. The Bromley at Brighton Crossing welcomes up to two pets per home.\n\nIs there a weight limit?\nThere's no weight limit for dogs at The Bromley at Brighton Crossing. Some breeds are restricted under our insurance policy; the leasing team can confirm before you apply.\n\nWhat does it cost?\nA one-time pet fee and monthly pet rent apply per pet. Assistance animals are not pets and have no fees.\n\nIs there a dog park?\nThe Bromley at Brighton Crossing has an on-site pet area. Ask the leasing team for current hours."
+      },
+      "review": null
+    },
+    {
+      "id": "call_prep:01123",
+      "source": "call_prep",
+      "source_id": "01123",
+      "company_id": "18234410112",
+      "title": "Send the Apartments.com rate email for Remi West Dallas",
+      "found": "Remi West Dallas pays $3,000 a month for Apartments.com Gold. Comparable RPM properties in Dallas pay about $500 less for the same package.",
+      "expect": "A $500 a month reduction at Remi West Dallas's October renewal.",
+      "if_skip": "Remi West Dallas's package renews at $3,000 a month.",
+      "receipts": [
+        {
+          "label": "Gold package, $3,000/mo",
+          "source": "hubspot_line_items",
+          "as_of": "2026-09-14T12:30:00Z"
+        }
+      ],
+      "evidence": null,
+      "sparkline": null,
+      "channels": [
+        "ils"
+      ],
+      "lens": "amplify",
+      "start_by": null,
+      "due": "2026-10-15",
+      "status": "to_do",
+      "needs_approval": true,
+      "client_visible": true,
+      "owner": "Marcus J.",
+      "comments_count": 0,
+      "cost_note": "Est. $6,000 a year",
+      "steps": [],
+      "trail": [
+        {
+          "at": "2026-09-14T12:46:00Z",
+          "actor": "vendor audit",
+          "text": "Drafted the email for Remi West Dallas",
+          "visibility": "client"
+        }
+      ],
+      "notes": [],
+      "actions": {
+        "approve": true,
+        "not_now": true
+      },
+      "fair_housing_review": null,
+      "why": {
+        "text": "Remi West Dallas pays more than comparable RPM properties in Dallas for the same Apartments.com package.",
+        "receipts": [
+          {
+            "label": "Gold package, $3,000/mo",
+            "source": "hubspot_line_items",
+            "as_of": "2026-09-14T12:30:00Z"
+          }
+        ]
+      },
+      "for_whom": {
+        "text": "Remi West Dallas's leasing goal: keep the same listing reach for less.",
+        "questions": []
+      },
+      "approving_does": [
+        {
+          "label": "RPM Digital sends the drafted email about Remi West Dallas from your account manager's address",
+          "owner": "RPM Digital",
+          "when": "Within 1 business day"
+        },
+        {
+          "label": "The rep replies with a revised rate",
+          "owner": "vendor",
+          "when": "Before the October renewal"
+        },
+        {
+          "label": "You approve the new rate before anything is signed",
+          "owner": "you",
+          "when": "When the rep replies"
+        }
+      ],
+      "category": "vendor",
+      "draft": {
+        "kind": "email",
+        "title": "Remi West Dallas — Apartments.com package review",
+        "body": "Hi [Rep],\n\nWe've been reviewing ILS performance across our portfolio and want to talk about the Remi West Dallas package before it renews in October. Remi West Dallas is on Gold at $3,000 a month; comparable RPM properties in Dallas pay about $500 less for the same placement. Could we set up 20 minutes this week to review Remi West Dallas's rate?\n\nThanks,\nMarcus"
+      },
+      "review": null
+    },
+    {
+      "id": "hubdb_rec:00872",
+      "source": "hubdb_rec",
+      "source_id": "00872",
+      "company_id": "18234410087",
+      "title": "Add Zillow Promoted at Skye Reserve",
+      "found": "Skye Reserve has 274 units to lease in 90 days and no Zillow listing upgrade.",
+      "expect": "Zillow Promoted at $480 a month for Skye Reserve. We measure leads from it for 60 days before renewing.",
+      "if_skip": "Skye Reserve's listings stay on Apartments.com and the property website only.",
+      "receipts": [
+        {
+          "label": "274 units to lease, 90 days",
+          "source": "aptiq",
+          "as_of": "2026-09-14T13:04:00Z"
+        }
+      ],
+      "evidence": null,
+      "sparkline": null,
+      "channels": [
+        "ils"
+      ],
+      "lens": "amplify",
+      "start_by": null,
+      "due": null,
+      "status": "to_do",
+      "needs_approval": true,
+      "client_visible": true,
+      "owner": "Dana R.",
+      "comments_count": 0,
+      "cost_note": "Adds $480 a month — drafted for signature",
+      "steps": [],
+      "trail": [
+        {
+          "at": "2026-09-14T08:15:00Z",
+          "actor": "vendor audit",
+          "text": "Opened for Skye Reserve",
+          "visibility": "client"
+        }
+      ],
+      "notes": [],
+      "actions": {
+        "approve": true,
+        "not_now": true
+      },
+      "fair_housing_review": null,
+      "why": {
+        "text": "Skye Reserve has more units opening than its current listings reach.",
+        "receipts": [
+          {
+            "label": "274 units to lease, 90 days",
+            "source": "aptiq",
+            "as_of": "2026-09-14T13:04:00Z"
+          }
+        ]
+      },
+      "for_whom": {
+        "text": "Skye Reserve's leasing goal: lift occupancy from 76% toward 93% before winter.",
+        "questions": []
+      },
+      "approving_does": [
+        {
+          "label": "We draft the Zillow order for Skye Reserve at $480 a month",
+          "owner": "RPM Digital",
+          "when": "Within 2 business days"
+        },
+        {
+          "label": "You sign the order; nothing is bought before signature",
+          "owner": "you",
+          "when": "When the draft arrives"
+        },
+        {
+          "label": "Zillow turns on Promoted placement",
+          "owner": "vendor",
+          "when": "Within 5 business days of signature"
+        }
+      ],
+      "category": "vendor",
+      "draft": null,
+      "review": null
+    },
+    {
+      "id": "fair_housing_review:0087-2026-09",
+      "source": "fair_housing_review",
+      "source_id": "0087-2026-09",
+      "company_id": "18234410087",
+      "title": "Your monthly Fair Housing review for Skye Reserve found 2 items",
+      "found": "We checked 42 pages and listing descriptions and 118 images for Skye Reserve on Sep 1.",
+      "expect": "Suggested copy fixes go to the web team as drafts for Skye Reserve; nothing publishes automatically.",
+      "if_skip": "The flagged copy and image stay live on Skye Reserve's site until someone changes them.",
+      "receipts": [
+        {
+          "label": "42 pages, 118 images checked",
+          "source": "fair_housing_review",
+          "as_of": "2026-09-01T14:00:00Z"
+        }
+      ],
+      "evidence": null,
+      "sparkline": null,
+      "channels": [
+        "website",
+        "listing"
+      ],
+      "lens": "tailor",
+      "start_by": null,
+      "due": null,
+      "status": "to_do",
+      "needs_approval": true,
+      "client_visible": true,
+      "owner": "Dana R.",
+      "comments_count": 0,
+      "cost_note": null,
+      "steps": [],
+      "trail": [
+        {
+          "at": "2026-09-01T14:00:00Z",
+          "actor": "monthly Fair Housing review",
+          "text": "Found 2 items on Skye Reserve",
+          "visibility": "client"
+        }
+      ],
+      "notes": [],
+      "actions": {
+        "approve": true,
+        "not_now": true
+      },
+      "fair_housing_review": {
+        "severity": "high",
+        "terms": [
+          "young professionals"
+        ]
+      },
+      "why": {
+        "text": "The monthly review of Skye Reserve's website, listings and images found wording and an image that need a person's call.",
+        "receipts": [
+          {
+            "label": "Monthly review, Sep 1",
+            "source": "fair_housing_review",
+            "as_of": "2026-09-01T14:00:00Z"
+          }
+        ]
+      },
+      "for_whom": {
+        "text": "Everyone who reads Skye Reserve's website and listings. Fair Housing rules apply to all of it, including edits made on site.",
+        "questions": []
+      },
+      "approving_does": [
+        {
+          "label": "RPM Digital drafts the suggested copy fixes for Skye Reserve's web team",
+          "owner": "RPM Digital",
+          "when": "Within 2 business days"
+        },
+        {
+          "label": "The web team reviews and publishes the fixes; nothing publishes automatically",
+          "owner": "RPM Digital",
+          "when": "Within 5 business days"
+        },
+        {
+          "label": "We re-check these pages in the next monthly review",
+          "owner": "RPM Digital",
+          "when": "2026-10-01"
+        }
+      ],
+      "category": "compliance",
+      "draft": null,
+      "review": {
+        "property": {
+          "company_id": "18234410087",
+          "name": "Skye Reserve"
+        },
+        "run_at": "2026-09-01T14:00:00Z",
+        "next_run": "2026-10-01T14:00:00Z",
+        "pages_checked": 42,
+        "assets_checked": 118,
+        "findings": [
+          {
+            "kind": "copy",
+            "location": "skyereserve.com/neighborhood",
+            "excerpt": "Perfect for young professionals starting out",
+            "reason": "Describes the kind of resident the property wants, which Fair Housing rules treat as a preference based on age and familial status.",
+            "severity": "high",
+            "suggested_fix": "Close to downtown offices, the riverwalk and nightlife — easy commutes from Skye Reserve."
+          },
+          {
+            "kind": "image",
+            "location": "Asset library: skyereserve-lobby-ai-edit-02",
+            "excerpt": "Lobby photo with AI-extended ceiling and added furniture",
+            "reason": "The image is AI-edited and has no disclosure. A state disclosure rule may apply; this check is flagged pending confirmation.",
+            "severity": "low",
+            "suggested_fix": "Add the 'Image digitally enhanced' caption wherever this photo runs, or use the unedited original."
+          }
+        ]
+      }
+    },
+    {
+      "id": "hubdb_rec:02031",
+      "source": "hubdb_rec",
+      "source_id": "02031",
+      "company_id": "18234410203",
+      "title": "Step down Apartments.com Premium to Standard at Arbor Hills Flats",
+      "found": "Arbor Hills Flats pays $4,300 a month for Apartments.com Premium. Hyly attributes 3 leases to it in the last six months.",
+      "expect": "Standard costs $1,800 a month. We expect lead volume at Arbor Hills Flats to hold within 10%, and we check again after 60 days.",
+      "if_skip": "Premium renews on Oct 1 at $4,300 a month. Nothing else changes at Arbor Hills Flats.",
+      "receipts": [
+        {
+          "label": "Premium package, $4,300/mo",
+          "source": "hubspot_line_items",
+          "as_of": "2026-09-14T12:30:00Z"
+        },
+        {
+          "label": "3 leases attributed in 6 months",
+          "source": "hyly",
+          "as_of": "2026-09-14T11:00:00Z"
+        }
+      ],
+      "evidence": {
+        "columns": [
+          "",
+          "Running now",
+          "Proposed"
+        ],
+        "rows": [
+          [
+            "Monthly cost",
+            "$4,300",
+            "$1,800"
+          ],
+          [
+            "Package",
+            "Premium",
+            "Standard"
+          ],
+          [
+            "Leases, last 6 months",
+            "3",
+            "—"
+          ]
+        ],
+        "more_count": 0
+      },
+      "sparkline": null,
+      "channels": [
+        "ils"
+      ],
+      "lens": "amplify",
+      "start_by": null,
+      "due": "2026-10-01",
+      "status": "to_do",
+      "needs_approval": true,
+      "client_visible": true,
+      "owner": "Marcus J.",
+      "comments_count": 0,
+      "cost_note": "Saves $30,000 a year",
+      "steps": [],
+      "trail": [
+        {
+          "at": "2026-09-14T08:12:00Z",
+          "actor": "vendor audit",
+          "text": "Opened for Arbor Hills Flats",
+          "visibility": "client"
+        },
+        {
+          "at": "2026-09-14T09:40:00Z",
+          "actor": "Marcus J.",
+          "text": "Checked the Arbor Hills Flats contract end date: Oct 1",
+          "visibility": "internal"
+        }
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T09:41:00Z",
+          "actor": "Marcus J.",
+          "text": "Copy the regional manager on the Arbor Hills Flats email.",
+          "visibility": "internal"
+        }
+      ],
+      "actions": {
+        "approve": true,
+        "not_now": true
+      },
+      "fair_housing_review": null,
+      "why": {
+        "text": "Arbor Hills Flats is paying for Premium placement that isn't producing leases.",
+        "receipts": [
+          {
+            "label": "Premium package, $4,300/mo",
+            "source": "hubspot_line_items",
+            "as_of": "2026-09-14T12:30:00Z"
+          },
+          {
+            "label": "3 leases attributed in 6 months",
+            "source": "hyly",
+            "as_of": "2026-09-14T11:00:00Z"
+          }
+        ]
+      },
+      "for_whom": {
+        "text": "Arbor Hills Flats's leasing goal: 23 units to lease in the next 90 days at 89% occupancy today.",
+        "questions": []
+      },
+      "approving_does": [
+        {
+          "label": "We email the Apartments.com rep to move Arbor Hills Flats to Standard at renewal",
+          "owner": "RPM Digital",
+          "when": "Within 2 business days"
+        },
+        {
+          "label": "The rep confirms the new package and rate",
+          "owner": "vendor",
+          "when": "Before Oct 1"
+        },
+        {
+          "label": "You sign the revised line item; the budget changes only after signature",
+          "owner": "you",
+          "when": "When the rep confirms"
+        }
+      ],
+      "category": "cost",
+      "draft": null,
+      "review": null
+    },
+    {
+      "id": "video_variant:01505",
+      "source": "video_variant",
+      "source_id": "01505",
+      "company_id": "18234410150",
+      "title": "Build new pool and clubhouse ad creative for The Maddux at Shadowood from existing assets",
+      "found": "The Maddux at Shadowood's two running ad creatives are 140 days old and click-through fell from 3.1% to 1.4%. The asset library already has 18 usable pool and clubhouse photos and one tour video.",
+      "expect": "Fresh ads for The Maddux at Shadowood built from those assets: three new crops, a 15-second video cut, and two ad variants that highlight the pool and clubhouse.",
+      "if_skip": "The Maddux at Shadowood's current ads keep running at their current click-through.",
+      "receipts": [
+        {
+          "label": "CTR 3.1% → 1.4% over 140 days",
+          "source": "google_ads",
+          "as_of": "2026-09-13T08:00:00Z"
+        },
+        {
+          "label": "18 usable amenity photos, 1 tour video",
+          "source": "hubspot",
+          "as_of": "2026-09-13T20:00:00Z"
+        }
+      ],
+      "evidence": null,
+      "sparkline": null,
+      "channels": [
+        "creative",
+        "paid_search"
+      ],
+      "lens": "express",
+      "start_by": null,
+      "due": null,
+      "status": "to_do",
+      "needs_approval": true,
+      "client_visible": true,
+      "owner": "Creative Services",
+      "comments_count": 0,
+      "cost_note": null,
+      "steps": [],
+      "trail": [
+        {
+          "at": "2026-09-13T20:00:00Z",
+          "actor": "creative audit",
+          "text": "Opened for The Maddux at Shadowood",
+          "visibility": "client"
+        }
+      ],
+      "notes": [],
+      "actions": {
+        "approve": true,
+        "not_now": true
+      },
+      "fair_housing_review": null,
+      "why": {
+        "text": "The Maddux at Shadowood's ads are worn out, and the assets to replace them already exist.",
+        "receipts": [
+          {
+            "label": "CTR 3.1% → 1.4% over 140 days",
+            "source": "google_ads",
+            "as_of": "2026-09-13T08:00:00Z"
+          }
+        ]
+      },
+      "for_whom": {
+        "text": "Renters searching for apartments with a pool in Atlanta; the ads highlight The Maddux at Shadowood's pool and clubhouse.",
+        "questions": []
+      },
+      "approving_does": [
+        {
+          "label": "RPM Digital builds three crops, a 15-second cut and two ad variants from The Maddux at Shadowood's existing assets",
+          "owner": "RPM Digital",
+          "when": "Within 7 business days"
+        },
+        {
+          "label": "Every variant passes the Fair Housing screen and AI-edit disclosure check before it runs",
+          "owner": "RPM Digital",
+          "when": "Before launch"
+        },
+        {
+          "label": "You see the finished variants here before they replace the current ads",
+          "owner": "you",
+          "when": "When they're ready"
+        }
+      ],
+      "category": "creative",
+      "draft": null,
+      "review": null
+    }
+  ]
+}

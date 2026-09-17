@@ -1,0 +1,32 @@
+{
+  "changing": [
+    {
+      "date": "2026-10-01",
+      "title": "Renewal-season creative set",
+      "note": "Renewal season opens October 1 and 19 leases sit in the 120-day window.",
+      "status": "in_production"
+    },
+    {
+      "date": "2026-10-29",
+      "title": "Q4 creative refresh",
+      "note": "Quarterly cycle. New paid and social asset set.",
+      "status": "scheduled"
+    }
+  ],
+  "done_this_quarter": [
+    {
+      "date": "2026-08-14",
+      "title": "Paid search shifted onto two-bedroom inventory",
+      "note": "B1 leased up in 19 days against a 34-day average.",
+      "status": "complete"
+    },
+    {
+      "date": "2026-07-30",
+      "title": "Floorplan pages rebuilt for search",
+      "note": "Six pages. Organic sessions to floorplans up 22% since.",
+      "status": "complete"
+    }
+  ],
+  "done_count": 11,
+  "gaps": []
+}

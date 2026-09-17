@@ -292,6 +292,47 @@ def loop_recommendations():
 
 # ── POST /api/loop/approve / /api/loop/reject ────────────────────────────────
 
+def record_recommendation_approved(uuid, recommendation, *, comment=None,
+                                   forecast_id=None, approver_email=None) -> str:
+    """Write the recommendation_approved event. Module-callable approve handler
+    (the route below and the workspace decision endpoint both use it)."""
+    import loop_writer
+    return loop_writer.record(
+        stage="optimize",
+        event_type="recommendation_approved",
+        property_uuid=uuid,
+        source="client_action",
+        trigger="client_action",
+        payload={
+            "recommendation": recommendation,
+            "comment":        comment,
+            "approver_email": approver_email,
+        },
+        parent_event_id=forecast_id,
+    )
+
+
+def record_recommendation_rejected(uuid, recommendation, *, reason=None,
+                                   counter_proposal=None, forecast_id=None,
+                                   rejecter_email=None) -> str:
+    """Write the recommendation_rejected event. Module-callable reject handler."""
+    import loop_writer
+    return loop_writer.record(
+        stage="optimize",
+        event_type="recommendation_rejected",
+        property_uuid=uuid,
+        source="client_action",
+        trigger="client_action",
+        payload={
+            "recommendation":   recommendation,
+            "reason":           reason,
+            "counter_proposal": counter_proposal,
+            "rejecter_email":   rejecter_email,
+        },
+        parent_event_id=forecast_id,
+    )
+
+
 @loop_bp.route("/api/loop/approve", methods=["POST", "OPTIONS"])
 def loop_approve():
     """Approve a recommendation. Records the approval Loop event; downstream
@@ -319,19 +360,9 @@ def loop_approve():
     comment = (payload.get("comment") or "").strip() or None
     parent = (payload.get("forecast_id") or "").strip() or None
 
-    import loop_writer
-    event_id = loop_writer.record(
-        stage="optimize",
-        event_type="recommendation_approved",
-        property_uuid=uuid,
-        source="client_action",
-        trigger="client_action",
-        payload={
-            "recommendation": rec_snapshot,
-            "comment":        comment,
-            "approver_email": request.headers.get("X-Portal-Email") or None,
-        },
-        parent_event_id=parent,
+    event_id = record_recommendation_approved(
+        uuid, rec_snapshot, comment=comment, forecast_id=parent,
+        approver_email=request.headers.get("X-Portal-Email") or None,
     )
     return jsonify({"status": "approved", "event_id": event_id})
 
@@ -354,20 +385,9 @@ def loop_reject():
     counter = payload.get("counter_proposal") or None
     parent = (payload.get("forecast_id") or "").strip() or None
 
-    import loop_writer
-    event_id = loop_writer.record(
-        stage="optimize",
-        event_type="recommendation_rejected",
-        property_uuid=uuid,
-        source="client_action",
-        trigger="client_action",
-        payload={
-            "recommendation":   rec_snapshot,
-            "reason":           reason,
-            "counter_proposal": counter,
-            "rejecter_email":   request.headers.get("X-Portal-Email") or None,
-        },
-        parent_event_id=parent,
+    event_id = record_recommendation_rejected(
+        uuid, rec_snapshot, reason=reason, counter_proposal=counter, forecast_id=parent,
+        rejecter_email=request.headers.get("X-Portal-Email") or None,
     )
     return jsonify({"status": "rejected", "event_id": event_id})
 
