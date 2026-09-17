@@ -159,6 +159,54 @@ class TestWebsiteDedup:
         assert row["records_covered"] == 2
         assert any(g["field"] == "records_covered" for g in row["gaps"])
 
+    def test_the_corporate_domain_is_never_a_shared_site(self, monkeypatch):
+        """Two records reading rpmliving.com are two properties with no site of
+        their own — not one property. Merging on that placeholder would drop
+        one of them from the roster entirely, which is what nearly happened on
+        11 Sept when Mesh 2, Mesh III and 5508 Parkcrest all pointed there."""
+        records = {
+            "RPMI": [
+                _co("10", "5508 Parkcrest LLC", "RPMI", "https://www.rpmliving.com/"),
+                _co("11", "Porter Fifth", "RPMI", "rpmliving.com"),
+            ],
+            "RPM Investments": [],
+        }
+
+        def search_companies(filters, properties=None, limit=None):
+            return list(records.get(filters[0]["value"], []))
+
+        monkeypatch.setitem(sys.modules, "hubspot_client", types.SimpleNamespace(
+            search_companies=search_companies))
+        rr.clear_cache()
+
+        roster = rr.get_roster()
+        assert len(roster) == 2                                # two rows, not one
+        assert all(r["records_covered"] == 1 for r in roster)
+        assert {r["name"] for r in roster} == {"5508 Parkcrest LLC", "Porter Fifth"}
+        assert all(any(g["field"] == "domain" and "corporate site" in g["message"]
+                       for g in r["gaps"]) for r in roster)
+        assert rr.coverage_summary()["records_on_a_shared_site"] == 2
+        rr.clear_cache()
+
+    def test_a_record_with_no_site_stands_alone(self, monkeypatch):
+        """Porter Westside has no domain. Two such records are two properties."""
+        records = {"RPMI": [_co("20", "Porter Westside", "RPMI", None),
+                            _co("21", "No Site Either", "RPMI", "")],
+                   "RPM Investments": []}
+
+        def search_companies(filters, properties=None, limit=None):
+            return list(records.get(filters[0]["value"], []))
+
+        monkeypatch.setitem(sys.modules, "hubspot_client", types.SimpleNamespace(
+            search_companies=search_companies))
+        rr.clear_cache()
+
+        roster = rr.get_roster()
+        assert len(roster) == 2
+        assert all(r["domain"] is None for r in roster)
+        assert rr.coverage_summary()["records_without_a_site"] == 2
+        rr.clear_cache()
+
     def test_sites_and_records_are_reported_separately(self, hubspot):
         summary = rr.coverage_summary()
         assert summary["records"] == 5      # HubSpot records

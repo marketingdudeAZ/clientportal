@@ -59,6 +59,13 @@ DE-DUPLICATION
     collapsed record is not dropped: every row carries `records_covered` and
     `also_covers`, so nothing disappears quietly.
 
+    What is NOT merged: a record with no website (Porter Westside), and a record
+    whose website is the corporate domain. `5508 Parkcrest LLC` reads
+    rpmliving.com today; on 11 Sept Mesh 2 and Mesh III read it too. Merging on
+    that placeholder would have collapsed three unrelated properties into one
+    row and quietly lost two of them, so `SHARED_SITES` keys those records by
+    company_id instead and says so in their gaps.
+
 WHAT COUNTS AS "MANAGED"
     `plestatus IN ('RPM Managed', 'Onboarding')` — 109 of the 116. The other
     seven are 4 Dispositioning, 1 Disposition Complete and 2 blank, and they are
@@ -110,6 +117,14 @@ ROSTER_PROPERTIES: Tuple[str, ...] = (
     "rpmmarket", "rpmregion", "city", "state",
     "totalunits",
 ) + tuple(PLATFORM_ID_PROPERTIES.values())
+
+# Sites that are not a property's site. A record whose website is the corporate
+# domain is not sharing a site with another property — it has no site of its
+# own — so these are never merged. `5508 Parkcrest LLC` reads rpmliving.com
+# today and three more did in the 11 Sept n8n sweep (Mesh 2, Mesh III, and it);
+# without this, the next time two of them do, two unrelated properties collapse
+# into one row and one of them disappears from the roster.
+SHARED_SITES = frozenset({"rpmliving.com"})
 
 SOURCE = "hubspot:companies.search client IN ('RPMI', 'RPM Investments')"
 
@@ -221,6 +236,11 @@ def _to_row(record: Dict[str, Any]) -> Dict[str, Any]:
         gaps.append(_gap("domain", "hubspot:website,domain",
                          f"no usable site on company {company_id} — it cannot be "
                          "crawled or de-duplicated by site"))
+    elif domain in SHARED_SITES:
+        gaps.append(_gap("domain", "hubspot:website",
+                         f"company {company_id} points at {domain}, the corporate "
+                         "site, not a property site — it has no site of its own "
+                         "to crawl and is never merged with another record"))
 
     return {
         "company_id": company_id,
@@ -274,6 +294,19 @@ def _read() -> Tuple[List[Dict[str, Any]], Optional[str]]:
 # ── public API ───────────────────────────────────────────────────────────────
 
 
+def _dedup_key(row: Dict[str, Any]) -> str:
+    """What makes two records the same property: one site, one property.
+
+    A record with no site, or one pointing at the corporate domain, is keyed by
+    its own company_id instead — it stands alone rather than being merged into
+    whatever else happens to carry the same placeholder.
+    """
+    domain = row["domain"]
+    if not domain or domain in SHARED_SITES:
+        return f"company:{row['company_id']}"
+    return domain
+
+
 def _pick_primary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Which record represents a site that several records share.
 
@@ -307,7 +340,7 @@ def get_roster(include_unmanaged: bool = False) -> List[Dict[str, Any]]:
 
     by_site: Dict[str, List[Dict[str, Any]]] = {}
     for row in rows:
-        by_site.setdefault(row["domain"] or f"company:{row['company_id']}", []).append(row)
+        by_site.setdefault(_dedup_key(row), []).append(row)
 
     roster: List[Dict[str, Any]] = []
     for site, group in by_site.items():
@@ -367,8 +400,8 @@ def coverage_summary(include_unmanaged: bool = False) -> Dict[str, Any]:
 
     sites: Dict[str, int] = {}
     for row in rows:
-        sites[row["domain"] or f"company:{row['company_id']}"] = \
-            sites.get(row["domain"] or f"company:{row['company_id']}", 0) + 1
+        key = _dedup_key(row)
+        sites[key] = sites.get(key, 0) + 1
 
     by_client: Dict[str, int] = {}
     for row in rows:
@@ -396,6 +429,7 @@ def coverage_summary(include_unmanaged: bool = False) -> Dict[str, Any]:
         "sites": len(sites),
         "sites_with_multiple_records": sum(1 for n in sites.values() if n > 1),
         "records_without_a_site": sum(1 for r in rows if not r["domain"]),
+        "records_on_a_shared_site": sum(1 for r in rows if r["domain"] in SHARED_SITES),
         "units_total": sum(counted_units) if counted_units else None,
         "units_counted_over": len(counted_units),
         "coverage": coverage,
