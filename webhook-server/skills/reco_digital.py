@@ -35,17 +35,32 @@ WHAT EACH RULE NEEDS (RPMI: 109 managed properties)
     | rule_key                   | needs                                        |
     |----------------------------|----------------------------------------------|
     | spend_not_on_vacancy       | AptIQ floor plans + Google Ads ad groups     |
-    | impression_share_lost      | Google Ads campaigns + AptIQ availability    |
+    | impression_share_lost      | Google Ads campaigns + AptIQ availability +  |
+    |                            | Red Light status + the authorized budget     |
     | wasted_spend               | Google Ads search terms / keywords           |
     | homepage_landing_page      | Google Ads final URLs (+ AptIQ for the plan) |
     | conversion_tracking_broken | Google Ads cost/conversions, GA4 id, tag ids |
     | conversion_overcounting    | Google Ads conversions + GA4 conversions     |
     | dormant_ad_groups          | Google Ads ad groups + AptIQ availability    |
     | creative_gaps              | Google Ads ads and account assets            |
-    | budget_pacing              | Google Ads cost + spend_sheet authorization  |
 
     Every rule returns [] when its inputs are missing. A missing source becomes
     a gap naming the source and the reason — never a zero, never a guess.
+
+WHAT THIS MODULE REUSES RATHER THAN REBUILDS
+    * `impression_share_lost` is a WRAPPER around `recommendation_gen`, which
+      already owns that decision: its `Guardrails` (10% minimum loss, +50%
+      maximum step, $10,000 ceiling) and its recovery math decide whether there
+      is a recommendation and what the budget should be. This module adds only
+      what that core does not know — that the property still has vacancy, and
+      what the extra budget buys in clicks — and maps the result into the shared
+      contract. `google_ads_islost.parse_islost` does the aggregation.
+    * Any budget step is additionally bounded by `loop_autopilot`'s existing
+      caps, `MAX_PERCENT_OF_CHANNEL` and `MAX_ABSOLUTE_AMOUNT`. They are
+      imported, never redefined.
+    * Budget pacing against authorized spend, occupancy drop, stale inventory,
+      lease wave, lead drop and data staleness already exist as
+      `skills/workspace_signals.py` rules. Nothing here duplicates them.
 
 DATA SEAMS
     Google Ads reads go through `google_ads_islost._run_gaql`, the existing
@@ -219,6 +234,38 @@ _BUCKET_PATTERNS = (
     ("3_bed", re.compile(r"\b(3\s*(?:bed|br|bd|bedroom)s?|three\s*bed(?:room)?s?|3br|3-bed)\b")),
     ("4_plus", re.compile(r"\b(4\+?\s*(?:bed|br|bd|bedroom)s?|four\s*bed(?:room)?s?|4br)\b")),
 )
+
+
+_HOMEPAGE_PATHS = frozenset({"", "index", "index.html", "index.php", "home", "default"})
+
+# A tag id that was cloned and never filled in: empty, zero, or still the
+# template's own placeholder. Park 5 ran eight months at Google Ads id "0".
+_PLACEHOLDER_ID = re.compile(r"^(?:aw|g|gtm|ua|)-?0*$|x{3,}|000000", re.IGNORECASE)
+
+
+def is_homepage_url(url: Any) -> bool:
+    """True when this final URL is the site root rather than a real page."""
+    from urllib.parse import urlparse
+
+    text = str(url or "").strip()
+    if not text:
+        return False
+    parsed = urlparse(text if "//" in text else "//" + text)
+    path = (parsed.path or "").strip("/").lower()
+    if path not in _HOMEPAGE_PATHS:
+        return False
+    # A tracking query string does not make the homepage a floor-plan page, but
+    # a real anchor or a search query might, so only a bare root counts.
+    return not (parsed.fragment or "").strip("/")
+
+
+def is_placeholder_id(value: Any) -> bool:
+    if value is None:
+        return True
+    text = str(value).strip()
+    if not text:
+        return True
+    return bool(_PLACEHOLDER_ID.search(text))
 
 
 def bucket_for_beds(beds: Any) -> Optional[str]:
@@ -665,12 +712,211 @@ def wasted_spend(ctx: DigitalContext, today: date) -> List[Dict[str, Any]]:
         verify_metric="paid search cost per lead")]
 
 
+def homepage_landing_page(ctx: DigitalContext, today: date) -> List[Dict[str, Any]]:
+    """Ads that spend on a floor plan and land the renter on the homepage.
+
+    Found on the Chicago townhome lease-ups: the inventory campaigns existed,
+    every ad pointed at the site root, and the renter had to start the search
+    again. Landing-page alignment is an allowed optimization in a Special Ad
+    Category — it changes where a click lands, not who sees the ad.
+    """
+    rule_key = "homepage_landing_page"
+    groups = [g for g in ctx.ads_rows("ad_groups") if (_f(g.get("cost")) or 0) > 0]
+    if not groups:
+        return []
+    total_cost = ctx.ads_cost or 0.0
+
+    offenders = []
+    for group in groups:
+        urls = [u for u in (group.get("final_urls") or []) if u]
+        if not urls or not all(is_homepage_url(u) for u in urls):
+            continue
+        name = group.get("ad_group_name") or ""
+        buckets = buckets_in_text(name, group.get("campaign_name"))
+        offenders.append({"ad_group": name, "campaign": group.get("campaign_name"),
+                          "cost": _f(group.get("cost")) or 0.0,
+                          "current_url": urls[0],
+                          "names_a_floor_plan": bool(buckets),
+                          "floor_plan_buckets": sorted(buckets)})
+    if not offenders:
+        return []
+    homepage_cost = sum(o["cost"] for o in offenders)
+    if homepage_cost < HOMEPAGE_MIN_USD:
+        return []
+
+    specific = [o for o in offenders if o["names_a_floor_plan"]]
+    share = homepage_cost / total_cost if total_cost else 0.0
+    severity = "high" if (specific or share >= HOMEPAGE_SHARE_HIGH) else "medium"
+    confidence = 9 if specific else 7
+    offenders.sort(key=lambda o: -o["cost"])
+
+    receipts = [
+        _receipt("Ad groups landing on the homepage", len(offenders), "google_ads",
+                 ctx.ads_as_of),
+        _receipt("Spend behind them (30 days)", _money(homepage_cost), "google_ads",
+                 ctx.ads_as_of),
+        _receipt("Largest of them",
+                 "%s — %s to %s" % (offenders[0]["ad_group"],
+                                    _money(offenders[0]["cost"]),
+                                    offenders[0]["current_url"]),
+                 "google_ads", ctx.ads_as_of),
+    ]
+    if specific:
+        receipts.append(_receipt("Of those, ad groups named for a floor plan",
+                                 len(specific), "google_ads", ctx.ads_as_of))
+    if ctx.floor_plans():
+        receipts.append(_receipt("Floor plans with units available now",
+                                 len([p for p in ctx.floor_plans()
+                                      if (_i(p.get("available_units")) or 0) > 0]),
+                                 "aptiq_floor_plans", ctx.availability.get("as_of")))
+
+    return [_rec(
+        ctx, today, rule_key=rule_key, category="content",
+        channels=["paid_search", "website"], severity=severity, confidence=confidence,
+        found=("%s of search spend sends renters to the homepage instead of the plan or "
+               "availability page the ad promised." % _money(homepage_cost)),
+        receipts=receipts,
+        expect=("Each ad group points at the page for what it advertises, so the renter "
+                "lands on the units they searched for instead of starting again."),
+        if_skip=("The click is paid for twice: once to bring the renter in, and again in "
+                 "the ones who leave rather than search the site themselves."),
+        kind="landing_page",
+        params={"ad_groups": [{"ad_group": o["ad_group"], "campaign": o["campaign"],
+                               "current_url": o["current_url"],
+                               "floor_plan_buckets": o["floor_plan_buckets"]}
+                              for o in offenders[:25]],
+                "target": "the matching floor-plan or availability page",
+                "candidate_paths": ["/floorplans", "/availability", "/apartments"],
+                "verify_target_exists": True},
+        executor="ninjacat", fair_housing_review=False,
+        verify_metric="paid search bounce rate and floor-plan page views")]
+
+
+def conversion_tracking_broken(ctx: DigitalContext, today: date) -> List[Dict[str, Any]]:
+    """Spend measured against nothing: no conversions, no GA4 id, placeholder tags.
+
+    One property ran eight months at Google Ads conversion id "0" because cloned
+    tag containers keep their placeholders and nothing checked. Until this is
+    fixed, every other number for the property is unsafe to quote.
+    """
+    rule_key = "conversion_tracking_broken"
+    cost = ctx.ads_cost
+    conversions = ctx.ads_conversions
+    as_of = ctx.ads_as_of
+    defects: List[Dict[str, Any]] = []
+
+    if cost is not None and cost >= TRACKING_MIN_SPEND and conversions == 0:
+        defects.append({"what": "spend with no tracked conversion", "severity": "high",
+                        "receipt": _receipt("Spend with zero recorded conversions",
+                                            _money(cost), "google_ads", as_of)})
+    if "property_id" in ctx.ga4 and not ctx.ga4.get("property_id"):
+        defects.append({"what": "no GA4 property id on the record", "severity": "medium",
+                        "receipt": _receipt("GA4 property id", "not set",
+                                            "hubspot_company", ctx.ga4.get("as_of"))})
+    placeholders = [(key, value) for key, value in sorted((ctx.tags or {}).items())
+                    if key.endswith("_id") and is_placeholder_id(value)]
+    for key, value in placeholders:
+        defects.append({"what": "placeholder %s" % key.replace("_", " "),
+                        "severity": "high" if (cost or 0) > 0 else "medium",
+                        "receipt": _receipt(key.replace("_", " ").title(),
+                                            value if value not in (None, "") else "empty",
+                                            ctx.tags.get("source") or "tag_manager",
+                                            ctx.tags.get("as_of"))})
+    if not defects:
+        return []
+
+    severity = "high" if any(d["severity"] == "high" for d in defects) else "medium"
+    confidence = 10 if (cost is not None or placeholders) else 7
+    months = ctx.tags.get("unchanged_months")
+    months_line = (" The tag setup has been in this state for %s months."
+                   % months) if months else ""
+
+    return [_rec(
+        ctx, today, rule_key=rule_key, category="vendors",
+        channels=["paid_search", "website"], severity=severity, confidence=confidence,
+        found=("Conversions are not being measured here: %s.%s"
+               % ("; ".join(d["what"] for d in defects), months_line)),
+        receipts=[d["receipt"] for d in defects],
+        expect=("Once the tag and conversion action are corrected, the property's cost "
+                "per lead becomes a real number for the first time%s."
+                % (" instead of a %s spend with nothing attached to it" % _money(cost)
+                   if cost else "")),
+        if_skip=("Spend continues against a measurement that records nothing, and every "
+                 "optimization and report built on it is guesswork."),
+        kind="tracking_fix",
+        params={"defects": [d["what"] for d in defects],
+                "ga4_property_id": ctx.ga4.get("property_id"),
+                "tag_ids": {key: value for key, value in placeholders},
+                "check": "conversion action, tag container ids, and the GA4 link"},
+        executor="human", fair_housing_review=False,
+        verify_metric="tracked conversions against site leads")]
+
+
+def conversion_overcounting(ctx: DigitalContext, today: date) -> List[Dict[str, Any]]:
+    """Platform conversions far above the site's own total.
+
+    Observed at 9.4x and 3.9x on real properties. The finding is a measurement
+    fault, not a result: a conversion action counting page views or duplicates.
+    Never celebrate the number — correct it, so cost per lead means something.
+    """
+    rule_key = "conversion_overcounting"
+    ads_conversions = ctx.ads_conversions
+    site_conversions = _f(ctx.ga4.get("conversions"))
+    if ads_conversions is None or site_conversions is None:
+        return []
+    if ads_conversions < OVERCOUNT_MIN_CONVERSIONS or site_conversions <= 0:
+        return []
+    ratio = ads_conversions / site_conversions
+    if ratio < OVERCOUNT_RATIO:
+        return []
+
+    severity = "high" if ratio >= OVERCOUNT_RATIO_HIGH else "medium"
+    cost = ctx.ads_cost
+    receipts = [
+        _receipt("Conversions reported by Google Ads", round(ads_conversions, 1),
+                 "google_ads", ctx.ads_as_of),
+        _receipt("Conversions recorded on the site", round(site_conversions, 1),
+                 "ga4", ctx.ga4.get("as_of")),
+        _receipt("Ratio", "%.1fx" % ratio, "google_ads vs ga4", ctx.ads_as_of),
+    ]
+    if cost:
+        receipts.append(_receipt("Cost per conversion as reported",
+                                 "$%.2f" % (cost / ads_conversions), "google_ads",
+                                 ctx.ads_as_of))
+        receipts.append(_receipt("Cost per conversion against the site total",
+                                 "$%.2f" % (cost / site_conversions),
+                                 "google_ads vs ga4", ctx.ads_as_of))
+    return [_rec(
+        ctx, today, rule_key=rule_key, category="vendors",
+        channels=["paid_search", "website"], severity=severity, confidence=9,
+        found=("Google Ads reports %.0f conversions where the site recorded %.0f — "
+               "%.1f times as many." % (ads_conversions, site_conversions, ratio)),
+        receipts=receipts,
+        expect=("With the conversion action corrected, reported conversions land near "
+                "the site's own total and cost per lead can be compared with other "
+                "properties."),
+        if_skip=("Reports keep showing %.1f times more leases-in-waiting than the site "
+                 "saw, and budget decisions are made on the inflated number."
+                 % ratio),
+        kind="tracking_fix",
+        params={"ads_conversions": round(ads_conversions, 1),
+                "site_conversions": round(site_conversions, 1),
+                "ratio": round(ratio, 2),
+                "fix": ("count only the verified lead events; remove page-view and "
+                        "duplicate counting from the conversion action")},
+        executor="human", fair_housing_review=False,
+        verify_metric="Google Ads conversions against the GA4 site total")]
+
+
 # ── registry and entry point ─────────────────────────────────────────────────
 
 RULES: "OrderedDict[str, Callable[[DigitalContext, date], List[Dict[str, Any]]]]" = OrderedDict((
     ("spend_not_on_vacancy", spend_not_on_vacancy),
     ("impression_share_lost", impression_share_lost),
     ("wasted_spend", wasted_spend),
+    ("homepage_landing_page", homepage_landing_page),
+    ("conversion_tracking_broken", conversion_tracking_broken),
+    ("conversion_overcounting", conversion_overcounting),
 ))
 
 

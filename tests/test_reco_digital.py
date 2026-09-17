@@ -207,6 +207,132 @@ def test_wasted_spend_silent_without_data():
     assert rd.wasted_spend(clean, TODAY) == []
 
 
+# ── 4. ads landing on the homepage ───────────────────────────────────────────
+
+def homepage_ctx() -> rd.DigitalContext:
+    """Park 5 shape: the inventory ad groups exist, every ad lands on the root."""
+    return ctx(
+        availability=plans(plan("TH2", 2, 12, rent=2400), plan("TH3", 3, 6, rent=2900)),
+        ads=ads(ad_groups=[
+            group("2 Bedroom Townhomes", 1800.0, urls=["https://park5.com/"]),
+            group("3 Bedroom Townhomes", 900.0, urls=["https://park5.com/?utm_source=g"]),
+            group("Brand", 400.0, urls=["https://park5.com/contact"])]))
+
+
+def test_homepage_landing_page_fires_when_inventory_ads_land_on_the_root():
+    out = rd.homepage_landing_page(homepage_ctx(), TODAY)
+    assert len(out) == 1
+    reco = out[0]
+    assert reco["action"]["kind"] == "landing_page"
+    assert reco["severity"] == "high"          # the ad groups name a floor plan
+    assert reco["confidence"] == 9
+    assert len(reco["action"]["params"]["ad_groups"]) == 2
+    assert reco["action"]["requires_signed_deal"] is False
+
+
+def test_homepage_landing_page_silent_when_ads_point_at_real_pages():
+    assert rd.homepage_landing_page(empty_ctx(), TODAY) == []
+    good = ctx(ads=ads(ad_groups=[group("2 Bedroom", 1800.0,
+                                        urls=["https://park5.com/floorplans/th2"])]))
+    assert rd.homepage_landing_page(good, TODAY) == []
+
+
+@pytest.mark.parametrize("url,expected", [
+    ("https://park5.com", True),
+    ("https://park5.com/", True),
+    ("https://park5.com/?utm_campaign=x", True),
+    ("https://park5.com/index.html", True),
+    ("https://park5.com/floorplans", False),
+    ("https://park5.com/floorplans/a1", False),
+    ("", False),
+])
+def test_homepage_url_detection(url, expected):
+    assert rd.is_homepage_url(url) is expected
+
+
+# ── 5. conversion tracking broken or absent ──────────────────────────────────
+
+def tracking_ctx() -> rd.DigitalContext:
+    """The GTM onboarding gap: a cloned container that kept its placeholders."""
+    return ctx(ga4={"property_id": None, "as_of": APTIQ_AS_OF},
+               tags={"google_ads_conversion_id": "0", "ga4_measurement_id": "G-XXXXXXX",
+                     "source": "gtm", "as_of": ADS_AS_OF, "unchanged_months": 8},
+               ads=ads(campaigns=[{"campaign_name": "Search", "cost": 5400.0,
+                                   "clicks": 900, "conversions": 0}]))
+
+
+def test_conversion_tracking_broken_fires_on_placeholders_and_dead_conversions():
+    out = rd.conversion_tracking_broken(tracking_ctx(), TODAY)
+    assert len(out) == 1
+    reco = out[0]
+    assert reco["severity"] == "high"
+    assert reco["confidence"] == 10
+    assert reco["action"]["kind"] == "tracking_fix"
+    assert reco["action"]["executor"] == "human"
+    defects = reco["action"]["params"]["defects"]
+    assert "spend with no tracked conversion" in defects
+    assert "no GA4 property id on the record" in defects
+    assert any("placeholder" in d for d in defects)
+    assert "8 months" in reco["found"]
+
+
+def test_conversion_tracking_broken_is_medium_when_only_the_ga4_id_is_missing():
+    c = ctx(ga4={"property_id": None}, ads=ads(campaigns=[
+        {"campaign_name": "Search", "cost": 2000.0, "clicks": 400, "conversions": 24}]))
+    reco = rd.conversion_tracking_broken(c, TODAY)[0]
+    assert reco["severity"] == "medium"
+
+
+def test_conversion_tracking_broken_silent_when_measurement_is_healthy():
+    assert rd.conversion_tracking_broken(empty_ctx(), TODAY) == []
+    healthy = ctx(ga4={"property_id": "331234567"},
+                  tags={"google_ads_conversion_id": "AW-987654321",
+                        "ga4_measurement_id": "G-8QP2LMX41C", "source": "gtm"},
+                  ads=ads(campaigns=[{"campaign_name": "Search", "cost": 2000.0,
+                                      "clicks": 400, "conversions": 24}]))
+    assert rd.conversion_tracking_broken(healthy, TODAY) == []
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("0", True), ("", True), (None, True), ("AW-0", True), ("GTM-XXXXXX", True),
+    ("AW-987654321", False), ("G-8QP2LMX41C", False), ("331234567", False),
+])
+def test_placeholder_id_detection(value, expected):
+    assert rd.is_placeholder_id(value) is expected
+
+
+# ── 6. conversion overcounting ───────────────────────────────────────────────
+
+def overcount_ctx(ads_conversions=188.0, site=20.0) -> rd.DigitalContext:
+    """Claire's shape: Google Ads at 9.4x the site's own total."""
+    return ctx(ga4={"property_id": "331234567", "conversions": site, "sessions": 4200,
+                    "as_of": ADS_AS_OF},
+               ads=ads(campaigns=[{"campaign_name": "Search", "cost": 4000.0,
+                                   "clicks": 700, "conversions": ads_conversions}]))
+
+
+def test_conversion_overcounting_fires_and_does_not_celebrate_the_number():
+    reco = rd.conversion_overcounting(overcount_ctx(), TODAY)[0]
+    assert reco["severity"] == "high"
+    assert reco["action"]["kind"] == "tracking_fix"
+    assert "9.4 times as many" in reco["found"]
+    assert reco["action"]["params"]["ratio"] == 9.4
+    labels = [r["label"] for r in reco["receipts"]]
+    assert "Cost per conversion against the site total" in labels
+
+
+def test_conversion_overcounting_silent_without_ga4_or_below_ratio():
+    assert rd.conversion_overcounting(empty_ctx(), TODAY) == []
+    no_ga4 = ctx(ads=ads(campaigns=[{"campaign_name": "Search", "cost": 4000.0,
+                                     "clicks": 700, "conversions": 188.0}]))
+    assert rd.conversion_overcounting(no_ga4, TODAY) == []
+    assert rd.conversion_overcounting(overcount_ctx(ads_conversions=24.0, site=20.0),
+                                      TODAY) == []
+    # Too few conversions to call it a pattern.
+    assert rd.conversion_overcounting(overcount_ctx(ads_conversions=6.0, site=1.0),
+                                      TODAY) == []
+
+
 # ── Fair Housing ─────────────────────────────────────────────────────────────
 
 def test_no_rule_can_emit_a_targeting_action():
@@ -259,6 +385,9 @@ ALL_FIXTURES = {
     "spend_not_on_vacancy": vacancy_ctx,
     "impression_share_lost": is_lost_ctx,
     "wasted_spend": waste_ctx,
+    "homepage_landing_page": homepage_ctx,
+    "conversion_tracking_broken": tracking_ctx,
+    "conversion_overcounting": overcount_ctx,
 }
 
 
