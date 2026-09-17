@@ -1565,7 +1565,24 @@ def _fee_signals_from_sentiment(payload: Any) -> List[Dict[str, Any]]:
     return out
 
 
+_SITE_HEALTH_FIELDS = (("title", "title"), ("metaDescription", "meta_description"),
+                       ("meta_description", "meta_description"), ("h1", "h1"),
+                       ("type", "page_type"), ("page_type", "page_type"),
+                       ("jsonld_types", "jsonld_types"), ("headings", "headings"),
+                       ("internal_links_in", "internal_links_in"),
+                       ("word_count", "word_count"))
+
+
 def _pages_from_site_health(payload: Any) -> List[Dict[str, Any]]:
+    """The page inventory, carrying only what the payload actually measured.
+
+    This is the sharpest edge in the whole module. A vendor that has
+    discovered a URL but never audited it returns the page with a null title
+    — and if we copied that null through as "title: None", the metadata rule
+    would read a page it has never seen as a page with no title, and file a
+    finding about it. Absent means absent: the key is left off, the rule sees
+    no measurement, and it stays quiet.
+    """
     if not isinstance(payload, dict):
         return []
     out = []
@@ -1573,12 +1590,10 @@ def _pages_from_site_health(payload: Any) -> List[Dict[str, Any]]:
         url = str(row.get("url") or "").strip()
         if not url:
             continue
-        page = {"url": url, "title": row.get("title"),
-                "meta_description": row.get("metaDescription") or row.get("meta_description"),
-                "h1": row.get("h1"), "page_type": row.get("type") or row.get("page_type")}
-        for key in ("jsonld_types", "internal_links_in", "headings", "word_count"):
-            if key in row:
-                page[key] = row[key]
+        page: Dict[str, Any] = {"url": url}
+        for source_key, our_key in _SITE_HEALTH_FIELDS:
+            if row.get(source_key) not in (None, ""):
+                page.setdefault(our_key, row[source_key])
         out.append(page)
     return out
 

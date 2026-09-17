@@ -521,10 +521,73 @@ class VendorNormalizerTests(unittest.TestCase):
             {"quote": "residents mention slow maintenance response", "platform": "ChatGPT"}]})
         self.assertEqual(len(data["fee_signals"]), 1)
 
+    def test_a_discovered_but_unaudited_page_carries_no_measurements(self):
+        """The vendor lists URLs it has not audited; nulls must not become findings.
+
+        This is the real payload for a project whose pages are discovered and
+        queued: every score and every field is null. If those nulls were
+        copied through, the metadata rule would report 12 pages with no title
+        on a site it has never read.
+        """
+        data = base()
+        reco_seo.merge_searchable(data, site_health={"pages": [
+            {"url": "https://example.com/", "slug": "/", "type": None,
+             "technicalScore": None, "aeoScore": None, "lastAuditedAt": None},
+            {"url": "https://example.com/amenities", "slug": "/amenities",
+             "type": None, "technicalScore": None, "aeoScore": None}]})
+        self.assertEqual(len(data["pages"]), 2)
+        for row in data["pages"]:
+            self.assertEqual(sorted(row), ["url"])
+        self.assertEqual(reco_seo.rule_money_page_metadata_gap(data), [])
+        self.assertEqual(reco_seo.rule_orphan_page(data), [])
+
+    def test_an_audited_page_keeps_what_it_measured(self):
+        data = base()
+        reco_seo.merge_searchable(data, site_health={"pages": [
+            {"url": "https://example.com/floorplans", "title": "Floor plans",
+             "metaDescription": "", "type": "floor_plans", "internal_links_in": 0}]})
+        page_row = data["pages"][0]
+        self.assertEqual(page_row["title"], "Floor plans")
+        self.assertEqual(page_row["page_type"], "floor_plans")
+        self.assertNotIn("meta_description", page_row)     # empty is not measured
+        self.assertEqual(page_row["internal_links_in"], 0)
+
     def test_nothing_recognized_lands_nothing(self):
         data = base()
         self.assertFalse(reco_seo.merge_searchable(data, visibility={"prompts": []}))
         self.assertNotIn("questions", data)
+
+
+class GatherTests(unittest.TestCase):
+    """The production entry point, on a server where nothing is reachable."""
+
+    def test_every_dead_source_becomes_a_named_gap_and_nothing_raises(self):
+        from unittest.mock import patch
+
+        with patch("skills.property_resolver.resolve", side_effect=RuntimeError("down")), \
+                patch("community_brief.load_company_state", side_effect=RuntimeError("down")):
+            data, gaps = reco_seo.gather("1001", today=TODAY)
+        sources = {g["source"] for g in gaps}
+        self.assertIn("property_resolver", sources)
+        self.assertIn("community_brief", sources)
+        self.assertIn("ai_answer_tracking", sources)
+        self.assertIn("site_crawl", sources)
+        for gap in gaps:
+            self.assertEqual(sorted(gap), ["field", "message", "source"])
+            self.assertTrue(gap["message"].endswith("."))
+        # Nothing was invented to fill the silence.
+        self.assertEqual(sorted(data), ["as_of", "company_id"])
+
+    def test_run_without_data_reports_the_gaps_and_skips_every_rule(self):
+        from unittest.mock import patch
+
+        with patch("skills.property_resolver.resolve", side_effect=RuntimeError("down")), \
+                patch("community_brief.load_company_state", side_effect=RuntimeError("down")):
+            out = reco_seo.run("1001", today=TODAY)
+        self.assertEqual(out["recommendations"], [])
+        self.assertEqual(out["rules_run"], [])
+        self.assertEqual(len(out["rules_skipped"]), len(reco_seo.RULES))
+        self.assertTrue(out["gaps"])
 
 
 class RunTests(unittest.TestCase):
