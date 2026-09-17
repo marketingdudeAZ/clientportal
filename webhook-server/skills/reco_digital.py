@@ -684,7 +684,18 @@ def impression_share_lost(ctx: DigitalContext, today: date) -> List[Dict[str, An
                 "campaigns": [c.get("campaign_name") for c in campaigns],
                 "current_monthly_spend_usd": round(cost, 2),
                 "additional_monthly_spend_usd": round(extra_cost, 2),
-                "basis": "search impression share lost to budget"},
+                "basis": "search impression share lost to budget",
+                # What the existing core decided, carried through unchanged so
+                # the two surfaces propose the same number for the same property.
+                "decided_by": "recommendation_gen.recommend_for_channel",
+                "current_budget": base.current_budget,
+                "recommended_budget": base.recommended_budget,
+                "full_delta_usd": base.delta,
+                "first_step_usd": first_step,
+                "step_bound": ("loop_autopilot: %d%% of the channel, %s absolute"
+                               % (round(MAX_PERCENT_OF_CHANNEL * 100),
+                                  _money(MAX_ABSOLUTE_AMOUNT))),
+                "recommendation_id": base.recommendation_id},
         executor="ninjacat", fair_housing_review=False,
         verify_metric="search impression share lost to budget")]
 

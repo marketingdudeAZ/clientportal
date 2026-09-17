@@ -154,6 +154,61 @@ def test_impression_share_lost_silent_without_data_or_below_threshold():
     assert rd.impression_share_lost(no_vacancy, TODAY) == []
 
 
+# The rule is a wrapper: `recommendation_gen` owns the decision and the
+# guardrails, and `loop_autopilot` owns how big one step may be. These three
+# tests pin that, so nobody quietly grows a second budget engine in here.
+
+def test_impression_share_lost_delegates_the_decision_to_recommendation_gen(monkeypatch):
+    import recommendation_gen as rg
+
+    seen = {}
+    real = rg.recommend_for_channel
+
+    def spy(property_uuid, company_id, signal, period, *args, **kwargs):
+        seen["signal"] = signal
+        seen["period"] = period
+        return real(property_uuid, company_id, signal, period, *args, **kwargs)
+
+    monkeypatch.setattr(rg, "recommend_for_channel", spy)
+    c = is_lost_ctx()
+    c.marketing_status = "RED"
+    c.authorized = {"by_sku": {"search": 3000.0}, "as_of": "2026-09-01"}
+    reco = rd.impression_share_lost(c, TODAY)[0]
+
+    assert seen["signal"].channel == rd.PAID_SEARCH_SKU
+    assert seen["signal"].current_budget == 3000.0
+    assert seen["signal"].marketing_status == "RED"
+    assert seen["period"] == "2026-Q3"
+    params = reco["action"]["params"]
+    assert params["decided_by"] == "recommendation_gen.recommend_for_channel"
+    # The core's own numbers, unchanged: +50% is its cap on a single step.
+    assert params["recommended_budget"] == 4500
+    assert params["recommendation_id"] == "u-1:search:2026-Q3"
+
+
+def test_impression_share_lost_first_step_respects_the_autopilot_caps():
+    from loop_autopilot import MAX_ABSOLUTE_AMOUNT, MAX_PERCENT_OF_CHANNEL
+
+    c = is_lost_ctx()
+    c.marketing_status = "RED"
+    c.authorized = {"by_sku": {"search": 3000.0}, "as_of": "2026-09-01"}
+    params = rd.impression_share_lost(c, TODAY)[0]["action"]["params"]
+    # The core would move $1,500; one step may be 15% of the channel or $500.
+    assert params["full_delta_usd"] == 1500
+    assert params["first_step_usd"] == min(3000.0 * MAX_PERCENT_OF_CHANNEL,
+                                           MAX_ABSOLUTE_AMOUNT)
+    assert params["additional_monthly_spend_usd"] == params["first_step_usd"]
+
+
+def test_impression_share_lost_accepts_the_cores_refusal():
+    """GREEN marketing is not a trigger in `recommendation_gen`. That answer
+    stands here too — this module does not second-guess the core."""
+    c = is_lost_ctx()
+    c.marketing_status = "GREEN"
+    c.authorized = {"by_sku": {"search": 3000.0}, "as_of": "2026-09-01"}
+    assert rd.impression_share_lost(c, TODAY) == []
+
+
 # ── 3. wasted spend ──────────────────────────────────────────────────────────
 
 def waste_ctx() -> rd.DigitalContext:
