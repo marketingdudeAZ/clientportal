@@ -70,6 +70,12 @@ _CLOSED_DEALSTAGES = frozenset({"closedwon", "closedlost"})
 
 _TIMEOUT = 10
 _MAX_RETRIES = 3            # for 429 backoff
+
+# CRM search paging. HubSpot's page size defaults to 10 and maxes at 100, and
+# the endpoint refuses to page past 10,000 records — so 100 pages is the ceiling
+# the API itself imposes, not an arbitrary one.
+_SEARCH_PAGE_SIZE = 100
+_SEARCH_MAX_PAGES = 100
 _CACHE_TTL = float(os.environ.get("HUBSPOT_CACHE_TTL", "60"))  # seconds
 
 
@@ -275,13 +281,59 @@ def batch_patch_companies(items: list[dict]) -> dict:
     return resp.json()
 
 
-def search_companies(filters: list[dict], properties: list[str] | None = None) -> list[dict]:
-    """CRM search. Returns the `results` list (empty on no match)."""
-    payload: dict[str, Any] = {"filterGroups": [{"filters": filters}]}
-    if properties:
-        payload["properties"] = properties
-    resp = _request("POST", f"{_COMPANIES}/search", json=payload)
-    return resp.json().get("results", [])
+def search_companies(filters: list[dict], properties: list[str] | None = None,
+                     limit: int | None = None) -> list[dict]:
+    """CRM search, paged to the end. Returns the `results` list (empty on no match).
+
+    THE TEN-ROW BUG: this sent no `limit` and never followed `paging.next`.
+    HubSpot's CRM search defaults to a page size of 10, so every caller got the
+    first ten matches and no signal that more existed — a truncation that reads
+    exactly like "that's all there is". It was wrong wherever it was used to
+    enumerate a set: `budget_variance_flags._currently_flagged` (it carried a
+    docstring note admitting the truncation), `create_apartmentscom_property`'s
+    id sweep, and any roster read.
+
+    `limit` is a cap on TOTAL rows returned, not the page size — pass it when
+    you genuinely want the first N (a uniqueness probe), leave it None to
+    enumerate. Page size is always HubSpot's maximum of 100, so a cap of 250
+    costs three requests, not 250.
+
+    CRM search will not page past 10,000 records; `_SEARCH_MAX_PAGES` stops
+    there and logs, rather than looping on an error response.
+    """
+    results: list[dict] = []
+    after: str | None = None
+
+    for _ in range(_SEARCH_MAX_PAGES):
+        page_size = _SEARCH_PAGE_SIZE
+        if limit is not None:
+            remaining = limit - len(results)
+            if remaining <= 0:
+                break
+            page_size = min(page_size, remaining)
+
+        payload: dict[str, Any] = {
+            "filterGroups": [{"filters": filters}],
+            "limit": page_size,
+        }
+        if properties:
+            payload["properties"] = properties
+        if after:
+            payload["after"] = after
+
+        body = _request("POST", f"{_COMPANIES}/search", json=payload).json()
+        page = body.get("results") or []
+        results.extend(page)
+
+        after = ((body.get("paging") or {}).get("next") or {}).get("after")
+        if not after or not page:
+            return results
+    else:
+        logger.warning(
+            "hubspot company search stopped at %d pages (%d rows) with more to "
+            "come — the result set is a floor, not the whole set", _SEARCH_MAX_PAGES, len(results))
+
+    return results
 
 
 def get_open_deals_for_company(
