@@ -180,6 +180,7 @@ class TestToolsList:
         assert {t["name"] for t in tools} == {
             "find_property", "get_property_brief", "get_availability",
             "get_leasing_funnel", "get_spend_authorization", "get_open_work",
+            "get_active_deals", "get_market_comps", "get_attribution",
             "get_metric_rules", "get_compliance_rules"}
         for t in tools:
             assert "handler" not in t                      # never serialize the callable
@@ -405,3 +406,140 @@ class TestMonthBounds:
     def test_handles_a_year_boundary(self):
         assert mcp_context.month_bounds("2026-12") == ("2026-12", "2026-12-01",
                                                        "2026-12-31")
+
+
+class TestNewTools:
+    """The four added for the deck: deals, comps, attribution, work timing."""
+
+    def test_deals_returns_stage_amount_and_timing(self, identity, monkeypatch):
+        fake = types.SimpleNamespace(
+            _get_deal_associations=lambda cids: {"d1": "555", "d2": "999"},
+            _batch_read_deals=lambda ids: {"d1": {"id": "d1", "properties": {
+                "dealname": "Atwood — Q4 media", "dealstage": "closedwon",
+                "pipeline": "default", "amount": "4200.5",
+                "createdate": "2026-08-01T00:00:00Z",
+                "closedate": "2026-08-20T00:00:00Z"}}})
+        monkeypatch.setitem(sys.modules, "spend_sheet", fake)
+        out = mcp_context.get_active_deals("555")
+        assert out["count"] == 1                      # the other company's deal is out
+        deal = out["deals"][0]
+        assert deal["amount"] == 4200.5
+        assert deal["is_closed_won"] is True
+        assert deal["stage_id"] == "closedwon"
+        assert any(g["field"] == "deal_change_history" for g in out["gaps"])
+
+    def test_deals_with_none_says_so(self, identity, monkeypatch):
+        fake = types.SimpleNamespace(_get_deal_associations=lambda cids: {},
+                                     _batch_read_deals=lambda ids: {})
+        monkeypatch.setitem(sys.modules, "spend_sheet", fake)
+        out = mcp_context.get_active_deals("555")
+        assert out["deals"] == []
+        assert any("No deals are associated" in g["message"] for g in out["gaps"])
+
+    def test_market_comps_without_a_comp_set_explains_the_gap(self, monkeypatch):
+        monkeypatch.setattr(mcp_context, "_resolve",
+                            lambda _id: (_Identity(aptiq_market_id="m-1"), None))
+        monkeypatch.setitem(sys.modules, "apartmentiq_client", types.SimpleNamespace(
+            get_market_narrative=lambda mid: {"summary": "Rents flat, concessions up"},
+            get_market_survey=lambda cid, bed=None: []))
+        out = mcp_context.get_market_comps("555")
+        assert out["narrative"]["summary"].startswith("Rents flat")
+        assert out["comp_set"] == []
+        assert any("comp set id" in g["message"] for g in out["gaps"])
+        assert "not brands" in out["note"]
+
+    def test_market_comps_with_a_comp_set_returns_rows(self, monkeypatch):
+        monkeypatch.setattr(mcp_context, "_resolve",
+                            lambda _id: (_Identity(aptiq_market_id="m-1"), None))
+        monkeypatch.setitem(sys.modules, "apartmentiq_client", types.SimpleNamespace(
+            get_market_narrative=lambda mid: {"summary": "x"},
+            get_market_survey=lambda cid, bed=None: [{"property": "Comp A",
+                                                      "rent": 1750, "bed": bed}]))
+        out = mcp_context.get_market_comps("555", comp_set_id="cs-9", bedroom_count=1)
+        assert out["comp_set"][0]["property"] == "Comp A"
+        assert out["comp_set"][0]["bed"] == 1
+        assert out["comp_set_id"] == "cs-9"
+
+    def test_market_comps_without_a_market_id_gaps(self, identity, monkeypatch):
+        monkeypatch.setitem(sys.modules, "apartmentiq_client", types.SimpleNamespace(
+            get_market_narrative=lambda mid: None, get_market_survey=lambda *a, **k: []))
+        out = mcp_context.get_market_comps("555")
+        assert out["narrative"] is None
+        assert any("no market id" in g["message"] for g in out["gaps"])
+
+    def test_attribution_counts_first_touch_by_source(self, monkeypatch):
+        rows = [
+            {"contact_id": "1", "source_raw": "paid_search", "lead_at": "2026-08-01T10:00:00",
+             "tour_scheduled_at": "2026-08-02T10:00:00", "toured_at": "2026-08-03T10:00:00",
+             "applied_at": "2026-08-04T10:00:00", "leased_at": "2026-08-11T10:00:00"},
+            {"contact_id": "2", "source_raw": "paid_search", "lead_at": "2026-08-05T10:00:00",
+             "tour_scheduled_at": None, "toured_at": None, "applied_at": None,
+             "leased_at": None},
+            {"contact_id": "3", "source_raw": None, "lead_at": "2026-08-06T10:00:00",
+             "tour_scheduled_at": None, "toured_at": None, "applied_at": None,
+             "leased_at": "2026-08-20T10:00:00"},
+        ]
+        monkeypatch.setattr(mcp_context, "_resolve",
+                            lambda _id: (_Identity(hyly_property_id="h-1"), None))
+        monkeypatch.setitem(sys.modules, "hyly_client", types.SimpleNamespace(
+            get_contact_submits=lambda pid, start_date, end_date: rows))
+        out = mcp_context.get_attribution("555", month="2026-08")
+        assert out["attribution_model"] == "first_touch"
+        assert out["by_source"]["paid_search"]["leads"] == 2
+        assert out["by_source"]["paid_search"]["leased"] == 1
+        assert out["by_source"]["paid_search"]["lead_to_lease"] == 0.5
+        assert out["by_source"]["unknown"]["leads"] == 1     # null source is labeled
+        assert out["totals"]["leads"] == 3 and out["totals"]["leased"] == 2
+        assert out["totals"]["median_days_lead_to_lease"] in (10, 14)
+        assert "do not describe" in out["note"].lower()
+        assert "first touch only" in out["note"].lower()
+        assert any(g["field"] == "multi_touch_attribution" for g in out["gaps"])
+
+    def test_attribution_refuses_june_2026(self, monkeypatch):
+        monkeypatch.setattr(mcp_context, "_resolve",
+                            lambda _id: (_Identity(hyly_property_id="h-1"), None))
+        out = mcp_context.get_attribution("555", month="2026-06")
+        assert out["by_source"] == {}
+        assert "backfill artifact" in out["gaps"][0]["message"]
+
+    def test_attribution_without_the_program_gaps(self, identity):
+        out = mcp_context.get_attribution("555")
+        assert out["by_source"] == {}
+        assert out["gaps"][0]["source"] == "hyly"
+
+    def test_open_work_reports_when_a_ticket_last_moved(self, identity, monkeypatch):
+        tasks = [{"name": "Test Property — creative refresh",
+                  "status": {"status": "in progress", "type": "custom"},
+                  "date_created": "1788220800000", "date_updated": "1789516800000",
+                  "due_date": None, "start_date": None,
+                  "assignees": [{"username": "dana"}], "url": "u1"}]
+        monkeypatch.setitem(sys.modules, "config",
+                            types.SimpleNamespace(CLICKUP_LIST_ONE="123"))
+        monkeypatch.setitem(sys.modules, "clickup_client",
+                            types.SimpleNamespace(get_tasks=lambda *a, **k: tasks))
+        out = mcp_context.get_open_work("555")
+        item = out["items"][0]
+        assert item["last_changed"].startswith("2026-09-16")
+        assert item["created"].startswith("2026-09-01")
+        assert item["assignees"] == ["dana"]
+        assert "last moved" in out["note"]
+
+    def test_open_work_can_filter_to_recent_movement(self, identity, monkeypatch):
+        import time as _time
+        now_ms = int(_time.time() * 1000)
+        tasks = [{"name": "Test Property — fresh", "status": {"status": "open"},
+                  "date_updated": str(now_ms), "url": "fresh"},
+                 {"name": "Test Property — stale", "status": {"status": "open"},
+                  "date_updated": str(now_ms - 90 * 86400 * 1000), "url": "stale"}]
+        monkeypatch.setitem(sys.modules, "config",
+                            types.SimpleNamespace(CLICKUP_LIST_ONE="123"))
+        monkeypatch.setitem(sys.modules, "clickup_client",
+                            types.SimpleNamespace(get_tasks=lambda *a, **k: tasks))
+        out = mcp_context.get_open_work("555", changed_within_days=30)
+        assert [i["url"] for i in out["items"]] == ["fresh"]
+        assert out["filtered_to"] == "changed within 30 days"
+
+    def test_epoch_ms_conversion_tolerates_junk(self):
+        assert mcp_context._ms_to_iso("1789516800000").startswith("2026-09-16")
+        for junk in (None, "", "not-a-number", "  "):
+            assert mcp_context._ms_to_iso(junk) is None

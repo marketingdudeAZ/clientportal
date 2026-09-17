@@ -52,6 +52,16 @@ def _gap(field: str, source: str, message: str) -> Dict[str, str]:
     return {"field": field, "source": source, "message": message}
 
 
+def _ms_to_iso(value: Any) -> Optional[str]:
+    """ClickUp hands back epoch milliseconds as a string. Give agents an ISO date."""
+    if not value or not str(value).strip().lstrip("-").isdigit():
+        return None
+    try:
+        return datetime.fromtimestamp(int(value) / 1000.0, timezone.utc).isoformat()
+    except (ValueError, OSError, OverflowError):
+        return None
+
+
 def _slug(name: str) -> str:
     return "_".join(name.lower().replace("&", "and").split())
 
@@ -288,7 +298,8 @@ def get_spend_authorization(company_id: str) -> Dict[str, Any]:
     }
 
 
-def get_open_work(company_id: str, limit: int = 20) -> Dict[str, Any]:
+def get_open_work(company_id: str, limit: int = 20,
+                  changed_within_days: Optional[int] = None) -> Dict[str, Any]:
     identity, err = _resolve(company_id)
     if err:
         return err
@@ -305,6 +316,11 @@ def get_open_work(company_id: str, limit: int = 20) -> Dict[str, Any]:
                 "gaps": [_gap("open_work", _SRC_CLICKUP,
                               "No ticket lists are configured on this server.")]}
 
+    cutoff_ms = None
+    if changed_within_days:
+        cutoff_ms = int((datetime.now(timezone.utc)
+                         - timedelta(days=int(changed_within_days))).timestamp() * 1000)
+
     items: List[Dict[str, Any]] = []
     for list_id in list_ids[:6]:
         try:
@@ -316,21 +332,228 @@ def get_open_work(company_id: str, limit: int = 20) -> Dict[str, Any]:
             title = t.get("name") or ""
             if name and name not in title.lower():
                 continue
+            updated = t.get("date_updated")
+            if cutoff_ms and updated and str(updated).isdigit() and int(updated) < cutoff_ms:
+                continue
             items.append({
                 "title": title,
                 "status": (t.get("status") or {}).get("status"),
-                "created": t.get("date_created"),
-                "due": t.get("due_date"),
+                "status_type": (t.get("status") or {}).get("type"),
+                "created": _ms_to_iso(t.get("date_created")),
+                "last_changed": _ms_to_iso(updated),
+                "started": _ms_to_iso(t.get("start_date")),
+                "due": _ms_to_iso(t.get("due_date")),
+                "assignees": [a.get("username") for a in (t.get("assignees") or [])
+                              if a.get("username")],
                 "url": t.get("url"),
             })
-            if len(items) >= cap:
-                break
-        if len(items) >= cap:
-            break
 
-    return {"company_id": company_id, "items": items, "source": _SRC_CLICKUP,
-            "as_of": _now_iso(), "gaps": [],
-            "note": "Check this before proposing work that may already be in flight."}
+    items.sort(key=lambda i: i.get("last_changed") or "", reverse=True)
+    items = items[:cap]
+    out = {"company_id": company_id, "items": items, "source": _SRC_CLICKUP,
+           "as_of": _now_iso(), "gaps": [],
+           "note": ("Sorted by most recently changed. `last_changed` is when the "
+                    "ticket last moved, which is the closest thing to a change log "
+                    "here: per-field history is not exposed. Check this before "
+                    "proposing work that may already be under way.")}
+    if changed_within_days:
+        out["filtered_to"] = "changed within %d days" % int(changed_within_days)
+    return out
+
+
+def get_active_deals(company_id: str) -> Dict[str, Any]:
+    """Open and recently-closed deals for the property, with stage and timing."""
+    import spend_sheet
+
+    try:
+        assoc = spend_sheet._get_deal_associations([str(company_id)])
+        deal_ids = [did for did, cid in (assoc or {}).items() if str(cid) == str(company_id)]
+        deals = spend_sheet._batch_read_deals(deal_ids) if deal_ids else {}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("mcp deals failed for %s: %s", company_id, exc, exc_info=True)
+        return {"error": "deals_unavailable", "detail": type(exc).__name__}
+
+    rows = []
+    for did, deal in (deals or {}).items():
+        p = deal.get("properties") or {}
+        stage = p.get("dealstage")
+        rows.append({
+            "deal_id": did,
+            "name": p.get("dealname"),
+            "stage_id": stage,
+            "pipeline_id": p.get("pipeline"),
+            "amount": float(p["amount"]) if str(p.get("amount") or "").strip() else None,
+            "created": p.get("createdate"),
+            "close_date": p.get("closedate"),
+            "is_closed_won": stage in ("closedwon", "266261426", "1389723181"),
+        })
+    rows.sort(key=lambda r: r.get("created") or "", reverse=True)
+
+    out = {
+        "company_id": company_id,
+        "deals": rows,
+        "count": len(rows),
+        "source": "hubspot_deals",
+        "as_of": _now_iso(),
+        "gaps": [],
+        "note": ("Stage and pipeline are returned as HubSpot ids because their labels "
+                 "differ per pipeline. A deal drives spend only once it is signed and "
+                 "its launch date has passed — see get_spend_authorization for the "
+                 "amounts that are actually authorized."),
+    }
+    if not rows:
+        out["gaps"].append(_gap("deals", "hubspot",
+                                "No deals are associated with this property."))
+    out["gaps"].append(_gap("deal_change_history", "hubspot",
+                            "When a deal last changed stage is not exposed; only "
+                            "creation and close dates are available here."))
+    return out
+
+
+def get_market_comps(company_id: str, comp_set_id: Optional[str] = None,
+                     bedroom_count: Optional[int] = None) -> Dict[str, Any]:
+    """Competitor context: the market narrative, and comp-set rents when we have
+    a comp set for the property."""
+    identity, err = _resolve(company_id)
+    if err:
+        return err
+    d = identity.to_dict()
+    market_id = d.get("aptiq_market_id")
+
+    import apartmentiq_client as aptiq
+
+    out: Dict[str, Any] = {"company_id": company_id, "market_id": market_id,
+                           "narrative": None, "comp_set": [], "gaps": []}
+
+    if market_id:
+        try:
+            narrative = aptiq.get_market_narrative(str(market_id))
+            out["narrative"] = narrative or None
+            if not narrative:
+                out["gaps"].append(_gap("narrative", _SRC_APTIQ,
+                                        "No market narrative is published for this "
+                                        "market right now."))
+        except Exception as exc:  # noqa: BLE001
+            logger.error("mcp market narrative failed for %s: %s", market_id, exc,
+                         exc_info=True)
+            out["gaps"].append(_gap("narrative", _SRC_APTIQ,
+                                    "The market source is temporarily unavailable."))
+    else:
+        out["gaps"].append(_gap("narrative", _SRC_APTIQ,
+                                "This property has no market id, so market context is "
+                                "not connected for it."))
+
+    if comp_set_id:
+        try:
+            survey = aptiq.get_market_survey(str(comp_set_id), bedroom_count)
+            out["comp_set"] = survey or []
+            out["comp_set_id"] = str(comp_set_id)
+            if not survey:
+                out["gaps"].append(_gap("comp_set", _SRC_APTIQ,
+                                        "That comp set returned no rows, or it is not "
+                                        "accessible to this account."))
+        except Exception as exc:  # noqa: BLE001
+            logger.error("mcp comp survey failed for %s: %s", comp_set_id, exc,
+                         exc_info=True)
+            out["gaps"].append(_gap("comp_set", _SRC_APTIQ,
+                                    "The comp-set source is temporarily unavailable."))
+    else:
+        out["gaps"].append(_gap("comp_set", _SRC_APTIQ,
+                                "Comp-set rents need a comp set id, which is not stored "
+                                "on the property record yet. Pass comp_set_id "
+                                "explicitly if you have one."))
+    out["as_of"] = _now_iso()
+    out["note"] = ("Competitors here are comparable communities in the same submarket, "
+                   "not brands. Never use competitor data to justify audience or "
+                   "geographic targeting changes — housing rules prohibit them.")
+    return out
+
+
+def get_attribution(company_id: str, month: Optional[str] = None) -> Dict[str, Any]:
+    """First-touch attribution by source, from lead-level funnel records."""
+    identity, err = _resolve(company_id)
+    if err:
+        return err
+    hyly_id = identity.to_dict().get("hyly_property_id")
+    month_key, start, end = month_bounds(month)
+    base = {"company_id": company_id, "month": month_key, "by_source": {},
+            "totals": {}, "source": "hyly_contact_grain"}
+
+    if not hyly_id:
+        base["gaps"] = [_gap("attribution", _SRC_HYLY,
+                             "This property is not in the leasing-funnel program, so "
+                             "lead-level attribution does not exist for it.")]
+        return base
+    if month_key == "2026-06":
+        base["gaps"] = [_gap("attribution", _SRC_HYLY,
+                             "June 2026 is a backfill artifact in the source and is "
+                             "excluded by rule. Choose another month.")]
+        return base
+
+    import hyly_client as hyly
+
+    try:
+        rows = hyly.get_contact_submits(str(hyly_id), start_date=start, end_date=end)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("mcp attribution failed for %s: %s", hyly_id, exc, exc_info=True)
+        base["gaps"] = [_gap("attribution", _SRC_HYLY,
+                             "The lead-level source is temporarily unavailable.")]
+        return base
+    if not rows:
+        base["gaps"] = [_gap("attribution", _SRC_HYLY,
+                             "No lead-level records are available for this property and "
+                             "month. The contact-grain source may not be configured.")]
+        return base
+
+    by_source: Dict[str, Dict[str, Any]] = {}
+    days_to_lease: List[int] = []
+    for r in rows:
+        src = (r.get("source_raw") or "unknown").strip() or "unknown"
+        bucket = by_source.setdefault(src, {"leads": 0, "tours_scheduled": 0,
+                                            "toured": 0, "applied": 0, "leased": 0})
+        bucket["leads"] += 1
+        for key, field in (("tours_scheduled", "tour_scheduled_at"),
+                           ("toured", "toured_at"),
+                           ("applied", "applied_at"),
+                           ("leased", "leased_at")):
+            if r.get(field):
+                bucket[key] += 1
+        if r.get("lead_at") and r.get("leased_at"):
+            try:
+                lead_day = datetime.fromisoformat(str(r["lead_at"])[:19])
+                lease_day = datetime.fromisoformat(str(r["leased_at"])[:19])
+                days_to_lease.append((lease_day - lead_day).days)
+            except ValueError:
+                pass
+
+    for src, b in by_source.items():
+        b["lead_to_lease"] = (round(b["leased"] / b["leads"], 4) if b["leads"] else None)
+
+    totals = {k: sum(b[k] for b in by_source.values())
+              for k in ("leads", "tours_scheduled", "toured", "applied", "leased")}
+    totals["lead_to_lease"] = (round(totals["leased"] / totals["leads"], 4)
+                               if totals["leads"] else None)
+    if days_to_lease:
+        ordered = sorted(days_to_lease)
+        totals["median_days_lead_to_lease"] = ordered[len(ordered) // 2]
+
+    return {
+        "company_id": company_id,
+        "month": month_key,
+        "range": {"start": start, "end": end},
+        "by_source": by_source,
+        "totals": totals,
+        "source": "hyly_contact_grain",
+        "as_of": _now_iso(),
+        "attribution_model": "first_touch",
+        "note": ("FIRST TOUCH only: each lead is credited to the first source recorded "
+                 "for that contact. Multi-touch and influenced attribution are NOT "
+                 "available — the multi-touch object sits outside the metric library, "
+                 "so do not describe these figures as multi-touch or influenced."),
+        "gaps": [_gap("multi_touch_attribution", _SRC_HYLY,
+                      "Influenced and multi-touch credit are not connected. Only "
+                      "first-touch credit is available.")],
+    }
 
 
 def get_metric_rules() -> Dict[str, Any]:
@@ -491,8 +714,10 @@ TOOLS: List[Dict[str, Any]] = [
         "name": "get_open_work",
         "title": "Get work in flight",
         "description": (
-            "Open tickets for this property, so you do not propose work that is already "
-            "under way. Internal comments and account notes are never included."),
+            "Open tickets for this property, newest change first, so you do not propose "
+            "work that is already under way. Each item carries when it was created, when "
+            "it last moved, its status and who owns it. Per-field change history is not "
+            "available. Internal comments and account notes are never included."),
         "handler": get_open_work,
         "inputSchema": {
             "type": "object",
@@ -500,6 +725,74 @@ TOOLS: List[Dict[str, Any]] = [
                 "company_id": {"type": "string", "description": "From find_property."},
                 "limit": {"type": "integer",
                           "description": "Max items, 1-50. Default 20."},
+                "changed_within_days": {
+                    "type": "integer",
+                    "description": ("Only tickets that moved in the last N days. Use it "
+                                    "to answer what changed recently."),
+                },
+            },
+            "required": ["company_id"],
+        },
+    },
+    {
+        "name": "get_active_deals",
+        "title": "Get deals and their timing",
+        "description": (
+            "Deals associated with this property: name, stage, pipeline, amount, created "
+            "and close dates. Use it for what is being sold or was recently signed. "
+            "Stage and pipeline come back as ids because their labels differ per "
+            "pipeline. A deal drives spend only once signed and past its launch date — "
+            "get_spend_authorization has the amounts that are actually authorized. When "
+            "a deal last changed stage is not available."),
+        "handler": get_active_deals,
+        "inputSchema": {
+            "type": "object",
+            "properties": {"company_id": {"type": "string",
+                                          "description": "From find_property."}},
+            "required": ["company_id"],
+        },
+    },
+    {
+        "name": "get_market_comps",
+        "title": "Get competitor and market context",
+        "description": (
+            "Competitor context for the property's submarket: the market narrative, and "
+            "comp-set rents and occupancy when a comp set id is supplied. Competitors "
+            "here are comparable communities in the same submarket, not brands. Never "
+            "use this to justify audience or geographic targeting changes — housing "
+            "rules prohibit them."),
+        "handler": get_market_comps,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "company_id": {"type": "string", "description": "From find_property."},
+                "comp_set_id": {"type": "string",
+                                "description": ("Optional. Comp-set rents need this; it "
+                                                "is not stored on the property record "
+                                                "yet.")},
+                "bedroom_count": {"type": "integer",
+                                  "description": "Optional. Narrow the survey to one "
+                                                 "bedroom count."},
+            },
+            "required": ["company_id"],
+        },
+    },
+    {
+        "name": "get_attribution",
+        "title": "Get first-touch attribution by source",
+        "description": (
+            "Leads, tours, applications and leases credited to the FIRST source recorded "
+            "for each contact, for one month, plus median days from lead to lease. "
+            "Multi-touch and influenced attribution are not available, so never "
+            "describe these figures as multi-touch or influenced. Defaults to the last "
+            "full month."),
+        "handler": get_attribution,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "company_id": {"type": "string", "description": "From find_property."},
+                "month": {"type": "string",
+                          "description": "YYYY-MM. Defaults to the last full month."},
             },
             "required": ["company_id"],
         },
