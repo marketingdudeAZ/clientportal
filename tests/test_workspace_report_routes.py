@@ -23,6 +23,7 @@ FIXTURE = json.loads((ROOT / "tests" / "fixtures" / "workspace" / "report_bromle
 INTERNAL = {"X-Portal-Email": "dana.reyes@rpmliving.com"}
 CLIENT = {"X-Portal-Email": "owner@example-capital.com"}
 URL = "/api/workspace/report?company_id=26136316506&month=2026-06"
+VERIFIED = {"portal.identity_verified": True}
 
 
 @pytest.fixture
@@ -41,6 +42,10 @@ def client(monkeypatch):
 
     monkeypatch.setattr(wr, "build_report", fake_build)
     app = Flask(__name__)
+    # The gate that protects this route lives at app level, not on the
+    # blueprint — that split is exactly how the hole below went unnoticed.
+    from _route_utils import workspace_proof_gate
+    app.before_request(workspace_proof_gate)
     app.register_blueprint(route.workspace_report_bp)
     c = app.test_client()
     c.calls = calls
@@ -55,7 +60,7 @@ def enabled(monkeypatch):
 
 class TestFlag:
     def test_api_404_when_flag_off(self, client):
-        r = client.get(URL, headers=INTERNAL)
+        r = client.get(URL, headers=INTERNAL, environ_overrides=VERIFIED)
         assert r.status_code == 404 and client.calls == []
 
     def test_page_404_when_flag_off(self, client):
@@ -64,51 +69,66 @@ class TestFlag:
     @pytest.mark.parametrize("value", ["false", "0", "", "no"])
     def test_falsy_values_keep_it_off(self, client, monkeypatch, value):
         monkeypatch.setenv("WORKSPACE_ENABLED", value)
-        assert client.get(URL, headers=INTERNAL).status_code == 404
+        assert client.get(URL, headers=INTERNAL, environ_overrides=VERIFIED).status_code == 404
 
 
 class TestAccess:
     def test_anonymous_is_401(self, client, enabled):
-        assert client.get(URL).status_code == 401
+        assert client.get(URL, environ_overrides=VERIFIED).status_code == 401  # KEEP-UNVERIFIED
         assert client.calls == []
 
-    def test_internal_user_gets_the_report(self, client, enabled):
+    def test_an_asserted_rpm_email_alone_is_refused(self, client, enabled):
+        """REGRESSION. This route lives on its own blueprint, so the workspace
+        blueprint's before_request never ran for it: anyone who knew an RPM
+        address could read any property's report. The old version of this test
+        asserted the 200."""
         r = client.get(URL, headers=INTERNAL)
+        assert r.status_code == 401
+        assert r.get_json()["error"] == "Verified sign-in required"
+        assert client.calls == []
+
+    def test_a_verified_internal_session_gets_the_report(self, client, enabled):
+        r = client.get(URL, headers=INTERNAL, environ_overrides=VERIFIED)
         assert r.status_code == 200
         assert r.get_json()["month"] == "2026-06"
         assert client.calls == [("26136316506", "2026-06")]
         assert r.headers["Cache-Control"] == "no-store"
 
+    def test_the_gate_can_be_turned_off_for_a_rollback(self, client, enabled, monkeypatch):
+        monkeypatch.setenv("WORKSPACE_REQUIRE_PROOF", "false")
+        assert client.get(URL, headers=INTERNAL, environ_overrides=VERIFIED).status_code == 200  # KEEP-UNVERIFIED
+
     def test_client_without_feature_is_403(self, client, enabled):
-        r = client.get(URL, headers=CLIENT)
+        r = client.get(URL, headers=CLIENT, environ_overrides=VERIFIED)
         assert r.status_code == 403 and client.calls == []
 
     def test_client_with_feature_but_other_property_is_403(self, client, enabled, monkeypatch):
         monkeypatch.setattr(feature_access, "can_access", lambda email, key: key == "workspace")
         monkeypatch.setattr(feature_access, "companies_for", lambda email: {"999"})
-        r = client.get(URL, headers=CLIENT)
+        r = client.get(URL, headers=CLIENT, environ_overrides=VERIFIED)
         assert r.status_code == 403 and client.calls == []
 
     def test_client_with_feature_and_property_gets_it(self, client, enabled, monkeypatch):
         monkeypatch.setattr(feature_access, "can_access", lambda email, key: key == "workspace")
         monkeypatch.setattr(feature_access, "companies_for", lambda email: {"26136316506"})
-        assert client.get(URL, headers=CLIENT).status_code == 200
+        assert client.get(URL, headers=CLIENT, environ_overrides=VERIFIED).status_code == 200
 
     def test_feature_gate_asks_for_workspace(self, client, enabled, monkeypatch):
         seen = []
         monkeypatch.setattr(feature_access, "can_access", lambda email, key: seen.append(key) or True)
-        client.get(URL, headers=INTERNAL)
+        client.get(URL, headers=INTERNAL, environ_overrides=VERIFIED)
         assert seen == ["workspace"]
 
     def test_missing_company_id_is_400(self, client, enabled):
-        assert client.get("/api/workspace/report", headers=INTERNAL).status_code == 400
+        assert client.get("/api/workspace/report", headers=INTERNAL,
+                          environ_overrides=VERIFIED).status_code == 400
 
     def test_strict_identity_requires_verified_session(self, client, enabled, monkeypatch):
         monkeypatch.setenv("PORTAL_STRICT_IDENTITY", "true")
         assert client.get(URL, headers=INTERNAL).status_code == 401
 
     def test_email_query_param_is_not_identity(self, client, enabled):
-        r = client.get(URL + "&email=dana.reyes@rpmliving.com")
+        r = client.get(URL + "&email=dana.reyes@rpmliving.com", environ_overrides=VERIFIED)
         assert r.status_code == 401
 
 
@@ -124,7 +144,7 @@ class TestErrors:
             raise exc
 
         monkeypatch.setattr(wr, "build_report", raiser)
-        r = client.get(URL, headers=INTERNAL)
+        r = client.get(URL, headers=INTERNAL, environ_overrides=VERIFIED)
         assert r.status_code == status
         assert r.get_json()["error"] == error
 

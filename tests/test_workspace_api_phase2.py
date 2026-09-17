@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import sys
 import time
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from unittest import mock
 from urllib.parse import urlparse
@@ -163,11 +163,17 @@ class TestSignalRules:
 
 @pytest.fixture
 def signal_data(monkeypatch):
+    # Dates are relative to today on purpose. Pinned dates aged past the
+    # staleness threshold and made an extra data_stale signal appear, so these
+    # tests started failing on a calendar day rather than on a code change.
+    fresh_day = (date.today() - timedelta(days=1))
+    fresh_us = fresh_day.strftime("%m/%d/%Y")
+    fresh_iso = fresh_day.isoformat() + "T00:00:00Z"
     monkeypatch.setattr(wcache, "aptiq_daily", lambda: ({"ap-1": {
-        "Exposure % (Next 30d)": "5", "Exposure % (Next 90d)": "13", "Report Generation Date": "09/13/2026"}},
-        "2026-09-14T00:00:00Z"))
+        "Exposure % (Next 30d)": "5", "Exposure % (Next 90d)": "13",
+        "Report Generation Date": fresh_us}}, fresh_iso))
     monkeypatch.setattr(wcache, "aptiq_floor_plans", lambda: ({"ap-1": [
-        {"Floor Plan Name": "S1", "Available Units": "12", "Days on Market": "95"}]}, "2026-09-14T00:00:00Z"))
+        {"Floor Plan Name": "S1", "Available Units": "12", "Days on Market": "95"}]}, fresh_iso))
     import bigquery_client
     monkeypatch.setattr(bigquery_client, "is_bigquery_configured", lambda: False)
 

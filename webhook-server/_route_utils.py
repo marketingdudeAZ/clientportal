@@ -176,3 +176,53 @@ def require_company_access(company_id):
         "error": "Not authorized for this property",
         "company_id": company_id,
     }), 403
+
+
+# Paths whose API answers require a PROVEN identity, whatever blueprint serves
+# them. This is enforced at APP level (server.py registers it as a
+# before_request) on purpose: workspace_bp carried its own before_request, and
+# /api/workspace/report sits on a SECOND blueprint, so the check silently did
+# not run for it — an asserted X-Portal-Email could read any property's report.
+# A prefix rule cannot be skipped by adding a blueprint.
+PROOF_REQUIRED_PREFIXES = ("/api/workspace/",)
+
+
+def workspace_proof_required(path: str) -> bool:
+    return any(path.startswith(prefix) for prefix in PROOF_REQUIRED_PREFIXES)
+
+
+def workspace_proof_gate():
+    """Refuse an asserted email on every workspace API route.
+
+    Returns a Flask response to refuse, or None to continue.
+
+    Page routes are deliberately NOT covered: /workspace and /workspace/report
+    must render for a signed-out visitor so Clerk can mount its sign-in.
+
+    WORKSPACE_REQUIRE_PROOF=false restores the old behavior. Scoped to the
+    workspace surface only — the legacy portal still runs without it, because
+    Clerk does not cover its existing users.
+    """
+    if request.method == "OPTIONS" or not workspace_proof_required(request.path):
+        return None
+    if os.environ.get("WORKSPACE_REQUIRE_PROOF", "true").strip().lower() in (
+            "0", "false", "no"):
+        return None
+    if is_internal_caller() or identity_is_verified():
+        return None
+    # A verified signed link counts. routes/workspace.py applies it in its own
+    # before_request, which runs after this one, so apply the same token here.
+    try:
+        from skills import workspace_links
+        if request.environ.get(workspace_links.SIGNED_LINK_ENVIRON):
+            return None
+        workspace_links.apply_to_request()
+        if request.environ.get(workspace_links.SIGNED_LINK_ENVIRON) or identity_is_verified():
+            return None
+    except Exception:  # noqa: BLE001 — links are optional; never 500 the gate
+        pass
+    return jsonify({
+        "error": "Verified sign-in required",
+        "detail": "This endpoint requires a verified session, not an asserted "
+                  "email header.",
+    }), 401

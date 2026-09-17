@@ -90,10 +90,21 @@ def _clerk_identity():
             # NOT a header: anything HTTP_* can be sent by the caller, so
             # X-Portal-User-Id above proves nothing on its own.
             request.environ["portal.identity_verified"] = True
-        elif os.environ.get("CLERK_SECRET_KEY"):
-            # A Bearer token was presented but failed verification — do not
-            # let a stale spoofable header ride along beside a bad token.
+        else:
+            # A Bearer token was presented but failed verification — do not let
+            # a stale spoofable header ride along beside a bad token. This used
+            # to run only when CLERK_SECRET_KEY was set, so a missing or wrong
+            # key in the environment left the asserted header in place, which is
+            # the opposite of what a failed verification should do.
             request.environ.pop("HTTP_X_PORTAL_EMAIL", None)
+            request.environ.pop("HTTP_X_PORTAL_USER_ID", None)
+
+
+@app.before_request
+def _require_workspace_proof():
+    """App-level identity gate for the workspace API (see _route_utils)."""
+    from _route_utils import workspace_proof_gate
+    return workspace_proof_gate()
 
 
 @app.after_request
