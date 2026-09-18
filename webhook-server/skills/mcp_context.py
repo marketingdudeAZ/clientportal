@@ -177,18 +177,84 @@ def get_property_brief(company_id: str, section: Optional[str] = None) -> Dict[s
     }
 
 
+def _floor_plans(company_id: str, aptiq_id: str):
+    """Per-plan availability, with the source that actually carries it.
+
+    The AptIQ property snapshot has NO floor_plans key, so reading one always
+    produced an empty list and a misleading gap. Per-plan data lives in the
+    floor-plan sheet keyed by AptIQ id, and in the property brief's floorplan
+    table — which is the only source carrying `available` per plan. There is no
+    per-plan rent in either, so none is reported.
+    """
+    try:
+        from skills import workspace_cache as wc
+        rows, as_of = wc.aptiq_floor_plans()
+        plans = (rows or {}).get(aptiq_id) or []
+        if plans:
+            return ([{"name": p.get("Floor Plan Name") or p.get("name"),
+                      "available_units": p.get("Available Units"),
+                      "days_on_market": p.get("Days on Market")}
+                     for p in plans], "aptiq_floor_plan_sheet", as_of)
+    except Exception as exc:  # noqa: BLE001 — optional source
+        logger.info("mcp floor plans (sheet) unavailable for %s: %s", aptiq_id, exc)
+
+    try:
+        import community_brief as cb
+        props = cb.load_company_state(company_id)
+        raw = cb.resolve_value(props, "fluency_floor_plans_json",
+                               "fluency_floor_plans_override")
+        table = cb._build_floorplan_table(raw) if raw else []
+        if table:
+            return ([{"name": r.get("name"), "beds": r.get("beds"),
+                      "baths": r.get("baths"), "sqft": r.get("sqft"),
+                      "total_units": r.get("total_units"),
+                      "available_units": r.get("available")}
+                     for r in table], "community_brief", None)
+    except Exception as exc:  # noqa: BLE001 — optional source
+        logger.info("mcp floor plans (brief) unavailable for %s: %s", company_id, exc)
+    return [], None, None
+
+
 def get_availability(company_id: str) -> Dict[str, Any]:
     identity, err = _resolve(company_id)
     if err:
         return err
     aptiq_id = identity.to_dict().get("aptiq_property_id")
-    empty = {"company_id": company_id, "occupancy": None, "available_units": None,
-             "floor_plans": []}
+    units = (identity.to_dict().get("totalunits")
+             or identity.to_dict().get("unit_count"))
+
+    # Floor plans are looked up FIRST and independently of the snapshot: many
+    # properties carry a plan table in the brief with no AptIQ id at all, and
+    # the old order returned nothing for them.
+    plans, plan_src, plan_as_of = _floor_plans(company_id, str(aptiq_id or ""))
+
+    out: Dict[str, Any] = {
+        "company_id": company_id,
+        "units": units,
+        "occupancy": None,
+        "leased_percent": None,
+        "exposure": None,
+        "available_units": None,
+        "leases_last_30": None,
+        "floor_plans": plans,
+        "gaps": [],
+        "note": ("Vacant units are lost revenue every day they stay vacant. Spend "
+                 "should follow availability, not the other way round."),
+    }
+    if plans:
+        out["floor_plans_source"] = plan_src
+        out["floor_plans_as_of"] = plan_as_of
+    else:
+        out["gaps"].append(_gap(
+            "floor_plans", plan_src or _SRC_APTIQ,
+            "Per-floor-plan availability is not connected for this property."))
+
     if not aptiq_id:
-        empty["gaps"] = [_gap("occupancy", _SRC_APTIQ,
-                              "This property has no availability id, so occupancy and "
-                              "unit availability are not connected for it.")]
-        return empty
+        out["gaps"].append(_gap(
+            "occupancy", _SRC_APTIQ,
+            "This property has no availability id, so occupancy and unit "
+            "availability are not connected for it."))
+        return out
 
     import apartmentiq_client as aptiq
 
@@ -196,33 +262,23 @@ def get_availability(company_id: str) -> Dict[str, Any]:
         snap = aptiq.get_property_snapshot(str(aptiq_id))
     except Exception as exc:  # noqa: BLE001
         logger.error("mcp availability failed for %s: %s", aptiq_id, exc, exc_info=True)
-        empty["gaps"] = [_gap("occupancy", _SRC_APTIQ,
-                              "The availability source is temporarily unavailable.")]
-        return empty
+        out["gaps"].append(_gap("occupancy", _SRC_APTIQ,
+                                "The availability source is temporarily unavailable."))
+        return out
     if not snap:
-        empty["gaps"] = [_gap("occupancy", _SRC_APTIQ,
-                              "No availability snapshot exists for this property today.")]
-        return empty
+        out["gaps"].append(_gap("occupancy", _SRC_APTIQ,
+                                "No availability snapshot exists for this property today."))
+        return out
 
     src = "aptiq_api" if snap.get("_source") == "api" else "aptiq_daily_csv"
     as_of = snap.get("as_of") or snap.get("snapshot_date") or _now_iso()
-    out = {
-        "company_id": company_id,
-        "units": identity.to_dict().get("unit_count"),
+    out.update({
         "occupancy": _receipt(snap.get("occupancy"), src, as_of),
         "leased_percent": _receipt(snap.get("leased_percent"), src, as_of),
         "exposure": _receipt(snap.get("exposure"), src, as_of),
         "available_units": _receipt(snap.get("available_units"), src, as_of),
         "leases_last_30": _receipt(snap.get("leases_last_30"), src, as_of),
-        "floor_plans": snap.get("floor_plans") or [],
-        "gaps": [],
-        "note": ("Vacant units are lost revenue every day they stay vacant. Spend "
-                 "should follow availability, not the other way round."),
-    }
-    if not out["floor_plans"]:
-        out["gaps"].append(_gap("floor_plans", src,
-                                "Floor-plan level availability is not in this snapshot; "
-                                "property-level availability is included."))
+    })
     return out
 
 

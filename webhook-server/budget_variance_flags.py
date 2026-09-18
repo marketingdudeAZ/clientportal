@@ -270,10 +270,10 @@ def watchdog(flagged_now: list[dict], today: str | None = None) -> dict:
 def _currently_flagged() -> list[dict]:
     """Companies where budget_discrepancy is true.
 
-    NOTE: hubspot_client.search_companies does not paginate, so a very large
-    flagged set is truncated to the first page. That degrades safely — an
-    unseen flag is simply not cleared this run and is picked up by a later one
-    — but it does mean the watchdog count is a floor, not an exact figure.
+    Was a floor, not a count: `hubspot_client.search_companies` sent no `limit`
+    and never followed `paging.next`, so this saw HubSpot's default first ten
+    flags and cleared only those. It pages to the end now, so the watchdog count
+    is the whole flagged set.
     """
     import hubspot_client as hs
     return hs.search_companies(

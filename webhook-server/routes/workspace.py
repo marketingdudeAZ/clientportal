@@ -8,6 +8,7 @@ HubSpot, HubDB, BigQuery or Claude directly.
 
     GET  /api/workspace/me
     GET  /api/workspace/portfolio?view=needs_me|all&page=     internal only
+    GET  /api/workspace/rpmi                                  internal only
     GET  /api/workspace/signals?company_id=                   internal only
     POST /api/workspace/signals/<id>/start-work               verified identity
     GET  /api/workspace/work?company_id=&status=
@@ -250,6 +251,27 @@ def workspace_portfolio():
         return jsonify(wp.build_portfolio(current_portal_email(), view=view, page=int(raw_page)))
     except Exception as exc:  # noqa: BLE001
         return _failed("portfolio", exc)
+
+
+@workspace_bp.route("/api/workspace/rpmi", methods=["GET", "OPTIONS"])
+def workspace_rpmi():
+    """The RPM Investments portfolio roll-up. Internal role, proven identity.
+
+    Sits behind the same gates as `/portfolio`: the blueprint's flag check and
+    `_require_proof` run first, `require_access` next, and `_is_internal()`
+    means a Clerk (or verified link) identity with the internal role — an
+    asserted `X-Portal-Email` and preview-as-client are both refused.
+    """
+    gate = require_access(FEATURE_KEY)
+    if gate:
+        return gate
+    if not _is_internal():
+        return jsonify({"error": "Internal role required"}), 403
+    from skills import workspace_rpmi as wrpmi
+    try:
+        return jsonify(wrpmi.build_rpmi(current_portal_email()))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("the RPMI portfolio", exc)
 
 
 # ── signals ──────────────────────────────────────────────────────────────────

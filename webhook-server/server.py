@@ -223,6 +223,107 @@ def clerk_health():
     })
 
 
+@app.route("/api/internal/google-ads-health", methods=["GET", "OPTIONS"])
+def google_ads_health():
+    """Diagnostic: can THIS server read Google Ads, and what did it get back?
+
+    Exists because the credentials live on the server, not on anyone's laptop,
+    so "does it work" has to be answerable where it actually runs. Internal key
+    only, and it never echoes a credential — only which variable supplied each
+    one, so a value arriving from an unsuffixed name (shared with another
+    integration) is visible without exposing it.
+
+    Pass ?company_id= or ?property= to run one real read for that property:
+    campaign count, 30-day spend, and impression share lost to budget. That is
+    the difference between "configured" and "working".
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    from _route_utils import is_internal_caller
+
+    if not is_internal_caller():
+        return jsonify({"error": "Internal key required"}), 401
+
+    import google_ads_islost as ads
+
+    missing = ads.missing_credentials()
+    body = {
+        "configured": not missing,
+        "missing": missing,
+        # variable name → the env var that supplied it (never the value)
+        "credential_sources": ads.credential_sources(),
+        "library_installed": True,
+    }
+    try:
+        import google.ads.googleads  # noqa: F401
+    except ImportError:
+        body["library_installed"] = False
+
+    target = (request.args.get("company_id") or request.args.get("property") or "").strip()
+    if not target:
+        body["probe"] = None
+        return jsonify(body)
+    if missing or not body["library_installed"]:
+        body["probe"] = {"ran": False,
+                         "reason": "Not configured yet, so nothing was queried."}
+        return jsonify(body)
+
+    from skills import property_resolver as pr
+
+    probe = {"ran": False, "target": target}
+    try:
+        identity = pr.resolve(target)
+    except Exception as exc:  # noqa: BLE001
+        probe["reason"] = "Could not resolve that property (%s)." % type(exc).__name__
+        body["probe"] = probe
+        return jsonify(body)
+
+    probe["property_name"] = identity.name
+    probe["company_id"] = identity.company_id
+    cid = (identity.to_dict().get("google_ads_customer_id") or "").strip()
+    probe["google_ads_customer_id"] = cid or None
+    if not cid:
+        probe["reason"] = ("This property has no Google Ads account id, so no "
+                           "paid-media rule can read it.")
+        body["probe"] = probe
+        return jsonify(body)
+
+    query = ("SELECT campaign.advertising_channel_type, metrics.cost_micros, "
+             "metrics.clicks, metrics.conversions, "
+             "metrics.search_budget_lost_impression_share "
+             "FROM campaign WHERE segments.date DURING LAST_30_DAYS")
+    try:
+        rows = ads._run_gaql(cid, query)
+    except ads.GoogleAdsNotConfigured as exc:
+        probe["reason"] = str(exc)
+        body["probe"] = probe
+        return jsonify(body)
+    except ads.GoogleAdsError as exc:
+        probe["reason"] = str(exc)
+        body["probe"] = probe
+        return jsonify(body)
+
+    spend = sum(float(r.get("metrics.cost_micros") or 0) / 1e6 for r in rows)
+    islost = ads.parse_islost([
+        {"channel_type": r.get("campaign.advertising_channel_type"),
+         "budget_lost_is": r.get("metrics.search_budget_lost_impression_share")}
+        for r in rows])
+    probe.update({
+        "ran": True,
+        "campaigns_last_30_days": len(rows),
+        "spend_last_30_days": round(spend, 2),
+        "clicks_last_30_days": sum(float(r.get("metrics.clicks") or 0) for r in rows),
+        "conversions_last_30_days": round(
+            sum(float(r.get("metrics.conversions") or 0) for r in rows), 1),
+        "search_impression_share_lost_to_budget": islost.get("paid_search"),
+    })
+    if not rows:
+        probe["note"] = ("The account answered and reported no campaigns in the "
+                         "last 30 days. That is an answer, not a failure.")
+    body["probe"] = probe
+    return jsonify(body)
+
+
 @app.route("/api/whoami", methods=["GET", "OPTIONS"])
 def whoami():
     """Diagnostic: echo what the auth layer resolved for THIS request. Called

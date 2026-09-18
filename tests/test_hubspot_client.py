@@ -199,3 +199,73 @@ def test_get_open_deals_filters_closed():
 def test_get_open_deals_empty_when_no_associations():
     _install([FakeResponse(200, {"results": []})])
     assert hc.get_open_deals_for_company("1") == []
+
+
+# ── CRM search paging ────────────────────────────────────────────────────────
+# The ten-row bug: search sent no `limit` and never followed `paging.next`, so
+# every caller silently got HubSpot's default first page. A roster read of 116
+# properties came back as 10.
+
+class _Body:
+    """A search response page."""
+
+    def __init__(self, ids, after=None):
+        self.ids, self.after = ids, after
+
+    def as_json(self):
+        body = {"results": [{"id": i, "properties": {}} for i in self.ids]}
+        if self.after:
+            body["paging"] = {"next": {"after": self.after}}
+        return body
+
+
+def _search_pages(*pages):
+    return _install([FakeResponse(200, p.as_json()) for p in pages])
+
+
+def test_search_follows_paging_to_the_end():
+    fake = _search_pages(_Body(["1", "2"], after="cursor-1"),
+                         _Body(["3", "4"], after="cursor-2"),
+                         _Body(["5"]))
+    out = hc.search_companies([{"propertyName": "client", "operator": "EQ",
+                                "value": "RPMI"}])
+    assert [r["id"] for r in out] == ["1", "2", "3", "4", "5"]
+    assert len(fake.calls) == 3
+
+
+def test_search_asks_for_the_maximum_page_size():
+    """Without an explicit limit HubSpot returns 10 per page, which is the bug."""
+    fake = _search_pages(_Body(["1"]))
+    captured = {}
+    original = fake.request
+
+    def spy(method, url, headers=None, **kwargs):
+        captured.update(kwargs.get("json") or {})
+        return original(method, url, headers=headers, **kwargs)
+
+    fake.request = spy
+    hc.search_companies([{"propertyName": "client", "operator": "EQ", "value": "RPMI"}])
+    assert captured.get("limit") == hc._SEARCH_PAGE_SIZE
+
+
+def test_a_caller_can_cap_total_rows():
+    """`limit` caps rows returned, not page size — one page covers a cap of 2."""
+    fake = _search_pages(_Body(["1", "2"], after="more"))
+    out = hc.search_companies([{"propertyName": "x", "operator": "EQ", "value": "y"}],
+                              limit=2)
+    assert [r["id"] for r in out] == ["1", "2"]
+    assert len(fake.calls) == 1          # stopped instead of following the cursor
+
+
+def test_an_empty_page_ends_the_walk():
+    """A cursor that keeps pointing at nothing must not loop."""
+    fake = _search_pages(_Body(["1"], after="cursor"), _Body([], after="cursor"))
+    out = hc.search_companies([{"propertyName": "x", "operator": "EQ", "value": "y"}])
+    assert [r["id"] for r in out] == ["1"]
+    assert len(fake.calls) == 2
+
+
+def test_no_matches_returns_empty():
+    _search_pages(_Body([]))
+    assert hc.search_companies([{"propertyName": "x", "operator": "EQ",
+                                 "value": "nope"}]) == []

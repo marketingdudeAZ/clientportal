@@ -170,6 +170,35 @@ PORTFOLIO = {
     "quiet_count": INT, "gaps": [GAP],
 }
 
+# GET /api/workspace/rpmi — the RPM Investments roll-up (internal only).
+# Every property number is a METRIC or null; a null is paired with a row gap.
+RPMI_SOURCE_KEYS = enum("aptiq", "ga4", "google_ads", "hyly")
+RPMI = {
+    "as_of": STR, "scope_label": STR, "client_values": [STR],
+    "record_count": INT, "property_count": INT,
+    "period": {"leases_month": opt(STR)},
+    "totals": {
+        "units": opt(METRIC), "occupancy": opt(METRIC), "available_units": opt(METRIC),
+        "units_at_risk": opt(METRIC), "leases_last_month": opt(METRIC),
+        "spend_monthly": opt(METRIC), "cost_per_lease": opt(METRIC),
+        "open_recommendations": opt(METRIC),
+    },
+    "coverage": {"property_count": INT,
+                 "sources": [{"key": RPMI_SOURCE_KEYS, "label": STR, "count": INT, "missing": INT}]},
+    "grouping": {"field": STR, "label": STR, "note": STR},
+    "properties": [{
+        "company_id": STR, "name": opt(STR), "city": opt(STR), "state": opt(STR),
+        "market": opt(STR), "status": opt(STR), "href": STR,
+        "units": opt(METRIC), "occupancy": opt(METRIC), "available_units": opt(METRIC),
+        "units_at_risk": opt(METRIC), "leases_last_month": opt(METRIC),
+        "cost_per_lease": opt(METRIC), "spend_monthly": opt(METRIC),
+        "open_recommendations": opt(METRIC),
+        "sources": {"aptiq": BOOL, "ga4": BOOL, "google_ads": BOOL, "hyly": BOOL},
+        "gaps": [GAP],
+    }],
+    "gaps": [GAP],
+}
+
 WORK = {
     "summary": {"open": INT, "late": INT, "needs_approval": INT, "next_deadline": opt(STR)},
     "counts": {"to_do": INT, "in_motion": INT, "done": INT},
@@ -263,7 +292,7 @@ SHAPES = {
     "decision_request": DECISION_REQUEST, "undo_result": UNDO_RESULT, "not_undoable": NOT_UNDOABLE,
     "property": PROPERTY, "performance": PERFORMANCE, "plan": PLAN, "client_view": CLIENT_VIEW,
     "signals": SIGNALS, "start_work": START_WORK, "draft": DRAFT, "filed": FILED, "recent": RECENT,
-    "search": SEARCH, "error": ERROR,
+    "search": SEARCH, "error": ERROR, "rpmi": RPMI,
 }
 
 # ── v3 rebuild screens ───────────────────────────────────────────────────────
@@ -479,6 +508,8 @@ COUNT_KEYS = frozenset({
     "waiting", "interrupts_count", "approved_this_month", "recommendations", "published", "in_review",
     "assets", "tracked_in_ads", "changes", "window_days", "autopilot_approvals", "fair_housing_reviews_clean",
     "pages_checked", "assets_checked", "profile_fields_checked", "findings_count",
+    # RPMI roll-up: roster tallies and per-source coverage, not measurements.
+    "record_count", "missing",
 })
 
 
