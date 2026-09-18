@@ -1,8 +1,14 @@
 """AI visibility: the vendor's numbers, our history, and the honest gaps.
 
-The payloads here are real responses, trimmed. That matters: the connector was
-written against measured shapes rather than a guess at an API, so these tests
-pin the normalization a live key will have to keep satisfying.
+The payloads here are real responses, trimmed, and they have now been checked
+against a LIVE read (project Vitriapartments, 18 Sept 2026): summary,
+platforms, trend, availableFilters and dateRange all came back in these shapes.
+
+That distinction cost something to learn. These payloads were always real; the
+transport underneath them was not — the old connector pointed at
+api.searchable.ai, a host with no DNS record, so the normalization was correct
+and the reads could never have happened. The vendor's surface is an MCP server,
+and `searchable_mcp` is what these now exercise.
 """
 from __future__ import annotations
 
@@ -17,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "webhook-server"))
 sys.path.insert(0, str(ROOT))
 
-import searchable_client as sc  # noqa: E402
+import searchable_mcp as sc  # noqa: E402
 from skills import ai_visibility as av  # noqa: E402
 
 # --- real payloads (trimmed) -----------------------------------------------
@@ -100,9 +106,14 @@ class TestNormalization:
 
 
 class TestTransportPolicy:
-    def test_unconfigured_is_a_reason_not_an_exception(self):
-        payload, reason = sc._get("/anything")
-        assert payload is None and "not connected" in reason
+    def test_unconfigured_is_a_reason_not_an_exception(self, monkeypatch):
+        """No credential must degrade to a gap, never raise: an unmeasured
+        property reads as "not measured yet", never as a zero."""
+        for name in ("SEARCHABLE_API_TOKEN", "SEARCHABLE_MCP_REFRESH_TOKEN",
+                     "SEARCHABLE_MCP_CLIENT_ID"):
+            monkeypatch.delenv(name, raising=False)
+        result, reason = sc.call("tools/list")
+        assert result is None and "credentials" in reason.lower()
 
     def test_project_lookup_without_a_website_says_so(self):
         project, reason = sc.project_for_domain("")
