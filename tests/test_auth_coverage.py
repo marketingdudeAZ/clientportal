@@ -49,7 +49,10 @@ AUTH_MARKERS = (
     "_is_authorized",              # INTERNAL_KEY/PORTAL_EMAIL (loop blueprint helper)
     "_is_internal",                # INTERNAL_KEY (loop blueprint internal-only helper)
     "_gate",                       # PILOT_ROSTER (portal-tickets blueprint)
-    "_caller_label",               # MACHINE_TOKEN (MCP endpoint: bearer token,
+    "_caller_label",               # MACHINE_TOKEN (MCP endpoint + the agent
+                                   # findings ingest, which reuses the same
+                                   # token table via _caller_label_or_error:
+                                   # bearer token,
                                    # constant-time matched against MCP_TOKENS /
                                    # MCP_BEARER_TOKEN; there is no portal user
                                    # on that path, so no portal marker applies)

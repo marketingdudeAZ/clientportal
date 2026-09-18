@@ -4,6 +4,7 @@ Add new blueprints here as they're extracted from server.py. server.py
 calls `register_all(app)` once at startup.
 """
 
+from .agent_findings import agent_findings_bp
 from .ask import ask_bp
 from .attention import attention_bp
 from .feedback import feedback_bp
@@ -46,6 +47,9 @@ def register_all(app):
     # MCP endpoint: read-only portal context for an external agent platform.
     # 404s unless a machine token is configured (MCP_BEARER_TOKEN / MCP_TOKENS).
     app.register_blueprint(mcp_bp)
+    # The return path: an outside agent POSTs a finding and it becomes a card in
+    # the Approvals queue. Shares the MCP token table, so it 404s with /mcp.
+    app.register_blueprint(agent_findings_bp)
     # Portal QA feedback -> ClickUp. Internal-only; the widget
     # hides itself unless CLICKUP_LIST_PORTAL_FEEDBACK is set.
     app.register_blueprint(feedback_bp)

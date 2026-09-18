@@ -88,3 +88,98 @@ shared machine token is an acceptable credential.
 - Transport: replies are SSE when the client's `Accept` includes
   `text/event-stream`, otherwise JSON. Both are valid; clients accept either.
   Batched JSON-RPC is refused with a clear message.
+
+---
+
+# The return path: posting a finding
+
+`/mcp` lets an agent READ the portal. This is the other direction — an agent
+posts what it found and it becomes a card in the portal's Approvals queue,
+beside the rules the portal runs itself. Same token table, same kill switch:
+`MCP_ENABLED=false` closes both, and with no token configured both 404.
+
+    POST /api/agent/findings      post one finding, or up to 25 in a batch
+    GET  /api/agent/findings       read back what is live for a property
+
+## Posting one
+
+```bash
+curl -sS https://<render-host>/api/agent/findings \
+  -H 'authorization: Bearer <token>' \
+  -H 'content-type: application/json' \
+  -H 'idempotency-key: nightly-2026-09-18-atwood-budget' \
+  -d '{
+    "property": "30912193455",
+    "rule_key": "search_budget_capped",
+    "category": "cost",
+    "severity": "high",
+    "confidence": 8,
+    "channels": ["paid_search"],
+    "found": "Search lost 41% of impressions to budget over the last 30 days.",
+    "expect": "Recovering that share should add roughly 120 clicks a month.",
+    "if_skip": "The campaign keeps stopping before midday.",
+    "receipts": [{"label": "Impression share lost to budget", "value": "41%",
+                  "source": "Google Ads", "as_of": "2026-09-17"}],
+    "action": {"kind": "budget_change", "params": {"daily_budget": 95}}
+  }'
+```
+
+`property` accepts a company id, a uuid, a domain or a property name — the same
+set a person can type. Use the company id from the MCP tools when you have it.
+
+A batch posts `{"property": "...", "findings": [ {...}, {...} ]}`; a finding may
+carry its own `property` to override.
+
+## Status codes, and what to do about each
+
+| Code | Meaning | What the agent should do |
+|---|---|---|
+| 200 | accepted, or a batch with per-item outcomes | nothing; it is queued |
+| 422 | the finding is wrong as posted | fix it; re-posting it unchanged will fail again |
+| 503 | the portal could not accept it | retry; the finding was never judged |
+| 401 | token missing or wrong | stop; rotate |
+| 404 | the feature is off, or the property is unknown (GET) | stop |
+| 413 | more than 25 findings in one request | split the batch |
+
+The 422/503 split is load-bearing. A rejection means the content is wrong and
+the agent should stop; a 503 means our Fair Housing checker or warehouse was
+unreachable and the finding was never judged. In a batch these are counted
+separately (`rejected` vs `unavailable`, plus `retry_unavailable`) so retrying
+does not re-post the genuinely bad ones forever.
+
+## What is refused, and why
+
+- **An action with no receipts.** A card asking someone to change live spend
+  without showing the numbers is worse than no card.
+- **Copy that fails the Fair Housing check**, which runs BEFORE storage, not at
+  publish time. Housing is a Special Ad Category. Protected-class vocabulary on
+  its own is kept but flagged for a person; a real violation is refused.
+- **Anything steering by audience or geography** — radius, ZIP, lookalike,
+  retargeting, demographics. Refused whoever produced it.
+- **A duplicate.** The property, the rule and the finding text are what make two
+  posts the same thing — deliberately not the numbers, so a value drifting a
+  dollar overnight does not create a second card. Send an `Idempotency-Key`
+  header (or `idempotency_key`) to control it yourself.
+
+## What the portal will not let an agent decide
+
+`requires_signed_deal` is set by the portal, not the caller: a budget change or
+a new ad group always needs a signature, and a posted finding claiming otherwise
+is overridden. Nothing here executes. The finding is stored as a loop event and
+waits for a human in the portal; only an approval fires a webhook back out.
+
+## Readback
+
+```bash
+curl -sS 'https://<render-host>/api/agent/findings?property=30912193455' \
+  -H 'authorization: Bearer <token>'
+```
+
+Returns only findings posted by the calling token, in the shape the queue shows
+them. A warehouse that cannot be read comes back as a `gaps` entry, never as an
+empty list — so "nothing posted" and "we could not look" stay distinguishable.
+
+Posted findings also rank in the portal's own queue: `agent_findings` is a
+producer in `skills/reco_engine.py`, so an agent's card competes on the same
+severity, confidence and rent-exposure scale as every internal rule rather than
+jumping the line.
