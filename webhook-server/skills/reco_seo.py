@@ -52,7 +52,8 @@ SHAPE
 
 DATA
     `run()` gathers from what the portal already owns: the community brief
-    (floor plans, fees, pet policy), AptIQ availability, the `ai_mentions`
+    (floor plans, fees, pet policy), AptIQ availability, the stored site crawl
+    (`seo_crawl`, which is what `pages` comes from), the `ai_mentions`
     audit, and the GEO tracking tables when the property has rows there. An
     outside AI-visibility tracker is OPTIONAL enrichment, merged through
     `merge_searchable()` when a project exists for the property's website;
@@ -1379,6 +1380,7 @@ def gather(company_id: str, *, today: Optional[date] = None) -> Tuple[Dict[str, 
     _gather_brief(company_id, data, gaps)
     _gather_availability(identity, data, gaps)
     _gather_ai_answers(identity, data, gaps)
+    _gather_pages(company_id, identity, data, gaps)
 
     if not data.get("pages"):
         gaps.append(_gap("pages", "site_crawl",
@@ -1386,6 +1388,40 @@ def gather(company_id: str, *, today: Optional[date] = None) -> Tuple[Dict[str, 
                          "rules cannot run. A crawl or the vendor's site health "
                          "supplies it."))
     return data, gaps
+
+
+def _gather_pages(company_id: str, identity: Any, data: Dict[str, Any],
+                  gaps: List[Dict[str, str]]) -> None:
+    """The stored read of the property's own website — `seo_crawl`.
+
+    This is what the four page-level rules were waiting for. The vendor's site
+    health still wins where it exists (one website); this fills the other
+    ninety-seven, which is why it runs after `_gather_ai_answers` and leaves an
+    already-populated `pages` alone rather than overwriting a measurement with
+    a different one.
+
+    Nothing here raises, and nothing here invents a page: a crawl that is not
+    stored leaves `pages` absent and the gap below names the source.
+    """
+    if data.get("pages"):
+        return
+    props = identity.to_dict() if identity is not None else {}
+    try:
+        import seo_crawl
+        read = seo_crawl.pages_for_property(
+            company_id, site=props.get("domain") or props.get("website"),
+            property_uuid=props.get("uuid")) or {}
+    except Exception as exc:  # noqa: BLE001 — an unconfigured warehouse is not an error
+        logger.info("reco_seo: stored site crawl unavailable for %s (%s)",
+                    company_id, exc)
+        return
+    gaps.extend(read.get("gaps") or [])
+    pages = read.get("pages") or []
+    if not pages:
+        return
+    data["pages"] = pages
+    data["pages_source"] = read.get("source") or "site_crawl"
+    data["pages_as_of"] = read.get("as_of")
 
 
 def _gather_ai_answers(identity: Any, data: Dict[str, Any],
