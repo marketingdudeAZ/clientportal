@@ -223,10 +223,12 @@ TARGETS = {
     },
     "workspace-v2": {
         "local": LOCAL_V2,
-        # Created by hand in HubSpot once, then pasted here. Until then they
-        # come from the environment so a deploy can never hit the wrong page.
-        "template_id": _env_id("HUBSPOT_V2_TEMPLATE_ID"),
-        "page_id": _env_id("HUBSPOT_V2_PAGE_ID"),
+        # Created by hand in HubSpot on 2026-09-18 and recorded here so nobody
+        # has to guess (Trap 1). The env vars still win, for a dry run against a
+        # scratch page. The template lives at the ROOT, not under templates/ —
+        # moving it now would break the page association.
+        "template_id": _env_id("HUBSPOT_V2_TEMPLATE_ID") or "222234995014",
+        "page_id": _env_id("HUBSPOT_V2_PAGE_ID") or "222235008133",
         "live_urls": ["https://digital.rpmliving.com/client-portal/v2"],
         "sentinels": ["/workspace/embed.js?v=", 'id="rpm-workspace"'],
         "validate": validate_workspace_v2,
