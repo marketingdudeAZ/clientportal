@@ -79,37 +79,88 @@ def test_run_gaql_seam_raises_until_configured():
 # traceback reaching a person.
 
 class TestCredentials:
-    ENV = ("GOOGLE_ADS_DEVELOPER_TOKEN", "GOOGLE_ADS_CLIENT_ID",
-           "GOOGLE_ADS_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN",
-           "GOOGLE_ADS_LOGIN_CUSTOMER_ID")
+    """This connector reads its OWN credentials so a pre-existing GOOGLE_ADS_*
+    set belonging to another integration is never repointed. Each credential
+    answers to `_2`, `2` and the unsuffixed name, in that order."""
 
-    def _set_all(self, monkeypatch):
-        for name in self.ENV:
-            monkeypatch.setenv(name, "value-for-%s" % name)
+    CANONICAL = ("GOOGLE_ADS_DEVELOPER_TOKEN_2", "GOOGLE_ADS_CLIENT_ID_2",
+                 "GOOGLE_ADS_CLIENT_SECRET_2", "GOOGLE_ADS_REFRESH_TOKEN_2",
+                 "GOOGLE_ADS_LOGIN_CUSTOMER_ID_2")
+    BASES = ("GOOGLE_ADS_DEVELOPER_TOKEN", "GOOGLE_ADS_CLIENT_ID",
+             "GOOGLE_ADS_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN",
+             "GOOGLE_ADS_LOGIN_CUSTOMER_ID")
+
+    def _clear(self, monkeypatch):
+        for base in self.BASES:
+            for name in (base + "_2", base + "2", base):
+                monkeypatch.delenv(name, raising=False)
+
+    def _set_all(self, monkeypatch, suffix="_2"):
+        self._clear(monkeypatch)
+        for base in self.BASES:
+            monkeypatch.setenv(base + suffix, "value-for-" + base)
 
     def test_nothing_configured_names_every_missing_value(self, monkeypatch):
-        for name in self.ENV:
-            monkeypatch.delenv(name, raising=False)
-        assert sorted(ga.missing_credentials()) == sorted(self.ENV)
+        self._clear(monkeypatch)
+        assert sorted(ga.missing_credentials()) == sorted(self.CANONICAL)
         assert ga.is_configured() is False
 
     def test_one_missing_value_is_named_on_its_own(self, monkeypatch):
         self._set_all(monkeypatch)
-        monkeypatch.delenv("GOOGLE_ADS_REFRESH_TOKEN")
-        assert ga.missing_credentials() == ["GOOGLE_ADS_REFRESH_TOKEN"]
+        monkeypatch.delenv("GOOGLE_ADS_REFRESH_TOKEN_2")
+        assert ga.missing_credentials() == ["GOOGLE_ADS_REFRESH_TOKEN_2"]
+
+    @pytest.mark.parametrize("suffix", ["_2", "2"])
+    def test_both_suffix_spellings_are_accepted(self, monkeypatch, suffix):
+        """A credential that silently does not apply because of an underscore is
+        a bad half-hour, so both forms work."""
+        self._set_all(monkeypatch, suffix=suffix)
+        assert ga.missing_credentials() == []
+        assert ga.credential_value("GOOGLE_ADS_DEVELOPER_TOKEN_2") == \
+            "value-for-GOOGLE_ADS_DEVELOPER_TOKEN"
+
+    def test_the_underscore_form_wins_when_both_are_set(self, monkeypatch):
+        self._clear(monkeypatch)
+        monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN2", "no-underscore")
+        monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN_2", "underscore")
+        assert ga.credential_value("GOOGLE_ADS_DEVELOPER_TOKEN_2") == "underscore"
 
     def test_the_error_tells_you_what_to_do(self, monkeypatch):
-        for name in self.ENV:
-            monkeypatch.delenv(name, raising=False)
+        self._clear(monkeypatch)
         with pytest.raises(ga.GoogleAdsNotConfigured) as err:
             ga._client()
         assert "google_ads_auth.py" in str(err.value)
-        assert "GOOGLE_ADS_REFRESH_TOKEN" in str(err.value)
+        assert "GOOGLE_ADS_REFRESH_TOKEN_2" in str(err.value)
+
+    def test_messages_never_ask_for_the_unsuffixed_name(self, monkeypatch):
+        """That credential belongs to another integration."""
+        self._clear(monkeypatch)
+        message = str(ga.missing_credentials())
+        for base in self.BASES:
+            assert ("'%s'" % base) not in message
+
+    def test_the_unsuffixed_names_still_satisfy_the_connector(self, monkeypatch):
+        """Anything already running on the original set keeps working."""
+        self._clear(monkeypatch)
+        for base in self.BASES:
+            monkeypatch.setenv(base, "legacy-" + base)
+        assert ga.missing_credentials() == []
+        assert ga.credential_sources()["GOOGLE_ADS_CLIENT_ID_2"] == "GOOGLE_ADS_CLIENT_ID"
+
+    def test_sources_name_the_variable_that_actually_supplied_each_value(self, monkeypatch):
+        """Sharing a credential with another integration is worth seeing."""
+        self._clear(monkeypatch)
+        monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN_2", "ours")
+        monkeypatch.setenv("GOOGLE_ADS_CLIENT_ID", "theirs")
+        sources = ga.credential_sources()
+        assert sources["GOOGLE_ADS_DEVELOPER_TOKEN_2"] == "GOOGLE_ADS_DEVELOPER_TOKEN_2"
+        assert sources["GOOGLE_ADS_CLIENT_ID_2"] == "GOOGLE_ADS_CLIENT_ID"
+        assert sources["GOOGLE_ADS_CLIENT_SECRET_2"] is None
 
     def test_whitespace_only_counts_as_missing(self, monkeypatch):
         self._set_all(monkeypatch)
-        monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN", "   ")
-        assert ga.missing_credentials() == ["GOOGLE_ADS_DEVELOPER_TOKEN"]
+        monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN_2", "   ")
+        assert ga.missing_credentials() == ["GOOGLE_ADS_DEVELOPER_TOKEN_2"]
 
 
 class TestQueryReading:

@@ -53,20 +53,37 @@ def check_credentials() -> int:
 
     missing = ads.missing_credentials()
     if not missing:
+        sources = ads.credential_sources()
         print("Credentials: all five present.")
+        shared = [n for n, src in sources.items()
+                  if src and not str(src).endswith(("_2", "2"))]
+        for name, src in sources.items():
+            shared_note = "" if str(src).endswith(("_2", "2")) else \
+                "   ← shared with another integration"
+            print("  %-34s from %s%s" % (name, src, shared_note))
+        if shared:
+            print("\nNote: %d value(s) are coming from the unprefixed names, which "
+                  "means this\nconnector is sharing a credential with another "
+                  "integration." % len(shared))
         return 0
     print("Credentials: MISSING %d of 5\n" % len(missing))
     where = {
-        "GOOGLE_ADS_DEVELOPER_TOKEN": "the manager account, Tools & Settings → "
-                                      "Setup → API Center (must be Basic, not Test)",
-        "GOOGLE_ADS_CLIENT_ID": "the OAuth client (Desktop app) in the GCP project",
-        "GOOGLE_ADS_CLIENT_SECRET": "the same OAuth client",
-        "GOOGLE_ADS_REFRESH_TOKEN": "run scripts/google_ads_auth.py once and sign "
-                                    "in as the account that can see the manager",
-        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "the manager account id, digits only",
+        "GOOGLE_ADS_DEVELOPER_TOKEN_2":
+            "the manager account, Tools & Settings → Setup → API Center "
+            "(must be Basic, not Test)",
+        "GOOGLE_ADS_CLIENT_ID_2":
+            "the OAuth client (Desktop app) in the GCP project",
+        "GOOGLE_ADS_CLIENT_SECRET_2": "the same OAuth client",
+        "GOOGLE_ADS_REFRESH_TOKEN_2":
+            "run scripts/google_ads_auth.py once and sign in as the account "
+            "that can see the manager",
+        "GOOGLE_ADS_LOGIN_CUSTOMER_ID_2":
+            "the manager account id, digits only",
     }
     for name in missing:
-        print("  %-30s %s" % (name, where.get(name, "")))
+        print("  %-38s %s" % (name, where.get(name, "")))
+    print("\nThese are this connector's own names. An existing unsuffixed "
+          "GOOGLE_ADS_* value for\nanother integration is used only as a fallback and is never repointed.")
     return 1
 
 

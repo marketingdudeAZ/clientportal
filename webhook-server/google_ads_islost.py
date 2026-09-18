@@ -12,13 +12,25 @@ GOOGLE_ADS_LOGIN_CUSTOMER_ID rather than from the record.
 
 `_run_gaql` is live when five environment values are present:
 
-    GOOGLE_ADS_DEVELOPER_TOKEN      from the MCC's API Center (needs Basic
-                                    access; Test access only reaches test
-                                    accounts)
-    GOOGLE_ADS_CLIENT_ID            OAuth client (Desktop app)
-    GOOGLE_ADS_CLIENT_SECRET
-    GOOGLE_ADS_REFRESH_TOKEN        minted by scripts/google_ads_auth.py
-    GOOGLE_ADS_LOGIN_CUSTOMER_ID    the manager account, digits only
+    GOOGLE_ADS_DEVELOPER_TOKEN_2     from the MCC's API Center (needs Basic
+                                     access; Test access only reaches test
+                                     accounts)
+    GOOGLE_ADS_CLIENT_ID_2           OAuth client (Desktop app)
+    GOOGLE_ADS_CLIENT_SECRET_2
+    GOOGLE_ADS_REFRESH_TOKEN_2       minted by scripts/google_ads_auth.py
+    GOOGLE_ADS_LOGIN_CUSTOMER_ID_2   the manager account, digits only
+
+WHY A SECOND SET, AND WHY BOTH SPELLINGS
+    An unsuffixed `GOOGLE_ADS_*` set already exists for another integration, and
+    Google has changed how API integrations are provisioned since it was
+    created. Repointing a live credential to test this one is the wrong trade,
+    so this connector reads its own set first and only falls back to the
+    unsuffixed names when its own value is absent.
+
+    Each credential accepts `_2` and `2` — the suffix is easy to type either
+    way, and a credential that silently does not apply because of an underscore
+    is a bad half-hour. `_2` is the canonical spelling: it is what the tools
+    report and ask for.
 
 With any of them missing it raises GoogleAdsNotConfigured, which every caller
 already turns into a named gap rather than a failure. The API does not accept
@@ -79,7 +91,11 @@ def parse_islost(rows: list[dict]) -> dict[str, float]:
     return {"paid_search": round(sum(search) / len(search), 4)}
 
 
-_REQUIRED_ENV = (
+# The five credentials, each as the names it answers to in priority order. The
+# first is canonical: it is what every message asks for. `_2` and `2` are both
+# accepted because either is a reasonable thing to type, and the unsuffixed name
+# is a last-resort fallback so anything already configured keeps working.
+_BASE_NAMES = (
     "GOOGLE_ADS_DEVELOPER_TOKEN",
     "GOOGLE_ADS_CLIENT_ID",
     "GOOGLE_ADS_CLIENT_SECRET",
@@ -87,10 +103,50 @@ _REQUIRED_ENV = (
     "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
 )
 
+_CREDENTIALS = tuple((base + "_2", base + "2", base) for base in _BASE_NAMES)
+
+_REQUIRED_ENV = tuple(names[0] for names in _CREDENTIALS)
+
+
+def _names_for(canonical: str) -> tuple:
+    for names in _CREDENTIALS:
+        if canonical in names:
+            return names
+    return (canonical,)
+
+
+def credential_value(canonical: str) -> str:
+    """The first non-empty value among the names this credential answers to."""
+    for name in _names_for(canonical):
+        value = (os.environ.get(name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def credential_sources() -> dict:
+    """{canonical name: the env name that actually supplied it, or None}.
+
+    Worth surfacing: a value arriving from the UNSUFFIXED name means this
+    connector is sharing a credential with another integration, which is the
+    thing the second set exists to avoid.
+    """
+    out = {}
+    for names in _CREDENTIALS:
+        out[names[0]] = None
+        for name in names:
+            if (os.environ.get(name) or "").strip():
+                out[names[0]] = name
+                break
+    return out
+
 
 def missing_credentials() -> list:
-    """Which of the five values are absent. Empty means the connector can run."""
-    return [name for name in _REQUIRED_ENV if not (os.environ.get(name) or "").strip()]
+    """Which credentials have no value under ANY of their accepted names.
+
+    Reports the canonical `_2` spelling, because that is the one to set.
+    """
+    return [names[0] for names in _CREDENTIALS if not credential_value(names[0])]
 
 
 def is_configured() -> bool:
@@ -120,11 +176,12 @@ def _client():
             "The google-ads library is not installed in this environment."
         ) from exc
     return GoogleAdsClient.load_from_dict({
-        "developer_token": os.environ["GOOGLE_ADS_DEVELOPER_TOKEN"].strip(),
-        "client_id": os.environ["GOOGLE_ADS_CLIENT_ID"].strip(),
-        "client_secret": os.environ["GOOGLE_ADS_CLIENT_SECRET"].strip(),
-        "refresh_token": os.environ["GOOGLE_ADS_REFRESH_TOKEN"].strip(),
-        "login_customer_id": _digits(os.environ["GOOGLE_ADS_LOGIN_CUSTOMER_ID"]),
+        "developer_token": credential_value("GOOGLE_ADS_DEVELOPER_TOKEN_2"),
+        "client_id": credential_value("GOOGLE_ADS_CLIENT_ID_2"),
+        "client_secret": credential_value("GOOGLE_ADS_CLIENT_SECRET_2"),
+        "refresh_token": credential_value("GOOGLE_ADS_REFRESH_TOKEN_2"),
+        "login_customer_id": _digits(
+            credential_value("GOOGLE_ADS_LOGIN_CUSTOMER_ID_2")),
         "use_proto_plus": True,
     })
 
