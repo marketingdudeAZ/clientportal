@@ -165,6 +165,40 @@ CLUSTER BY site, company_id;
 
 Repeat for `rpm_portal_dev` (replace the schema name).
 
+### `ai_visibility_daily` — the AI-visibility trend we own
+
+The whole reason this table exists: the product sold is the TREND — "your
+visibility went from 20 to 37 and here is what we did." If that trend lives only
+in Searchable's database, then changing vendors, or losing one at renewal,
+resets every client's chart to zero and the work stops being provable. The
+vendor measures; we keep the record.
+
+One row per property per day per engine, plus an `engine = 'all'` row carrying
+the overall score. Append-only: a re-run writes a second row for the same day
+and the READ takes the newest `captured_at`, because DML against BigQuery's
+streaming buffer is not reliable enough to depend on for a nightly job.
+
+```sql
+CREATE TABLE IF NOT EXISTS `YOUR_PROJECT_ID.rpm_portal.ai_visibility_daily` (
+  reading_date         DATE NOT NULL,
+  property_uuid        STRING,                   -- R1 identity; NULL only if HubSpot has none
+  company_id           STRING,
+  domain               STRING NOT NULL,          -- bare host, matches the Searchable project
+  engine               STRING NOT NULL,          -- 'all' | 'chatgpt' | 'google-ai-overview' | 'Perplexity' | …
+  visibility_score     FLOAT64,                  -- set on the 'all' row: the headline 0-100 score
+  visibility_rate      FLOAT64,                  -- set on per-engine rows
+  responses            INT64,                    -- prompts the engine answered
+  responses_with_brand INT64,                    -- how many named this property
+  citations            INT64,
+  vendor               STRING NOT NULL,          -- 'searchable'
+  captured_at          TIMESTAMP NOT NULL        -- newest wins on read
+)
+PARTITION BY reading_date
+CLUSTER BY property_uuid, engine;
+```
+
+Repeat for `rpm_portal_dev` (replace the schema name).
+
 ## 4. Create a service account for the portal
 
 1. GCP Console → IAM & Admin → Service Accounts → **Create Service Account**

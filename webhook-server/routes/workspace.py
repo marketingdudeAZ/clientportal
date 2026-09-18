@@ -274,6 +274,50 @@ def workspace_rpmi():
         return _failed("the RPMI portfolio", exc)
 
 
+@workspace_bp.route("/api/workspace/geo", methods=["GET", "OPTIONS"])
+def workspace_geo():
+    """The RPMI GEO/AEO roll-up: who the assistants name, and who they don't.
+
+    Same gates as /rpmi — the blueprint flag, the app-level proof gate,
+    require_access, then _is_internal(). This reads the whole RPMI portfolio,
+    so an asserted X-Portal-Email and preview-as-client are both refused.
+    """
+    gate = require_access(FEATURE_KEY)
+    if gate:
+        return gate
+    if not _is_internal():
+        return jsonify({"error": "Internal role required"}), 403
+    from skills import geo_rpmi
+    raw_days = (request.args.get("days") or "30").strip()
+    if not raw_days.isdigit() or not (1 <= int(raw_days) <= 365):
+        return jsonify({"error": "Invalid days", "detail": "1-365"}), 400
+    try:
+        return jsonify(geo_rpmi.build(days=int(raw_days)))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("the GEO/AEO roll-up", exc)
+
+
+@workspace_bp.route("/api/workspace/geo/property", methods=["GET", "OPTIONS"])
+def workspace_geo_property():
+    """One property's AI visibility, including the trend from OUR warehouse."""
+    gate = require_access(FEATURE_KEY)
+    if gate:
+        return gate
+    if not _is_internal():
+        return jsonify({"error": "Internal role required"}), 403
+    company_id = _company_id() or None
+    if not company_id:
+        return jsonify({"error": "company_id is required"}), 400
+    gate = require_company_access(company_id)
+    if gate:
+        return gate
+    from skills import geo_rpmi
+    try:
+        return jsonify(geo_rpmi.for_property(company_id))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("AI visibility for this property", exc)
+
+
 # ── signals ──────────────────────────────────────────────────────────────────
 
 @workspace_bp.route("/api/workspace/signals", methods=["GET", "OPTIONS"])
