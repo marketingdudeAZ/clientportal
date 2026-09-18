@@ -43,6 +43,8 @@ WHAT EACH RULE NEEDS (RPMI: 109 managed properties)
     | conversion_overcounting    | Google Ads conversions + GA4 conversions     |
     | dormant_ad_groups          | Google Ads ad groups + AptIQ availability    |
     | creative_gaps              | Google Ads ads and account assets            |
+    | budget_pacing              | Google Ads cost + the authorized SKUs         |
+    |                            | (INTERNAL ONLY — never shown to a client)    |
 
     Every rule returns [] when its inputs are missing. A missing source becomes
     a gap naming the source and the reason — never a zero, never a guess.
@@ -58,9 +60,15 @@ WHAT THIS MODULE REUSES RATHER THAN REBUILDS
     * Any budget step is additionally bounded by `loop_autopilot`'s existing
       caps, `MAX_PERCENT_OF_CHANNEL` and `MAX_ABSOLUTE_AMOUNT`. They are
       imported, never redefined.
-    * Budget pacing against authorized spend, occupancy drop, stale inventory,
-      lease wave, lead drop and data staleness already exist as
-      `skills/workspace_signals.py` rules. Nothing here duplicates them.
+    * `budget_pacing` imports its bands from `workspace_signals.spend_pacing`
+      rather than restating them, so the ranked queue and the signals page
+      cannot disagree about what off pace means. It exists here because the two
+      differ in measurement and surface: signals reads delivered spend from the
+      NinjaCat feed, which has missed real Google Ads spend before, and lands on
+      the signals page; this reads cost from the Google Ads API and lands in the
+      queue, which has no signals adapter.
+    * Occupancy drop, stale inventory, lease wave, lead drop and data staleness
+      are `workspace_signals` rules. Nothing here duplicates them.
 
 DATA SEAMS
     Google Ads reads go through `google_ads_islost._run_gaql`, the existing
@@ -100,10 +108,9 @@ EXECUTORS = ("ninjacat", "portal", "human")
 # without a signed deal, so `_rec` sets it rather than trusting each rule.
 SPEND_INCREASING_KINDS = frozenset({"budget_change", "new_ad_group"})
 
-# Rules whose output is internal and must never be rendered to a client. Empty
-# on purpose: the internal-only rule in this family is budget pacing against
-# authorized spend, and that already exists as `workspace_signals.spend_pacing`.
-# The aggregator still reads this, so a future internal rule declares itself.
+# Rules whose output is internal and must never be rendered to a client. The
+# aggregator reads this, so an internal rule declares itself rather than relying
+# on a reviewer noticing.
 INTERNAL_ONLY_RULES = frozenset({"budget_pacing"})
 
 # The paid search SKU on the signed deal, and the channel name
