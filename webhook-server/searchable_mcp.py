@@ -492,3 +492,76 @@ def from_payload(projects: Any = None, visibility_payload: Any = None,
                 "opportunities": normalize_opportunities(opportunities_payload)
                 if opportunities_payload is not None else []})
     return out
+
+
+# --- the one write we do, on purpose -----------------------------------------
+# generate_report stays in WRITE_TOOLS: call_tool() refuses it, and that refusal
+# is what stops a rule or an agent reaching a write by accident. This function is
+# the deliberate exception — its own function, its own credential, its own
+# dry-run default — so allowing it never widens what anything else can do.
+
+WRITE_TOKEN_ENV = "SEARCHABLE_API_TOKEN_WRITE"
+REPORT_TYPES = ("sentiment", "visibility", "combined")
+
+
+def has_write_credential() -> bool:
+    return bool((os.environ.get(WRITE_TOKEN_ENV) or "").strip())
+
+
+def _write_bearer() -> Tuple[Optional[str], Optional[str]]:
+    """The write credential, and never the read one.
+
+    Kept separate so a read token cannot be silently promoted: with the write key
+    missing the answer is "not configured", rather than a 403 from the vendor
+    that reads like an outage.
+    """
+    token = (os.environ.get(WRITE_TOKEN_ENV) or "").strip()
+    if not token:
+        return None, ("Publishing reports needs a write-scoped Searchable key in "
+                      "%s. The read key cannot generate reports." % WRITE_TOKEN_ENV)
+    return token, None
+
+
+def generate_report(project_id: str, *, report_type: str = "combined",
+                    time_range: str = "30d", title: Optional[str] = None,
+                    white_label: bool = True, confirm: bool = False
+                    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Publish a shareable report and return its public link.
+
+    `confirm` defaults to False, which asks the vendor for a dry run: nothing is
+    published and the preview comes back instead. Publishing is the caller's
+    explicit act, because the link this returns is PUBLIC and unauthenticated —
+    anyone holding it can read the report.
+    """
+    if report_type not in REPORT_TYPES:
+        return None, ("Unknown report type %r; expected one of %s."
+                      % (report_type, ", ".join(REPORT_TYPES)))
+    token, reason = _write_bearer()
+    if not token:
+        return None, reason
+    args: Dict[str, Any] = {"projectId": project_id, "reportType": report_type,
+                            "timeRange": time_range, "whiteLabel": bool(white_label)}
+    if title:
+        args["title"] = title
+    if confirm:
+        args["confirm"] = True
+    result, reason = call("tools/call",
+                          {"name": "generate_report", "arguments": args},
+                          token=token)
+    if result is None:
+        return None, reason
+    if result.get("isError"):
+        return None, "Searchable could not generate that report."
+    payload = _content(result)
+    out: Dict[str, Any] = {"published": bool(confirm), "raw": payload}
+    if isinstance(payload, dict):
+        out["link"] = (payload.get("url") or payload.get("publicUrl")
+                       or payload.get("reportUrl") or payload.get("shareUrl"))
+        out["report_id"] = payload.get("id") or payload.get("reportId")
+        out["title"] = payload.get("title")
+    elif isinstance(payload, str) and payload.strip().startswith("http"):
+        out["link"] = payload.strip()
+    if confirm and not out.get("link"):
+        return None, ("Searchable published the report but returned no link, so "
+                      "there is nothing to show yet.")
+    return out, None

@@ -154,6 +154,19 @@ def build(*, days: int = 30, max_reads: int = MAX_MEASURED_READS,
         for entry, reading in results:
             entry.update(reading)
 
+    # Published report links, in ONE warehouse read for the whole screen rather
+    # than one per row. A property with no report is not an error — most have
+    # none until someone publishes one.
+    try:
+        from skills import searchable_reports
+        links = searchable_reports.links_for([r.get("uuid") for r in rows])
+    except Exception as exc:  # noqa: BLE001
+        logger.info("geo_rpmi: published report links unavailable: %s", exc)
+        links = {}
+    for row in rows:
+        report = links.get(str(row.get("uuid") or ""))
+        row["report"] = report or None
+
     measured = [r for r in rows if r.get("measured")]
     scores = [r["score"] for r in measured if isinstance(r.get("score"), (int, float))]
     # Ranked so the screen opens on the properties with the most room to move:

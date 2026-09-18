@@ -318,6 +318,45 @@ def workspace_geo_property():
         return _failed("AI visibility for this property", exc)
 
 
+@workspace_bp.route("/api/workspace/geo/report", methods=["GET", "POST", "OPTIONS"])
+def workspace_geo_report():
+    """The white-labelled AI-search report for one property.
+
+    GET  returns the newest published link, read from our own warehouse.
+    POST publishes a new one. A dry run is the default; publishing needs
+         ?confirm=true, because the link it mints is PUBLIC and
+         unauthenticated — anyone holding it can read the report.
+    """
+    gate = require_access(FEATURE_KEY)
+    if gate:
+        return gate
+    if not _is_internal():
+        return jsonify({"error": "Internal role required"}), 403
+    company_id = _company_id() or None
+    if not company_id:
+        return jsonify({"error": "company_id is required"}), 400
+    gate = require_company_access(company_id)
+    if gate:
+        return gate
+    from skills import searchable_reports as sr
+
+    if request.method == "GET":
+        try:
+            latest, gaps = sr.latest_for_property(company_id)
+        except Exception as exc:  # noqa: BLE001
+            return _failed("the published report", exc)
+        return jsonify({"company_id": company_id, "report": latest, "gaps": gaps})
+
+    report_type = (request.args.get("type") or sr.DEFAULT_REPORT_TYPE).strip()
+    confirm = (request.args.get("confirm") or "").strip().lower() in ("1", "true", "yes")
+    try:
+        if confirm:
+            return jsonify(sr.publish(company_id, report_type=report_type, confirm=True))
+        return jsonify(sr.preview(company_id, report_type=report_type))
+    except Exception as exc:  # noqa: BLE001
+        return _failed("publishing the report", exc)
+
+
 # ── signals ──────────────────────────────────────────────────────────────────
 
 @workspace_bp.route("/api/workspace/signals", methods=["GET", "OPTIONS"])
