@@ -334,3 +334,60 @@ class TestSignalsAdapter:
     def test_signals_are_a_registered_producer(self):
         assert "workspace_signals" in engine.PRODUCERS
         assert engine._producer("workspace_signals") is engine.signals_producer
+
+
+class TestPortfolioFanOut:
+    """Every property costs every producer a round of reads. A 109-property
+    portfolio behind one page render is hundreds of calls, so a pass evaluates
+    the properties with the most rent exposed and says what it skipped."""
+
+    def _engine_with_one_reco(self, monkeypatch):
+        seen = []
+
+        def fake(name):
+            if name != "reco_digital":
+                return None
+
+            def run(company_id, today=None):
+                seen.append(company_id)
+                return {"recommendations": [reco(id="%s-a" % company_id,
+                                                 company_id=company_id,
+                                                 rule_key="a")], "gaps": []}
+            return run
+
+        monkeypatch.setattr(engine, "_producer", fake)
+        return seen
+
+    def _props(self, n):
+        # Later properties carry more unleased rent, so the cap must not simply
+        # take the first N in the list.
+        return [{"company_id": "p%02d" % i, "name": "P%02d" % i,
+                 "units": 50 + i * 10, "exposure": 0.01 * i} for i in range(n)]
+
+    def test_only_the_most_exposed_properties_are_evaluated(self, monkeypatch):
+        seen = self._engine_with_one_reco(monkeypatch)
+        out = engine.for_portfolio(self._props(30), today=TODAY, max_properties=5)
+        assert len(seen) == 5
+        assert set(seen) == {"p29", "p28", "p27", "p26", "p25"}
+        assert out["property_count"] == 5
+        assert out["not_evaluated"] == 25
+
+    def test_what_was_skipped_is_reported_not_hidden(self, monkeypatch):
+        self._engine_with_one_reco(monkeypatch)
+        out = engine.for_portfolio(self._props(30), today=TODAY, max_properties=5)
+        assert any("25 properties were not checked" in g["message"]
+                   for g in out["gaps"])
+
+    def test_a_nightly_job_can_evaluate_everything(self, monkeypatch):
+        seen = self._engine_with_one_reco(monkeypatch)
+        out = engine.for_portfolio(self._props(30), today=TODAY, max_properties=None)
+        assert len(seen) == 30 and out["not_evaluated"] == 0
+        assert not any("not checked" in g["message"] for g in out["gaps"])
+
+    def test_a_small_portfolio_is_never_capped(self, monkeypatch):
+        seen = self._engine_with_one_reco(monkeypatch)
+        out = engine.for_portfolio(self._props(3), today=TODAY, max_properties=25)
+        assert len(seen) == 3 and out["not_evaluated"] == 0
+
+    def test_the_default_cap_is_conservative_enough_for_a_page_render(self):
+        assert engine.MAX_PROPERTIES_EVALUATED <= 30

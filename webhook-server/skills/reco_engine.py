@@ -389,15 +389,30 @@ def for_property(company_id: str, *, context: Optional[Dict[str, Any]] = None,
     return outcome
 
 
+# How many properties one portfolio pass will actually evaluate. Each property
+# costs every producer a round of reads, so a 109-property portfolio would fan
+# out to hundreds of calls behind one page render. The cap is on the RANKED
+# order, so the properties with the most rent exposed are the ones evaluated.
+MAX_PROPERTIES_EVALUATED = 25
+
+
 def for_portfolio(properties: List[Dict[str, Any]], *,
                   producers: Optional[Tuple[str, ...]] = None,
                   today: Optional[date] = None,
                   max_portfolio: int = MAX_PORTFOLIO,
-                  max_per_property: int = MAX_PER_PROPERTY) -> Dict[str, Any]:
+                  max_per_property: int = MAX_PER_PROPERTY,
+                  max_properties: Optional[int] = MAX_PROPERTIES_EVALUATED
+                  ) -> Dict[str, Any]:
     """The portfolio queue: what needs a person this week, across properties.
 
     `properties` is [{company_id, name, units, exposure, decisions?}, …] —
     whatever the caller already knows, so this does no lookups of its own.
+
+    Only the top `max_properties` by rent exposed are evaluated. Producers read
+    per property, so an uncapped pass over a full portfolio is hundreds of calls
+    inside one request. Pass None to evaluate everything (a nightly job should;
+    a page render should not). Whatever is skipped is COUNTED and reported, not
+    quietly dropped.
     """
     today = _today(today)
     per_property: Dict[str, Dict[str, Any]] = {}
@@ -406,10 +421,17 @@ def for_portfolio(properties: List[Dict[str, Any]], *,
     totals = {"produced": 0, "surfaced": 0, "quiet": 0, "deduped": 0,
               "already_decided": 0, "dropped": 0, "refused": 0}
 
-    for prop in properties or []:
+    candidates = [p for p in (properties or [])
+                  if str(p.get("company_id") or "").strip()]
+    if max_properties is not None and len(candidates) > max_properties:
+        candidates = sorted(candidates, key=exposure_weight,
+                            reverse=True)[:max_properties]
+        not_evaluated = len(properties or []) - len(candidates)
+    else:
+        not_evaluated = 0
+
+    for prop in candidates:
         company_id = str(prop.get("company_id") or "").strip()
-        if not company_id:
-            continue
         outcome = for_property(
             company_id, context=prop, decisions=prop.get("decisions"),
             producers=producers, today=today, max_per_property=max_per_property)
@@ -425,11 +447,12 @@ def for_portfolio(properties: List[Dict[str, Any]], *,
 
     everything.sort(key=lambda r: (-(r.get("_score") or 0), r.get("rule_key") or ""))
     queue, held = everything[:max_portfolio], everything[max_portfolio:]
-    return {
+    result = {
         "queue": queue,
         "held_back": len(held),
         "properties": per_property,
         "property_count": len(per_property),
+        "not_evaluated": not_evaluated,
         "totals": totals,
         "gaps": gaps,
         "as_of": _now_iso(),
@@ -437,6 +460,12 @@ def for_portfolio(properties: List[Dict[str, Any]], *,
                  "visible per property but held out of the queue so the list "
                  "stays readable." % (len(queue), len(per_property), len(held))),
     }
+    if not_evaluated:
+        result["gaps"].append(_gap(
+            "recommendations", "reco_engine",
+            "%d properties were not checked in this pass. The ones with the most "
+            "unleased rent are checked first." % not_evaluated))
+    return result
 
 
 def to_work_item(reco: Dict[str, Any]) -> Dict[str, Any]:
