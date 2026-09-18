@@ -1870,8 +1870,32 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     });
   }
 
-  /* ── Properties (GOO-0) ──────────────────────────────────────────── */
+  /* ── Properties (GOO-0) ──────────────────────────────────────────────
+     Two scopes, and the difference is not cosmetic.
+
+     MINE is the dashboard: the companies HubSpot names you on (marketing
+     manager, director or RVP) with the full column set — occupancy, leases,
+     health, profile — because the dashboard reads each of those properties
+     in full.
+
+     ALL is the portfolio: every managed property. It cannot carry those same
+     columns, because filling them would mean reading 752 properties on one
+     page render. It carries what ranking already costs — occupancy, units at
+     risk, and the next thing to do — and says so rather than printing columns
+     of dashes. It is paged at the server's page size.
+
+     Staff land on ALL. Internal role already grants portfolio-wide access
+     (`/me` returns portfolio_wide), and defaulting a director to their own
+     assignment list showed one test property while claiming "every property
+     you can see". Clients never see the toggle: their scope IS their
+     companies, so there is nothing to switch between. */
+  state.props = { scope: null, page: 1, rows: [], meta: null, loading: false };
+  function propScope() {
+    if (!state.props.scope) state.props.scope = realInternal() ? 'all' : 'mine';
+    return realInternal() ? state.props.scope : 'mine';
+  }
   function screenProperties() {
+    if (propScope() === 'all') return screenPropertiesAll();
     renderTop('Properties', companies().length + ' properties');
     guard(api('/api/workspace/dashboard'), 'properties').then(function (r) {
       if (!r) return;
@@ -1881,8 +1905,117 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       if (w != null) state.waiting = w;
       renderSide('properties');
       setView(propertiesHtml(d));
+      bindPropScope();
     });
   }
+
+  /* The scope switch. Rendered for staff only, and only inside the Properties
+     screen, so a client's markup never mentions a scope they cannot have. */
+  function scopeSwitch(active, note) {
+    if (!realInternal()) return '';
+    function b(key, label) {
+      return '<button type="button" class="chip" data-prop-scope="' + key +
+        '" aria-pressed="' + (active === key) + '">' + esc(label) + '</button>';
+    }
+    return '<div class="chips" role="group" aria-label="Which properties to show">' +
+      b('all', 'All properties') + b('mine', 'Assigned to me') +
+      '</div>' + (note ? '<p class="support">' + esc(note) + '</p>' : '');
+  }
+  function bindPropScope() {
+    view.querySelectorAll('[data-prop-scope]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var next = btn.getAttribute('data-prop-scope');
+        if (next === propScope()) return;
+        state.props.scope = next;
+        state.props.page = 1;
+        state.props.rows = [];
+        state.props.meta = null;
+        screenProperties();
+      });
+    });
+  }
+
+  function screenPropertiesAll() {
+    var first = state.props.page === 1;
+    renderTop('Properties', (state.props.meta ? state.props.meta.property_count + ' properties' : 'All properties'));
+    renderSide('properties');
+    if (first) setView('<div class="page">' + propsAllHead() + '<div data-props-results>' +
+      '<div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading every managed property…</div></div></div>');
+    bindPropScope();
+    state.props.loading = true;
+    api('/api/workspace/portfolio?view=all&page=' + encodeURIComponent(state.props.page))
+      .then(function (r) {
+        state.props.loading = false;
+        var d = r.data || {};
+        state.props.meta = d;
+        state.props.rows = state.props.rows.concat(d.properties || []);
+        renderPropsAll();
+      })
+      .catch(function (e) {
+        state.props.loading = false;
+        var box = view.querySelector('[data-props-results]');
+        if (box && !(e && e.status === 401)) box.innerHTML = errorHtml(e);
+      });
+  }
+  function propsAllHead() {
+    return '<div class="head"><div class="stack"><h1 class="h-page">Properties</h1>' +
+      '<p class="support">Every managed property, ranked by units at risk.</p></div>' +
+      (state.props.meta ? staleLabel(state.props.meta.as_of) : '') + '</div>' +
+      scopeSwitch('all');
+  }
+  function renderPropsAll() {
+    var box = view.querySelector('[data-props-results]');
+    if (!box) return;
+    var d = state.props.meta || {}, rows = state.props.rows;
+    var kpis = '<div class="kpis">' +
+      '<div class="kpi"><span class="eyebrow">Properties</span><span class="v">' + esc(num(d.property_count)) + '</span></div>' +
+      '<div class="kpi"><span class="eyebrow">Open items</span><span class="v">' + esc(num(d.item_count)) + '</span></div>' +
+      '<div class="kpi"><span class="eyebrow">Starting this week</span><span class="v">' + esc(num(d.starting_this_week)) + '</span></div>' +
+      '<div class="kpi"><span class="eyebrow">Nothing waiting</span><span class="v">' + esc(num(d.quiet_count)) + '</span></div>' +
+      '</div>';
+    var body = rows.map(function (p) {
+      var href = '#/property/' + encodeURIComponent(p.company_id);
+      var occ = val(p.occupancy), risk = val(p.units_at_risk);
+      var item = p.top_item ? (esc(p.top_item.title) +
+        (p.more_items ? '<span class="fine" style="display:block">and ' + esc(num(p.more_items)) + ' more</span>' : '') +
+        (p.top_item.needs_approval ? ' <span class="pill attention"><i></i>Needs approval</span>' : ''))
+        : '<span class="empty-dash">—</span>';
+      return '<tr class="rowlink" data-href="' + href + '">' +
+        '<td class="name"><a href="' + href + '">' + esc(p.name) + '</a>' +
+        '<span class="fine" style="display:block">' + esc([p.city, p.state].filter(Boolean).join(', ')) + '</span></td>' +
+        '<td class="num">' + esc(num(p.units)) + '</td>' +
+        '<td class="num"' + rtitle(p.occupancy) + '>' + (occ == null ? '<span class="empty-dash">—</span>' : esc(pct(occ, 1))) + '</td>' +
+        '<td class="num"' + rtitle(p.units_at_risk) + '>' + (risk == null ? '<span class="empty-dash">—</span>' : esc(num(risk))) + '</td>' +
+        '<td>' + item + '</td>' +
+        '<td class="num">' + (has(p.start_by) ? (p.overdue ? '<span class="pill critical"><i></i>' + esc(mdy(p.start_by)) + '</span>' : esc(mdy(p.start_by))) : '<span class="empty-dash">—</span>') + '</td>' +
+        '</tr>';
+    }).join('');
+    box.innerHTML = kpis +
+      '<p class="sumline" role="status">Showing <b>' + esc(num(rows.length)) + '</b> of <b>' +
+      esc(num(d.property_count)) + '</b> ' + plural(d.property_count, 'property', 'properties') + '</p>' +
+      (rows.length
+        ? '<div class="tscroll"><table class="tbl"><caption class="sr-only">Every managed property, ranked by units at risk</caption>' +
+          '<thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th>' +
+          '<th scope="col" class="num">Occupancy</th><th scope="col" class="num">Units at risk</th>' +
+          '<th scope="col">Next thing to do</th><th scope="col" class="num">Start by</th></tr></thead>' +
+          '<tbody>' + body + '</tbody></table></div>'
+        : '<p class="support">No managed properties came back.</p>') +
+      (d.next_page ? '<p class="sumline"><button type="button" class="btn" data-props-more>' +
+        'Show the next ' + esc(num(d.page_size)) + '</button></p>' : '') +
+      /* Said once, plainly: these are not the same columns as "Assigned to
+         me", and the reason is cost, not omission. */
+      '<p class="support">Occupancy, health and profile detail for a single property are on its own screen; ' +
+      'filling those columns here would mean reading every managed property on one page.</p>' +
+      gapsLine(d.gaps);
+    var more = box.querySelector('[data-props-more]');
+    if (more) more.addEventListener('click', function () {
+      more.disabled = true;
+      more.textContent = 'Loading…';
+      state.props.page = (state.props.meta || {}).next_page || (state.props.page + 1);
+      screenPropertiesAll();
+    });
+  }
+
   function propertiesHtml(d) {
     var list = companies(), k = d.kpis || {};
     var units = list.reduce(function (s, c) { return s + (c.units || 0); }, 0);
@@ -1904,7 +2037,15 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         '<td class="num">' + (has(p.status) ? esc(p.status) : '<span class="empty-dash">—</span>') + '</td>' +
         (function () { var pc = val(p.profile_completeness); return '<td class="num"' + rtitle(p.profile_completeness) + '>' + (pc == null ? '<span class="empty-dash">—</span>' : '<a class="link" href="#/property/' + encodeURIComponent(c.company_id) + '/profile">' + esc(Math.round(pc)) + '%</a>') + '</td></tr>'; })();
     }).join('');
-    return '<div class="page"><div class="head"><div class="stack"><h1 class="h-page">Properties</h1><p class="support">Every property you can see, sorted as your account lists them.</p></div>' + staleLabel(d.as_of) + '</div>' + strip +
+    /* The old copy said "every property you can see", which was true for a
+       client and wrong for staff — it listed only the assignments. Staff get
+       the switch and wording that matches what is on screen. */
+    var lede = realInternal()
+      ? 'The properties HubSpot names you on, as marketing manager, director or RVP.'
+      : 'Every property you can see, sorted as your account lists them.';
+    return '<div class="page"><div class="head"><div class="stack"><h1 class="h-page">Properties</h1><p class="support">' + esc(lede) + '</p></div>' + staleLabel(d.as_of) + '</div>' +
+      scopeSwitch('mine', realInternal() && !list.length
+        ? 'No managed property names this email. Switch to All properties to see the portfolio.' : '') + strip +
       '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">Occupancy</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Leases (month)</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th><th scope="col" class="num">Profile</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       gapsLine(d.gaps) + '</div>';
   }
