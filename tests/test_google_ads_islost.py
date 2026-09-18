@@ -267,3 +267,109 @@ class TestFailuresAreLegible:
             ga._run_gaql("4869803719", "SELECT campaign.name FROM campaign")
         assert "4869803719" in str(err.value)
         assert "Traceback" not in str(err.value)
+
+
+class TestServerHealthEndpoint:
+    """Credentials live on the server, so "does it work" has to be answerable
+    where it runs. This endpoint answers it without ever echoing a secret."""
+
+    @pytest.fixture
+    def client(self, monkeypatch):
+        monkeypatch.setenv("INTERNAL_API_KEY", "internal-secret")
+        import server
+        server.app.config["TESTING"] = True
+        return server.app.test_client()
+
+    def test_it_refuses_a_caller_without_the_internal_key(self, client):
+        assert client.get("/api/internal/google-ads-health").status_code == 401
+
+    def test_it_reports_what_is_missing_without_a_probe(self, client, monkeypatch):
+        for base in ("GOOGLE_ADS_DEVELOPER_TOKEN", "GOOGLE_ADS_CLIENT_ID",
+                     "GOOGLE_ADS_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN",
+                     "GOOGLE_ADS_LOGIN_CUSTOMER_ID"):
+            for name in (base + "_2", base + "2", base):
+                monkeypatch.delenv(name, raising=False)
+        body = client.get("/api/internal/google-ads-health",
+                          headers={"X-Internal-Key": "internal-secret"}).get_json()
+        assert body["configured"] is False
+        assert len(body["missing"]) == 5
+        assert body["probe"] is None
+
+    def test_it_never_echoes_a_credential_value(self, client, monkeypatch):
+        secret = "super-secret-token-value"
+        monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN_2", secret)
+        resp = client.get("/api/internal/google-ads-health",
+                          headers={"X-Internal-Key": "internal-secret"})
+        assert secret not in resp.get_data(as_text=True)
+        # it says WHICH variable supplied it, which is the useful half
+        assert resp.get_json()["credential_sources"][
+            "GOOGLE_ADS_DEVELOPER_TOKEN_2"] == "GOOGLE_ADS_DEVELOPER_TOKEN_2"
+
+    def test_it_does_not_query_when_unconfigured(self, client, monkeypatch):
+        for base in ("GOOGLE_ADS_DEVELOPER_TOKEN", "GOOGLE_ADS_CLIENT_ID",
+                     "GOOGLE_ADS_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN",
+                     "GOOGLE_ADS_LOGIN_CUSTOMER_ID"):
+            for name in (base + "_2", base + "2", base):
+                monkeypatch.delenv(name, raising=False)
+
+        def _boom(*a, **k):
+            raise AssertionError("must not call the API when unconfigured")
+
+        monkeypatch.setattr(ga, "_run_gaql", _boom)
+        body = client.get("/api/internal/google-ads-health?company_id=555",
+                          headers={"X-Internal-Key": "internal-secret"}).get_json()
+        assert body["probe"]["ran"] is False
+        assert "Not configured" in body["probe"]["reason"]
+
+    def test_a_working_probe_reports_what_it_read(self, client, monkeypatch):
+        for base in ("GOOGLE_ADS_DEVELOPER_TOKEN", "GOOGLE_ADS_CLIENT_ID",
+                     "GOOGLE_ADS_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN",
+                     "GOOGLE_ADS_LOGIN_CUSTOMER_ID"):
+            monkeypatch.setenv(base + "_2", "set")
+
+        class _Identity:
+            name = "Test Property"
+            company_id = "555"
+
+            def to_dict(self):
+                return {"google_ads_customer_id": "486-980-3719"}
+
+        import skills.property_resolver as pr
+        monkeypatch.setattr(pr, "resolve", lambda t: _Identity())
+        monkeypatch.setattr(ga, "_run_gaql", lambda cid, q: [
+            {"campaign.advertising_channel_type": "SEARCH",
+             "metrics.cost_micros": 4_200_000_000, "metrics.clicks": 812,
+             "metrics.conversions": 31.0,
+             "metrics.search_budget_lost_impression_share": 0.34}])
+        body = client.get("/api/internal/google-ads-health?company_id=555",
+                          headers={"X-Internal-Key": "internal-secret"}).get_json()
+        probe = body["probe"]
+        assert probe["ran"] is True
+        assert probe["campaigns_last_30_days"] == 1
+        assert probe["spend_last_30_days"] == 4200.0
+        assert probe["search_impression_share_lost_to_budget"] == 0.34
+
+    def test_a_refusal_is_reported_as_a_reason_not_a_500(self, client, monkeypatch):
+        for base in ("GOOGLE_ADS_DEVELOPER_TOKEN", "GOOGLE_ADS_CLIENT_ID",
+                     "GOOGLE_ADS_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN",
+                     "GOOGLE_ADS_LOGIN_CUSTOMER_ID"):
+            monkeypatch.setenv(base + "_2", "set")
+
+        class _Identity:
+            name = "Test Property"
+            company_id = "555"
+
+            def to_dict(self):
+                return {"google_ads_customer_id": "4869803719"}
+
+        import skills.property_resolver as pr
+        monkeypatch.setattr(pr, "resolve", lambda t: _Identity())
+
+        def _refuse(cid, q):
+            raise ga.GoogleAdsError("This login does not have access to account %s." % cid)
+
+        monkeypatch.setattr(ga, "_run_gaql", _refuse)
+        resp = client.get("/api/internal/google-ads-health?property=Test",
+                          headers={"X-Internal-Key": "internal-secret"})
+        assert resp.status_code == 200
+        assert "does not have access" in resp.get_json()["probe"]["reason"]
