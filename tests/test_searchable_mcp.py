@@ -276,6 +276,48 @@ class TestOAuth:
         assert tools is None and "searchable_auth.py" in reason
 
 
+# --- the read-only rule ----------------------------------------------------
+
+class TestWriteGuard:
+    """Searchable exposes four tools that change ITS account. The arrangement is
+    that the vendor measures and the portal decides, so the portal never writes
+    there — and a rule or an agent must not be able to reach one by accident."""
+
+    @pytest.mark.parametrize("name", sorted(sm.WRITE_TOOLS))
+    def test_every_write_tool_is_refused(self, name, monkeypatch):
+        monkeypatch.setenv("SEARCHABLE_API_TOKEN", "t")
+        http = FakeHTTP(TOOLS)
+        monkeypatch.setattr(sm.urllib.request, "urlopen", http)
+        with pytest.raises(sm.WriteRefused):
+            sm.call_tool(name, {"confirm": True})
+        assert http.sent == [], "a refused write must never reach the network"
+
+    def test_the_refusal_names_the_tool_and_the_reason(self, monkeypatch):
+        monkeypatch.setenv("SEARCHABLE_API_TOKEN", "t")
+        with pytest.raises(sm.WriteRefused) as exc:
+            sm.call_tool("trigger_audit")
+        assert "trigger_audit" in str(exc.value)
+        assert "does not write" in str(exc.value)
+
+    def test_an_unknown_tool_is_declined_but_not_an_exception(self, monkeypatch):
+        """A tool we have not vetted is a config gap, not a safety incident."""
+        monkeypatch.setenv("SEARCHABLE_API_TOKEN", "t")
+        value, reason = sm.call_tool("some_new_tool")
+        assert value is None and "READ_TOOLS" in reason
+
+    def test_the_two_sets_never_overlap(self):
+        assert not (sm.READ_TOOLS & sm.WRITE_TOOLS)
+
+    def test_the_read_list_covers_what_the_service_needs(self):
+        """Named explicitly: if one of these disappears from the allowlist, the
+        GEO/AEO service loses a panel and it should be a deliberate choice."""
+        for needed in ("list_projects", "get_visibility", "get_visibility_history",
+                       "get_share_of_voice", "get_sentiment", "get_opportunities",
+                       "get_site_health", "get_ai_traffic", "get_prompt_answers",
+                       "get_competitors"):
+            assert needed in sm.READ_TOOLS
+
+
 # --- the probe -------------------------------------------------------------
 
 class TestProbe:
@@ -345,6 +387,30 @@ class TestHealthRoute:
         body = resp.get_json()
         assert body["configured"] is True and body["works"] is True
         assert [t["name"] for t in body["tools"]] == ["get_visibility", "list_projects"]
+
+    def test_it_can_run_one_read_tool_for_diagnosis(self, client, monkeypatch):
+        """So "does this connection see our properties" is answerable from the
+        machine that holds the token, without anyone pasting it around."""
+        monkeypatch.setenv("SEARCHABLE_API_TOKEN", "good")
+        monkeypatch.setattr(sm.urllib.request, "urlopen", FakeHTTP(
+            rpc({"structuredContent": {"projects": [{"name": "Atwood", "id": "p1"}]}})))
+        body = client.get("/api/internal/searchable-health?tool=list_projects",
+                          headers={"X-Internal-Key": "internal-secret"}).get_json()
+        assert body["result"]["projects"][0]["name"] == "Atwood"
+        assert body["reason"] is None
+
+    def test_the_diagnostic_refuses_a_write_tool(self, client, monkeypatch):
+        monkeypatch.setenv("SEARCHABLE_API_TOKEN", "good")
+        resp = client.get("/api/internal/searchable-health?tool=trigger_audit&args=%7B%22confirm%22%3Atrue%7D",
+                          headers={"X-Internal-Key": "internal-secret"})
+        assert resp.status_code == 403
+        assert "does not write" in resp.get_json()["error"]
+
+    def test_bad_args_are_refused_before_the_call(self, client, monkeypatch):
+        monkeypatch.setenv("SEARCHABLE_API_TOKEN", "good")
+        resp = client.get("/api/internal/searchable-health?tool=list_projects&args=notjson",
+                          headers={"X-Internal-Key": "internal-secret"})
+        assert resp.status_code == 400
 
     def test_tools_are_omitted_unless_asked_for(self, client, monkeypatch):
         monkeypatch.setenv("SEARCHABLE_API_TOKEN", "good")
