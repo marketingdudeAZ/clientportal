@@ -84,6 +84,8 @@ LOOP_EVENT_TYPES = {
     # optimize
     "forecast_run", "recommendation_proposed",
     "recommendation_approved", "recommendation_rejected",
+    # optimize — findings posted by an outside agent (routes/agent_findings.py)
+    "agent_finding_posted",
     "tier_changed", "loop_mode_changed",
     # ops
     "cron_started", "cron_completed", "backfill_completed",

@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 # (occupancy drop, stale inventory, lease wave, lead drop, spend pacing, data
 # stale). It is adapted here rather than re-implemented, so the portal has ONE
 # queue instead of a signals list beside a recommendations list.
-PRODUCERS: Tuple[str, ...] = ("workspace_signals", "reco_digital", "reco_seo")
+PRODUCERS: Tuple[str, ...] = ("workspace_signals", "reco_digital", "reco_seo",
+                             "agent_findings")
 
 CATEGORIES = ("cost", "vendors", "content", "creative", "compliance")
 SEVERITIES = {"high": 3.0, "medium": 2.0, "low": 1.0}
