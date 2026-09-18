@@ -276,11 +276,32 @@ class TestPayload:
         assert body["totals"]["open_recommendations"] == {
             "value": 4, "source": "workspace_inbox", "as_of": TS}
 
-    def test_it_never_groups_by_market_and_says_why(self, body):
+    def test_it_falls_back_to_state_when_most_rows_have_no_market(self, body):
+        # This fixture has market on 1 of 4, so grouping by it would be mostly
+        # empty headings. The gap says that, rather than the screen going quiet.
         assert body["grouping"]["field"] == "state"
         assert "Market is not set on 3 of 4" in _messages(body["gaps"])
         assert _rows(body)[FULL]["market"] == "Central Texas"
         assert _rows(body)[BARE]["market"] is None
+
+    def test_it_groups_by_market_once_the_field_is_populated(self, client, sources, monkeypatch):
+        # rpmmarket is the field that is actually filled in (109 of 109 live);
+        # `market`, which the property resolver reads, is not. Grouping is
+        # decided from the rows, so the populated case must group by market.
+        full = [{"id": c["id"], "properties": dict(c["properties"], rpmmarket="Central Texas")}
+                for c in ROSTER]
+        monkeypatch.setattr("hubspot_client.search_companies",
+                            lambda f, properties=None, limit=None: [dict(c) for c in full])
+        wrpmi.clear_cache()
+        body = client.get("/api/workspace/rpmi", headers=_h()).get_json()
+        assert body["grouping"]["field"] == "market"
+        assert body["grouping"]["note"] == "Grouped by market."
+        assert "market" not in [g.get("field") for g in body["gaps"]]
+        assert all(r["market"] == "Central Texas" for r in body["properties"])
+
+    def test_market_comes_from_rpmmarket_not_the_resolvers_market_field(self, sources):
+        wrpmi.roster()
+        assert "rpmmarket" in sources["properties"]
 
 
 # ── null with a gap ──────────────────────────────────────────────────────────

@@ -3009,8 +3009,10 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     setView('<div class="page">' + rpmiHead() + '<div data-rpmi-results>' +
       '<div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading the RPMI portfolio…</div></div></div>');
     bindRpmiControls();
-    guard(api('/api/workspace/rpmi'), 'the RPMI portfolio').then(function (r) {
-      if (!r) return;
+    // Not guard(): guard replaces the whole view with its own loading state,
+    // which would take the search box and the results container with it. The
+    // head stays put and only the results box swaps, the way Spend does it.
+    api('/api/workspace/rpmi').then(function (r) {
       state.rpmiData = r.data || {};
       renderRpmi();
     }).catch(function (e) {
