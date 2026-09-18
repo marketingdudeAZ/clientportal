@@ -229,6 +229,45 @@ def clerk_health():
     })
 
 
+@app.route("/api/internal/searchable-health", methods=["GET", "OPTIONS"])
+def searchable_health():
+    """Diagnostic: can THIS server read Searchable, and with which credential?
+
+    Searchable's surface is an MCP endpoint behind OAuth, and its authorization
+    server offers no client_credentials grant — so whether a static
+    SEARCHABLE_API_TOKEN is accepted as a bearer decides between one secret in
+    Render and a refresh-token dance. That question can only be answered from
+    the machine that holds the credentials.
+
+    Internal key only. It reports which variables are SET and whether each is
+    ACCEPTED — never a value. `?tools=1` also lists what the server offers, so
+    the portal's mapping can be written against real tools.
+    """
+    if request.method == "OPTIONS":
+        return _preflight_response()
+    from _route_utils import is_internal_caller
+
+    if not is_internal_caller():
+        return jsonify({"error": "Internal key required"}), 401
+
+    import searchable_mcp
+
+    if not searchable_mcp.is_configured():
+        return jsonify({
+            "configured": False,
+            "endpoint": searchable_mcp.endpoint(),
+            "credentials_present": searchable_mcp.credential_names(),
+            "next": ("Set SEARCHABLE_API_TOKEN, or run scripts/searchable_auth.py "
+                     "and set SEARCHABLE_MCP_CLIENT_ID and "
+                     "SEARCHABLE_MCP_REFRESH_TOKEN."),
+        })
+    body = searchable_mcp.probe()
+    body["configured"] = True
+    if not (request.args.get("tools") or "").strip():
+        body.pop("tools", None)
+    return jsonify(body)
+
+
 @app.route("/api/internal/google-ads-health", methods=["GET", "OPTIONS"])
 def google_ads_health():
     """Diagnostic: can THIS server read Google Ads, and what did it get back?
