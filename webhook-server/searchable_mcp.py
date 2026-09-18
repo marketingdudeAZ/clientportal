@@ -297,3 +297,198 @@ def probe() -> Dict[str, Any]:
                             for t in tools]
             out["works"] = True
     return out
+
+
+# --- the portal's view of a property ---------------------------------------
+# Normalizers written against a LIVE payload (project Vitriapartments, 30 days,
+# captured 2026-09-18), not against a guess. The vendor's own shape is:
+#   summary   {visibilityScore, scoreChange, scoreChangePeriod, responseMentionRate,
+#              totalResponses, totalMentions, totalCitations, totalSources}
+#   platforms [{platform, visibilityRate, responses, responsesWithBrand,
+#               mentions, brandMentions, citations, brandCitations, sources,
+#               brandSources}]
+#   trend, dateRange, availableFilters{topics, countries}, project
+
+def _clean_domain(value: Any) -> str:
+    """A bare hostname. HubSpot stores websites however whoever typed them felt
+    that day, so scheme, www, path, port and case all come off before matching."""
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    text = text.split("://", 1)[-1]
+    text = text.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+    text = text.split("@")[-1].split(":", 1)[0]
+    return text[4:] if text.startswith("www.") else text
+
+
+def normalize_projects(payload: Any) -> List[Dict[str, Any]]:
+    rows = payload.get("projects") if isinstance(payload, dict) else payload
+    out: List[Dict[str, Any]] = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        out.append({
+            "id": row.get("id"),
+            "name": row.get("name"),
+            "domain": _clean_domain(row.get("domain")),
+            # Null until the project has collected anything. A project created
+            # today has no history, which is the difference between "measured"
+            # and "measurable".
+            "data_available_from": row.get("dataAvailableFrom"),
+            "is_active": row.get("isActive"),
+        })
+    return [r for r in out if r["id"]]
+
+
+def normalize_visibility(payload: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return None
+    summary = payload.get("summary") or {}
+    platforms = payload.get("platforms") or []
+    if not summary and not platforms:
+        return None
+    engines = []
+    for row in platforms:
+        if not isinstance(row, dict):
+            continue
+        engines.append({
+            "engine": row.get("platform") or row.get("platformId"),
+            "visibility_rate": row.get("visibilityRate"),
+            "responses": row.get("responses"),
+            "responses_with_brand": row.get("responsesWithBrand"),
+            "mentions": row.get("mentions"),
+            "brand_mentions": row.get("brandMentions"),
+            "citations": row.get("citations"),
+            "brand_citations": row.get("brandCitations"),
+            "sources": row.get("sources"),
+            "brand_sources": row.get("brandSources"),
+        })
+    topics = [str(t.get("name")).strip()
+              for t in ((payload.get("availableFilters") or {}).get("topics") or [])
+              if isinstance(t, dict) and t.get("name")]
+    return {
+        "score": summary.get("visibilityScore"),
+        "score_change": summary.get("scoreChange"),
+        "change_period": summary.get("scoreChangePeriod"),
+        "response_mention_rate": summary.get("responseMentionRate"),
+        "totals": {"responses": summary.get("totalResponses"),
+                   "mentions": summary.get("totalMentions"),
+                   "citations": summary.get("totalCitations"),
+                   "sources": summary.get("totalSources")},
+        "engines": engines,
+        "topics": topics,
+        "trend": payload.get("trend") or [],
+        "date_range": payload.get("dateRange") or {},
+    }
+
+
+def normalize_opportunities(payload: Any) -> List[Dict[str, Any]]:
+    rows = payload.get("opportunities") if isinstance(payload, dict) else payload
+    out: List[Dict[str, Any]] = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        out.append({"id": row.get("id"), "title": row.get("title") or row.get("name"),
+                    "impact": row.get("impact"), "status": row.get("status"),
+                    "source": row.get("source"),
+                    "detail": row.get("description") or row.get("detail")})
+    return out
+
+
+def list_projects() -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
+    payload, reason = call_tool("list_projects")
+    if payload is None:
+        return None, reason
+    return normalize_projects(payload), None
+
+
+def project_for_domain(domain: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """The project measuring this website, or None with a reason.
+
+    Returns a (project, reason) TUPLE — callers that treat the return value as
+    a dict get a truthy tuple and sail on with nonsense, which is exactly the
+    bug this signature is written to make obvious.
+    """
+    wanted = _clean_domain(domain)
+    if not wanted:
+        return None, "This property has no website on its record."
+    projects, reason = list_projects()
+    if projects is None:
+        return None, reason
+    for project in projects:
+        if project["domain"] and project["domain"] == wanted:
+            return project, None
+    return None, ("%s is not measured for AI visibility yet. Add it as a "
+                  "project to start measuring." % wanted)
+
+
+def visibility(project_id: str, days: int = 30) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    payload, reason = call_tool("get_visibility", {"projectId": project_id, "days": days})
+    if payload is None:
+        return None, reason
+    normalized = normalize_visibility(payload)
+    if normalized is None:
+        return None, "Searchable returned no readings for this property yet."
+    return normalized, None
+
+
+def opportunities(project_id: str) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
+    payload, reason = call_tool("get_opportunities", {"projectId": project_id})
+    if payload is None:
+        return None, reason
+    return normalize_opportunities(payload), None
+
+
+def for_property(domain: str, days: int = 30) -> Dict[str, Any]:
+    """Everything measured for one property, shaped for a rule or a panel.
+
+    Always returns a dict. `measured` is False with a `reason` when the property
+    has no project, which is the common case: one project exists across a
+    hundred RPMI websites, and "not measured yet" is a useful thing to be able
+    to say plainly.
+    """
+    out: Dict[str, Any] = {"domain": _clean_domain(domain), "measured": False,
+                           "reason": None, "project_id": None,
+                           "visibility": None, "opportunities": []}
+    project, reason = project_for_domain(domain)
+    if project is None:
+        out["reason"] = reason
+        return out
+    out["project_id"] = project["id"]
+    out["project_name"] = project.get("name")
+    out["data_available_from"] = project.get("data_available_from")
+    vis, vis_reason = visibility(project["id"], days=days)
+    if vis is None:
+        out["reason"] = vis_reason
+        return out
+    opps, _ = opportunities(project["id"])
+    out.update({"measured": True, "visibility": vis, "opportunities": opps or []})
+    return out
+
+
+def from_payload(projects: Any = None, visibility_payload: Any = None,
+                 opportunities_payload: Any = None) -> Dict[str, Any]:
+    """A reading built from captured payloads, with no network and no key.
+
+    Rules, tests and a demo can all work against real vendor shapes without a
+    credential. Only transport separates this from `for_property`, which is the
+    property that let the normalizers be right while the transport was pointed
+    at a host that does not exist.
+    """
+    rows = normalize_projects(projects) if projects is not None else []
+    project = rows[0] if rows else None
+    out: Dict[str, Any] = {
+        "domain": project["domain"] if project else "",
+        "measured": False, "reason": None,
+        "project_id": project["id"] if project else None,
+        "project_name": project.get("name") if project else None,
+        "visibility": None, "opportunities": [],
+    }
+    vis = normalize_visibility(visibility_payload) if visibility_payload is not None else None
+    if vis is None:
+        out["reason"] = "No readings in the payload."
+        return out
+    out.update({"measured": True, "visibility": vis,
+                "opportunities": normalize_opportunities(opportunities_payload)
+                if opportunities_payload is not None else []})
+    return out

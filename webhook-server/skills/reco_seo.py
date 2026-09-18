@@ -1449,35 +1449,56 @@ def _merge_vendor(domain: str, data: Dict[str, Any],
                   gaps: List[Dict[str, str]]) -> bool:
     """The vendor connector, when a project exists for this website."""
     try:
-        import searchable_client as sc
+        import searchable_mcp as sc
     except Exception as exc:  # noqa: BLE001 — unconfigured server, not an error
         logger.debug("reco_seo: vendor connector unavailable (%s)", exc)
         return False
     try:
-        project = sc.project_for_domain(domain)
+        # (project, reason). This used to be read as a dict, so a truthy TUPLE
+        # passed the emptiness check below and was handed on as a project id.
+        project, why = sc.project_for_domain(domain)
     except Exception as exc:  # noqa: BLE001
         logger.info("reco_seo: vendor lookup failed for %s (%s)", domain, exc)
-        project = None
-    project_id = (project or {}).get("id") if isinstance(project, dict) else project
+        project, why = None, None
+    project_id = (project or {}).get("id")
     if not project_id:
         gaps.append(_gap("questions", "searchable",
                          "No AI-visibility project exists for %s yet; this property "
                          "is not being measured by the vendor." % domain))
         return False
 
-    payload = {}
+    # Every reader returns (value, reason); the value is what merges. Handing
+    # the tuple straight through would give merge_searchable something it does
+    # not recognize, which it ignores — so the vendor feed would look connected
+    # and land nothing.
+    payload, unmapped = {}, []
     for name in ("visibility", "sentiment", "sources", "site_health", "opportunities"):
         reader = getattr(sc, name, None)
         if not callable(reader):
+            # The tool exists at the vendor (get_sentiment, get_site_health,
+            # search_sources) but its payload shape has not been captured and
+            # normalized yet. Named here rather than silently skipped, because
+            # "no fee signals" and "we never asked" look identical downstream.
+            unmapped.append(name)
             continue
         try:
-            payload[name] = reader(project_id)
+            value, why = reader(project_id)
         except Exception as exc:  # noqa: BLE001
             logger.info("reco_seo: vendor %s failed for %s (%s)", name, project_id, exc)
+            continue
+        if value is None:
+            logger.debug("reco_seo: vendor %s empty for %s (%s)", name, project_id, why)
+            continue
+        payload[name] = value
+    if unmapped:
+        gaps.append(_gap("questions", "searchable",
+                         "These vendor feeds are not mapped yet, so they are not "
+                         "part of this read: %s." % ", ".join(sorted(unmapped))))
     merged = merge_searchable(data, **payload)
     if not merged:
         gaps.append(_gap("questions", "searchable",
-                         "The vendor project for %s has no readings yet." % domain))
+                         "The vendor project for %s has no readings we can use yet."
+                         % domain))
     return merged
 
 

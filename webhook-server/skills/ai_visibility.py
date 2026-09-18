@@ -85,7 +85,7 @@ def for_property(company_id: str, *, days: int = 30) -> Dict[str, Any]:
                                 "its AI visibility cannot be measured."))
         return out
 
-    import searchable_client as sc
+    import searchable_mcp as sc
 
     reading = sc.for_property(website, days=days)
     if not reading.get("measured"):
