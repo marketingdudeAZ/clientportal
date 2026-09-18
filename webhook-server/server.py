@@ -116,6 +116,12 @@ def add_cors(response):
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Portal-Email, Authorization, X-Workspace-Link, X-Workspace-Preview-Role"
+        if request.method == "OPTIONS":
+            # Without this every cross-origin call costs two round trips: the
+            # workspace page on digital.rpmliving.com sends Authorization, which
+            # makes each request preflighted, and Chrome caps the cache at 2h
+            # anyway. 7200 is the ceiling that actually gets honored.
+            response.headers["Access-Control-Max-Age"] = "7200"
     return response
 
 
