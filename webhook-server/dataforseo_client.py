@@ -113,24 +113,116 @@ def serp_ai_mode(keyword: str, location_code: int | None = None) -> dict:
 
 # ─── On-Page ────────────────────────────────────────────────────────────────
 
-def onpage_task_post(target: str, max_crawl_pages: int = 100, enable_javascript: bool = True) -> str:
-    """Kick off an on-page crawl. Returns task_id to poll later."""
+def _task(body: dict) -> dict:
+    """The first task of a response, checked for its own status code.
+
+    A task can fail inside a body whose own `status_code` is 20000 — the
+    envelope succeeded, the work did not. Reading `result` without looking here
+    turns a failed crawl into an empty one.
+    """
+    tasks = body.get("tasks") or []
+    if not tasks:
+        raise DataForSEOError("DataForSEO returned no tasks")
+    task = tasks[0] or {}
+    code = task.get("status_code") or 0
+    if code >= 40000:
+        raise DataForSEOError(f"{code}: {task.get('status_message')}")
+    return task
+
+
+def _cost(body: dict) -> float:
+    """What the call charged, as the response reports it. 0.0 when unstated."""
+    try:
+        return float(body.get("cost") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def onpage_task_create(
+    target: str,
+    max_crawl_pages: int = 100,
+    enable_javascript: bool = True,
+    store_raw_html: bool = False,
+) -> dict:
+    """Kick off an on-page crawl. Returns {'task_id', 'cost'}.
+
+    `store_raw_html` is what makes `onpage_raw_html` work later — DataForSEO
+    keeps the fetched HTML only when the task asked it to, and there is no way
+    to turn it on after the fact.
+    """
     payload = {
         "target": target,
         "max_crawl_pages": max_crawl_pages,
         "load_resources": False,
         "enable_javascript": enable_javascript,
+        "store_raw_html": store_raw_html,
         "respect_sitemap": True,
     }
     body = _post("/v3/on_page/task_post", payload)
-    tasks = body.get("tasks") or []
-    if not tasks:
-        raise DataForSEOError("on_page task_post returned no tasks")
-    return tasks[0].get("id")
+    task = _task(body)
+    task_id = task.get("id")
+    if not task_id:
+        raise DataForSEOError("on_page task_post returned no task id")
+    return {"task_id": task_id, "cost": _cost(body)}
+
+
+def onpage_task_post(target: str, max_crawl_pages: int = 100, enable_javascript: bool = True) -> str:
+    """Kick off an on-page crawl. Returns task_id to poll later."""
+    return onpage_task_create(target, max_crawl_pages, enable_javascript)["task_id"]
 
 
 def onpage_summary(task_id: str) -> dict:
     return _first_result(_get(f"/v3/on_page/summary/{task_id}"))
+
+
+def onpage_pages(task_id: str, limit: int = 100, offset: int = 0) -> dict:
+    """One page inventory for a finished (or running) crawl.
+
+    Returns {'items', 'crawl_progress', 'crawl_status', 'total', 'cost'}. The
+    crawl state travels with the pages on purpose: a caller that stores a
+    partial inventory as if it were the whole site is the failure this shape
+    prevents.
+    """
+    payload = {"id": task_id, "limit": limit, "offset": offset}
+    body = _post("/v3/on_page/pages", payload)
+    _task(body)
+    result = _first_result(body)
+    return {
+        "items": result.get("items") or [],
+        "crawl_progress": result.get("crawl_progress"),
+        "crawl_status": result.get("crawl_status") or {},
+        "total": result.get("total_items_count"),
+        "cost": _cost(body),
+    }
+
+
+def onpage_links(task_id: str, limit: int = 1000, offset: int = 0) -> dict:
+    """The crawl's link graph. Returns {'items', 'total', 'cost'}."""
+    payload = {"id": task_id, "limit": limit, "offset": offset}
+    body = _post("/v3/on_page/links", payload)
+    _task(body)
+    result = _first_result(body)
+    return {
+        "items": result.get("items") or [],
+        "total": result.get("total_items_count"),
+        "cost": _cost(body),
+    }
+
+
+def onpage_raw_html(task_id: str, url: str) -> dict:
+    """The stored HTML for one crawled URL. Returns {'html', 'cost'}.
+
+    `html` is None when the task did not store raw HTML for that URL, which is
+    not an error — it means we cannot read its markup, and the caller must say
+    so rather than record "no markup found".
+    """
+    payload = {"id": task_id, "url": url}
+    body = _post("/v3/on_page/raw_html", payload)
+    _task(body)
+    result = _first_result(body)
+    items = result.get("items") or []
+    html = (items[0] or {}).get("html") if items else None
+    return {"html": html, "cost": _cost(body)}
 
 
 def onpage_content_parsing(url: str) -> dict:

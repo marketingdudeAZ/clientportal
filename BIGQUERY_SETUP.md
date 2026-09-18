@@ -116,6 +116,51 @@ CREATE TABLE IF NOT EXISTS `YOUR_PROJECT_ID.rpm_portal.seo_ranks_daily` (
 )
 PARTITION BY DATE(fetched_at)
 CLUSTER BY property_uuid, keyword;
+
+-- Table 6: on-page site audit — written by webhook-server/seo_crawl.py
+-- One row per (site, crawl_date, url). Read back by seo_crawl.stored_pages(),
+-- which is what skills/reco_seo.gather() hands to the four page-level rules
+-- (missing floor-plan page, availability not machine readable, money-page
+-- metadata gap, orphan page).
+--
+-- NULL means "not measured" and the reader leaves the key off the page
+-- entirely; "" means "measured, and the page has none", which is the finding.
+-- Two columns exist only to keep that distinction readable coming back out:
+--   jsonld_read      — false when the page's raw HTML was never fetched. An
+--                      empty ARRAY and a NULL one are the same value in
+--                      BigQuery, so without this a page we never looked at
+--                      would read as a page with no markup.
+--   crawl_complete   — false when the crawl stopped at its page cap. The link
+--                      graph is then partial, so internal_links_in is stored
+--                      NULL and the orphan rule cannot invent orphans.
+CREATE TABLE IF NOT EXISTS `YOUR_PROJECT_ID.rpm_portal.seo_onpage_audit` (
+  crawl_date         DATE NOT NULL,
+  site               STRING NOT NULL,          -- bare host, e.g. "live75west.com"
+  target             STRING,                   -- what was submitted to DataForSEO
+  company_id         STRING,
+  property_uuid      STRING,
+  property_name      STRING,
+  url                STRING NOT NULL,
+  status_code        INT64,
+  title              STRING,
+  meta_description   STRING,
+  h1                 STRING,                   -- the first one
+  h1_all             ARRAY<STRING>,            -- all of them; 2+ is a finding
+  jsonld_read        BOOL,
+  jsonld_types       ARRAY<STRING>,
+  internal_links_in  INT64,                    -- NULL when crawl_complete is false
+  internal_links_out INT64,
+  inbound_source     STRING,                   -- "meta" | "link_graph"
+  word_count         INT64,
+  canonical          STRING,
+  onpage_score       FLOAT64,
+  crawl_complete     BOOL,
+  pages_available    INT64,                    -- pages the crawl found in total
+  task_id            STRING,
+  crawled_at         TIMESTAMP NOT NULL
+)
+PARTITION BY crawl_date
+CLUSTER BY site, company_id;
 ```
 
 Repeat for `rpm_portal_dev` (replace the schema name).
