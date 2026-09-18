@@ -142,7 +142,10 @@ def _rows_for_snapshot(reading: Dict[str, Any], on: date) -> List[Dict[str, Any]
 
 def snapshot(company_id: str, *, on: Optional[date] = None,
              reading: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Write today's reading into our own warehouse. Idempotent per day.
+    """Write today's reading into our own warehouse.
+
+    Append-only, and the READ takes the newest capture per day — so running
+    this twice costs a row, not a doubled point on a client's chart.
 
     Returns what happened rather than raising: a warehouse that is down must not
     stop a dashboard from rendering, but it must be visible that the day was
@@ -191,11 +194,18 @@ def history(property_uuid: str, *, days: int = 180,
         return out
     try:
         from google.cloud import bigquery as gbq
+        # Newest capture per day wins. snapshot() appends — a retry, an
+        # overlapping cron or a manual re-run writes a second row for the same
+        # day — and without this the client's chart shows that day twice.
+        # Deduping on READ rather than with DML because BigQuery's streaming
+        # buffer makes UPDATE/DELETE against fresh rows unreliable.
         sql = """
           SELECT reading_date, visibility_score, visibility_rate
           FROM `{dataset}.{table}`
           WHERE property_uuid = @uuid AND engine = @engine
             AND reading_date >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)
+          QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY reading_date ORDER BY captured_at DESC) = 1
           ORDER BY reading_date
         """.format(dataset=bq._dataset(), table=TABLE)
         rows = bq.query(sql, [

@@ -1205,7 +1205,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     var html = logo + '<div class="nav">' + navItems().map(link).join('');
     if (viewInternal()) html += '<p class="nav-label">RPM only</p>' +
       link({ key: 'signals', href: '#/signals', label: 'Signals', icon: 'signal' }) +
-      link({ key: 'rpmi', href: '#/rpmi', label: 'RPMI', icon: 'building' });
+      link({ key: 'rpmi', href: '#/rpmi', label: 'RPMI', icon: 'building' }) +
+      link({ key: 'geo', href: '#/geo', label: 'AI Search', icon: 'eye' });
     html += '</div><div class="side-grow"></div>';
     if (state.loop) {
       html += '<div class="loopcard" role="status"><i class="' + (state.loop.running ? 'on' : '') + '" aria-hidden="true"></i><div><b>' + (state.loop.running === true ? 'Loop running' : (state.loop.running === false ? 'Loop paused' : 'Loop status unavailable')) + '</b>' +
@@ -1868,6 +1869,102 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         var w = btn.closest('.undo-wrap'); if (w) w.outerHTML = '<span class="undo-note">' + esc(reason) + '</span>';
       });
     });
+  }
+
+  /* ── AI Search — the RPMI GEO/AEO roll-up ─────────────────────────────
+     What a renter's assistant says when asked for apartments in this market.
+
+     Every RPMI property is listed, measured or not, because coverage IS the
+     finding: one Searchable project exists across 98 websites, and a screen
+     that quietly showed only the measured ones would look tidy and hide the
+     state of the programme. "Not measured yet" and "scored zero" are opposite
+     findings, and the screen never lets them look alike. */
+  function screenGeo() {
+    renderTop('AI Search', 'RPMI');
+    renderSide('geo');
+    setView('<div class="page">' + geoHead() + '<div data-geo-results>' +
+      '<div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>' +
+      'Asking the assistants what they say about RPMI…</div></div></div>');
+    api('/api/workspace/geo').then(function (r) {
+      state.geo = r.data || {};
+      renderGeo();
+    }).catch(function (e) {
+      var box = view.querySelector('[data-geo-results]');
+      if (box && !(e && e.status === 401)) box.innerHTML = errorHtml(e);
+    });
+  }
+  function geoHead() {
+    return '<div class="head"><div class="stack"><h1 class="h-page">AI Search</h1>' +
+      '<p class="support">When a renter asks ChatGPT, Google AI Overviews or Perplexity ' +
+      'for apartments in these markets, which of our properties get named.</p></div>' +
+      (state.geo && state.geo.as_of ? staleLabel(state.geo.as_of) : '') + '</div>';
+  }
+  function geoScore(v) {
+    if (v == null) return '<span class="empty-dash">—</span>';
+    var band = v >= 50 ? 'healthy' : (v >= 25 ? 'attention' : 'critical');
+    return '<span class="pill ' + band + '"><i></i>' + esc(pct(v / 100, 1)) + '</span>';
+  }
+  function renderGeo() {
+    var box = view.querySelector('[data-geo-results]');
+    if (!box) return;
+    var d = state.geo || {}, rows = d.properties || [];
+    var kpis = '<div class="kpis">' +
+      '<div class="kpi"><span class="eyebrow">RPMI properties</span><span class="v">' + esc(num(d.property_count)) + '</span></div>' +
+      '<div class="kpi"><span class="eyebrow">Measured</span><span class="v">' + esc(num(d.measured_count)) + '</span></div>' +
+      '<div class="kpi"><span class="eyebrow">Not measured yet</span><span class="v">' + esc(num(d.unmeasured_count)) + '</span></div>' +
+      '<div class="kpi"><span class="eyebrow">Average visibility</span><span class="v">' +
+      (d.average_score == null ? '<span class="empty-dash">—</span>' : esc(pct(d.average_score / 100, 1))) + '</span></div>' +
+      '</div>';
+
+    /* The state of the programme, said in one sentence rather than left for
+       someone to work out from a column of dashes. */
+    var lede = d.measured_count
+      ? '<p class="sumline" role="status"><b>' + esc(num(d.measured_count)) + '</b> of <b>' +
+        esc(num(d.property_count)) + '</b> RPMI properties are being measured.' +
+        (d.unmeasured_count ? ' The other ' + esc(num(d.unmeasured_count)) +
+         ' need a Searchable project before anything can be measured for them.' : '') + '</p>'
+      : '<p class="sumline" role="status">No RPMI property is being measured yet. ' +
+        'Measurement starts the day a property gets a Searchable project — history does not backfill, ' +
+        'so the sooner a project exists, the sooner there is a trend to show.</p>';
+
+    var body = rows.map(function (p) {
+      var href = '#/property/' + encodeURIComponent(p.company_id || '');
+      var eng = {};
+      (p.engines || []).forEach(function (e) {
+        eng[String(e.engine || '').toLowerCase()] = e.visibility_rate;
+      });
+      function rate(key) {
+        var v = eng[key];
+        return '<td class="num">' + (v == null ? '<span class="empty-dash">—</span>' : esc(pct(v / 100, 1))) + '</td>';
+      }
+      var change = p.score_change;
+      return '<tr class="rowlink" data-href="' + href + '">' +
+        '<td class="name"><a href="' + href + '">' + esc(p.name) + '</a>' +
+        '<span class="fine" style="display:block">' + esc(p.domain || '') + '</span></td>' +
+        '<td class="num">' + esc(num(p.units)) + '</td>' +
+        '<td class="num">' + geoScore(p.score) + '</td>' +
+        '<td class="num">' + (change == null ? '<span class="empty-dash">—</span>'
+          : esc((change > 0 ? '+' : '') + change) + '<span class="fine"> ' + esc(p.change_period || '') + '</span>') + '</td>' +
+        rate('chatgpt') + rate('google-ai-overview') + rate('perplexity') +
+        '<td>' + (p.measured
+          ? (p.trend_points > 1 ? esc(num(p.trend_points)) + ' readings'
+             : '<span class="fine">measuring since ' + esc(mdy(p.data_available_from) || 'recently') + '</span>')
+          : '<span class="fine">' + esc(p.reason || 'Not measured yet') + '</span>') + '</td>' +
+        '</tr>';
+    }).join('');
+
+    box.innerHTML = kpis + lede +
+      (rows.length
+        ? '<div class="tscroll"><table class="tbl"><caption class="sr-only">RPMI properties by AI search visibility</caption>' +
+          '<thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th>' +
+          '<th scope="col" class="num">Visibility</th><th scope="col" class="num">Change</th>' +
+          '<th scope="col" class="num">ChatGPT</th><th scope="col" class="num">AI Overviews</th>' +
+          '<th scope="col" class="num">Perplexity</th><th scope="col">Status</th></tr></thead>' +
+          '<tbody>' + body + '</tbody></table></div>'
+        : '<p class="support">No RPMI properties came back.</p>') +
+      '<p class="support">Visibility is the share of renter questions where an assistant named this property. ' +
+      'A property with no project is not a zero — it is unmeasured, and the two are shown differently on purpose.</p>' +
+      gapsLine(d.gaps);
   }
 
   /* ── Properties (GOO-0) ──────────────────────────────────────────────
@@ -3308,7 +3405,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     if (name === 'work' || name === 'client') name = 'approvals';
     if (name === 'portfolio') name = 'dashboard';
     if (name === 'reports') { window.location.href = reportHref(); return; }
-    if ((name === 'signals' || name === 'rpmi') && !viewInternal()) name = 'dashboard';
+    if ((name === 'signals' || name === 'rpmi' || name === 'geo') && !viewInternal()) name = 'dashboard';
     if (name === 'property' && parts[1]) {
       setCompany(parts[1]);
       name = parts[2] ? { 'media-plan': 'mediaplan', visibility: 'visibility', content: 'content', creative: 'creative', profile: 'profile' }[parts[2]] || 'property' : 'property';
@@ -3319,7 +3416,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       mediaplan: [screenMediaPlan, 'properties'], visibility: [screenVisibility, 'visibility'], content: [screenContent, 'content'],
       creative: [screenCreative, 'creative'], value: [screenValue, 'value'], signals: [screenSignals, 'signals'],
       ask: [screenAsk, ''], request: [screenRequest, 'approvals'], spend: [screenSpend, 'spend'], profile: [screenProfile, 'profile'],
-      rpmi: [screenRpmi, 'rpmi']
+      rpmi: [screenRpmi, 'rpmi'], geo: [screenGeo, 'geo']
     };
     state.profileView = name === 'profile' ? (parts[3] || '') : '';
     var s = screens[name] || screens.dashboard;
