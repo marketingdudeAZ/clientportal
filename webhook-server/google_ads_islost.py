@@ -12,13 +12,23 @@ GOOGLE_ADS_LOGIN_CUSTOMER_ID rather than from the record.
 
 `_run_gaql` is live when five environment values are present:
 
-    GOOGLE_ADS_DEVELOPER_TOKEN_2     from the MCC's API Center (needs Basic
-                                     access; Test access only reaches test
-                                     accounts)
     GOOGLE_ADS_CLIENT_ID_2           OAuth client (Desktop app)
     GOOGLE_ADS_CLIENT_SECRET_2
     GOOGLE_ADS_REFRESH_TOKEN_2       minted by scripts/google_ads_auth.py
     GOOGLE_ADS_LOGIN_CUSTOMER_ID_2   the manager account, digits only
+
+    GOOGLE_ADS_DEVELOPER_TOKEN_2     OPTIONAL. Google announced in 2026 that
+                                     developer tokens are no longer required and
+                                     that API access level is managed in the
+                                     Cloud console instead, per the notice in
+                                     the manager account's API Center. The
+                                     client library still insists the key is
+                                     PRESENT, so when no token is configured
+                                     this passes an empty string and sets
+                                     use_cloud_org_for_api_access, which is the
+                                     new model. A token that IS set is passed
+                                     through unchanged, so an account still on
+                                     the old model keeps working.
 
 WHY A SECOND SET, AND WHY BOTH SPELLINGS
     An unsuffixed `GOOGLE_ADS_*` set already exists for another integration, and
@@ -95,17 +105,26 @@ def parse_islost(rows: list[dict]) -> dict[str, float]:
 # first is canonical: it is what every message asks for. `_2` and `2` are both
 # accepted because either is a reasonable thing to type, and the unsuffixed name
 # is a last-resort fallback so anything already configured keeps working.
+# What the connector cannot run without. The developer token is deliberately
+# NOT here: Google no longer requires one, and demanding it would block a
+# correctly-configured account from being read.
 _BASE_NAMES = (
-    "GOOGLE_ADS_DEVELOPER_TOKEN",
     "GOOGLE_ADS_CLIENT_ID",
     "GOOGLE_ADS_CLIENT_SECRET",
     "GOOGLE_ADS_REFRESH_TOKEN",
     "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
 )
 
-_CREDENTIALS = tuple((base + "_2", base + "2", base) for base in _BASE_NAMES)
+# Read when present, never required.
+_OPTIONAL_BASE_NAMES = ("GOOGLE_ADS_DEVELOPER_TOKEN",)
 
-_REQUIRED_ENV = tuple(names[0] for names in _CREDENTIALS)
+_CREDENTIALS = tuple((base + "_2", base + "2", base)
+                     for base in _BASE_NAMES + _OPTIONAL_BASE_NAMES)
+
+_REQUIRED_CREDENTIALS = tuple((base + "_2", base + "2", base)
+                              for base in _BASE_NAMES)
+
+_REQUIRED_ENV = tuple(names[0] for names in _REQUIRED_CREDENTIALS)
 
 
 def _names_for(canonical: str) -> tuple:
@@ -142,11 +161,25 @@ def credential_sources() -> dict:
 
 
 def missing_credentials() -> list:
-    """Which credentials have no value under ANY of their accepted names.
+    """Which REQUIRED credentials have no value under any accepted name.
 
-    Reports the canonical `_2` spelling, because that is the one to set.
+    Reports the canonical `_2` spelling, because that is the one to set. The
+    developer token is not included: it is optional under the current model.
     """
-    return [names[0] for names in _CREDENTIALS if not credential_value(names[0])]
+    return [names[0] for names in _REQUIRED_CREDENTIALS
+            if not credential_value(names[0])]
+
+
+def access_model() -> str:
+    """'developer_token' when one is configured, else 'cloud_org'.
+
+    Worth reporting: the two models fail differently, so knowing which one a
+    request used is the difference between "apply for Basic access" and "grant
+    the Cloud project access".
+    """
+    return ("developer_token"
+            if credential_value("GOOGLE_ADS_DEVELOPER_TOKEN_2")
+            else "cloud_org")
 
 
 def is_configured() -> bool:
@@ -175,15 +208,22 @@ def _client():
         raise GoogleAdsNotConfigured(
             "The google-ads library is not installed in this environment."
         ) from exc
-    return GoogleAdsClient.load_from_dict({
-        "developer_token": credential_value("GOOGLE_ADS_DEVELOPER_TOKEN_2"),
+    token = credential_value("GOOGLE_ADS_DEVELOPER_TOKEN_2")
+    config = {
+        # The library requires this key to EXIST even though Google no longer
+        # requires a token, so an empty string is the correct value when there
+        # is none — omitting the key raises before any request is made.
+        "developer_token": token,
         "client_id": credential_value("GOOGLE_ADS_CLIENT_ID_2"),
         "client_secret": credential_value("GOOGLE_ADS_CLIENT_SECRET_2"),
         "refresh_token": credential_value("GOOGLE_ADS_REFRESH_TOKEN_2"),
         "login_customer_id": _digits(
             credential_value("GOOGLE_ADS_LOGIN_CUSTOMER_ID_2")),
         "use_proto_plus": True,
-    })
+    }
+    if not token:
+        config["use_cloud_org_for_api_access"] = True
+    return GoogleAdsClient.load_from_dict(config)
 
 
 def selected_fields(query: str) -> list:
@@ -250,6 +290,13 @@ def _translate(exc: Exception, customer_id: str) -> Exception:
             "The Google Ads refresh token is no longer valid; mint a new one with "
             "scripts/google_ads_auth.py.")
     if "developer_token" in lowered or "developertoken" in lowered:
+        if access_model() == "cloud_org":
+            return GoogleAdsNotConfigured(
+                "Google Ads refused the request for a developer token. This "
+                "connector is using the Cloud-managed access model, so grant "
+                "the Cloud project Google Ads API access in the Cloud console "
+                "— or set GOOGLE_ADS_DEVELOPER_TOKEN_2 to fall back to the "
+                "older model.")
         return GoogleAdsNotConfigured(
             "The developer token was refused. Test-level tokens only reach test "
             "accounts; Basic access is required for live data.")

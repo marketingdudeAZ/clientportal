@@ -83,15 +83,17 @@ class TestCredentials:
     set belonging to another integration is never repointed. Each credential
     answers to `_2`, `2` and the unsuffixed name, in that order."""
 
-    CANONICAL = ("GOOGLE_ADS_DEVELOPER_TOKEN_2", "GOOGLE_ADS_CLIENT_ID_2",
-                 "GOOGLE_ADS_CLIENT_SECRET_2", "GOOGLE_ADS_REFRESH_TOKEN_2",
-                 "GOOGLE_ADS_LOGIN_CUSTOMER_ID_2")
-    BASES = ("GOOGLE_ADS_DEVELOPER_TOKEN", "GOOGLE_ADS_CLIENT_ID",
-             "GOOGLE_ADS_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN",
-             "GOOGLE_ADS_LOGIN_CUSTOMER_ID")
+    # Four REQUIRED. The developer token is optional: Google moved API access
+    # management to the Cloud console and no longer requires one, so demanding
+    # it would block a correctly-configured account from being read.
+    CANONICAL = ("GOOGLE_ADS_CLIENT_ID_2", "GOOGLE_ADS_CLIENT_SECRET_2",
+                 "GOOGLE_ADS_REFRESH_TOKEN_2", "GOOGLE_ADS_LOGIN_CUSTOMER_ID_2")
+    BASES = ("GOOGLE_ADS_CLIENT_ID", "GOOGLE_ADS_CLIENT_SECRET",
+             "GOOGLE_ADS_REFRESH_TOKEN", "GOOGLE_ADS_LOGIN_CUSTOMER_ID")
+    OPTIONAL_BASES = ("GOOGLE_ADS_DEVELOPER_TOKEN",)
 
     def _clear(self, monkeypatch):
-        for base in self.BASES:
+        for base in self.BASES + self.OPTIONAL_BASES:
             for name in (base + "_2", base + "2", base):
                 monkeypatch.delenv(name, raising=False)
 
@@ -105,10 +107,27 @@ class TestCredentials:
         assert sorted(ga.missing_credentials()) == sorted(self.CANONICAL)
         assert ga.is_configured() is False
 
+    def test_the_four_are_enough_without_a_developer_token(self, monkeypatch):
+        """Google no longer requires a developer token; API access moved to the
+        Cloud console. Requiring one here would block a working account."""
+        self._set_all(monkeypatch)
+        assert ga.missing_credentials() == []
+        assert ga.is_configured() is True
+        assert ga.access_model() == "cloud_org"
+
+    def test_a_configured_token_switches_back_to_the_old_model(self, monkeypatch):
+        self._set_all(monkeypatch)
+        monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN_2", "22-char-token-value")
+        assert ga.access_model() == "developer_token"
+
     def test_one_missing_value_is_named_on_its_own(self, monkeypatch):
         self._set_all(monkeypatch)
         monkeypatch.delenv("GOOGLE_ADS_REFRESH_TOKEN_2")
         assert ga.missing_credentials() == ["GOOGLE_ADS_REFRESH_TOKEN_2"]
+
+    def test_a_missing_developer_token_is_never_reported_as_missing(self, monkeypatch):
+        self._set_all(monkeypatch)
+        assert "GOOGLE_ADS_DEVELOPER_TOKEN_2" not in ga.missing_credentials()
 
     @pytest.mark.parametrize("suffix", ["_2", "2"])
     def test_both_suffix_spellings_are_accepted(self, monkeypatch, suffix):
@@ -116,8 +135,8 @@ class TestCredentials:
         a bad half-hour, so both forms work."""
         self._set_all(monkeypatch, suffix=suffix)
         assert ga.missing_credentials() == []
-        assert ga.credential_value("GOOGLE_ADS_DEVELOPER_TOKEN_2") == \
-            "value-for-GOOGLE_ADS_DEVELOPER_TOKEN"
+        assert ga.credential_value("GOOGLE_ADS_CLIENT_ID_2") == \
+            "value-for-GOOGLE_ADS_CLIENT_ID"
 
     def test_the_underscore_form_wins_when_both_are_set(self, monkeypatch):
         self._clear(monkeypatch)
@@ -159,8 +178,15 @@ class TestCredentials:
 
     def test_whitespace_only_counts_as_missing(self, monkeypatch):
         self._set_all(monkeypatch)
+        monkeypatch.setenv("GOOGLE_ADS_CLIENT_SECRET_2", "   ")
+        assert ga.missing_credentials() == ["GOOGLE_ADS_CLIENT_SECRET_2"]
+
+    def test_a_whitespace_developer_token_means_the_cloud_model(self, monkeypatch):
+        """Not missing — optional. But it must not be sent as a real token."""
+        self._set_all(monkeypatch)
         monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN_2", "   ")
-        assert ga.missing_credentials() == ["GOOGLE_ADS_DEVELOPER_TOKEN_2"]
+        assert ga.missing_credentials() == []
+        assert ga.access_model() == "cloud_org"
 
 
 class TestQueryReading:
@@ -244,17 +270,32 @@ class TestFailuresAreLegible:
         ("invalid_grant: Token has been expired or revoked",
          "GoogleAdsNotConfigured", "mint a new one"),
         ("DeveloperTokenError.DEVELOPER_TOKEN_NOT_APPROVED",
-         "GoogleAdsNotConfigured", "Basic access"),
+         "GoogleAdsNotConfigured", "Cloud console"),
         ("AuthorizationError.USER_PERMISSION_DENIED",
          "GoogleAdsError", "does not have access"),
         ("CUSTOMER_NOT_ENABLED", "GoogleAdsError", "not reachable"),
         ("RESOURCE_EXHAUSTED: quota", "GoogleAdsError", "rate-limiting"),
         ("something else entirely", "GoogleAdsError", "request failed"),
     ])
-    def test_translation(self, text, expected, fragment):
+    def test_translation(self, text, expected, fragment, monkeypatch):
+        for name in ("GOOGLE_ADS_DEVELOPER_TOKEN_2", "GOOGLE_ADS_DEVELOPER_TOKEN2",
+                     "GOOGLE_ADS_DEVELOPER_TOKEN"):
+            monkeypatch.delenv(name, raising=False)     # Cloud-managed model
         out = ga._translate(RuntimeError(text), "4869803719")
         assert type(out).__name__ == expected
         assert fragment in str(out)
+
+    def test_a_token_refusal_says_which_model_to_fix(self, monkeypatch):
+        """The two models fail differently: one needs Cloud project access, the
+        other needs Basic. Saying the wrong one sends someone down a dead end —
+        and API Center now states its own access levels are inaccurate."""
+        refusal = "DeveloperTokenError.DEVELOPER_TOKEN_NOT_APPROVED"
+        for name in ("GOOGLE_ADS_DEVELOPER_TOKEN_2", "GOOGLE_ADS_DEVELOPER_TOKEN2",
+                     "GOOGLE_ADS_DEVELOPER_TOKEN"):
+            monkeypatch.delenv(name, raising=False)
+        assert "Cloud console" in str(ga._translate(RuntimeError(refusal), "1"))
+        monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN_2", "a-token")
+        assert "Basic access" in str(ga._translate(RuntimeError(refusal), "1"))
 
     def test_a_failure_mid_stream_is_translated_not_leaked(self, monkeypatch):
         class _Service:
@@ -292,7 +333,8 @@ class TestServerHealthEndpoint:
         body = client.get("/api/internal/google-ads-health",
                           headers={"X-Internal-Key": "internal-secret"}).get_json()
         assert body["configured"] is False
-        assert len(body["missing"]) == 5
+        assert len(body["missing"]) == 4        # the developer token is optional
+        assert "GOOGLE_ADS_DEVELOPER_TOKEN_2" not in body["missing"]
         assert body["probe"] is None
 
     def test_it_never_echoes_a_credential_value(self, client, monkeypatch):
