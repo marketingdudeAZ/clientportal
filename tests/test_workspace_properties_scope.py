@@ -137,6 +137,13 @@ class TestTheColumns:
         and false for staff, which is what made the bug invisible."""
         assert "The properties HubSpot names you on" in page
 
+    def test_the_rail_does_not_contradict_the_screen(self, page):
+        """The rail counted HubSpot assignments, so it read "1" beside a screen
+        listing 784 properties — which looks like the screen is broken. A
+        client still gets their portfolio count, which is worth knowing."""
+        nav = page.split("function navItems()", 1)[1].split("function ", 1)[0]
+        assert "realInternal() ? null : (companies().length || null)" in nav
+
     def test_missing_values_render_as_a_dash_not_a_zero(self, page):
         """A property with no AptIQ row has unknown occupancy, not 0%."""
         block = page.split("function renderPropsAll()", 1)[1].split("function propertiesHtml", 1)[0]

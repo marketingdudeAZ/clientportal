@@ -1180,7 +1180,14 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     var items = [
       { key: 'dashboard', href: '#/dashboard', label: 'Dashboard', icon: 'dashboard' },
       { key: 'approvals', href: '#/approvals', label: 'Approvals', icon: 'inbox', badge: state.waiting },
-      { key: 'properties', href: '#/properties', label: 'Properties', icon: 'building', count: companies().length || null },
+      /* For a client the count is their portfolio, which is the useful thing
+         to know at a glance. For staff it was their HubSpot assignment count —
+         so the rail said "1" beside a screen listing 784 properties, which
+         reads as a bug in the screen. Staff get no count: "how many properties
+         exist" is not a number anyone needs in the rail, and the screen's own
+         header carries it. */
+      { key: 'properties', href: '#/properties', label: 'Properties', icon: 'building',
+        count: realInternal() ? null : (companies().length || null) },
       { key: 'spend', href: '#/spend', label: 'Spend', icon: 'wallet' },
       { key: 'profile', href: '#/property/' + encodeURIComponent(state.companyId || '') + '/profile', label: 'Profile', icon: 'idcard' },
       { key: 'visibility', href: '#/visibility', label: 'Visibility', icon: 'eye' },
