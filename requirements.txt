@@ -3,3 +3,8 @@
 # root (e.g. for local dev or scripts/) while production on Railway builds
 # from webhook-server/ directly.
 -r webhook-server/requirements.txt
+
+# Google Ads API: the paid-media rules read through it.
+# Unset credentials raise GoogleAdsNotConfigured, which callers report as a gap.
+google-ads==31.1.0
+google-auth-oauthlib>=1.2.0
