@@ -61,6 +61,27 @@ DATAFORSEO_DEFAULT_LANGUAGE = os.getenv("DATAFORSEO_DEFAULT_LANGUAGE", "en")
 BIGQUERY_SEO_RANKS_TABLE = os.getenv("BIGQUERY_SEO_RANKS_TABLE", "seo_ranks_daily")
 BIGQUERY_SEO_AUDIT_TABLE = os.getenv("BIGQUERY_SEO_AUDIT_TABLE", "seo_onpage_audit")
 
+# --- Site crawl (webhook-server/seo_crawl.py -> BIGQUERY_SEO_AUDIT_TABLE) ---
+# A crawl costs money per page, so the cap is deliberate and low rather than
+# DataForSEO's own 100. Raising it is cheap (fractions of a cent per page) and
+# buys completeness: when a crawl stops at the cap, the link graph is partial,
+# so `internal_links_in` is stored NULL for that site and the orphan-page rule
+# stays quiet instead of reporting pages as unlinked when we simply never
+# reached the page that links to them.
+SEO_CRAWL_MAX_PAGES = int(os.getenv("SEO_CRAWL_MAX_PAGES", "50"))
+# JSON-LD needs the page's raw HTML, one fetch per page, so it is capped
+# separately and spent on the pages a renter lands on first. A page we did not
+# fetch carries no `jsonld_types` at all — absent, not empty.
+SEO_CRAWL_JSONLD_PAGES = int(os.getenv("SEO_CRAWL_JSONLD_PAGES", "12"))
+# Render JavaScript while crawling. These sites render plans and availability
+# client-side; with this off, most titles and h1s read as empty.
+SEO_CRAWL_ENABLE_JAVASCRIPT = os.getenv("SEO_CRAWL_ENABLE_JAVASCRIPT", "true").lower() \
+    not in ("0", "false", "no")
+SEO_CRAWL_POLL_SECONDS = int(os.getenv("SEO_CRAWL_POLL_SECONDS", "15"))
+SEO_CRAWL_POLL_TIMEOUT_SECONDS = int(os.getenv("SEO_CRAWL_POLL_TIMEOUT_SECONDS", "900"))
+# How far back a stored crawl still counts as a read of the site.
+SEO_CRAWL_LOOKBACK_DAYS = int(os.getenv("SEO_CRAWL_LOOKBACK_DAYS", "45"))
+
 # --- Google Sheets ---
 GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID", "1jRqmEzhOIe72zgwIOcDZTyvde_Y0_jvayaLTZhva9mk")
 GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
