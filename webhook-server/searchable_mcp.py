@@ -49,6 +49,36 @@ TOKEN_URL = "https://app.searchable.com/api/mcp-auth/oauth/token"
 _TIMEOUT = float(os.environ.get("SEARCHABLE_TIMEOUT", "30"))
 _CACHE_TTL = float(os.environ.get("SEARCHABLE_CACHE_TTL", "900"))
 
+# Every tool this portal is allowed to call. Searchable also exposes
+# manage_associated_source, generate_report, trigger_audit and refresh_sitemap,
+# which change state in the vendor's account — and the whole arrangement here is
+# that the vendor MEASURES and the portal DECIDES. A read-only allowlist means a
+# rule, an agent or a bad argument cannot reach a write, and adding one is a
+# deliberate edit rather than an accident.
+READ_TOOLS = frozenset({
+    "get_current_date", "whoami", "search_docs", "read_doc", "list_projects",
+    "list_prompts", "get_brand_profile", "get_domain_authority",
+    "get_visibility", "get_visibility_history", "get_share_of_voice",
+    "investigate", "get_topic_analysis", "get_competitors", "search_sources",
+    "get_source_detail", "get_source_trends", "get_sentiment",
+    "get_sentiment_history", "get_sentiment_competitors", "get_ga4_traffic",
+    "get_gsc_performance", "get_site_health", "list_articles", "get_article",
+    "get_opportunities", "get_query_fanout", "get_ai_traffic",
+    "get_page_metrics", "get_shopping_visibility", "get_prompt_answers",
+    "get_ads", "get_associated_sources",
+})
+
+# Named so a refusal can say what it refused rather than "unknown tool".
+WRITE_TOOLS = frozenset({
+    "manage_associated_source", "generate_report", "trigger_audit",
+    "refresh_sitemap",
+})
+
+
+class WriteRefused(RuntimeError):
+    """A write tool was asked for. The portal does not call these."""
+
+
 _lock = threading.Lock()
 _access: Dict[str, Any] = {"token": None, "expires_at": 0.0}
 _cache: Dict[str, Tuple[float, Any]] = {}
@@ -175,7 +205,19 @@ def list_tools(*, token: Optional[str] = None) -> Tuple[Optional[List[Dict[str, 
 
 def call_tool(name: str, arguments: Optional[Dict[str, Any]] = None
               ) -> Tuple[Optional[Any], Optional[str]]:
-    """Call one tool and hand back its content, cached briefly."""
+    """Call one READ tool and hand back its content, cached briefly.
+
+    Raises WriteRefused for a tool that changes the vendor's account. Loud on
+    purpose: a caller reaching for one has misunderstood the arrangement, and a
+    quiet `(None, reason)` would let it keep trying.
+    """
+    if name in WRITE_TOOLS:
+        raise WriteRefused(
+            "%s changes Searchable's own account. The portal reads Searchable "
+            "and decides here; it does not write there." % name)
+    if name not in READ_TOOLS:
+        return None, ("%s is not a tool this portal calls. Add it to READ_TOOLS "
+                      "if it should be." % name)
     key = "%s:%s" % (name, json.dumps(arguments or {}, sort_keys=True))
     with _lock:
         hit = _cache.get(key)

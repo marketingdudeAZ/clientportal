@@ -261,6 +261,28 @@ def searchable_health():
                      "and set SEARCHABLE_MCP_CLIENT_ID and "
                      "SEARCHABLE_MCP_REFRESH_TOKEN."),
         })
+    tool = (request.args.get("tool") or "").strip()
+    if tool:
+        # A read-only diagnostic call, so "does this connection see our
+        # properties" can be answered without a laptop holding the token.
+        import json as _json
+
+        args = {}
+        raw = (request.args.get("args") or "").strip()
+        if raw:
+            try:
+                args = _json.loads(raw)
+            except ValueError:
+                return jsonify({"error": "args must be JSON"}), 400
+        if not isinstance(args, dict):
+            return jsonify({"error": "args must be a JSON object"}), 400
+        try:
+            value, reason = searchable_mcp.call_tool(tool, args)
+        except searchable_mcp.WriteRefused as exc:
+            return jsonify({"error": str(exc)}), 403
+        return jsonify({"tool": tool, "args": args, "reason": reason,
+                        "result": value})
+
     body = searchable_mcp.probe()
     body["configured"] = True
     if not (request.args.get("tools") or "").strip():
