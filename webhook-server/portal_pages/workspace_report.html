@@ -6,15 +6,31 @@
 <meta name="referrer" content="no-referrer">
 <title>Monthly report · RPM Workspace</title>
 <script>window.__CLERK_PK__ = '';</script>
+<script>window.__PORTAL_API_BASE__ = '';</script>
 <script>
 /* ── Identity (same approach as client-portal.html's Clerk gate, ADR 0002) ──
    - A signed preview link arrives as ?t=. It moves to sessionStorage, leaves
      the URL, and rides on every API call as X-Workspace-Link.
    - With a Clerk publishable key and no preview link, API calls wait for the
      Clerk session and carry Authorization: Bearer <session JWT>.
-   - There is no ?email= identity on this page. */
+   - There is no ?email= identity on this page.
+
+   ── Two bases, both empty by default ──
+   __PORTAL_API_BASE__ ('' = same origin) is where /api/* lives, and mirrors
+   workspace.html: a serve-time value, absolute only when this page is hosted
+   off the API host. Today nothing injects it here, because this page is
+   served BY the API host — the plumbing exists so that stays true by choice
+   and not by accident.
+
+   __PORTAL_APP_BASE__ ('' = /workspace on this host) is where the workspace
+   app lives, and it is what makes the sidebar and the back link work when the
+   app is the HubSpot page at digital.rpmliving.com/client-portal/v2 and this
+   report is still served from Render. workspace.html passes it as ?app=, and
+   it is honored only for origins listed in APP_ORIGINS — an unchecked value
+   would turn every link on this page into an open redirect. */
 (function () {
   var LINK_KEY = 'ws.link';   // must match workspace.html — the token is written there
+  var APP_ORIGINS = ['https://digital.rpmliving.com'];   // plus this origin, always
   try {
     var u = new URL(window.location.href);
     var t = u.searchParams.get('t');
@@ -25,10 +41,52 @@
     }
   } catch (e) {}
   function linkToken() { try { return sessionStorage.getItem(LINK_KEY) || ''; } catch (e) { return ''; } }
-  function isApi(url) {
-    try { var p = new URL(url, window.location.href); return p.origin === window.location.origin && p.pathname.indexOf('/api/') === 0; }
-    catch (e) { return false; }
+
+  var API_BASE = (function () {
+    var b = String(window.__PORTAL_API_BASE__ || '').trim().replace(/\/+$/, '');
+    if (!b || !/^https?:\/\/[^\/?#\s]+$/.test(b)) return '';
+    return b === window.location.origin ? '' : b;
+  })();
+  function appOriginAllowed(u) {
+    if (u.origin === window.location.origin) return true;
+    if (APP_ORIGINS.indexOf(u.origin) !== -1) return true;
+    // Loopback, so the two-origin setup can be driven locally while the real
+    // page is hosted on HubSpot (docs/PORTAL_V2_HOSTING.md). A redirect to a
+    // localhost URL is not a phishing target.
+    return /^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname);
   }
+  var APP_BASE = (function () {
+    try {
+      var raw = new URL(window.location.href).searchParams.get('app');
+      if (!raw) return '';
+      var u = new URL(raw, window.location.href);
+      if (!appOriginAllowed(u)) return '';
+      return u.origin + u.pathname.replace(/\/+$/, '');
+    } catch (e) { return ''; }
+  })();
+  window.__PORTAL_API_BASE__ = API_BASE;
+  window.__PORTAL_APP_BASE__ = APP_BASE;
+  window.portalApiUrl = function (path) { return API_BASE + path; };
+  window.portalAppUrl = function (hash) { return (APP_BASE || '/workspace') + (hash || ''); };
+
+  function isApi(url) {
+    try {
+      var p = new URL(url, window.location.href);
+      return p.origin === (API_BASE || window.location.origin) && p.pathname.indexOf('/api/') === 0;
+    } catch (e) { return false; }
+  }
+
+  /* The sidebar and back link are authored relative (/workspace#/…). Off-origin
+     hosting rewrites them once the markup exists. */
+  function retargetAppLinks() {
+    if (!APP_BASE) return;
+    var links = document.querySelectorAll('a[href^="/workspace#"]');
+    for (var i = 0; i < links.length; i++) {
+      links[i].setAttribute('href', window.portalAppUrl(links[i].getAttribute('href').slice('/workspace'.length)));
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', retargetAppLinks);
+  else retargetAppLinks();
   var CLERK_PK = window.__CLERK_PK__ || '';
   var clerkOn = CLERK_PK.indexOf('pk_') === 0 && !linkToken();
   var readyResolve;
@@ -47,7 +105,9 @@
         var link = linkToken();
         if (link) h.set('X-Workspace-Link', link);
         init.headers = h;
-        init.credentials = 'same-origin';
+        // Cross-origin calls authenticate with the Bearer token alone; a cookie
+        // must never ride along to another origin.
+        init.credentials = API_BASE ? 'omit' : 'same-origin';
         return _fetch(url, init);
       });
     });
@@ -411,6 +471,13 @@ tr.em td{font-weight:600;color:var(--ink)}
 (function () {
   'use strict';
 
+  /* ── bases ────────────────────────────────────────────────────────────
+     Both are normalized by the identity script in <head>. Empty means what
+     it has always meant: the API is same-origin and the app is /workspace on
+     this host. */
+  function apiUrl(path) { return window.portalApiUrl ? window.portalApiUrl(path) : path; }
+  function appUrl(hash) { return window.portalAppUrl ? window.portalAppUrl(hash) : '/workspace' + (hash || ''); }
+
   /* ── formatting (mirrors skills/workspace_report.py) ─────────────────── */
   var MINUS = '−';
   function v(r) { return r && typeof r === 'object' && 'value' in r ? r.value : null; }
@@ -438,7 +505,7 @@ tr.em td{font-weight:600;color:var(--ink)}
   var companyId = params.get('company_id') || '';
   if (companyId) {
     Array.prototype.forEach.call(document.querySelectorAll('[data-scoped]'), function (a) {
-      a.href = '/workspace#/property/' + encodeURIComponent(companyId) + '/' + a.getAttribute('data-scoped');
+      a.href = appUrl('#/property/' + encodeURIComponent(companyId) + '/' + a.getAttribute('data-scoped'));
     });
   }
   var content = document.getElementById('content');
@@ -460,7 +527,7 @@ tr.em td{font-weight:600;color:var(--ink)}
     var q = new URLSearchParams({ company_id: companyId });
     if (params.get('month')) q.set('month', params.get('month'));
     content.setAttribute('aria-busy', 'true');
-    fetch('/api/workspace/report?' + q.toString()).then(function (res) {
+    fetch(apiUrl('/api/workspace/report?' + q.toString())).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) { return { status: res.status, body: body }; });
     }).then(function (r) {
       content.removeAttribute('aria-busy');
@@ -481,7 +548,7 @@ tr.em td{font-weight:600;color:var(--ink)}
     var meta = [p.city && p.state ? p.city + ', ' + p.state : (p.city || p.state || ''), has(p.units) ? fInt(v(p.units)) + ' units' : ''].filter(Boolean).join(' · ');
     document.getElementById('side-meta').textContent = meta;
     var back = document.getElementById('back-link');
-    if (back && companyId) { back.href = '/workspace#/property/' + encodeURIComponent(companyId); back.textContent = '\u2190 ' + (p.name || 'Property'); }
+    if (back && companyId) { back.href = appUrl('#/property/' + encodeURIComponent(companyId)); back.textContent = '\u2190 ' + (p.name || 'Property'); }
     monthSel.innerHTML = (d.available_months || [d.month]).slice().reverse().map(function (m) {
       var parts = m.split('-'); var label = new Date(Date.UTC(+parts[0], +parts[1] - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
       return '<option value="' + esc(m) + '"' + (m === d.month ? ' selected' : '') + '>' + esc(label) + '</option>';

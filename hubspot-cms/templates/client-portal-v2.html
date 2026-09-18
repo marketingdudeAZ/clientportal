@@ -1,0 +1,105 @@
+<!--
+  templateType: page
+  label: RPM Client Workspace (v2)
+  isAvailableForNewContent: true
+-->
+{#
+  RPM Living — the client workspace at digital.rpmliving.com/client-portal/v2
+
+  WHAT THIS FILE IS: a loader, not the app. The workspace is
+  webhook-server/portal_pages/workspace.html (~3,200 lines, one <style> block
+  and one <script> block) served from Render. This template renders an empty
+  container and loads the app from Render as a script.
+
+  WHY IT IS A LOADER — one source of truth
+    Pasting the page into this template would create a second copy of a
+    3,200-line app. The two would drift within a week, and the HubSpot copy is
+    the one Cloudflare then holds at the edge for ~10 hours, so the drift would
+    be invisible for most of a working day. With a loader:
+      - /workspace (Render) and /client-portal/v2 (here) run the same bytes;
+      - shipping an app change is a Render deploy, with no template upload and
+        no CDN wait at all;
+      - this file changes about once a year.
+    /workspace/embed.js is GENERATED from workspace.html on each request by
+    webhook-server/routes/portal_ui.py, so it cannot fall behind the page.
+
+  WHY NOT AN IFRAME
+    The app signs in with Clerk. Inside a cross-origin iframe the Clerk session
+    is third-party storage: Safari blocks it outright and Chrome partitions it,
+    so sign-in would work for some clients and silently fail for others.
+    Printing the monthly report, deep links and the Back button all degrade in
+    a frame too. Loading the app as a script keeps it first-party on THIS
+    origin; only the API calls cross an origin, as CORS, deliberately
+    (digital.rpmliving.com is already in ALLOWED_ORIGINS).
+
+  DEPLOY.md TRAP 4 — HubL branch conflict
+    This template has NO if/else split, which is the only way to be certain no
+    script lands in a branch that never renders. There is nothing to branch on:
+    identity is Clerk's, server-side, and HubL cannot read Render's
+    environment. Do not add a Memberships branch — this page's auth is Clerk,
+    and gating it on Memberships as well would lock out every client who has
+    one and not the other. If a branch ever does become necessary, the loader
+    must move above the else marker; scripts/deploy_template.py --target
+    workspace-v2 fails the deploy if it does not.
+
+  DEPLOY.md TRAP 3 — Cloudflare holds this HTML for ~10h
+    Which is why the asset URL carries ?v={{ app_version }}. Bump app_version
+    on every template change: it is both the cache-busting handle and the way
+    to tell from devtools (or window.__RPM_WORKSPACE_EMBED__.version) which
+    render of this template you are actually looking at. Changing the version
+    does NOT ship app changes — those ride the Render deploy.
+
+  Deploy:  python3 scripts/deploy_template.py --target workspace-v2
+  Docs:    docs/PORTAL_V2_HOSTING.md
+#}
+{% set app_version = "2026-09-18-1" %}
+{% set api_origin = "https://rpm-portal-server.onrender.com" %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<title>RPM Digital | Workspace</title>
+{{ standard_header_includes }}
+<style>
+  /* The app ships its own stylesheet, injected at runtime by the loader, so it
+     wins over anything the theme adds here. This is only the frame. */
+  html, body { margin: 0; padding: 0; background: #FBFCFC; }
+  #rpm-workspace { min-height: 100vh; }
+  #rpm-boot { font: 15px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+              color: #5E6261; padding: 48px 24px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="rpm-workspace"><div id="rpm-boot">Loading your workspace…</div></div>
+
+<noscript>
+  <div style="font:15px/1.5 system-ui,sans-serif;padding:48px 24px;text-align:center;color:#282D27">
+    The workspace needs JavaScript switched on.
+  </div>
+</noscript>
+
+<script>
+  /* A failure to reach Render must say so. Without this the page sits on
+     "Loading your workspace…" forever and looks like a broken portal. */
+  window.__rpmWorkspaceFailed = function (why) {
+    var b = document.getElementById('rpm-boot');
+    if (b) b.textContent = why;
+  };
+  window.setTimeout(function () {
+    if (!window.__RPM_WORKSPACE_EMBED__) {
+      window.__rpmWorkspaceFailed('The workspace is taking longer than usual to load. Reload the page, and tell the RPM digital team if it keeps happening.');
+    }
+  }, 15000);
+</script>
+<script src="{{ api_origin }}/workspace/embed.js?v={{ app_version }}"
+        crossorigin="anonymous"
+        onerror="window.__rpmWorkspaceFailed('We could not reach the workspace service. Reload the page, and tell the RPM digital team if it keeps happening.')"></script>
+
+{{ standard_footer_includes }}
+</body>
+</html>

@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>window.__CLERK_PK__ = '';</script>   <!-- filled in at serve time from CLERK_PUBLISHABLE_KEY -->
+<script>window.__PORTAL_API_BASE__ = '';</script>   <!-- filled in at serve time from PORTAL_API_BASE; '' = same origin -->
 <style>
 /* ── Tokens ────────────────────────────────────────────────────────────
    Structure, type scale, spacing and radii follow the v3 product design
@@ -895,6 +896,34 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 (function () {
   'use strict';
 
+  /* ── API base ────────────────────────────────────────────────────────
+     Where the API lives, relative to wherever this page is being served.
+
+     ''  (the default, and what the committed file carries) — same origin.
+         The page is served by the API host itself: /workspace on Render, or
+         scripts/preview_workspace.py. Requests stay relative and carry
+         credentials:'same-origin', byte-for-byte the behavior that shipped.
+
+     An absolute https origin — the page is hosted somewhere else (the
+         HubSpot CMS page at digital.rpmliving.com/client-portal/v2, with the
+         API still on Render). Requests go to that origin, authenticate with
+         the Clerk Bearer token, and send credentials:'omit': no cookie ever
+         crosses an origin, so nothing here depends on third-party cookies.
+
+     Anything that is not an absolute http(s) origin is ignored rather than
+     trusted — a typo must not send a Bearer token to an unintended host. */
+  var API_BASE = (function () {
+    var b = String(window.__PORTAL_API_BASE__ || '').trim().replace(/\/+$/, '');
+    if (!b) return '';
+    if (!/^https?:\/\/[^\/?#\s]+$/.test(b)) {
+      if (window.console) console.warn('Ignoring __PORTAL_API_BASE__, not an absolute origin: ' + b);
+      return '';
+    }
+    return b === window.location.origin ? '' : b;
+  })();
+  function apiUrl(path) { return API_BASE + path; }
+  function crossOrigin() { return API_BASE !== ''; }
+
   /* ── Identity ────────────────────────────────────────────────────────
      Never an email in the URL. Two ways in:
      1. A signed preview link (?t=). It moves to sessionStorage, leaves the
@@ -918,6 +947,12 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 
   var CLERK_PK = window.__CLERK_PK__ || '';
   var useClerk = !linkToken && CLERK_PK.indexOf('pk_') === 0;
+  /* Cross-origin with nothing to authenticate with — no signed link and no
+     usable publishable key — can never reach the API: cookies are omitted, so
+     every call would be an anonymous 401. Say that on the page instead of
+     rendering an empty shell. A key that is present but wrong still fails
+     visibly: loadClerk()'s onerror path calls showSignIn(). */
+  var noAuthPossible = crossOrigin() && !linkToken && !useClerk;
   var clerkReadyResolve, clerkReady = new Promise(function (res) { clerkReadyResolve = res; });
   if (!useClerk) clerkReadyResolve(false);
 
@@ -951,8 +986,11 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   }
 
   /* ── API ─────────────────────────────────────────────────────────────
-     Same-origin only. While an internal user previews as a client, reads
-     carry X-Workspace-Preview-Role: client (see the build plan). Writes never do. */
+     Paths are always written relative here; API_BASE decides whether they go
+     out relative (same origin, with cookies) or absolute (cross origin, with
+     the Bearer token and no cookies). While an internal user previews as a
+     client, reads carry X-Workspace-Preview-Role: client (see the build
+     plan). Writes never do. */
   function ApiError(status, body) {
     this.status = status; this.body = body;
     this.message = (body && (body.detail || body.reason || body.error)) || ('Request failed (' + status + ')');
@@ -962,7 +1000,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   }
   function api(path, opts) {
     opts = opts || {};
-    if (path.charAt(0) !== '/' || path.indexOf('//') === 0) throw new Error('same-origin paths only');
+    if (path.charAt(0) !== '/' || path.indexOf('//') === 0) throw new Error('relative API paths only');
     var method = opts.method || 'GET';
     return clerkReady.then(function (signedIn) {
       var h = { 'Accept': 'application/json' };
@@ -971,9 +1009,9 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       if (!signedIn || !window.Clerk || !window.Clerk.session) return h;
       return window.Clerk.session.getToken().then(function (t) { if (t) h['Authorization'] = 'Bearer ' + t; return h; });
     }).then(function (h) {
-      var init = { method: method, headers: h, credentials: 'same-origin' };
+      var init = { method: method, headers: h, credentials: crossOrigin() ? 'omit' : 'same-origin' };
       if (opts.body !== undefined) { h['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
-      return fetch(path, init);
+      return fetch(apiUrl(path), init);
     }).then(function (res) {
       return res.text().then(function (txt) {
         var body = null;
@@ -1128,7 +1166,16 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   };
 
   /* ── Sidebar ─────────────────────────────────────────────────────── */
-  function reportHref() { return '/workspace/report?company_id=' + encodeURIComponent(state.companyId || ''); }
+  /* The monthly report is a page on the API host, so it moves with API_BASE.
+     Cross-origin it also needs to be told where to come back to, because its
+     own nav links are relative: ?app= carries this page's URL, and the report
+     page only honors it for origins it already trusts. */
+  function appHere() { return window.location.origin + window.location.pathname; }
+  function reportUrl(companyId) {
+    return apiUrl('/workspace/report') + '?company_id=' + encodeURIComponent(companyId || '')
+      + (crossOrigin() ? '&app=' + encodeURIComponent(appHere()) : '');
+  }
+  function reportHref() { return reportUrl(state.companyId); }
   function navItems() {
     var items = [
       { key: 'dashboard', href: '#/dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -1219,7 +1266,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       if (!r || typeof r.href !== 'string') return;
       var href = r.href;
       if (r.type === 'property' && r.company_id) href = '#/property/' + encodeURIComponent(r.company_id);
-      if (r.type === 'report' && r.company_id) { window.location.href = '/workspace/report?company_id=' + encodeURIComponent(r.company_id); return; }
+      if (r.type === 'report' && r.company_id) { window.location.href = reportUrl(r.company_id); return; }
       if (href.indexOf('#/') !== 0) return;
       close();
       if (r.company_id) setCompany(r.company_id);
@@ -3142,6 +3189,10 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 
   function boot() {
     if (useClerk) loadClerk();
+    if (noAuthPossible) {
+      showSignIn('Sign-in is not configured for this page yet. Tell the RPM digital team the workspace publishable key is missing.');
+      return;
+    }
     view.innerHTML = loadingHtml('your workspace');
     api('/api/workspace/me').then(function (r) {
       state.me = r.data || {};

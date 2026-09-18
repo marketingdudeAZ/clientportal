@@ -11,6 +11,15 @@ GET /portal/lite  A lighter, fully live-wired page (Portfolio + Spend pull
                   server-side with marketing-manager next steps). Kept as the
                   data-wiring surface while demo.html sections get connected.
 
+GET /workspace/embed.js
+                  The same workspace page, delivered as a loader so another
+                  host can render it. This is what the HubSpot CMS page at
+                  digital.rpmliving.com/client-portal/v2 loads. It is
+                  GENERATED from portal_pages/workspace.html on every request,
+                  so there is exactly one copy of the app: editing the page
+                  changes both surfaces, and the template cannot go stale.
+                  See docs/PORTAL_V2_HOSTING.md.
+
 The page asset is bundled under portal_pages/ so it deploys with the
 service regardless of Render's root-directory setting.
 """
@@ -20,6 +29,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 
 from html import escape
 
@@ -110,6 +120,60 @@ def _workspace_enabled() -> bool:
     return workspace_enabled()
 
 
+_ORIGIN_RE = re.compile(r"^https?://[^/?#\s]+$")
+
+
+def api_base() -> str:
+    """PORTAL_API_BASE — the origin the workspace page should call, or "".
+
+    Empty (the default) means same origin, which is the truth for /workspace:
+    this service serves both the page and /api/workspace/*. It is set only when
+    the page is hosted somewhere else and the API stays here.
+
+    Anything that is not a bare absolute origin is refused rather than passed
+    through. A value with a path or a trailing junk character would be pasted
+    straight into the URL a Clerk Bearer token is sent to.
+    """
+    raw = os.environ.get("PORTAL_API_BASE", "").strip().rstrip("/")
+    if not raw:
+        return ""
+    if not _ORIGIN_RE.match(raw):
+        logger.error("PORTAL_API_BASE is not an absolute origin, ignoring: %r", raw)
+        return ""
+    return raw
+
+
+def _this_origin() -> str:
+    """This service's own public origin, as the browser reached it.
+
+    Render terminates TLS at its proxy, so request.scheme is http inside the
+    app; using it would hand the HubSpot page an http:// API base and every
+    call would be blocked as mixed content.
+    """
+    host = request.headers.get("X-Forwarded-Host", "").split(",")[0].strip() or request.host
+    proto = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip() or request.scheme
+    if host.split(":")[0] not in ("localhost", "127.0.0.1", "[::1]"):
+        proto = "https"
+    return "{}://{}".format(proto, host)
+
+
+def _inject_config(page: str, base: str = "") -> str:
+    """Fill the two serve-time placeholders the workspace pages carry.
+
+    Both replacements are skipped when there is nothing to inject, so with no
+    environment set the bytes served are the bytes in the file — that identity
+    is what tests assert, and what makes the same-origin path unchanged.
+    """
+    pk = os.environ.get("CLERK_PUBLISHABLE_KEY", "").strip()
+    if pk.startswith("pk_"):
+        page = page.replace("window.__CLERK_PK__ = '';",
+                            "window.__CLERK_PK__ = {};".format(json.dumps(pk)), 1)
+    if base:
+        page = page.replace("window.__PORTAL_API_BASE__ = '';",
+                            "window.__PORTAL_API_BASE__ = {};".format(json.dumps(base)), 1)
+    return page
+
+
 @portal_ui_bp.route("/workspace", methods=["GET"])
 def workspace_page():
     """The simplified client workspace (screens per the Paper workspace file).
@@ -124,15 +188,180 @@ def workspace_page():
         return Response("Not found", status=404, mimetype="text/plain")
     resp = _serve(_WORKSPACE)
     if resp.status_code == 200:
-        # The page ships with an empty publishable key and is given the real one
-        # here, the way routes/workspace_report.py does it. A key committed into
-        # the file is the key production would run on.
-        pk = os.environ.get("CLERK_PUBLISHABLE_KEY", "").strip()
-        if pk.startswith("pk_"):
-            resp.set_data(resp.get_data(as_text=True).replace(
-                "window.__CLERK_PK__ = '';", f"window.__CLERK_PK__ = {json.dumps(pk)};", 1))
+        # The page ships with an empty publishable key and an empty API base and
+        # is given the real ones here, the way routes/workspace_report.py does
+        # it. A key committed into the file is the key production would run on.
+        # PORTAL_API_BASE is normally unset for this route — the page and the API
+        # are the same origin here — so the bytes are the file's bytes.
+        resp.set_data(_inject_config(resp.get_data(as_text=True), api_base()))
         resp.headers["Cache-Control"] = "no-store"
         resp.headers["Referrer-Policy"] = "no-referrer"
+    return resp
+
+
+# ── The workspace as a loader, for a host that is not this one ──────────────
+#
+# Why a loader and not a copy: workspace.html is ~3,200 lines with one <style>
+# block and one <script> block. Pasting it into a HubSpot template gives two
+# copies of the app that drift, and the HubSpot copy is the one Cloudflare then
+# holds at the edge for ~10 hours. Generating the loader from the page keeps a
+# single source of truth: /workspace and /client-portal/v2 run the same bytes,
+# and a page edit needs no template deploy at all.
+#
+# Why not an iframe: the app signs in with Clerk. In a cross-origin iframe the
+# Clerk session is third-party storage, which Safari blocks outright and Chrome
+# partitions, so sign-in would work for some clients and silently fail for
+# others. Printing the monthly report, deep links and the browser Back button
+# also all break inside a frame. A loader keeps the app first-party on the
+# HubSpot origin, and only the API calls cross origins — as CORS, deliberately.
+
+_MOUNT_ID = "rpm-workspace"
+_LINK_RE = re.compile(r"<link\b[^>]*>", re.IGNORECASE)
+
+
+def _between(text: str, open_tag: str, close_tag: str, start: int = 0):
+    """The text between the first open_tag and its close_tag after `start`."""
+    a = text.find(open_tag, start)
+    if a == -1:
+        return None, -1
+    a += len(open_tag)
+    b = text.find(close_tag, a)
+    if b == -1:
+        return None, -1
+    return text[a:b], b + len(close_tag)
+
+
+def workspace_parts(page: str) -> dict:
+    """Split workspace.html into the pieces a loader needs.
+
+    Deliberately strict: if the page's shape changes (a second <style> block,
+    the app script moved), this raises instead of shipping a half-built page to
+    a CDN that will cache it for hours. tests/test_workspace_v2_hosting.py runs
+    this against the real file.
+    """
+    head, _ = _between(page, "<head>", "</head>")
+    if head is None:
+        raise ValueError("workspace.html: no <head>")
+    title, _ = _between(head, "<title>", "</title>")
+    style, _ = _between(head, "<style>", "</style>")
+    if style is None:
+        raise ValueError("workspace.html: no <style> block in <head>")
+    if head.count("<style") != 1:
+        raise ValueError("workspace.html: expected exactly one <style> block in <head>")
+
+    body_start = page.find("<body>")
+    if body_start == -1:
+        raise ValueError("workspace.html: no <body>")
+    body_start += len("<body>")
+    app_script_start = page.find("<script>", body_start)
+    if app_script_start == -1:
+        raise ValueError("workspace.html: no app <script> in <body>")
+    markup = page[body_start:app_script_start]
+    app_js, _ = _between(page, "<script>", "</script>", app_script_start)
+    if not app_js or "function api(" not in app_js:
+        raise ValueError("workspace.html: the app <script> is not where it was")
+    if page.count("<script", app_script_start) != 1:
+        raise ValueError("workspace.html: expected exactly one <script> in <body>")
+
+    # Stylesheet/preconnect links only: the <meta> tags and the config <script>
+    # in <head> belong to the standalone document, and the host page owns those.
+    links = "\n".join(_LINK_RE.findall(head))
+    return {
+        "title": (title or "RPM Digital | Workspace").strip(),
+        "head": links + "\n<style>\n" + style + "\n</style>",
+        "markup": markup,
+        "app_js": app_js,
+    }
+
+
+def build_workspace_embed(page: str, clerk_pk: str, api_origin: str, version: str) -> str:
+    """The loader JS: inject this page's head assets, markup and app script.
+
+    Everything from the page travels as a JSON string literal, so `</script>`
+    and friends inside the app cannot break out — this is served as JavaScript,
+    never parsed as HTML. The app script is inserted as a real <script> element
+    rather than eval'd so it keeps normal script semantics.
+    """
+    parts = workspace_parts(page)
+    return (
+        "/* RPM workspace embed — generated from portal_pages/workspace.html.\n"
+        "   Do not edit a copy of this: edit the page. version=%s */\n" % json.dumps(version)
+        + "(function () {\n"
+        "  'use strict';\n"
+        "  if (window.__RPM_WORKSPACE_EMBED__) return;\n"
+        "  window.__RPM_WORKSPACE_EMBED__ = { version: %s, api: %s };\n" % (
+            json.dumps(version), json.dumps(api_origin))
+        + "  window.__CLERK_PK__ = %s;\n" % json.dumps(clerk_pk)
+        + "  window.__PORTAL_API_BASE__ = %s;\n" % json.dumps(api_origin)
+        + "  var HEAD = %s;\n" % json.dumps(parts["head"])
+        + "  var MARKUP = %s;\n" % json.dumps(parts["markup"])
+        + "  var APP = %s;\n" % json.dumps(parts["app_js"])
+        + "  var mount = document.getElementById(%s);\n" % json.dumps(_MOUNT_ID)
+        + "  if (!mount) {\n"
+        "    var w = document.createElement('div');\n"
+        "    w.setAttribute('style', 'font:15px/1.5 system-ui,sans-serif;padding:32px;color:#282D27');\n"
+        "    w.textContent = 'This page is missing its workspace container (#%s), so there is nothing to sign in to. Tell the RPM digital team.';\n" % _MOUNT_ID
+        + "    (document.body || document.documentElement).appendChild(w);\n"
+        "    return;\n"
+        "  }\n"
+        "  document.title = %s;\n" % json.dumps(parts["title"])
+        + "  var assets = document.createElement('template');\n"
+        "  assets.innerHTML = HEAD;\n"
+        "  document.head.appendChild(assets.content);\n"
+        "  mount.innerHTML = MARKUP;\n"
+        "  var s = document.createElement('script');\n"
+        "  s.textContent = APP;\n"
+        "  document.body.appendChild(s);\n"
+        "})();\n"
+    )
+
+
+@portal_ui_bp.route("/workspace/embed.js", methods=["GET"])
+def workspace_embed_js():
+    """The workspace app as a script another origin can load.
+
+    Same flag as /workspace, so this route does not exist until the workspace
+    is switched on. The API base defaults to THIS service's own origin — the
+    host loading this script is by definition not the API host — and
+    PORTAL_API_BASE overrides it when the API moves to its own hostname.
+
+    Never cached: it carries the Clerk publishable key, and the app must not be
+    pinned at a shared edge. ?v= is the caller's cache-busting handle (the
+    HubSpot page HTML that references it is held by Cloudflare for ~10h, so the
+    version in the URL is how you tell which template render you are looking
+    at); it is echoed into the file and onto window.__RPM_WORKSPACE_EMBED__.
+    """
+    if not _workspace_enabled():
+        return Response("Not found", status=404, mimetype="text/plain")
+    try:
+        with open(_WORKSPACE, encoding="utf-8") as fh:
+            page = fh.read()
+    except OSError as exc:
+        logger.error("workspace asset missing: %s", exc)
+        return Response("/* workspace page not found */", status=500,
+                        mimetype="application/javascript")
+    version = (request.args.get("v") or "")[:64]
+    pk = os.environ.get("CLERK_PUBLISHABLE_KEY", "").strip()
+    if not pk.startswith("pk_"):
+        # Not fatal, and deliberately not a blank page: the app detects a
+        # missing key on a cross-origin host and renders a sign-in failure.
+        logger.error("workspace embed served without CLERK_PUBLISHABLE_KEY")
+        pk = ""
+    try:
+        js = build_workspace_embed(page, pk, api_base() or _this_origin(), version)
+    except ValueError as exc:
+        logger.error("workspace embed could not be built: %s", exc)
+        return Response("/* %s */\n" % exc, status=500, mimetype="application/javascript")
+    resp = Response(js, mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-store"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    # Loaded by the HubSpot page with crossorigin="anonymous"; CORS on a script
+    # is what turns a syntax error there into a readable message in the console.
+    origin = request.headers.get("Origin", "")
+    if origin:
+        from _route_utils import ALLOWED_ORIGINS
+        if origin in ALLOWED_ORIGINS:
+            resp.headers["Access-Control-Allow-Origin"] = origin
     return resp
 
 
