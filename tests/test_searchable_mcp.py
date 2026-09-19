@@ -106,6 +106,14 @@ class TestConfiguration:
         monkeypatch.setenv("SEARCHABLE_MCP_CLIENT_ID", "c")
         assert sm.is_configured() is True
 
+    def test_the_write_key_is_reported_too(self, monkeypatch):
+        """It was left out of the first version, so the health endpoint reported
+        a fully configured server while blind to the one credential someone had
+        just added."""
+        assert "SEARCHABLE_API_TOKEN_WRITE" in sm.credential_names()
+        monkeypatch.setenv("SEARCHABLE_API_TOKEN_WRITE", "w")
+        assert sm.credential_names()["SEARCHABLE_API_TOKEN_WRITE"] is True
+
     def test_credential_names_never_leak_values(self, monkeypatch):
         monkeypatch.setenv("SEARCHABLE_API_TOKEN", "super-secret-value")
         names = sm.credential_names()

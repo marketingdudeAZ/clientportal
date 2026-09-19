@@ -89,10 +89,17 @@ def endpoint() -> str:
 
 
 def credential_names() -> Dict[str, bool]:
-    """Which variables are set. Names and presence only — never a value."""
+    """Which variables are set. Names and presence only — never a value.
+
+    The write key belongs in this list even though nothing here reads it: the
+    first version left it out, and the health endpoint then reported a
+    perfectly configured server while being blind to the one credential
+    somebody had just added.
+    """
     return {name: bool((os.environ.get(name) or "").strip()) for name in (
-        "SEARCHABLE_API_TOKEN", "SEARCHABLE_MCP_REFRESH_TOKEN",
-        "SEARCHABLE_MCP_CLIENT_ID", "SEARCHABLE_MCP_URL")}
+        "SEARCHABLE_API_TOKEN", "SEARCHABLE_API_TOKEN_WRITE",
+        "SEARCHABLE_MCP_REFRESH_TOKEN", "SEARCHABLE_MCP_CLIENT_ID",
+        "SEARCHABLE_MCP_URL")}
 
 
 def is_configured() -> bool:

@@ -261,6 +261,20 @@ def searchable_health():
                      "and set SEARCHABLE_MCP_CLIENT_ID and "
                      "SEARCHABLE_MCP_REFRESH_TOKEN."),
         })
+    dry_run_for = (request.args.get("report_dry_run") or "").strip()
+    if dry_run_for:
+        # A DRY RUN ONLY. `preview` never passes confirm, so no public link is
+        # minted here — this exists so the report path can be proven from the
+        # machine that holds the credentials, before anything is published.
+        from skills import searchable_reports as sr
+        try:
+            return jsonify(sr.preview(dry_run_for))
+        except Exception as exc:  # noqa: BLE001
+            logger.error("searchable report dry run failed for %s: %s",
+                         dry_run_for, exc, exc_info=True)
+            return jsonify({"error": "The dry run could not complete.",
+                            "detail": type(exc).__name__}), 500
+
     tool = (request.args.get("tool") or "").strip()
     if tool:
         # A read-only diagnostic call, so "does this connection see our
