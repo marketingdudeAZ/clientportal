@@ -72,6 +72,8 @@ LOOP_EVENT_TYPES = {
     "fluency_provisioned", "ai_mention_index_changed",
     # engage
     "property_brief_published", "community_brief_published",
+    # engage — white-labelled AI-search report published to a public link
+    "ai_report_published",
     "aeo_content_generated", "aeo_citation_detected",
     "review_received", "page_health_changed",
     # engage — ticket → property-profile loop (ticket_profile_sync.py)

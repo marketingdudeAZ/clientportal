@@ -1957,6 +1957,11 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
           ? (p.trend_points > 1 ? esc(num(p.trend_points)) + ' readings'
              : '<span class="fine">measuring since ' + esc(mdy(p.data_available_from) || 'recently') + '</span>')
           : '<span class="fine">' + esc(p.reason || 'Not measured yet') + '</span>') + '</td>' +
+        '<td>' + (p.report && p.report.link
+          ? '<a class="link" href="' + esc(p.report.link) + '" target="_blank" rel="noopener noreferrer">Open report</a>' +
+            '<span class="fine" style="display:block">published ' + esc(mdy(p.report.published_at) || '') + ' · public link</span>'
+          : (p.measured ? '<span class="fine">None published</span>'
+                        : '<span class="empty-dash">—</span>')) + '</td>' +
         '</tr>';
     }).join('');
 
@@ -1966,10 +1971,12 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
           '<thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th>' +
           '<th scope="col" class="num">Visibility</th><th scope="col" class="num">Change</th>' +
           '<th scope="col" class="num">ChatGPT</th><th scope="col" class="num">AI Overviews</th>' +
-          '<th scope="col" class="num">Perplexity</th><th scope="col">Status</th></tr></thead>' +
+          '<th scope="col" class="num">Perplexity</th><th scope="col">Status</th>' +
+          '<th scope="col">Client report</th></tr></thead>' +
           '<tbody>' + body + '</tbody></table></div>'
         : '<p class="support">No RPMI properties came back.</p>') +
-      '<p class="support">Visibility is the share of renter questions where an assistant named this property. ' +
+      '<p class="support">Client reports open on a public link with no sign-in — share them deliberately. ' +
+      'Visibility is the share of renter questions where an assistant named this property. ' +
       'A property with no project is not a zero — it is unmeasured, and the two are shown differently on purpose.</p>' +
       gapsLine(d.gaps);
   }
