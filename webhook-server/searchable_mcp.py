@@ -558,7 +558,16 @@ def generate_report(project_id: str, *, report_type: str = "combined",
     if result is None:
         return None, reason
     if result.get("isError"):
-        return None, "Searchable could not generate that report."
+        # Pass the vendor's own words through. A generic "could not generate"
+        # hides the one thing worth knowing — a missing scope reads exactly
+        # like an outage otherwise, and the fixes are nothing alike.
+        detail = _content(result)
+        if isinstance(detail, dict):
+            detail = (detail.get("message") or detail.get("error")
+                      or json.dumps(detail)[:300])
+        detail = str(detail or "").strip()
+        return None, ("Searchable could not generate that report%s"
+                      % (": %s" % detail[:300] if detail else "."))
     payload = _content(result)
     out: Dict[str, Any] = {"published": bool(confirm), "raw": payload}
     if isinstance(payload, dict):

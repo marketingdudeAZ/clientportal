@@ -160,6 +160,27 @@ class TestPublishingIsDeliberate:
         assert http.sent == []
 
 
+class TestErrorsAreLegible:
+    def test_the_vendors_own_reason_comes_through(self, monkeypatch):
+        """A missing scope and an outage look identical behind a generic
+        message, and the fixes are nothing alike."""
+        monkeypatch.setenv("SEARCHABLE_API_TOKEN_WRITE", "write-key")
+        monkeypatch.setattr(sm.urllib.request, "urlopen", FakeHTTP(rpc({
+            "isError": True,
+            "content": [{"type": "text", "text": "missing required scope: write"}]})))
+        result, reason = sm.generate_report("p-1", confirm=True)
+        assert result is None
+        assert "missing required scope: write" in reason
+
+    def test_a_structured_error_is_unwrapped_too(self, monkeypatch):
+        monkeypatch.setenv("SEARCHABLE_API_TOKEN_WRITE", "write-key")
+        monkeypatch.setattr(sm.urllib.request, "urlopen", FakeHTTP(rpc({
+            "isError": True,
+            "structuredContent": {"message": "report quota exhausted"}})))
+        _, reason = sm.generate_report("p-1", confirm=True)
+        assert "report quota exhausted" in reason
+
+
 class TestTheWriteGuardStillHolds:
     def test_generate_report_is_still_refused_through_call_tool(self, monkeypatch):
         """The deliberate function is the ONLY way in. If this ever stops
