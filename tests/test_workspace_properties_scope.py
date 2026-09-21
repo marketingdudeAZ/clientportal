@@ -150,6 +150,37 @@ class TestTheColumns:
         assert block.count("empty-dash") >= 4
 
 
+# ── never label a property with another property's name ──────────────────────
+
+class TestTheNameOnScreen:
+    """`company()` used to fall back to `companies()[0]` — the first property
+    HubSpot names you on — whenever the open property was not one of your
+    assignments. Staff now browse all 784, so that fallback labelled every
+    other property's page with the same assignment: a director opened Heights
+    at 61st Street and the back link read "ZZ Test - Creative Transition"."""
+
+    def test_there_is_no_fallback_to_someone_elses_property(self, page):
+        assert "return companyById(state.companyId) || companies()[0] || null;" not in page
+        block = page.split("function company() {", 1)[1].split("function setCompany", 1)[0]
+        assert "companies()[0]" not in block.split("if (state.companyId)", 1)[1].split("return companies()[0]")[0]
+
+    def test_an_unknown_property_has_no_name_rather_than_a_wrong_one(self, page):
+        """Empty beats wrong: the screen fills the name in when its own payload
+        lands, and shows nothing until then."""
+        block = page.split("function company() {", 1)[1].split("function setCompany", 1)[0]
+        assert "name: null" in block
+
+    def test_loaded_names_are_remembered(self, page):
+        """So a click-through from the portfolio knows the name before its own
+        payload arrives, instead of falling back."""
+        assert "function rememberCompany(" in page
+        assert page.count("rememberCompany(") >= 4
+
+    def test_the_back_link_says_property_when_the_name_is_unknown(self, page):
+        """`esc(null)` renders an empty arrow, which looks broken."""
+        assert "esc(c && c.name ? c.name : 'Property')" in page
+
+
 # ── the server side of the same rule ─────────────────────────────────────────
 
 class TestTheServerAgrees:
