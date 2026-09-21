@@ -3480,7 +3480,16 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       if (!realInternal()) state.preview = false;
       var saved = null;
       try { saved = localStorage.getItem(COMPANY_KEY); } catch (e) {}
-      state.companyId = companyById(saved) ? saved : (companies()[0] ? String(companies()[0].company_id) : null);
+      /* A saved id is honoured as an ID, not checked for membership of
+         `me.companies`. It used to be discarded unless it was one of this
+         user's assignments, which meant every reload dragged staff back to
+         their one assigned property however deep into the portfolio they had
+         navigated. The screens fetch their own data and answer 403 themselves
+         if the property is not theirs, so the only thing worth checking here
+         is that the stored value still looks like an id. */
+      saved = (saved || '').trim();
+      state.companyId = /^[0-9]+$/.test(saved) ? saved
+        : (companies()[0] ? String(companies()[0].company_id) : null);
       window.addEventListener('hashchange', route);
       route();
       loadBadge();
