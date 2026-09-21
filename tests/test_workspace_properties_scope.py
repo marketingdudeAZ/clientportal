@@ -176,6 +176,15 @@ class TestTheNameOnScreen:
         assert "function rememberCompany(" in page
         assert page.count("rememberCompany(") >= 4
 
+    def test_a_reload_keeps_the_property_you_were_on(self, page):
+        """The saved id used to be discarded unless it was one of this user's
+        assignments, so every reload dragged staff back to their one assigned
+        property however deep into the portfolio they had navigated. That is
+        what made "I only ever see ZZ Test" survive navigating away from it."""
+        assert "companyById(saved) ? saved :" not in page
+        block = page.split("localStorage.getItem(COMPANY_KEY)", 1)[1][:900]
+        assert "/^[0-9]+$/.test(saved)" in block
+
     def test_the_back_link_says_property_when_the_name_is_unknown(self, page):
         """`esc(null)` renders an empty arrow, which looks broken."""
         assert "esc(c && c.name ? c.name : 'Property')" in page
