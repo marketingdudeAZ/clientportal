@@ -1109,8 +1109,33 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     return '<a href="#" class="link" data-signin>' + esc(label) + '</a>';
   }
   function companies() { return (state.me && state.me.companies) || []; }
-  function companyById(id) { var l = companies(); for (var i = 0; i < l.length; i++) if (String(l[i].company_id) === String(id)) return l[i]; return null; }
-  function company() { return companyById(state.companyId) || companies()[0] || null; }
+
+  /* Properties this session has actually loaded, by id. Staff browse the whole
+     portfolio now, so most properties they open are NOT in `me.companies` —
+     that list is only the ones HubSpot names them on. Without somewhere to
+     remember a loaded name, every screen fell back to the first assignment and
+     labelled another property's page with it. */
+  state.known = {};
+  function rememberCompany(rec) {
+    if (!rec) return rec;
+    var id = rec.company_id != null ? String(rec.company_id) : '';
+    if (!id || !rec.name) return rec;
+    state.known[id] = { company_id: id, name: rec.name, city: rec.city, state: rec.state, units: rec.units };
+    return rec;
+  }
+  function companyById(id) {
+    var key = String(id), l = companies();
+    for (var i = 0; i < l.length; i++) if (String(l[i].company_id) === key) return l[i];
+    return state.known[key] || null;
+  }
+  /* No falling back to someone else's property. When an id is selected but its
+     name is not known yet, the answer is "this property, name unknown" — the
+     screens then render nothing rather than the wrong name, and fill it in the
+     moment their own payload lands. */
+  function company() {
+    if (state.companyId) return companyById(state.companyId) || { company_id: String(state.companyId), name: null };
+    return companies()[0] || null;
+  }
   function setCompany(id) {
     if (!id) return;
     var changed = String(id) !== String(state.companyId);
@@ -1935,6 +1960,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         'so the sooner a project exists, the sooner there is a trend to show.</p>';
 
     var body = rows.map(function (p) {
+      rememberCompany(p);
       var href = '#/property/' + encodeURIComponent(p.company_id || '');
       var eng = {};
       (p.engines || []).forEach(function (e) {
@@ -2085,6 +2111,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       '<div class="kpi"><span class="eyebrow">Nothing waiting</span><span class="v">' + esc(num(d.quiet_count)) + '</span></div>' +
       '</div>';
     var body = rows.map(function (p) {
+      rememberCompany(p);
       var href = '#/property/' + encodeURIComponent(p.company_id);
       var occ = val(p.occupancy), risk = val(p.units_at_risk);
       var item = p.top_item ? (esc(p.top_item.title) +
@@ -2466,6 +2493,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   function renderProfile(prof) {
     state.profile = prof;
     var p = prof.property || {}, comp = prof.completeness || {}, ci = prof.checkin || {}, staleView = state.profileView === 'stale', co = companyById(p.company_id) || {};
+    rememberCompany({ company_id: state.companyId, name: p.name });
     renderTop('Profile', p.name);
     var pctv = comp.pct == null ? null : Math.round(comp.pct);
     var meter = '<div class="meter"><span class="eyebrow">Profile completeness</span><div class="row1"><b>' + (pctv == null ? '—' : esc(pctv) + '%') + '</b><span class="support">complete</span></div>' +
@@ -2623,13 +2651,14 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
 
   /* ── Property detail (D4I-2, G73-1) ──────────────────────────────── */
   var LENS_LABEL = { express: 'Express', tailor: 'Tailor', amplify: 'Amplify', evolve: 'Evolve' };
-  function scopedBack() { var c = company(); return '<a class="back" href="#/property/' + encodeURIComponent(state.companyId) + '">' + ic(I.arrowLeft, 13) + esc(c ? c.name : 'Property') + '</a>'; }
+  function scopedBack() { var c = company(); return '<a class="back" href="#/property/' + encodeURIComponent(state.companyId) + '">' + ic(I.arrowLeft, 13) + esc(c && c.name ? c.name : 'Property') + '</a>'; }
   function screenProperty() {
     var c = company();
     renderTop('Properties', c ? c.name : '');
     guard(api('/api/workspace/property-overview?' + cq()), 'the property').then(function (r) {
       if (!r) return;
       var d = r.data || {};
+      rememberCompany({ company_id: state.companyId, name: d.name, city: d.city, state: d.state, units: d.units });
       renderTop('Properties', d.name);
       var h = propertyHtml(d);
       setView(h.page, h.rail);
