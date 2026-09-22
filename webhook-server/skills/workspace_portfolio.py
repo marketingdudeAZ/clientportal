@@ -80,7 +80,7 @@ def _rank_key(row: dict):
 
 
 def build_portfolio(email: str, *, view: str | None = None, page: int = 1,
-                    today: date | None = None) -> dict:
+                    today: date | None = None, market: str | None = None) -> dict:
     today = today or date.today()
     horizon = today + timedelta(days=6)
     gaps: list = []
@@ -97,6 +97,9 @@ def build_portfolio(email: str, *, view: str | None = None, page: int = 1,
     else:
         scope = managed_properties()
         scope_label = f"All managed properties · {len(scope)}"
+    from skills import workspace_scope as wscope
+    markets = wscope.markets_in(scope)
+    scope = wscope.in_market(scope, market)
     gaps.append(wc.gap("items",
                        "Portfolio counts cover recommendation cards, call prep, video variants "
                        "and onboarding gaps; tickets, forecast recommendations and profile "
@@ -152,6 +155,7 @@ def build_portfolio(email: str, *, view: str | None = None, page: int = 1,
             "name": p.get("name") or None,
             "city": p.get("city") or None,
             "state": p.get("state") or None,
+            "market": wscope.market_of(p),
             "units": wc.to_int(p.get("totalunits")),
             "units_source": "hubspot_company",
             "occupancy": entry["occupancy"],
@@ -175,6 +179,8 @@ def build_portfolio(email: str, *, view: str | None = None, page: int = 1,
         "view": view,
         "scope_label": scope_label,
         "property_count": len(scope),
+        "markets": markets,
+        "market": (market or "").strip() or None,
         "item_count": item_count,
         "starting_this_week": starting,
         "properties": rows,

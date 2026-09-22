@@ -64,7 +64,7 @@ class TestTheRequest:
     def test_the_mine_scope_still_uses_the_dashboard(self, page):
         """Unchanged on purpose: the dashboard is what carries occupancy,
         leases, health and profile for a small set of properties."""
-        assert "guard(api('/api/workspace/dashboard'), 'properties')" in page
+        assert "guard(api('/api/workspace/dashboard' + marketQs('?')), 'properties')" in page
 
 
 # ── who gets the switch ──────────────────────────────────────────────────────

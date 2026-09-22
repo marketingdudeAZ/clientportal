@@ -63,6 +63,7 @@ def _company_summary(props: dict, company_id: str) -> dict:
         "name": props.get("name") or None,
         "city": props.get("city") or None,
         "state": props.get("state") or None,
+        "market": str(props.get("rpmmarket") or "").strip() or None,
         "units": wc.to_int(props.get("totalunits")),
         "source": "hubspot_company",
     }
@@ -94,7 +95,7 @@ def build_me(email: str, *, verified: bool, can_decide: bool | None = None,
         import hubspot_client
         for cid in sorted(companies_for(email)):
             try:
-                props = hubspot_client.get_company(cid, ["uuid", "name", "city", "state", "totalunits"])
+                props = hubspot_client.get_company(cid, ["uuid", "name", "city", "state", "totalunits", "rpmmarket"])
                 companies.append(_company_summary(props or {}, cid))
             except Exception as exc:  # noqa: BLE001
                 logger.warning("workspace me: company %s unreadable: %s", cid, exc)
