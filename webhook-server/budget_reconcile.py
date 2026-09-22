@@ -200,6 +200,19 @@ def _close_sort_key(deal: dict) -> str:
     return props.get("closedate") or props.get("createdate") or ""
 
 
+def _winner_key(deal_id: str, deal: dict) -> tuple[str, int]:
+    """Close date, then deal id. Deals closed in bulk share a timestamp to the
+    millisecond (Bungalows on Henness: two deals, 2026-07-17T01:01:05.331Z), and
+    with the date alone the winner was whichever HubSpot returned last — so a
+    scheduled run could flip a property between two budgets hour to hour.
+    Deal ids are allocated in creation order, so the later-created deal wins."""
+    try:
+        n = int(deal_id)
+    except (TypeError, ValueError):
+        n = -1
+    return (_close_sort_key(deal), n)
+
+
 def _line_items_by_product(deal_ids: list[str]) -> dict[str, dict[str, float]]:
     """{deal_id: {product_id: amount}}.
 
@@ -352,7 +365,7 @@ def expected_budgets() -> dict[str, dict]:
     deals = _batch_read_deals(list(deal_to_company.keys()))
 
     # Winning deal per company: most recently closed CLOSED-WON deal.
-    winner: dict[str, dict] = {}
+    winner: dict[str, tuple[str, dict]] = {}
     for did, deal in deals.items():
         if not _is_won(deal):
             continue
@@ -360,8 +373,9 @@ def expected_budgets() -> dict[str, dict]:
         if not cid:
             continue
         cur = winner.get(cid)
-        if cur is None or _close_sort_key(deal) > _close_sort_key(cur):
-            winner[cid] = deal
+        if cur is None or _winner_key(did, deal) > _winner_key(*cur):
+            winner[cid] = (did, deal)
+    winner = {cid: deal for cid, (_, deal) in winner.items()}
 
     li = _line_items_by_product([str(d["id"]) for d in winner.values()])
     uuids = _uuids_for(list(winner.keys()))
