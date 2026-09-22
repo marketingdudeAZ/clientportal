@@ -213,6 +213,18 @@ class WonDealSelection(unittest.TestCase):
     def test_missing_dates_sort_last_rather_than_raising(self):
         self.assertEqual(br._close_sort_key({"properties": {}}), "")
 
+    def test_identical_close_times_break_on_deal_id(self):
+        """Bulk-closed deals share a timestamp to the ms; the winner must not
+        depend on the order HubSpot returns them in."""
+        same = {"properties": {"closedate": "2026-07-17T01:01:05.331Z"}}
+        self.assertGreater(br._winner_key("62661036654", same),
+                           br._winner_key("62660912776", same))
+
+    def test_close_date_still_outranks_deal_id(self):
+        older = {"properties": {"closedate": "2026-07-01T00:00:00Z"}}
+        newer = {"properties": {"closedate": "2026-08-01T00:00:00Z"}}
+        self.assertGreater(br._winner_key("1", newer), br._winner_key("999", older))
+
 
 class ChannelRegistry(unittest.TestCase):
     def test_labels_carry_no_asterisk(self):
