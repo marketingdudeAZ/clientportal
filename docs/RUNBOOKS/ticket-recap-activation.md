@@ -100,3 +100,27 @@ python3 scripts/register_ticket_recap_webhook.py delete <WEBHOOK_ID>
 (or disable the ClickUp Automation). Removing the secret from Render also
 hard-stops the endpoint, but prefer deleting the webhook so ClickUp doesn't
 keep retrying failed deliveries.
+
+## Watchdog — failures open a task on ClickUp "FAILING ERRORS"
+
+On 2026-09-17 the web service sat in an OOM restart loop for ~18 hours. ClickUp
+suspends a webhook after ~100 failed deliveries and **never resumes it on its
+own**, so five ticket lists stopped sending events and 27 tickets sat in
+"done - add to hubspot" for five days with nobody the wiser.
+
+`webhook-server/recap_watch_cron.py` runs hourly from its own Render Cron Job
+and checks from the outside: the portal answers `/health`; every recap list has
+an **active** ticket-complete webhook (a suspended one is reactivated once the
+portal is healthy — and still reported, since events during the suspension were
+dropped); and no ticket has sat in "done - add to hubspot" for over an hour
+without the `recap-posted` tag. Any problem opens one urgent task on the
+[FAILING ERRORS list](https://rpm-marketing.clickup.com/9011805260/v/l/li/901115437267);
+a persisting problem comments on it, and the next clean run closes it.
+
+Render setup (one time): New → Cron Job, same repo/branch as the web service,
+command `python webhook-server/recap_watch_cron.py`, schedule `15 * * * *`,
+env `CLICKUP_API_KEY` (same value as the web service). Optional knobs are in
+the module docstring.
+
+When it fires for stuck tickets: find the reason in the web service logs
+(`clickup_recap`), fix it, then replay with `scripts/backfill_ticket_recaps.py`.
