@@ -136,6 +136,12 @@ def check_webhooks(portal_ok: bool, heal: bool) -> list[str]:
         if not any(str(w.get("list_id")) == list_id for w in hooks):
             problems.append(f"{name}: no ticket-complete webhook registered — "
                             "tickets on this list never trigger a recap")
+    # A list can carry more than one recap webhook (re-registrations leave the
+    # old one behind). When a sibling on the same list is active, recaps still
+    # flow, and the failing one is most likely a stale duplicate whose secret
+    # is not in CLICKUP_WEBHOOK_SECRET — every delivery it makes gets a 401.
+    active_lists = {str(w.get("list_id")) for w in hooks
+                    if ((w.get("health") or {}).get("status")) == "active"}
     for w in hooks:
         if str(w.get("list_id")) not in LISTS:
             continue
@@ -145,6 +151,14 @@ def check_webhooks(portal_ok: bool, heal: bool) -> list[str]:
             continue
         name = LISTS[str(w["list_id"])]
         fails = health.get("fail_count")
+        if str(w["list_id"]) in active_lists:
+            problems.append(
+                f"{name}: webhook {w.get('id')} is {state} ({fails} failed deliveries) but "
+                "another webhook on this list is active, so recaps still flow. This one is "
+                "likely a stale duplicate (its secret not on Render, so every delivery is "
+                "refused) — compare ids with `register_ticket_recap_webhook.py status` and "
+                "delete the stale one. Not reactivated.")
+            continue
         if state == "suspended" and heal and portal_ok:
             ok = _cu("PUT", f"webhook/{w['id']}",
                      json={"endpoint": w["endpoint"], "events": w.get("events") or [],
@@ -158,8 +172,8 @@ def check_webhooks(portal_ok: bool, heal: bool) -> list[str]:
             problems.append(f"{name}: webhook SUSPENDED by ClickUp after {fails} failed "
                             "deliveries — ClickUp will not send events until it is reactivated")
         else:
-            problems.append(f"{name}: webhook is {state} ({fails} failed deliveries so far) — "
-                            "ClickUp suspends it at ~100")
+            problems.append(f"{name}: webhook {w.get('id')} is {state} ({fails} failed "
+                            "deliveries so far) — ClickUp suspends it at ~100")
     return problems
 
 

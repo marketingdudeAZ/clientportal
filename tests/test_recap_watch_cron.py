@@ -131,6 +131,34 @@ class TestWatchdog(unittest.TestCase):
         self.assertEqual(_main(fake), 1)
         self.assertTrue(fake.writes("POST", f"list/{cron.ALERT_LIST_ID}/task"))
 
+    def test_failing_webhook_alert_names_the_webhook(self):
+        fake = FakeClickUp(_hooks({"901111999695": {"status": "failing", "fail_count": 12}}))
+        self.assertEqual(_main(fake), 1)
+        body = fake.writes("POST", f"list/{cron.ALERT_LIST_ID}/task")[0][2]["description"]
+        self.assertIn("General Ticket: webhook wh901111999695 is failing (12 failed", body)
+
+    def test_failing_duplicate_beside_an_active_webhook_is_called_out(self):
+        hooks = _hooks()
+        hooks["webhooks"].append(
+            {"id": "stale", "list_id": "901111999695", "events": ["taskStatusUpdated"],
+             "endpoint": "https://x" + cron.ENDPOINT_PATH,
+             "health": {"status": "failing", "fail_count": 12}})
+        fake = FakeClickUp(hooks)
+        self.assertEqual(_main(fake), 1)
+        body = fake.writes("POST", f"list/{cron.ALERT_LIST_ID}/task")[0][2]["description"]
+        self.assertIn("webhook stale is failing", body)
+        self.assertIn("likely a stale duplicate", body)
+
+    def test_suspended_duplicate_beside_an_active_webhook_is_not_reactivated(self):
+        hooks = _hooks()
+        hooks["webhooks"].append(
+            {"id": "stale", "list_id": "901111999695", "events": ["taskStatusUpdated"],
+             "endpoint": "https://x" + cron.ENDPOINT_PATH,
+             "health": {"status": "suspended", "fail_count": 101}})
+        fake = FakeClickUp(hooks)
+        self.assertEqual(_main(fake), 1)
+        self.assertFalse(fake.writes("PUT", "webhook/"))
+
     def test_no_clickup_key_is_a_config_error(self):
         with mock.patch.dict(os.environ, {"CLICKUP_API_KEY": ""}):
             self.assertEqual(cron.main(), 2)
