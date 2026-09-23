@@ -155,7 +155,8 @@ ITEM = {
 ME = {
     "email": STR, "role": enum("internal", "client"), "verified": BOOL, "can_decide": BOOL,
     "companies": [{"company_id": STR, "uuid": opt(STR), "name": opt(STR),
-                   "city": opt(STR), "state": opt(STR), "units": opt(INT)}],
+                   "city": opt(STR), "state": opt(STR), "market": omittable(opt(STR)),
+                   "units": opt(INT)}],
 }
 
 PORTFOLIO = {
@@ -163,11 +164,13 @@ PORTFOLIO = {
     "property_count": INT, "item_count": INT, "starting_this_week": INT,
     "properties": [{
         "company_id": STR, "name": opt(STR), "city": opt(STR), "state": opt(STR),
-        "units": opt(INT), "occupancy": opt(METRIC),
+        "market": omittable(opt(STR)), "units": opt(INT), "occupancy": opt(METRIC),
         "top_item": opt({"id": STR, "title": STR, "needs_approval": BOOL}), "more_items": INT,
         "start_by": opt(STR), "overdue": BOOL, "units_at_risk": opt(METRIC),
     }],
     "quiet_count": INT, "gaps": [GAP],
+    # Market filter (rpmmarket): options from the unfiltered scope, and the one applied.
+    "markets": omittable([STR]), "market": omittable(opt(STR)),
 }
 
 # GET /api/workspace/rpmi — the RPM Investments roll-up (internal only).
@@ -320,6 +323,7 @@ DASHBOARD = {
                  "company_id": omittable(STR), "title": STR, "subtitle": opt(STR),
                  "category": opt(APPROVAL_CATEGORY), "stale_count": omittable(INT)}],
     "loop_status": {"running": opt(BOOL), "property_count": INT, "last_pass": opt(STR)},
+    "markets": omittable([STR]), "market": omittable(opt(STR)),
     "gaps": [GAP],
 }
 

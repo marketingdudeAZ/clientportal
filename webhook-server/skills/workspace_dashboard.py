@@ -387,12 +387,16 @@ def profile_checkins(props: list, today: date, gaps: list) -> list:
 
 
 def build_dashboard(email: str, *, internal: bool, today: date | None = None,
-                    scope_internal: bool | None = None, **_ignored) -> dict:
+                    scope_internal: bool | None = None, market: str | None = None,
+                    **_ignored) -> dict:
     today = today or date.today()
     # Scope follows the real role, filtering the effective one: an internal
     # "Preview as client" sees their own properties rendered as a client would.
     scope = wscope.properties_in_scope(email, internal if scope_internal is None else scope_internal)
-    props = scope["properties"]
+    # The market options come from the whole scope, so choosing one never
+    # hides the others; every figure below is then computed for that market.
+    markets = wscope.markets_in(scope["properties"])
+    props = wscope.in_market(scope["properties"], market)
     gaps: list = list(scope["gaps"])
 
     rows, loaded = _aptiq(gaps) if props else ({}, None)
@@ -459,6 +463,8 @@ def build_dashboard(email: str, *, internal: bool, today: date | None = None,
         "greeting_name": greeting_name(email, gaps),
         "as_of": wc.now_iso(),
         "scope_label": scope["label"],
+        "markets": markets,
+        "market": (market or "").strip() or None,
         "kpis": kpis,
         "health_tiles": tiles,
         "properties": prop_rows,

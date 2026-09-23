@@ -66,7 +66,6 @@ ol,ul{list-style:none}
 .logo span{font-size:12px;line-height:16px;color:var(--color-fg-muted);letter-spacing:.04em}
 .logo .logo-mark{height:32px;width:auto;display:block;flex-shrink:0}
 .nav{display:flex;flex-direction:column;gap:2px}
-.nav-label{padding:20px 10px 6px;font-size:11px;line-height:14px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--color-fg-muted)}
 .nav a{height:36px;display:flex;align-items:center;gap:10px;padding-inline:10px;border-radius:var(--radius-sm);font-size:13px;line-height:16px;font-weight:500;color:var(--color-fg-muted);transition:background-color .15s,color .15s}
 .nav a svg{width:16px;height:16px;flex-shrink:0;stroke:currentColor}
 .nav a .t{flex:1}
@@ -793,7 +792,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   .nav{flex-direction:row;overflow-x:auto;flex-basis:100%;order:3;padding-bottom:4px;scrollbar-width:none}
   .nav::-webkit-scrollbar{display:none}
   .nav a{height:44px;flex-shrink:0}
-  .nav-label,.side-grow,.loopcard,.userrow{display:none}
+  .side-grow,.loopcard,.userrow{display:none}
   .side-bottom{border:0;padding:0;margin-left:auto;order:2}
   .topbar{position:static;height:auto;flex-wrap:wrap;padding:8px 12px}
   .crumbs{display:none}
@@ -1235,10 +1234,13 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         (n.count ? '<span class="count">' + esc(n.count) + '</span>' : '') + '</a>';
     }
     var html = logo + '<div class="nav">' + navItems().map(link).join('');
-    if (viewInternal()) html += '<p class="nav-label">RPM only</p>' +
-      link({ key: 'signals', href: '#/signals', label: 'Signals', icon: 'signal' }) +
-      link({ key: 'rpmi', href: '#/rpmi', label: 'RPMI', icon: 'building' }) +
-      link({ key: 'geo', href: '#/geo', label: 'AI Search', icon: 'eye' });
+    /* No "RPM only" section in the rail (2026-09-22). Signals, RPMI and AI
+       Search each ask a question a screen above already asks — AI Search is
+       the vendor's answer to what Visibility answers from our own tables — and
+       a staff-only block on a client's portal invites the question of why it
+       is there at all. The screens and their endpoints are untouched and still
+       staff-gated: #/signals, #/rpmi and #/geo still open by URL. Putting them
+       back is this block. */
     html += '</div><div class="side-grow"></div>';
     if (state.loop) {
       html += '<div class="loopcard" role="status"><i class="' + (state.loop.running ? 'on' : '') + '" aria-hidden="true"></i><div><b>' + (state.loop.running === true ? 'Loop running' : (state.loop.running === false ? 'Loop paused' : 'Loop status unavailable')) + '</b>' +
@@ -2026,7 +2028,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
      assignment list showed one test property while claiming "every property
      you can see". Clients never see the toggle: their scope IS their
      companies, so there is nothing to switch between. */
-  state.props = { scope: null, page: 1, rows: [], meta: null, loading: false };
+  state.props = { scope: null, page: 1, rows: [], meta: null, loading: false, market: '', markets: [] };
   function propScope() {
     if (!state.props.scope) state.props.scope = realInternal() ? 'all' : 'mine';
     return realInternal() ? state.props.scope : 'mine';
@@ -2034,9 +2036,10 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   function screenProperties() {
     if (propScope() === 'all') return screenPropertiesAll();
     renderTop('Properties', companies().length + ' properties');
-    guard(api('/api/workspace/dashboard'), 'properties').then(function (r) {
+    guard(api('/api/workspace/dashboard' + marketQs('?')), 'properties').then(function (r) {
       if (!r) return;
       var d = r.data || {};
+      state.props.markets = d.markets || [];
       state.loop = d.loop_status || state.loop;
       var w = ((d.kpis || {}).waiting_on_you || {}).value;
       if (w != null) state.waiting = w;
@@ -2046,6 +2049,26 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
     });
   }
 
+  /* Market is `rpmmarket` on the company record. The server filters, so the
+     KPI strip and the ranking are computed for the chosen market rather than
+     the whole book with rows hidden. The options come from the unfiltered
+     scope; with one market or none there is nothing to choose, so no control. */
+  function marketQs(sep) {
+    return state.props.market ? sep + 'market=' + encodeURIComponent(state.props.market) : '';
+  }
+  function marketFilter() {
+    var list = state.props.markets || [], cur = state.props.market;
+    if (list.length < 2 && !cur) return '';
+    return '<div class="controls"><label class="ctl"><span>Market</span><select class="inp" data-prop-market>' +
+      '<option value="">All markets</option>' +
+      list.map(function (m) { return '<option' + (m === cur ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') +
+      '</select></label></div>';
+  }
+  function resetProps() {
+    state.props.page = 1;
+    state.props.rows = [];
+    state.props.meta = null;
+  }
   /* The scope switch. Rendered for staff only, and only inside the Properties
      screen, so a client's markup never mentions a scope they cannot have. */
   function scopeSwitch(active, note) {
@@ -2064,11 +2087,17 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         var next = btn.getAttribute('data-prop-scope');
         if (next === propScope()) return;
         state.props.scope = next;
-        state.props.page = 1;
-        state.props.rows = [];
-        state.props.meta = null;
+        state.props.market = '';
+        state.props.markets = [];
+        resetProps();
         screenProperties();
       });
+    });
+    var mk = view.querySelector('[data-prop-market]');
+    if (mk) mk.addEventListener('change', function () {
+      state.props.market = mk.value;
+      resetProps();
+      screenProperties();
     });
   }
 
@@ -2080,11 +2109,19 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       '<div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>Loading every managed property…</div></div></div>');
     bindPropScope();
     state.props.loading = true;
-    api('/api/workspace/portfolio?view=all&page=' + encodeURIComponent(state.props.page))
+    api('/api/workspace/portfolio?view=all&page=' + encodeURIComponent(state.props.page) + marketQs('&'))
       .then(function (r) {
         state.props.loading = false;
         var d = r.data || {};
+        var fresh = !(state.props.markets || []).length && (d.markets || []).length;
+        state.props.markets = d.markets || [];
         state.props.meta = d;
+        /* The first page is what tells us the markets, so the head drawn
+           before it arrived has no filter yet. */
+        if (fresh && first) {
+          var head = view.querySelector('[data-props-head]');
+          if (head) { head.outerHTML = propsAllHead(); bindPropScope(); }
+        }
         state.props.rows = state.props.rows.concat(d.properties || []);
         renderPropsAll();
       })
@@ -2095,10 +2132,11 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       });
   }
   function propsAllHead() {
-    return '<div class="head"><div class="stack"><h1 class="h-page">Properties</h1>' +
-      '<p class="support">Every managed property, ranked by units at risk.</p></div>' +
+    return '<div data-props-head><div class="head"><div class="stack"><h1 class="h-page">Properties</h1>' +
+      '<p class="support">Every managed property' + (state.props.market ? ' in ' + esc(state.props.market) : '') +
+      ', ranked by units at risk.</p></div>' +
       (state.props.meta ? staleLabel(state.props.meta.as_of) : '') + '</div>' +
-      scopeSwitch('all');
+      scopeSwitch('all') + marketFilter() + '</div>';
   }
   function renderPropsAll() {
     var box = view.querySelector('[data-props-results]');
@@ -2120,7 +2158,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
         : '<span class="empty-dash">—</span>';
       return '<tr class="rowlink" data-href="' + href + '">' +
         '<td class="name"><a href="' + href + '">' + esc(p.name) + '</a>' +
-        '<span class="fine" style="display:block">' + esc([p.city, p.state].filter(Boolean).join(', ')) + '</span></td>' +
+        '<span class="fine" style="display:block">' + esc([[p.city, p.state].filter(Boolean).join(', '), p.market].filter(Boolean).join(' · ')) + '</span></td>' +
         '<td class="num">' + esc(num(p.units)) + '</td>' +
         '<td class="num"' + rtitle(p.occupancy) + '>' + (occ == null ? '<span class="empty-dash">—</span>' : esc(pct(occ, 1))) + '</td>' +
         '<td class="num"' + rtitle(p.units_at_risk) + '>' + (risk == null ? '<span class="empty-dash">—</span>' : esc(num(risk))) + '</td>' +
@@ -2155,7 +2193,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
   }
 
   function propertiesHtml(d) {
-    var list = companies(), k = d.kpis || {};
+    var want = (state.props.market || '').toLowerCase();
+    var list = companies().filter(function (c) { return !want || (c.market || '').toLowerCase() === want; }), k = d.kpis || {};
     var units = list.reduce(function (s, c) { return s + (c.units || 0); }, 0);
     var strip = '<div class="kpis">' +
       '<div class="kpi"><span class="eyebrow">Properties</span><span class="v">' + esc(num(list.length)) + '</span></div>' +
@@ -2169,7 +2208,7 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       var t = (d.health_tiles || []).filter(function (x) { return x.company_id === c.company_id; })[0] || {};
       var score = p.health != null ? p.health : t.score, b = p.band || t.band || band(score), href = '#/property/' + encodeURIComponent(c.company_id);
       function cell(r, fmt, cls) { var v = val(r); return '<td class="num ' + (cls || '') + '"' + rtitle(r) + '>' + (v == null ? '<span class="empty-dash">—</span>' : esc(fmt(v))) + '</td>'; }
-      return '<tr class="rowlink" data-href="' + href + '"><td class="name"><a href="' + href + '">' + esc(c.name) + '</a><span class="fine" style="display:block">' + esc([c.city, c.state].filter(Boolean).join(', ')) + '</span></td>' +
+      return '<tr class="rowlink" data-href="' + href + '"><td class="name"><a href="' + href + '">' + esc(c.name) + '</a><span class="fine" style="display:block">' + esc([[c.city, c.state].filter(Boolean).join(', '), c.market].filter(Boolean).join(' · ')) + '</span></td>' +
         '<td class="num">' + esc(num(c.units)) + '</td>' + cell(p.occupancy, function (v) { return pct(v, 1); }) + cell(p.to_lease_90d, num) + cell(p.leases_month, num) +
         '<td class="num"><span class="pill ' + esc(b) + '"><i></i>' + (score == null ? 'New' : esc(score) + ' · ' + esc(BAND_LABEL[b])) + '</span></td>' +
         '<td class="num">' + (has(p.status) ? esc(p.status) : '<span class="empty-dash">—</span>') + '</td>' +
@@ -2182,8 +2221,8 @@ button.link{text-align:left;align-self:flex-start;min-height:24px}
       ? 'The properties HubSpot names you on, as marketing manager, director or RVP.'
       : 'Every property you can see, sorted as your account lists them.';
     return '<div class="page"><div class="head"><div class="stack"><h1 class="h-page">Properties</h1><p class="support">' + esc(lede) + '</p></div>' + staleLabel(d.as_of) + '</div>' +
-      scopeSwitch('mine', realInternal() && !list.length
-        ? 'No managed property names this email. Switch to All properties to see the portfolio.' : '') + strip +
+      scopeSwitch('mine', realInternal() && !companies().length
+        ? 'No managed property names this email. Switch to All properties to see the portfolio.' : '') + marketFilter() + strip +
       '<div class="tscroll"><table class="tbl"><caption class="sr-only">Properties</caption><thead><tr><th scope="col">Property</th><th scope="col" class="num">Units</th><th scope="col" class="num">Occupancy</th><th scope="col" class="num">To lease (90d)</th><th scope="col" class="num">Leases (month)</th><th scope="col" class="num">Health</th><th scope="col" class="num">Status</th><th scope="col" class="num">Profile</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       gapsLine(d.gaps) + '</div>';
   }

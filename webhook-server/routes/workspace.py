@@ -248,7 +248,8 @@ def workspace_portfolio():
     if not raw_page.isdigit() or int(raw_page) < 1:
         return jsonify({"error": "Invalid page"}), 400
     try:
-        return jsonify(wp.build_portfolio(current_portal_email(), view=view, page=int(raw_page)))
+        return jsonify(wp.build_portfolio(current_portal_email(), view=view, page=int(raw_page),
+                                          market=(request.args.get("market") or "").strip() or None))
     except Exception as exc:  # noqa: BLE001
         return _failed("portfolio", exc)
 
@@ -703,7 +704,8 @@ def workspace_dashboard():
     from skills import workspace_dashboard as wdash
     try:
         return jsonify(wdash.build_dashboard(current_portal_email(), internal=_is_internal(),
-                                             scope_internal=_real_internal()))
+                                             scope_internal=_real_internal(),
+                                             market=(request.args.get("market") or "").strip() or None))
     except Exception as exc:  # noqa: BLE001
         return _failed("dashboard", exc)
 

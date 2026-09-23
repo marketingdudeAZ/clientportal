@@ -22,10 +22,36 @@ logger = logging.getLogger(__name__)
 SCOPE_FIELDS = ["name", "city", "state", "totalunits", "uuid", "aptiq_property_id",
                 "redlight_report_score", "red_light_report_score", "red_light_run_date",
                 "plestatus", "marketing_manager_email", "marketing_director_email",
-                "marketing_rvp_email", "hyly_property_id"]
+                "marketing_rvp_email", "hyly_property_id", "rpmmarket"]
 
 # How many properties a portfolio screen reads work items for, worst health first.
 MAX_ITEM_PROPERTIES = 40
+
+
+def market_of(props: dict) -> str | None:
+    """The RPM market on the company record. `rpmmarket`, not `market`: the
+    bare field is set on a handful of properties, `rpmmarket` on the portfolio."""
+    return str(props.get("rpmmarket") or "").strip() or None
+
+
+def markets_in(props: list) -> list[str]:
+    """Every market the properties sit in, for a filter's options.
+
+    One entry per market regardless of case, since `in_market` matches that way:
+    "Phoenix" and "phoenix" are one choice, spelled as first seen."""
+    seen: dict[str, str] = {}
+    for m in (market_of(p) for p in props):
+        if m:
+            seen.setdefault(m.lower(), m)
+    return sorted(seen.values(), key=str.lower)
+
+
+def in_market(props: list, market: str | None) -> list:
+    """The properties in `market` (case-insensitive); all of them when blank."""
+    want = (market or "").strip().lower()
+    if not want:
+        return props
+    return [p for p in props if (market_of(p) or "").lower() == want]
 
 
 def health_score(props: dict) -> float | None:
