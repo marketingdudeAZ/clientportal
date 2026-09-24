@@ -134,6 +134,54 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(len(issues), 1)
 
 
+class TestFindTwin(unittest.TestCase):
+    """The BI twin is found by domain, then street address + zip, then name."""
+
+    def _find(self, props, results_by_field):
+        def search(filters, properties=None, limit=None):
+            return results_by_field.get(filters[0]["propertyName"], [])
+        with mock.patch.object(cron.hs, "search_companies", side_effect=search) as m:
+            return cron.find_twin("c1", props), m
+
+    @staticmethod
+    def _bi(cid="c2", uuid=None, plestatus="RPM Managed"):
+        return {"id": cid, "properties": {"name": "Somewhere", "uuid": uuid, "plestatus": plestatus}}
+
+    def test_domain_match_wins(self):
+        twin, _ = self._find(_company(plestatus=None), {"domain": [self._bi()]})
+        self.assertEqual((twin["id"], twin["matched_on"]), ("c2", "domain"))
+
+    def test_bi_record_without_domain_found_by_address(self):
+        twin, m = self._find(_company(plestatus=None), {"address": [self._bi("c3")]})
+        self.assertEqual((twin["id"], twin["matched_on"]), ("c3", "address"))
+        address_filters = m.call_args_list[1].args[0]
+        self.assertEqual({f["propertyName"] for f in address_filters}, {"address", "zip"})
+
+    def test_name_is_the_last_resort(self):
+        props = {**_company(plestatus=None), "domain": "", "address": ""}
+        twin, m = self._find(props, {"name": [self._bi("c4")]})
+        self.assertEqual((twin["id"], twin["matched_on"]), ("c4", "name"))
+        self.assertEqual(m.call_count, 1)
+
+    def test_self_records_with_uuid_and_non_managed_are_not_twins(self):
+        twin, _ = self._find(_company(plestatus=None), {
+            "domain": [self._bi("c1")],                 # itself
+            "address": [self._bi("c5", uuid="u9")],     # another portal record
+            "name": [self._bi("c6", plestatus="Dispositioning")]})
+        self.assertIsNone(twin)
+
+    def test_shared_rpm_domain_is_not_searched(self):
+        _, m = self._find({**_company(plestatus=None), "domain": "rpmliving.com",
+                           "address": "", "name": ""}, {})
+        m.assert_not_called()
+
+    def test_task_says_how_the_twin_was_matched(self):
+        issues = _eval([_row("other")], [_deal()], {"d1": ["c1"]},
+                       {"c1": _company(plestatus=None)},
+                       twin=lambda cid, p: {"id": "c2", "name": "Somewhere", "matched_on": "name"})
+        self.assertIn("confirm it is the same property", issues[0].detail[0])
+
+
 def _resp(body, status=200):
     r = mock.Mock()
     r.ok = 200 <= status < 300

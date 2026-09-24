@@ -28,6 +28,28 @@ that, and none of them shows up anywhere:
 - **Partial row.** The row exists but address/city/state/zip/domain are blank.
   (Balcones Club.)
 
+## For AMs: a property is missing from the ingestion sheet
+
+The usual cause is a duplicate company in HubSpot. It is almost never a missing
+property value.
+
+1. **Spot it.** The property is not on the ingestion sheet, or its HubSpot record
+   has no PLE Status at all. Search HubSpot companies for the property name and
+   street address. Two records means a duplicate.
+2. **Tell the two records apart.** The **BI record** (from Salesforce) has PLE
+   Status, RPM Market and street address. The **portal record** (from the deal)
+   has the UUID and the deal. Neither one qualifies on its own.
+3. **Merge them, keeping the portal record as primary**, so the UUID and the
+   deal stay on the surviving record.
+4. **Don't edit properties by hand.** Wait for the 6 AM run. It picks up the
+   merged record and writes the row, and the sheet then feeds Fluency.
+5. **Don't rename companies in HubSpot.** Salesforce overwrites company names
+   every night. A rename has to go through BI's Salesforce mapping.
+
+The watchdog finds the BI twin by domain, then by street address + zip, then
+by exact name. A name-only match says so in the task, so confirm it is the same
+property before you merge.
+
 ## What counts as "should be on the tab"
 
 1. A live **Sales Pipeline** deal named "… New Account Build …" in **Ready to

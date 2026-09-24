@@ -296,17 +296,38 @@ def read_hubspot(since: str) -> tuple[list[dict], dict[str, list[str]], dict[str
     return deals, links, companies, expected
 
 
-def find_twin(company_id: str, props: dict) -> dict | None:
-    """The unmerged BI record for the same property: same domain, RPM Managed, no UUID."""
+def _twin_searches(props: dict) -> list[tuple[str, list[dict]]]:
+    """Ways to find the BI record for the same property, strongest first.
+
+    Domain alone missed BI records that arrive without one: the BI record carries
+    PLE status, market and street address, the portal record the UUID and the
+    deal (9/24 Fluency ingestion miss). Street address + zip, then exact name,
+    catch those. Name is last because Salesforce overwrites company names nightly.
+    """
+    searches = []
     domain = (props.get("domain") or "").strip().lower()
-    if not domain or domain == "rpmliving.com":
-        return None
-    for c in hs.search_companies(
-            [{"propertyName": "domain", "operator": "EQ", "value": domain}],
-            properties=["name", "uuid", "plestatus", "hs_object_source_id"], limit=20):
-        p = c.get("properties") or {}
-        if c["id"] != company_id and p.get("plestatus") == "RPM Managed" and not p.get("uuid"):
-            return {"id": c["id"], **p}
+    if domain and domain != "rpmliving.com":
+        searches.append(("domain", [{"propertyName": "domain", "operator": "EQ", "value": domain}]))
+    address, zip_ = (props.get("address") or "").strip(), (props.get("zip") or "").strip()
+    if address and zip_:
+        searches.append(("address", [
+            {"propertyName": "address", "operator": "EQ", "value": address},
+            {"propertyName": "zip", "operator": "EQ", "value": zip_}]))
+    name = (props.get("name") or "").strip()
+    if name:
+        searches.append(("name", [{"propertyName": "name", "operator": "EQ", "value": name}]))
+    return searches
+
+
+def find_twin(company_id: str, props: dict) -> dict | None:
+    """The unmerged BI record for the same property: RPM Managed, no UUID, and the
+    same domain, street address + zip, or name. `matched_on` says which."""
+    for matched_on, filters in _twin_searches(props):
+        for c in hs.search_companies(
+                filters, properties=["name", "uuid", "plestatus", "hs_object_source_id"], limit=20):
+            p = c.get("properties") or {}
+            if c["id"] != company_id and p.get("plestatus") == "RPM Managed" and not p.get("uuid"):
+                return {"id": c["id"], "matched_on": matched_on, **p}
     return None
 
 
@@ -346,8 +367,10 @@ def diagnose_missing(cid: str, p: dict, twin: Callable[[str, dict], dict | None]
     if p.get("plestatus") != "RPM Managed":
         t = twin(cid, p)
         if t:
+            basis = {"address": "same street address + zip", "name": "same name — confirm "
+                     "it is the same property before merging"}.get(t.get("matched_on"), "same domain")
             return [f"Unmerged BI duplicate: {t.get('name')} ({t['id']}) is RPM Managed "
-                    f"with no UUID — {_company_url(t['id'])}",
+                    f"with no UUID ({basis}) — {_company_url(t['id'])}",
                     "Merge it into this record (keep this one as primary so the UUID "
                     "survives). Merged values do not trigger the workflow, so after the "
                     "merge either add the row by hand or wait for the next 6 AM run."]
