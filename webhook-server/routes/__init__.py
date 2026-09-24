@@ -10,6 +10,7 @@ from .attention import attention_bp
 from .feedback import feedback_bp
 from .ils import ils_bp
 from .budget_sync_api import budget_sync_api_bp
+from .heatmap_folders_api import heatmap_folders_api_bp
 from .clickup import clickup_bp
 from .loop import loop_bp
 from .mcp import mcp_bp
@@ -33,6 +34,7 @@ def register_all(app):
     # Attention queue. Owns /api/needs-you, which moved here out of
     # server.py — same URL, same response keys, one implementation.
     app.register_blueprint(attention_bp)
+    app.register_blueprint(heatmap_folders_api_bp)
     app.register_blueprint(paid_bp)
     app.register_blueprint(ask_bp)
     app.register_blueprint(portal_bp)
