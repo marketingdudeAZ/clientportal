@@ -126,14 +126,23 @@ def classify(expected: dict[str, dict],
         shadow_rows = shadow.get(uuid, {})
         cells: list[dict] = []
         worst = VERDICT_BOTH_RIGHT
+        # A DISPO is zeroed where it exists and never appended (budget_sync.plan,
+        # budget_reconcile.diff). A tab with no rows for it owes nothing, so an
+        # absent block is right, not MISSING. Without this, every historical
+        # dispo that the old workflow left as $0.00 rows in live but the loop
+        # never appended to shadow reads as the new system being wrong
+        # (106 properties an hour after the 2026-09-24 catch-up).
+        dispo = bool(exp.get("dispo"))
+        live_owed = not (dispo and uuid not in live)
+        shadow_owed = not (dispo and uuid not in shadow)
 
         for _, label in rec.BUDGET_CHANNELS:
             want = exp["budgets"][label]
             live_val = live_rows.get(label, MISSING)
             shadow_val = shadow_rows.get(label, MISSING)
             verdict = _verdict(
-                live_val is not None and rec.same_money(live_val, want),
-                shadow_val is not None and rec.same_money(shadow_val, want))
+                not live_owed or (live_val is not None and rec.same_money(live_val, want)),
+                not shadow_owed or (shadow_val is not None and rec.same_money(shadow_val, want)))
             if verdict != VERDICT_BOTH_RIGHT:
                 cells.append({"channel": label, "verdict": verdict,
                               "hubspot": want,
