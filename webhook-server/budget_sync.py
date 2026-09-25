@@ -86,6 +86,14 @@ MAX_DRIFT_RATIO = float(os.getenv("BUDGET_SYNC_MAX_DRIFT_RATIO", "0.15"))
 # small-portfolio case where a ratio alone is too permissive.
 MAX_CELL_WRITES = int(os.getenv("BUDGET_SYNC_MAX_CELL_WRITES", "500"))
 
+# Account-name sync: rebrands (Arris Seahaven → Oasis at Seahaven) must reach
+# the sheet because Meta budgets are aligned on account name. OFF by default —
+# the first run could rename many rows, so it ships dark and a dry run reports
+# the count before anyone turns it on. Its own ceiling, in properties.
+SYNC_NAMES = os.getenv("BUDGET_SYNC_NAMES", "").lower() == "true"
+MAX_NAME_PROPERTIES = int(os.getenv("BUDGET_SYNC_MAX_NAME_PROPERTIES", "25"))
+_NAME_COL = "B"
+
 # Where a run that could not be completed gets recorded for a human.
 DEADLETTER_PATH = os.getenv("BUDGET_SYNC_DEADLETTER_PATH", "")
 
@@ -169,7 +177,8 @@ def index_rows(rows: list[list[str]]) -> dict[tuple[str, str], int]:
 
 def plan(expected: dict[str, dict],
          actual: dict[str, dict],
-         index: dict[tuple[str, str], int]) -> dict:
+         index: dict[tuple[str, str], int],
+         names: dict[str, str] | None = None) -> dict:
     """Compute the writes needed to converge the sheet onto `expected`.
 
     Returns {"updates": [(a1_range, value)], "appends": [[uuid, name, label,
@@ -179,9 +188,15 @@ def plan(expected: dict[str, dict],
     updates: list[tuple[str, str]] = []
     appends: list[list[str]] = []
     skipped: list[dict] = []
+    name_updates: list[tuple[str, str]] = []
+    renamed: list[dict] = []
 
     for uuid, exp in expected.items():
         rows = actual.get(uuid)
+        if rows is None and exp.get("dispo"):
+            # A property that is leaving is zeroed where it already exists; it
+            # never gets a fresh block of $0.00 rows appended.
+            continue
         if rows is None:
             # Property absent entirely — append a full block in channel order.
             for _, label in rec.BUDGET_CHANNELS:
@@ -213,7 +228,19 @@ def plan(expected: dict[str, dict],
                 continue
             updates.append((f"{_VALUE_COL}{rownum}", want))
 
-    return {"updates": updates, "appends": appends, "skipped": skipped}
+        # Name drift. Always computed so a dry run can report it; only applied
+        # when SYNC_NAMES is on (see _apply / sync).
+        want_name = (exp.get("account_name") or "").strip()
+        have_name = (names or {}).get(uuid, "")
+        if names is not None and want_name and have_name != want_name:
+            renamed.append({"uuid": uuid, "from": have_name, "to": want_name})
+            for _, label in rec.BUDGET_CHANNELS:
+                rownum = index.get((uuid, label))
+                if rownum is not None:
+                    name_updates.append((f"{_NAME_COL}{rownum}", want_name))
+
+    return {"updates": updates, "appends": appends, "skipped": skipped,
+            "name_updates": name_updates, "renamed": renamed}
 
 
 def _preflight(expected: dict, actual: dict, plan_obj: dict,
@@ -247,6 +274,12 @@ def _preflight(expected: dict, actual: dict, plan_obj: dict,
 
     if bootstrap:
         return
+
+    if SYNC_NAMES and len(plan_obj.get("renamed", [])) > MAX_NAME_PROPERTIES:
+        raise SyncAborted(
+            f"plan would rename {len(plan_obj['renamed'])} properties, above the "
+            f"name ceiling of {MAX_NAME_PROPERTIES}. Refusing. Review the dry-run "
+            f"'renamed' list, then raise BUDGET_SYNC_MAX_NAME_PROPERTIES once.")
 
     n_writes = len(plan_obj["updates"]) + len(plan_obj["appends"])
     if n_writes > MAX_CELL_WRITES:
@@ -332,6 +365,10 @@ def _apply(ws, plan_obj: dict) -> None:
         ws.batch_update([{"range": rng, "values": [[val]]}
                          for rng, val in plan_obj["updates"]],
                         value_input_option="RAW")
+    if SYNC_NAMES and plan_obj.get("name_updates"):
+        ws.batch_update([{"range": rng, "values": [[val]]}
+                         for rng, val in plan_obj["name_updates"]],
+                        value_input_option="RAW")
     if plan_obj["appends"]:
         ws.append_rows(plan_obj["appends"], value_input_option="RAW",
                        insert_data_option="INSERT_ROWS")
@@ -415,7 +452,7 @@ def sync(dry_run: bool = True, target: str | None = None,
         rows = rec.read_sheet_rows(tab)
         actual, structural = rec.parse_sheet(rows)
         index = index_rows(rows)
-        plan_obj = plan(expected, actual, index)
+        plan_obj = plan(expected, actual, index, names=rec.sheet_names(rows))
 
         report: dict[str, Any] = {
             "at": stamp,
@@ -426,6 +463,10 @@ def sync(dry_run: bool = True, target: str | None = None,
             "properties_in_sheet": len(actual),
             "planned_updates": len(plan_obj["updates"]),
             "planned_appends": len(plan_obj["appends"]),
+            "names_enabled": SYNC_NAMES,
+            "planned_renames": len(plan_obj.get("renamed", [])),
+            "dispo_properties": sorted(u for u, e in expected.items() if e.get("dispo")),
+            "returning_properties": sorted(u for u, e in expected.items() if e.get("returning")),
             "skipped": plan_obj["skipped"],
             "structural_drift": structural,
         }
@@ -441,9 +482,11 @@ def sync(dry_run: bool = True, target: str | None = None,
         if dry_run:
             report["ok"] = True
             report["sample_updates"] = plan_obj["updates"][:20]
+            report["sample_renames"] = plan_obj.get("renamed", [])[:20]
             return report
 
-        if not plan_obj["updates"] and not plan_obj["appends"]:
+        if not plan_obj["updates"] and not plan_obj["appends"] and not (
+                SYNC_NAMES and plan_obj.get("name_updates")):
             report.update({"ok": True, "no_changes": True,
                            "elapsed_s": round(time.monotonic() - started, 2)})
             return report

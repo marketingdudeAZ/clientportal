@@ -43,6 +43,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -198,6 +200,54 @@ def _close_sort_key(deal: dict) -> str:
     """
     props = deal.get("properties", {})
     return props.get("closedate") or props.get("createdate") or ""
+
+
+# A disposition closes with a "DISPO" deal ("Ridgecrest - DISPO - September,
+# 2026", "Luna Villa - Dispo - September 2026"). The live action zeroes every
+# channel when that deal closes; the reconciler must do the same, or a property
+# that left management keeps its old budgets forever (Tara, 2026-09-24).
+_DISPO_RE = re.compile(r"\bdispo(?:sition)?\b|\bend digital services\b", re.IGNORECASE)
+
+# A property flagged "ended" only counts as live if its winning deal is recent.
+# Measured 2026-09-24: 69 RPM Managed properties carry stale end dates (some
+# from 2021) yet close budget deals every month; Abby Court and The Falls on
+# Bull Creek last closed in 2024 and are genuinely gone.
+RETURNING_WINDOW_DAYS = int(os.getenv("BUDGET_SYNC_RETURNING_WINDOW_DAYS", "365"))
+
+ZERO = "$0.00"
+
+
+def _is_dispo(deal: dict) -> bool:
+    return bool(_DISPO_RE.search(deal.get("properties", {}).get("dealname") or ""))
+
+
+def _date_only(v: Any) -> str:
+    """'YYYY-MM-DD' from a HubSpot ISO timestamp, a date, or epoch millis. '' if
+    unparseable, which callers treat as 'unknown' (never as 'after')."""
+    v = str(v or "").strip()
+    if not v:
+        return ""
+    if v.isdigit():
+        try:
+            return datetime.fromtimestamp(int(v) / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+        except (ValueError, OverflowError, OSError):
+            return ""
+    return v[:10] if re.match(r"\d{4}-\d{2}-\d{2}", v) else ""
+
+
+def _closed_after(deal: dict, management_end: Any) -> bool:
+    """True if the deal closed strictly after the Management End Date AND within
+    RETURNING_WINDOW_DAYS of today.
+
+    That is the signal an 'ended' property is actually live: a returning
+    property (Strata, 2026-09) or an end date entered wrong (Icon on Broadway,
+    end date = start date = 2026-04-30, new build closed 2026-09-19)."""
+    end = _date_only(management_end)
+    closed = _date_only(deal.get("properties", {}).get("closedate"))
+    if not (end and closed and closed > end):
+        return False
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=RETURNING_WINDOW_DAYS)).strftime("%Y-%m-%d")
+    return closed >= cutoff
 
 
 def _winner_key(deal_id: str, deal: dict) -> tuple[str, int]:
@@ -357,7 +407,7 @@ def expected_budgets() -> dict[str, dict]:
     from spend_sheet import (_batch_read_deals, _get_deal_associations,
                              _get_managed_companies)
 
-    companies = _get_managed_companies()
+    companies = _get_managed_companies(include_ended=True)
     by_id = {str(c["id"]): c for c in companies}
     logger.info("reconcile: %d managed companies", len(by_id))
 
@@ -392,18 +442,43 @@ def expected_budgets() -> dict[str, dict]:
             # the HubSpot workflow that assigns uuid. Logged, never written.
             logger.info("reconcile: company %s has no uuid — skipped", cid)
             continue
+        company = by_id.get(str(cid), {})
+        dispo = _is_dispo(deal)
+        ended = bool(company.get("management_ended"))
+        if ended and not dispo and not _closed_after(deal, company.get("management_end")):
+            # Management ended and nothing closed since: the property is gone.
+            # Its rows stay as orphans for a human, exactly as before.
+            continue
         amounts = li.get(str(deal["id"]), {})
+        if dispo:
+            budgets = {label: ZERO for _, label in BUDGET_CHANNELS}
+        else:
+            budgets = {label: (format_money(amounts[pid]) if pid in amounts else NOT_PURCHASED)
+                       for pid, label in BUDGET_CHANNELS}
         out[uuid] = {
             "company_id": str(cid),
             "account_name": names.get(cid, ""),
             "deal_id": str(deal["id"]),
             "deal_name": (deal.get("properties", {}).get("dealname") or "").strip(),
             "closedate": deal.get("properties", {}).get("closedate") or "",
-            "budgets": {
-                label: (format_money(amounts[pid]) if pid in amounts else NOT_PURCHASED)
-                for pid, label in BUDGET_CHANNELS
-            },
+            "budgets": budgets,
+            # dispo: zero existing rows, never append a block for a property
+            # that is leaving. returning: kept despite a past end date.
+            "dispo": dispo,
+            "returning": ended and not dispo,
         }
+    return out
+
+
+def sheet_names(rows: list[list[str]]) -> dict[str, str]:
+    """{uuid: account name as the sheet shows it}, first occurrence wins."""
+    out: dict[str, str] = {}
+    for row in rows[1:]:
+        if len(row) <= _COL_ACCOUNT:
+            continue
+        uuid = normalize_sheet_value(row[_COL_UUID])
+        if uuid:
+            out.setdefault(uuid, normalize_sheet_value(row[_COL_ACCOUNT]))
     return out
 
 
@@ -498,6 +573,8 @@ def diff(expected: dict[str, dict], actual: dict[str, dict]) -> list[dict]:
     for uuid, exp in expected.items():
         name = exp["account_name"]
         rows = actual.get(uuid)
+        if rows is None and exp.get("dispo"):
+            continue          # leaving, and already absent — nothing owed
         if rows is None:
             out.append(_drift(KIND_MISSING_PROPERTY, uuid, name,
                               deal_id=exp["deal_id"], deal_name=exp["deal_name"],

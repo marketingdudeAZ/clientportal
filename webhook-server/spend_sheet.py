@@ -337,9 +337,15 @@ def _rows_no_deal(companies: list) -> list[dict]:
 
 # ── HubSpot fetchers ────────────────────────────────────────────────────────────
 
-def _get_managed_companies() -> list[dict]:
+def _get_managed_companies(include_ended: bool = False) -> list[dict]:
     """Enumerate every company in HubSpot and keep the ones whose plestatus
     is in PLE_STATUSES.
+
+    include_ended=True also returns companies the disposition guard would drop
+    (Management End Date in the past), flagged with management_ended=True. Only
+    the budget reconciler asks for them: it needs to zero a DISPO and to keep a
+    property that closed a new deal after its end date (a returning property, or
+    an end date entered wrong). Every other caller keeps the default.
 
     Why not the Search API: HubSpot's /companies/search endpoint has known
     eventual-consistency + early-pagination issues at our portfolio size
@@ -396,7 +402,8 @@ def _get_managed_companies() -> list[dict]:
                 continue
             # Disposition guard: drop anything whose management has ended, even
             # if plestatus is a stale "Dispositioning" from the warehouse lag.
-            if _management_ended(cp.get("managementend")):
+            ended = _management_ended(cp.get("managementend"))
+            if ended and not include_ended:
                 continue
             # Require at least one associated deal — every row in the
             # /accounts table represents a deal.
@@ -416,6 +423,8 @@ def _get_managed_companies() -> list[dict]:
                 "zillow_per_lease": _f(cp.get("zillow_spend")),
                 "costar_package":   cp.get("costar_package") or "",
                 "cx_bundle":        (cp.get("customerexperiencebundle") or "") in ("true", "True"),
+                "management_end":   cp.get("managementend") or "",
+                "management_ended": ended,
             })
 
         after = data.get("paging", {}).get("next", {}).get("after")
