@@ -188,3 +188,28 @@ class PlanningDispoAndNames(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FailClosed(unittest.TestCase):
+    """A HubSpot batch that can't be read must stop the run, never blank budgets."""
+
+    def test_persistent_failure_raises(self):
+        import requests
+        with mock.patch.object(requests, "post", side_effect=requests.ConnectionError("reset")), \
+             mock.patch("time.sleep"):
+            with self.assertRaises(rec.HubSpotIncomplete):
+                rec._line_items_by_product(["1", "2"])
+
+    def test_transient_failure_is_retried(self):
+        import requests
+        ok = mock.Mock(status_code=200, json=lambda: {"results": []})
+        with mock.patch.object(requests, "post", side_effect=[requests.ConnectionError("reset"), ok]), \
+             mock.patch("time.sleep"):
+            self.assertEqual(rec._line_items_by_product(["1"]), {})
+
+    def test_rate_limit_is_retried_then_fails_closed(self):
+        import requests
+        limited = mock.Mock(status_code=429, text="slow down")
+        with mock.patch.object(requests, "post", return_value=limited), mock.patch("time.sleep"):
+            with self.assertRaises(rec.HubSpotIncomplete):
+                rec._line_items_by_product(["1"])

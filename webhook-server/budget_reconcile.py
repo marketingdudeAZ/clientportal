@@ -263,6 +263,34 @@ def _winner_key(deal_id: str, deal: dict) -> tuple[str, int]:
     return (_close_sort_key(deal), n)
 
 
+class HubSpotIncomplete(RuntimeError):
+    """A HubSpot batch could not be read after retries. Raised instead of
+    continuing with partial data: a missing chunk would make its deals look
+    like they have no line items, so desired state would blank real budgets.
+    (9/24/26: a single connection reset turned a 27-cell plan into 718.)"""
+
+
+def _post_with_retry(url: str, body: dict, what: str, attempts: int = 3) -> dict:
+    """POST to HubSpot with retries on connection errors, 429 and 5xx. Raises
+    HubSpotIncomplete if the batch can't be read, so the run fails closed."""
+    import time
+    import requests
+    from spend_sheet import HS_HDRS
+    last = ""
+    for n in range(attempts):
+        try:
+            r = requests.post(url, headers=HS_HDRS, json=body, timeout=30)
+            if r.status_code in (200, 207):
+                return r.json()
+            last = f"HTTP {r.status_code}: {r.text[:120]}"
+            if r.status_code not in (429, 500, 502, 503, 504):
+                break
+        except Exception as e:  # noqa: BLE001 — retried, then surfaced
+            last = str(e)
+        time.sleep(2 * (n + 1))
+    raise HubSpotIncomplete(f"{what} failed after {attempts} attempts: {last}")
+
+
 def _line_items_by_product(deal_ids: list[str]) -> dict[str, dict[str, float]]:
     """{deal_id: {product_id: amount}}.
 
@@ -270,45 +298,32 @@ def _line_items_by_product(deal_ids: list[str]) -> dict[str, dict[str, float]]:
     aggregates into spend COLUMNS via SKU name matching and never fetches
     `hs_product_id` — which is the whole point here. Same batch-read shape.
     """
-    import requests
-    from spend_sheet import HS_BASE, HS_HDRS
+    from spend_sheet import HS_BASE
 
     deal_li: dict[str, list[str]] = {}
     for i in range(0, len(deal_ids), 100):
         chunk = deal_ids[i:i + 100]
-        try:
-            r = requests.post(
-                f"{HS_BASE}/crm/v4/associations/deals/line_items/batch/read",
-                headers=HS_HDRS,
-                json={"inputs": [{"id": d} for d in chunk]},
-                timeout=20,
-            )
-            if r.status_code in (200, 207):
-                for item in r.json().get("results", []):
-                    did = str(item.get("from", {}).get("id", ""))
-                    ids = [str(a.get("toObjectId")) for a in item.get("to", [])]
-                    if ids:
-                        deal_li[did] = ids
-        except Exception as e:  # noqa: BLE001 — a chunk failure must not abort the sweep
-            logger.error("deal→line_item assoc failed (chunk %d): %s", i, e)
+        data = _post_with_retry(
+            f"{HS_BASE}/crm/v4/associations/deals/line_items/batch/read",
+            {"inputs": [{"id": d} for d in chunk]},
+            f"deal→line_item associations (chunk {i})")
+        for item in data.get("results", []):
+            did = str(item.get("from", {}).get("id", ""))
+            ids = [str(a.get("toObjectId")) for a in item.get("to", [])]
+            if ids:
+                deal_li[did] = ids
 
     all_ids = list({lid for ids in deal_li.values() for lid in ids})
     props: dict[str, dict] = {}
     for i in range(0, len(all_ids), 100):
         chunk = all_ids[i:i + 100]
-        try:
-            r = requests.post(
-                f"{HS_BASE}/crm/v3/objects/line_items/batch/read",
-                headers=HS_HDRS,
-                json={"inputs": [{"id": lid} for lid in chunk],
-                      "properties": ["hs_product_id", "name", "amount", "price"]},
-                timeout=20,
-            )
-            r.raise_for_status()
-            for li in r.json().get("results", []):
-                props[str(li["id"])] = li.get("properties", {})
-        except Exception as e:  # noqa: BLE001
-            logger.error("line item batch read failed (chunk %d): %s", i, e)
+        data = _post_with_retry(
+            f"{HS_BASE}/crm/v3/objects/line_items/batch/read",
+            {"inputs": [{"id": lid} for lid in chunk],
+             "properties": ["hs_product_id", "name", "amount", "price"]},
+            f"line item batch read (chunk {i})")
+        for li in data.get("results", []):
+            props[str(li["id"])] = li.get("properties", {})
 
     out: dict[str, dict[str, float]] = {}
     for did, ids in deal_li.items():
