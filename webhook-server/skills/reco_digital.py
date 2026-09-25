@@ -698,6 +698,7 @@ def impression_share_lost(ctx: DigitalContext, today: date) -> List[Dict[str, An
                 "current_budget": base.current_budget,
                 "recommended_budget": base.recommended_budget,
                 "full_delta_usd": base.delta,
+                "capped_by": list(base.capped_by),
                 "first_step_usd": first_step,
                 "step_bound": ("loop_autopilot: %d%% of the channel, %s absolute"
                                % (round(MAX_PERCENT_OF_CHANNEL * 100),

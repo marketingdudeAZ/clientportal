@@ -62,6 +62,10 @@ class Recommendation:
     rationale: str
     recommendation_id: str
     change_type: str = "active_channel_increase"
+    # Guardrails that lowered the number, so a person sees why it isn't the full
+    # recovery target: "max_increase" (the +N% single-step limit) and/or
+    # "spend_ceiling" (the absolute per-channel max_budget). Empty = uncapped.
+    capped_by: tuple[str, ...] = ()
 
 
 def recommend_for_channel(
@@ -94,21 +98,30 @@ def recommend_for_channel(
 
     lost = min(max(signal.impression_share_lost_pct, 0.0), 0.95)  # guard /0
     recover_target = signal.current_budget / (1.0 - lost)
-    capped = min(
-        recover_target,
-        signal.current_budget * (1.0 + guardrails.max_increase_pct),
-        guardrails.max_budget,
-    )
+    step_limit = signal.current_budget * (1.0 + guardrails.max_increase_pct)
+    capped = min(recover_target, step_limit, guardrails.max_budget)
+    capped_by: list[str] = []
+    if capped < recover_target:
+        if step_limit <= guardrails.max_budget:
+            capped_by.append("max_increase")
+        if guardrails.max_budget <= step_limit:
+            capped_by.append("spend_ceiling")
     recommended = round(capped)
     delta = recommended - signal.current_budget
     if delta <= 0:
         return None
 
+    if "spend_ceiling" in capped_by:
+        cap_note = f" (capped at the ${round(guardrails.max_budget):,} channel spend ceiling)"
+    elif capped_by:
+        cap_note = f" (capped at +{round(guardrails.max_increase_pct * 100)}% in one step)"
+    else:
+        cap_note = ""
     rationale = (
         f"{signal.channel} is losing ~{round(lost * 100)}% of available impressions "
         f"to budget while marketing is {signal.marketing_status}. Raising "
         f"${round(signal.current_budget):,} → ${recommended:,} recovers most of "
-        f"that lost share (capped at +{round(guardrails.max_increase_pct * 100)}%)."
+        f"that lost share{cap_note}."
     )
     return Recommendation(
         property_uuid=property_uuid,
@@ -119,6 +132,7 @@ def recommend_for_channel(
         delta=delta,
         rationale=rationale,
         recommendation_id=f"{property_uuid}:{signal.channel}:{period}",
+        capped_by=tuple(capped_by),
     )
 
 

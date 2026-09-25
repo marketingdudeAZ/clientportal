@@ -43,12 +43,22 @@ def test_increase_is_capped_at_max_pct():
     # 60% lost would target 1500/0.40=3750, but +50% cap holds it to 2250.
     rec = rg.recommend_for_channel("u-1", "c-1", _sig(impression_share_lost_pct=0.60), "2026-Q3")
     assert rec.recommended_budget == 2250  # current * 1.5
+    assert rec.capped_by == ("max_increase",)
+    assert "+50% in one step" in rec.rationale
 
 
 def test_capped_at_absolute_max_budget():
     g = rg.Guardrails(max_budget=2000.0)
     rec = rg.recommend_for_channel("u-1", "c-1", _sig(impression_share_lost_pct=0.60), "2026-Q3", g)
     assert rec.recommended_budget == 2000
+    assert rec.capped_by == ("spend_ceiling",)
+    assert "$2,000 channel spend ceiling" in rec.rationale
+
+
+def test_uncapped_recommendation_names_no_guardrail():
+    rec = rg.recommend_for_channel("u-1", "c-1", _sig(), "2026-Q3")
+    assert rec.capped_by == ()
+    assert "capped" not in rec.rationale
 
 
 # ── guardrails: when NOT to recommend ────────────────────────────────────────

@@ -7278,6 +7278,10 @@ function _ffPreset(name){
     var ach=(_ffData.achievable_leases||1), goal=(_ffData.goal_leases||1);
     var mult=Math.min(3,Math.max(1.2, goal/Math.max(ach,0.5))), extra=Math.max(0,total)*(mult-1);
     if(total<=0) extra=goal*600;
+    // Server-side guardrails (cost per lease x velocity-capped leases, spend ceiling) win when present.
+    var br=_ffData.budget_recommendation||{};
+    if(br.recommended_monthly!=null) extra=Math.max(0,br.recommended_monthly-total);
+    else if(br.ceiling&&br.ceiling.amount!=null) extra=Math.max(0,Math.min(extra,br.ceiling.amount-total));
     b.seo=Math.round((b.seo||0)+extra*0.40); b.paid_social=Math.round((b.paid_social||0)+extra*0.35);
     b.display=Math.round((b.display||0)+extra*0.15); b.paid_search=Math.round((b.paid_search||0)+extra*0.10);
   }

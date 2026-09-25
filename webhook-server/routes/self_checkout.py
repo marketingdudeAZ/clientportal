@@ -245,6 +245,7 @@ def _card(rec) -> dict:
         "rationale": rec.rationale,
         "recommendation_id": rec.recommendation_id,
         "change_type": rec.change_type,
+        "capped_by": list(rec.capped_by),
     }
 
 

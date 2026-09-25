@@ -5965,7 +5965,7 @@ def get_funnel_forecast():
     import bigquery_client as _bq
 
     # 1. Property context from HubSpot
-    props = "name,ninjacat_system_id,totalunits,occupancy_status,developtype,proptype,target_occupancy,aptiq_property_id"
+    props = "name,ninjacat_system_id,totalunits,occupancy_status,developtype,proptype,target_occupancy,aptiq_property_id,hyly_property_id,uuid"
     try:
         r = _req.get(
             f"https://api.hubapi.com/crm/v3/objects/companies/{company_id}?properties={props}",
@@ -6042,6 +6042,29 @@ def get_funnel_forecast():
             context = "btr"
         else:
             context = "stabilized"
+
+    # Lease-velocity guardrail: an exposure spike (ops behind) must not size the
+    # funnel -- or the budget -- to more leases than the property can sign in a
+    # month. Applies to overrides too; the response says when it bit. Last full
+    # month's Hyly leases (beta properties only) floor the cap and feed cost
+    # per lease below.
+    import budget_guardrails as _bg
+    leases_last_month = None
+    hyly_pid = str(p.get("hyly_property_id") or "").strip()
+    if hyly_pid.isdigit():
+        try:
+            from datetime import date as _date, timedelta as _td
+            from skills import workspace_leasing as _wl
+            _last_end = _date.today().replace(day=1) - _td(days=1)
+            _by_pid = _wl.leases_by_property([int(hyly_pid)], _last_end.replace(day=1).isoformat(),
+                                             _last_end.isoformat())
+            if _by_pid is not None:
+                leases_last_month = _by_pid.get(int(hyly_pid))
+        except Exception as e:
+            logger.warning("funnel-forecast Hyly lease lookup failed for %s: %s", hyly_pid, e)
+    goal_requested = goal_leases
+    goal_leases, goal_capped_by = _bg.cap_leases_needed(
+        goal_leases, _bg.lease_velocity_cap(units, context, observed_leases=leases_last_month))
 
     # 3. Funnel actuals from NinjaCat (latest complete month) via BigQuery
     if not _bq.is_bigquery_configured():
@@ -6146,9 +6169,30 @@ def get_funnel_forecast():
         )
         result["scenario"] = False
 
+    # 6. Guarded budget recommendation: cost per lease x leases needed (last
+    #    full month of Hyly leases over contracted spend), capped by lease
+    #    velocity and the property's spend ceiling. Hyly covers the beta only;
+    #    without leases it falls back to the funnel ratio (observed funnel,
+    #    not the scenario) and says so.
+    result["budget_recommendation"] = _bg.recommend_monthly_budget(
+        current_spend=sum(current_channels.values()), leases_needed=goal_requested,
+        units=units, context=context, leases_last_month=leases_last_month,
+        achievable_leases=_ff._safe_div(observed["conversions"], leads_per_lease),
+        ceiling=_bg.spend_ceiling_for(company_id, p.get("uuid")),
+    )
+    if goal_capped_by:
+        result.setdefault("diagnosis", []).append(
+            f"Goal capped at {goal_leases:g} leases/month (realistic lease velocity), down from "
+            f"{goal_requested:g}. More media budget can't buy leases faster than that.")
+    for note in result["budget_recommendation"]["notes"]:
+        if "spend ceiling" in note:
+            result.setdefault("diagnosis", []).append(note)
+
     result["available"] = True
     result["month"] = rows[0].get("report_month") if rows else None
     result["goal_basis"] = goal_basis
+    result["goal_leases_requested"] = goal_requested
+    result["goal_capped_by"] = goal_capped_by
     result["occupancy"] = apt_occ
     result["exposure"] = apt_exp
     result["current_budget"] = sku_budget
