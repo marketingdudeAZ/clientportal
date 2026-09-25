@@ -130,6 +130,45 @@ class MissingRows(unittest.TestCase):
         self.assertEqual(out["counts"][bc.VERDICT_NEW_WRONG], 2)
 
 
+class Dispositions(unittest.TestCase):
+    """A DISPO is zeroed where it exists and never appended (PR #72), so the
+    comparison must not call an absent block wrong. 2026-09-25: 106 historical
+    dispos sat as $0.00 rows in live and absent from shadow, and the hourly
+    compare reported them all as the new system being wrong."""
+
+    ZEROED = {l: "$0.00" for l in LABELS}
+
+    def _dispo(self, uuid="u1"):
+        exp = _expected((uuid, "Ridgecrest", self.ZEROED))
+        exp[uuid]["dispo"] = True
+        return exp
+
+    def test_dispo_absent_from_shadow_zeroed_in_live_is_agreement(self):
+        out = bc.classify(self._dispo(), _tab(("u1", self.ZEROED)), {})
+        self.assertEqual(out["properties"]["u1"]["verdict"], bc.VERDICT_BOTH_RIGHT)
+        self.assertEqual(bc.flagworthy(out), [])
+
+    def test_dispo_absent_from_both_tabs_is_agreement(self):
+        out = bc.classify(self._dispo(), {}, {})
+        self.assertEqual(out["properties"]["u1"]["verdict"], bc.VERDICT_BOTH_RIGHT)
+
+    def test_dispo_present_in_shadow_with_old_budget_is_still_new_wrong(self):
+        """Present rows are owed $0.00. Only absence is excused."""
+        out = bc.classify(self._dispo(), _tab(("u1", self.ZEROED)),
+                          _tab(("u1", {PAID_SEARCH: "$1,500.00"})))
+        self.assertEqual(out["properties"]["u1"]["verdict"], bc.VERDICT_NEW_WRONG)
+
+    def test_dispo_absent_from_live_with_old_budget_in_shadow_is_new_wrong(self):
+        out = bc.classify(self._dispo(), {}, _tab(("u1", {PAID_SEARCH: "$1,500.00"})))
+        self.assertEqual(out["properties"]["u1"]["verdict"], bc.VERDICT_NEW_WRONG)
+
+    def test_non_dispo_absent_from_shadow_is_still_new_wrong(self):
+        """The unseeded-shadow guard is untouched for ordinary properties."""
+        exp = _expected(("u1", "Citria", {PAID_SEARCH: "$2,060.00"}))
+        out = bc.classify(exp, _tab(("u1", {PAID_SEARCH: "$2,060.00"})), {})
+        self.assertEqual(out["properties"]["u1"]["verdict"], bc.VERDICT_NEW_WRONG)
+
+
 class PropertyRollup(unittest.TestCase):
     def test_worst_cell_decides_the_property(self):
         """One new_wrong channel outranks nine agreeing ones."""
